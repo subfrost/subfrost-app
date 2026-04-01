@@ -54,6 +54,9 @@ export function readU128LE(bytes: number[], offset: number): bigint {
   return value;
 }
 
+// u128 max constant for un-inverting ask prices
+const U128_MAX = (BigInt(1) << BigInt(128)) - BigInt(1);
+
 /**
  * Parse orderbook response from carbine controller opcode 24 (GetOrderbookDepth).
  *
@@ -63,12 +66,21 @@ export function readU128LE(bytes: number[], offset: number): bigint {
  *   u32 numAsks (4 bytes LE)
  *   [u128 price, u128 amount] x numAsks (32 bytes each)
  *
- * Price encoding:
- *   - Both bid and ask prices in the response are REAL prices (raw u128, no scaling)
- *   - The contract already un-inverts ask prices before writing the response
- *     (line 760: real_price = u128::MAX - token_id)
- *   - Prices are in the token's native denomination (e.g., sats)
+ * Price encoding (VERIFIED against live devnet data 2026-04-01):
+ *   - Bid prices are REAL prices (raw u128, no transformation needed)
+ *   - Ask prices are INVERTED trie keys: stored as u128::MAX - real_price
+ *     Despite source code suggesting un-inversion at line 760, the actual
+ *     response returns raw trie keys. Parser MUST un-invert: real = MAX - stored.
+ *   - Prices are in the token's native denomination (raw u128, no 1e8 scaling)
  *   - Empty/padding slots have price=0 or amount=0 and are skipped
+ *
+ * Debug tip — verify orderbook data from browser console on devnet:
+ *   const r = await fetch('http://localhost:18888', { method: 'POST',
+ *     headers: {'Content-Type': 'application/json'}, body: JSON.stringify({
+ *     jsonrpc: '2.0', method: 'alkanes_simulate', params: [{ target:
+ *     { block: '4', tx: '70000' }, inputs: ['24','2','0','32','0','10'],
+ *     block_tag: 'latest' }], id: 1 }) });
+ *   console.log((await r.json())?.result?.execution?.data);
  */
 export function parseOrderbookResponse(data: string | number[]): OrderbookData | null {
   const bytes = typeof data === 'string'
@@ -107,8 +119,12 @@ export function parseOrderbookResponse(data: string | number[]): OrderbookData |
   const asks: OrderLevel[] = [];
   let askCumTotal = 0;
   for (let i = 0; i < numAsks; i++) {
-    // Prices in response are already un-inverted by the contract (lib.rs:760)
-    const price = Number(readU128LE(bytes, offset));
+    // Ask prices in the response are INVERTED trie keys (u128::MAX - real_price).
+    // We must un-invert to get the real price. Verified on devnet 2026-04-01:
+    // stored=340282366920938463463374607431768211355, real=100 (correct).
+    const rawPrice = readU128LE(bytes, offset);
+    const realPrice = rawPrice > U128_MAX / BigInt(2) ? U128_MAX - rawPrice : rawPrice;
+    const price = Number(realPrice);
     const amount = Number(readU128LE(bytes, offset + 16));
     offset += 32;
     if (price <= 0 || amount <= 0) continue;
