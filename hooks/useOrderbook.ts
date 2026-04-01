@@ -101,12 +101,14 @@ export function parseOrderbookResponse(data: string | number[]): OrderbookData |
     const price = Number(readU128LE(bytes, offset));
     const amount = Number(readU128LE(bytes, offset + 16));
     offset += 32;
-    if (price <= 0 || amount <= 0) continue;
-    bidCumTotal += price * amount;
+    // Skip only if amount is 0 (empty padding slot). Price=0 is valid
+    // (the contract may encode prices differently than expected).
+    if (amount <= 0) continue;
+    bidCumTotal += amount;
     bids.push({
       price: price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-      amount: amount.toFixed(4),
-      total: bidCumTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+      amount: amount.toLocaleString('en-US', { maximumFractionDigits: 4 }),
+      total: bidCumTotal.toLocaleString('en-US', { maximumFractionDigits: 4 }),
     });
   }
 
@@ -127,7 +129,7 @@ export function parseOrderbookResponse(data: string | number[]): OrderbookData |
     const price = Number(realPrice);
     const amount = Number(readU128LE(bytes, offset + 16));
     offset += 32;
-    if (price <= 0 || amount <= 0) continue;
+    if (amount <= 0) continue;
     askCumTotal += price * amount;
     asks.push({
       price: price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
