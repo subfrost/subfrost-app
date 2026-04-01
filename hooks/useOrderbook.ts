@@ -329,12 +329,7 @@ export function useOrderbook(baseToken?: string, quoteToken?: string) {
                 params: [{
                   target: { block: ctrlBlock, tx: ctrlTx },
                   inputs: ['24', b1, t1, b2, t2, '10'],
-                  alkanes: [],
-                  transaction: '0x',
-                  block: '0x',
-                  height: '999999',
-                  txindex: 0,
-                  vout: 0,
+                  block_tag: 'latest',
                 }],
                 id: 1,
               }),
