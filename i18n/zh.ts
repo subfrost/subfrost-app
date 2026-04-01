@@ -933,7 +933,7 @@ const zh: Record<string, string> = {
   'fire.bondLpTokens': '质押 LP 代币',
   'fire.youReceiveVested': '您将获得（归属）',
   'fire.vestingPeriod': '归属期',
-  'fire.vestingDuration': '约 5 天（720 个区块）',
+  'fire.vestingDuration': '约 7 天（1008 个区块）',
   'fire.availableFire': '可用 FIRE',
   'fire.bondLp': '债券化 LP',
   'fire.activeBonds': '活跃债券',

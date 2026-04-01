@@ -8,8 +8,8 @@
 /** Total FIRE max supply */
 export const FIRE_MAX_SUPPLY = 2_100_000;
 
-/** Emission pool = 30% of max supply */
-export const FIRE_EMISSION_POOL = FIRE_MAX_SUPPLY * 0.3; // 630,000
+/** Emission pool = 100% of max supply (no premine) */
+export const FIRE_EMISSION_POOL = FIRE_MAX_SUPPLY; // 2,100,000
 
 /** Blocks per epoch (~2 years at 10min blocks) */
 export const BLOCKS_PER_EPOCH = 105_120;

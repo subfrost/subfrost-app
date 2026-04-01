@@ -941,7 +941,7 @@ const en: Record<string, string> = {
   'fire.bondLpTokens': 'Bond LP Tokens',
   'fire.youReceiveVested': 'You receive (vested)',
   'fire.vestingPeriod': 'Vesting period',
-  'fire.vestingDuration': '~5 days (720 blocks)',
+  'fire.vestingDuration': '~7 days (1008 blocks)',
   'fire.availableFire': 'Available FIRE',
   'fire.bondLp': 'Bond LP',
   'fire.activeBonds': 'Bond Positions',
