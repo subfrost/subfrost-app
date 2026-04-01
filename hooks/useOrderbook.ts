@@ -177,9 +177,20 @@ export function useOrderbook(baseToken?: string, quoteToken?: string) {
           const data = await resp.json();
           const exec = data?.result?.execution;
 
-          if (exec?.data && !exec.error) {
+          if (exec?.error) {
+            console.warn('[useOrderbook] Carbine simulate error:', exec.error);
+          } else if (exec?.data) {
+            const hex = exec.data.replace(/^0x/, '');
+            const byteLen = hex.length / 2;
             const parsed = parseOrderbookResponse(exec.data);
-            if (parsed) return parsed;
+            if (parsed) {
+              console.log('[useOrderbook] Parsed orderbook:', parsed.bids.length, 'bids,', parsed.asks.length, 'asks, spread:', parsed.spread);
+              return parsed;
+            } else {
+              console.warn('[useOrderbook] parseOrderbookResponse returned null for', byteLen, 'bytes. First 64 hex:', hex.slice(0, 64));
+            }
+          } else {
+            console.warn('[useOrderbook] No data in Carbine response');
           }
         } catch (err) {
           console.warn('[useOrderbook] Carbine controller query failed, returning empty orderbook:', err);
