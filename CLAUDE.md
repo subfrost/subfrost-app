@@ -1752,7 +1752,48 @@ indexer. Filter: enter `-__get_len` in Chrome DevTools console filter field.
 |------|---------|
 | `hooks/useOrderbook.ts` | orderbook data fetching, binary parsing, pair-order retry |
 | `hooks/useLimitOrderMutation.ts` | correct PlaceLimitOrder mutation (use this, not LimitOrderPanel's inline code) |
-| `app/swap/components/LimitOrderPanel.tsx` | UI panel — has legacy direct sdkProvider call (migration TODO) |
+| `app/swap/components/LimitOrderPanel.tsx` | UI panel — now uses useLimitOrderMutation |
 | `app/swap/components/OrderbookPanel.tsx` | orderbook display component |
 | `lib/devnet/boot.ts` Phase 3a | Carbine deployment + initialization (lines ~896-960) |
 | `utils/getConfig.ts` | `CARBINE_CONTROLLER_ID` config key |
+
+### Current Status (2026-04-01) — Known Working / Known Broken
+
+**Working:**
+- App boots and loads cleanly on devnet
+- Carbine deploys successfully in Phase 3a with correct init args
+- Buy orders (side=0) place successfully and increment GetOpenOrderCount
+- GetOrderbookDepth (opcode 24) returns correct binary data when queried directly
+- Orderbook UI renders and displays headers
+
+**Known issues to debug next session:**
+- Sell orders (side=1): orders appear to disappear or not persist in the orderbook after placement. Root cause unknown — may be pair ordering, may be UTXO selection for DIESEL deposit, may be the display not refreshing.
+- Orderbook display: bid/ask rows not always showing even when orders exist on-chain. The `useOrderbook` hook queries with pair (frBTC=32:0, DIESEL=2:0) — NOT (DIESEL=2:0, frBTC=32:0). Verify the query is using the right pair order by running the debug script below.
+
+**Debugging protocol for next session:**
+1. Boot devnet, place a sell order
+2. Check order count: `alkanes_simulate` opcode 25 on [4:70000] — did it increment?
+3. If yes, query depth with BOTH pair orderings to find which one has the order
+4. Compare pair key used at placement vs at query time in LimitOrderPanel / useLimitOrderMutation
+5. Run the vitest e2e test: `npm run test:sdk -- e2e-carbine-clob` — it places both buy and sell orders and verifies them; if it passes, the contract is fine and the bug is purely in the UI
+
+**Debug script — check sell order after placing:**
+```javascript
+// Run after placing a sell order:
+(async () => {
+  // Check total order count
+  const r1 = await fetch('http://localhost:18888', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ jsonrpc: '2.0', method: 'alkanes_simulate', params: [{ target: { block: '4', tx: '70000' }, inputs: ['25'], block_tag: 'latest' }], id: 1 }) });
+  const j1 = await r1.json();
+  console.log('Total open orders:', j1?.result?.execution?.data);
+
+  // Check depth with DIESEL-base, frBTC-quote (what LimitOrderPanel sends)
+  const r2 = await fetch('http://localhost:18888', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ jsonrpc: '2.0', method: 'alkanes_simulate', params: [{ target: { block: '4', tx: '70000' }, inputs: ['24', '2', '0', '32', '0', '10'], block_tag: 'latest' }], id: 2 }) });
+  const j2 = await r2.json();
+  console.log('Depth (DIESEL/frBTC):', j2?.result?.execution?.data, 'err:', j2?.result?.execution?.error);
+
+  // Check depth with frBTC-base, DIESEL-quote (what useOrderbook queries)
+  const r3 = await fetch('http://localhost:18888', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ jsonrpc: '2.0', method: 'alkanes_simulate', params: [{ target: { block: '4', tx: '70000' }, inputs: ['24', '32', '0', '2', '0', '10'], block_tag: 'latest' }], id: 3 }) });
+  const j3 = await r3.json();
+  console.log('Depth (frBTC/DIESEL):', j3?.result?.execution?.data, 'err:', j3?.result?.execution?.error);
+})();
+```
