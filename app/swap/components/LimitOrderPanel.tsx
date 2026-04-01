@@ -2,39 +2,16 @@
  * LimitOrderPanel.tsx
  *
  * UI panel for placing limit orders on the Carbine CLOB. Handles the buy/sell
- * toggle, price/amount inputs, fee selection, and transaction submission.
+ * toggle, price/amount inputs, fee selection, and transaction submission via
+ * useLimitOrderMutation.
  *
  * =============================================================================
- * CRITICAL: Use useLimitOrderMutation — do NOT call sdkProvider directly
+ * ARCHITECTURE: useLimitOrderMutation (DO NOT bypass)
  * =============================================================================
- *
- * The handleSubmit function currently calls sdkProvider.alkanesExecuteTyped()
- * directly from useAlkanesSDK(). This BYPASSES devnet auto-routing in execute.ts
- * and causes "Insufficient alkanes: have 0, need N" on sell orders even when
- * the wallet has DIESEL balance.
- *
- * WHY IT FAILS:
- *   useAlkanesSDK() returns the raw SDK provider. The raw provider uses quspo
- *   data APIs for UTXO discovery. On devnet, quspo data can be stale/incomplete.
- *   execute.ts has devnet detection that switches to alkanesExecuteFull (primary
- *   alkanes indexer, always complete). That detection only fires when going
- *   through useSandshrewProvider(), which wraps execute.ts.
- *
- * CORRECT PATTERN (already implemented in hooks/useLimitOrderMutation.ts):
- *   const provider = useSandshrewProvider();       // ← routes through execute.ts
- *   await provider.alkanesExecuteTyped({ ... });   // ← devnet-aware
- *
- * MIGRATION TODO:
- *   Replace the inline handleSubmit execution logic with:
- *     const limitOrderMutation = useLimitOrderMutation();
- *     limitOrderMutation.mutate({ controllerId, baseTokenId, quoteTokenId,
- *       side, price, amount, feeRate });
- *   This also picks up correct useActualAddresses logic and browser wallet
- *   input patching (patchInputsOnly) from useLimitOrderMutation.
- *
- * useActualAddresses is applied in this file via:
- *   const useActualAddresses = network === 'devnet' || !segwit;
- * This is correct. Do NOT remove it.
+ * All order placement routes through useLimitOrderMutation → useSandshrewProvider
+ * → execute.ts. This is critical for devnet: execute.ts detects localhost:18888
+ * and switches to alkanesExecuteFull (primary indexer, always complete). The raw
+ * SDK provider uses quspo (stale on devnet) and causes "Insufficient alkanes: have 0".
  *
  * =============================================================================
  * CARBINE CLOB — PlaceLimitOrder (opcode 20) call format
@@ -47,8 +24,23 @@
  *   For sell: inputReqs = '2:0:{amountScaled}'  (send DIESEL, the base token)
  *   For buy:  inputReqs = '32:0:{priceScaled * amountScaled / 1e8}'  (send frBTC)
  *
- *   After broadcast, mine a block on devnet or the order never executes:
- *     generatetoaddress 1 <segwit_addr>  (via localhost:18888 JSON-RPC)
+ * =============================================================================
+ * KNOWN ISSUE (2026-04-01): Sell orders not appearing in orderbook display
+ * =============================================================================
+ * Buy orders (side=0) display correctly in the Order Book panel as green bid rows.
+ * Sell orders (side=1) are confirmed on-chain (opcode 25 order count increments)
+ * but do NOT appear as red ask rows in the orderbook.
+ *
+ * HYPOTHESIS: The Carbine contract stores sell orders under a different pair key
+ * or trie position than buy orders. GetOrderbookDepth (opcode 24) with pair
+ * (DIESEL=2:0, frBTC=32:0) returns the correct bid depth but ask entries all have
+ * U128_MAX amounts (sentinel/empty slots). Real ask amounts are zero or stored
+ * differently. Need to inspect carbine-controller source at:
+ *   subfrost-alkanes/alkanes/carbine-controller/src/lib.rs
+ * Specifically how PlaceLimitOrder stores side=1 vs side=0, and how
+ * GetOrderbookDepth traverses the trie for asks.
+ *
+ * NEXT STEP: Read carbine-controller source to understand ask trie storage.
  * =============================================================================
  */
 
@@ -125,7 +117,11 @@ export default function LimitOrderPanel({
   const { showNotification } = useNotification();
 
   const handleSubmit = async () => {
-    if (!price || !amount || !isConnected) return;
+    console.log('[QA] handleSubmit called:', { price, amount, isConnected, side, network });
+    if (!price || !amount || !isConnected) {
+      console.log('[QA] handleSubmit blocked — missing:', { price: !price, amount: !amount, isConnected: !isConnected });
+      return;
+    }
     try {
       const effectiveNetwork = network || 'devnet';
       const config = getConfig(effectiveNetwork);

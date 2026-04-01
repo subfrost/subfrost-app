@@ -1757,25 +1757,34 @@ indexer. Filter: enter `-__get_len` in Chrome DevTools console filter field.
 | `lib/devnet/boot.ts` Phase 3a | Carbine deployment + initialization (lines ~896-960) |
 | `utils/getConfig.ts` | `CARBINE_CONTROLLER_ID` config key |
 
-### Current Status (2026-04-01) — Known Working / Known Broken
+### Current Status (2026-04-01 updated) — Known Working / Known Broken
 
 **Working:**
 - App boots and loads cleanly on devnet
 - Carbine deploys successfully in Phase 3a with correct init args
-- Buy orders (side=0) place successfully and increment GetOpenOrderCount
-- GetOrderbookDepth (opcode 24) returns correct binary data when queried directly
-- Orderbook UI renders and displays headers
+- Buy orders (side=0) place successfully AND display as green bid rows in orderbook ✅
+- GetOrderbookDepth (opcode 24) with `block_tag: latest` returns correct binary data ✅
+- Orderbook UI renders bid rows correctly ✅
+- U128_MAX sentinel slots (depth padding) correctly filtered out ✅
+- DevnetControlPanel "Clear & Reload" button clears IndexedDB + reloads (fixes WASM OOM) ✅
 
 **Known issues to debug next session:**
-- Sell orders (side=1): orders appear to disappear or not persist in the orderbook after placement. Root cause unknown — may be pair ordering, may be UTXO selection for DIESEL deposit, may be the display not refreshing.
-- Orderbook display: bid/ask rows not always showing even when orders exist on-chain. The `useOrderbook` hook queries with pair (frBTC=32:0, DIESEL=2:0) — NOT (DIESEL=2:0, frBTC=32:0). Verify the query is using the right pair order by running the debug script below.
+- Sell orders (side=1): confirmed on-chain (opcode 25 count increments) but do NOT
+  appear as red ask rows in orderbook. GetOrderbookDepth returns 10 asks but all have
+  U128_MAX amounts (sentinel values) — the real sell orders are NOT in the ask depth.
+  **Root cause hypothesis**: Carbine stores ask orders in a separate trie keyed differently
+  from bid orders. The depth traversal for asks may use a different range or the sell
+  orders are stored under the inverted price key but with zero or U128_MAX amount as a
+  placeholder until matched. Need to read carbine-controller/src/lib.rs PlaceLimitOrder
+  and GetOrderbookDepth source to understand the exact trie layout for side=1.
 
-**Debugging protocol for next session:**
-1. Boot devnet, place a sell order
-2. Check order count: `alkanes_simulate` opcode 25 on [4:70000] — did it increment?
-3. If yes, query depth with BOTH pair orderings to find which one has the order
-4. Compare pair key used at placement vs at query time in LimitOrderPanel / useLimitOrderMutation
-5. Run the vitest e2e test: `npm run test:sdk -- e2e-carbine-clob` — it places both buy and sell orders and verifies them; if it passes, the contract is fine and the bug is purely in the UI
+**Next session debugging protocol:**
+1. Clone subfrost-alkanes repo to `./reference/` and read carbine-controller/src/lib.rs
+2. Find PlaceLimitOrder (opcode 20): how does side=1 differ from side=0 in trie storage?
+3. Find GetOrderbookDepth (opcode 24): what trie range does it traverse for asks?
+4. Check if sell orders need to be placed with frBTC as `inputReqs` (the quote token)
+   instead of DIESEL — maybe the buy/sell token deposit is inverted in useLimitOrderMutation
+5. Run vitest e2e: `npm run test:sdk -- e2e-carbine-clob` to verify contract behavior
 
 **Debug script — check sell order after placing:**
 ```javascript
