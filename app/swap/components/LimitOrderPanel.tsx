@@ -95,9 +95,16 @@ export default function LimitOrderPanel({
       const amountScaled = Math.floor(parseFloat(amount) * 1e8);
 
       const protostone = `[${cBlock},${cTx},20,${aBlock},${aTx},32,0,${sideNum},${priceScaled},${amountScaled}]:v0:v0`;
-      const inputReqs = side === 'buy'
-        ? `32:0:${Math.floor(priceScaled * amountScaled / 1e8)}` // pay in quote token
-        : `${pairA}:${amountScaled}`; // pay in base token
+
+      // Input requirements: PlaceLimitOrder does NOT require token deposits.
+      // The order is a resting entry in the trie — actual token settlement
+      // happens during fill/cancel via the carbine NFT mechanism.
+      // Only BTC for transaction fees is needed.
+      // Source: carbine-controller/src/lib.rs _place_limit_order() — no
+      // incoming_alkanes check, price/amount are purely callpack inputs.
+      const inputReqs = 'B:100000:v0';
+
+      console.log('[LimitOrder] Side:', side, 'pairA:', pairA, 'inputReqs:', inputReqs, 'protostone:', protostone);
 
       if (!sdkProvider) throw new Error('SDK provider not ready');
 
