@@ -420,7 +420,12 @@ export function useOrderbook(baseToken?: string, quoteToken?: string) {
               console.log('[useOrderbook] Parsed orderbook:', parsed.bids.length, 'bids,', parsed.asks.length, 'asks, spread:', parsed.spread);
               return parsed;
             } else {
+              // parseOrderbookResponse returns null when all entries are filtered out.
+              // Most common cause on devnet: corrupted trie state from OOM crash.
+              // Symptom: numAsks>0 but all amounts are MAX or insane values.
+              // Fix: use the "Clear & Reload" button in DevnetControlPanel.
               console.warn('[useOrderbook] parseOrderbookResponse returned null for', byteLen, 'bytes. First 64 hex:', hex.slice(0, 64));
+              console.warn('[useOrderbook] ⚠ If you see numAsks>0 above but no asks display, devnet state is corrupted — use "Clear & Reload"');
             }
           } else {
             console.warn('[useOrderbook] No data in Carbine response');
