@@ -122,24 +122,23 @@ export default function LimitOrderPanel({
 
       const fromAddrs = [segwit, taproot].filter(Boolean);
 
-      // Use alkanesExecuteFull — same method the working vitest E2E test uses.
-      // alkanesExecuteWithStrings has UTXO scanning issues where it can't find
-      // DIESEL-bearing outpoints despite the wallet having balance (reports
-      // "have 0" for sell orders). alkanesExecuteFull bypasses this by using
-      // the provider's own UTXO resolution with actual addresses.
-      const result = await sdkProvider.alkanesExecuteFull(
-        JSON.stringify([taproot || segwit]),
-        inputReqs,
-        protostone,
-        Math.round(fee.feeRate).toString(),
-        null,
-        JSON.stringify({
-          from_addresses: fromAddrs,
-          change_address: segwit || taproot,
-          alkanes_change_address: taproot || segwit,
-          mine_enabled: network === 'devnet',
-        }),
-      );
+      // Use alkanesExecuteTyped — same method useSwapMutation uses, which
+      // successfully finds DIESEL UTXOs for sell swaps. alkanesExecuteFull and
+      // alkanesExecuteWithStrings both fail with "have 0" DIESEL in browser
+      // despite the wallet having balance. alkanesExecuteTyped uses a different
+      // UTXO selection path that works.
+      const useActualAddresses = network === 'devnet' || !segwit;
+      const result = await sdkProvider.alkanesExecuteTyped({
+        inputRequirements: inputReqs,
+        protostones: protostone,
+        feeRate: Math.round(fee.feeRate),
+        autoConfirm: false,
+        fromAddresses: useActualAddresses ? fromAddrs : ['p2wpkh:0', 'p2tr:0'],
+        toAddresses: useActualAddresses ? [taproot || segwit] : ['p2tr:0'],
+        changeAddress: useActualAddresses ? (segwit || taproot) : 'p2wpkh:0',
+        alkanesChangeAddress: useActualAddresses ? (taproot || segwit) : 'p2tr:0',
+        ordinalsStrategy: 'burn',
+      });
 
       if (result) {
         console.log('[LimitOrder] SDK result:', result);
