@@ -893,6 +893,73 @@ async function deployFullProtocol(
   const [poolBlock, poolTx] = poolId ? poolId.split(':').map(Number) : [2, 0];
 
   // -----------------------------------------------------------------------
+  // Phase 3a: Carbine CLOB — deployed early so logs are visible before
+  // console overflow from later phases. No dependency on FIRE/Fujin/bridges.
+  // -----------------------------------------------------------------------
+  // CRITICAL: Carbine contracts do NOT support opcode 50 (the default init
+  // arg in deployWithProxy/deployWithBeacon). Using [50] causes CREATERESERVED
+  // to revert atomically — the WASM binary is never stored, and the proxy
+  // points at an empty slot. Every extcall then fails with "unexpected end
+  // of file". The fix: deploy impls with contract-specific safe opcodes.
+  //
+  // Verified init args from e2e-carbine-clob.test.ts (PlaceLimitOrder works):
+  //   Controller impl: [0, 0, 0]  — opcode 0 (Initialize) with dummy template [0:0]
+  //   Template impl:   [3]        — opcode 3 (query_metadata), read-only
+  //   Router impl:     [0]        — opcode 0 (Initialize)
+  // -----------------------------------------------------------------------
+  onProgress('Deploying Carbine CLOB...', 40);
+  console.log('[devnet-boot] Phase 3a: Carbine CLOB (proxied)...');
+  try {
+    // 1. Controller impl [4:80000] — opcode 0 = Initialize(template_block=0, template_tx=0)
+    await fetchAndDeploy(provider, harness, segwit, taproot,
+      'carbine_controller', S.CARBINE_CTRL_IMPL, [0, 0, 0],
+      'Carbine Controller Impl', onProgress, 40);
+    // 2. Controller proxy [4:70000]
+    await deployWasm(provider, harness, segwit, taproot,
+      upgradeableWasm, S.CARBINE_CTRL_PROXY,
+      [0x7fff, 4, S.CARBINE_CTRL_IMPL, 1],
+      'Carbine Controller Proxy', onProgress, 41);
+    contracts.carbineController.authTokenId = await discoverLastAuthToken(taproot);
+
+    // 3. Template impl [4:80001] — opcode 3 = query_metadata (read-only, safe)
+    await fetchAndDeploy(provider, harness, segwit, taproot,
+      'carbine_template', S.CARBINE_TMPL_IMPL, [3],
+      'Carbine Template Impl', onProgress, 42);
+    // 4. Template beacon [4:90001]
+    await deployWasm(provider, harness, segwit, taproot,
+      upgradeableBeaconWasm, S.CARBINE_TMPL_BEACON,
+      [0x7fff, 4, S.CARBINE_TMPL_IMPL, 1],
+      'Carbine Template Beacon', onProgress, 42);
+    contracts.carbineTemplate.authTokenId = await discoverLastAuthToken(taproot);
+
+    // 5. Template beacon-proxy instance [4:70001]
+    await deployBeaconInstance(provider, harness, segwit, taproot,
+      beaconProxyWasm, S.CARBINE_TEMPLATE, S.CARBINE_TMPL_BEACON,
+      'Carbine Default', onProgress, 43);
+
+    // 6. Router impl [4:80002] — opcode 0 = Initialize
+    await fetchAndDeploy(provider, harness, segwit, taproot,
+      'universal_router', S.UNIVERSAL_ROUTER_IMPL, [0],
+      'Universal Router Impl', onProgress, 43);
+    // 7. Router proxy [4:70002]
+    await deployWasm(provider, harness, segwit, taproot,
+      upgradeableWasm, S.UNIVERSAL_ROUTER_PROXY,
+      [0x7fff, 4, S.UNIVERSAL_ROUTER_IMPL, 1],
+      'Universal Router Proxy', onProgress, 44);
+    contracts.universalRouter.authTokenId = await discoverLastAuthToken(taproot);
+
+    // Initialize controller through proxy with real template reference.
+    // Opcode 0 = Initialize, args = [4, CARBINE_TEMPLATE] = template at [4:70001]
+    await initThroughProxy(provider, harness, segwit, taproot,
+      S.CARBINE_CTRL_PROXY, [0, 4, S.CARBINE_TEMPLATE],
+      'Carbine Controller');
+
+    console.log('[devnet-boot] Carbine CLOB deployed and initialized');
+  } catch (e: any) {
+    console.warn('[devnet-boot] Carbine deployment failed (non-fatal):', e?.message?.substring(0, 80));
+  }
+
+  // -----------------------------------------------------------------------
   // Phase 3: FIRE Protocol — 6 contracts, each behind upgradeable proxy
   // Deploy impl at +10000 slot, proxy at original slot.
   // Business init happens THROUGH proxy (delegatecall).
@@ -1086,71 +1153,7 @@ async function deployFullProtocol(
     'B:100000:v0');
   console.log('[devnet-boot] MasterFujin initialized');
 
-  // -----------------------------------------------------------------------
-  // Phase 6: Carbine CLOB — controller proxy + template beacon
-  // -----------------------------------------------------------------------
-  // CRITICAL: Carbine contracts do NOT support opcode 50 (the default init
-  // arg in deployWithProxy/deployWithBeacon). Using [50] causes CREATERESERVED
-  // to revert atomically — the WASM binary is never stored, and the proxy
-  // points at an empty slot. Every extcall then fails with "unexpected end
-  // of file". The fix: deploy impls with contract-specific safe opcodes.
-  //
-  // Verified init args from e2e-carbine-clob.test.ts (PlaceLimitOrder works):
-  //   Controller impl: [0, 0, 0]  — opcode 0 (Initialize) with dummy template [0:0]
-  //   Template impl:   [3]        — opcode 3 (query_metadata), read-only
-  //   Router impl:     [0]        — opcode 0 (Initialize)
-  // -----------------------------------------------------------------------
-  onProgress('Deploying Carbine CLOB...', 88);
-  console.log('[devnet-boot] Phase 6: Carbine CLOB (proxied)...');
-  try {
-    // 1. Controller impl [4:80000] — opcode 0 = Initialize(template_block=0, template_tx=0)
-    await fetchAndDeploy(provider, harness, segwit, taproot,
-      'carbine_controller', S.CARBINE_CTRL_IMPL, [0, 0, 0],
-      'Carbine Controller Impl', onProgress, 88);
-    // 2. Controller proxy [4:70000]
-    await deployWasm(provider, harness, segwit, taproot,
-      upgradeableWasm, S.CARBINE_CTRL_PROXY,
-      [0x7fff, 4, S.CARBINE_CTRL_IMPL, 1],
-      'Carbine Controller Proxy', onProgress, 88);
-    contracts.carbineController.authTokenId = await discoverLastAuthToken(taproot);
-
-    // 3. Template impl [4:80001] — opcode 3 = query_metadata (read-only, safe)
-    await fetchAndDeploy(provider, harness, segwit, taproot,
-      'carbine_template', S.CARBINE_TMPL_IMPL, [3],
-      'Carbine Template Impl', onProgress, 89);
-    // 4. Template beacon [4:90001]
-    await deployWasm(provider, harness, segwit, taproot,
-      upgradeableBeaconWasm, S.CARBINE_TMPL_BEACON,
-      [0x7fff, 4, S.CARBINE_TMPL_IMPL, 1],
-      'Carbine Template Beacon', onProgress, 89);
-    contracts.carbineTemplate.authTokenId = await discoverLastAuthToken(taproot);
-
-    // 5. Template beacon-proxy instance [4:70001]
-    await deployBeaconInstance(provider, harness, segwit, taproot,
-      beaconProxyWasm, S.CARBINE_TEMPLATE, S.CARBINE_TMPL_BEACON,
-      'Carbine Default', onProgress, 89);
-
-    // 6. Router impl [4:80002] — opcode 0 = Initialize
-    await fetchAndDeploy(provider, harness, segwit, taproot,
-      'universal_router', S.UNIVERSAL_ROUTER_IMPL, [0],
-      'Universal Router Impl', onProgress, 90);
-    // 7. Router proxy [4:70002]
-    await deployWasm(provider, harness, segwit, taproot,
-      upgradeableWasm, S.UNIVERSAL_ROUTER_PROXY,
-      [0x7fff, 4, S.UNIVERSAL_ROUTER_IMPL, 1],
-      'Universal Router Proxy', onProgress, 90);
-    contracts.universalRouter.authTokenId = await discoverLastAuthToken(taproot);
-
-    // Initialize controller through proxy with real template reference.
-    // Opcode 0 = Initialize, args = [4, CARBINE_TEMPLATE] = template at [4:70001]
-    await initThroughProxy(provider, harness, segwit, taproot,
-      S.CARBINE_CTRL_PROXY, [0, 4, S.CARBINE_TEMPLATE],
-      'Carbine Controller');
-
-    console.log('[devnet-boot] Carbine CLOB deployed and initialized');
-  } catch (e: any) {
-    console.warn('[devnet-boot] Carbine deployment failed (non-fatal):', e?.message?.substring(0, 80));
-  }
+  // Phase 6 slot intentionally left empty — Carbine moved to Phase 3a (above FIRE)
 
   // -----------------------------------------------------------------------
   // Phase 7: Bridge contracts — each behind upgradeable proxy
