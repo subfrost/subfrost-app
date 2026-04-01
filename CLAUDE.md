@@ -25,7 +25,9 @@ Every mutation hook MUST use `useActualAddresses = isBrowserWallet || network ==
 
 **Test enforcement:** `address-handling.test.ts` asserts `useActualAddresses = isBrowserWallet || network === 'devnet'` exists in every hook.
 
-**After fixing address bugs:** Hard reset the devnet. Old state has tokens at the wrong derivation addresses and cannot be recovered.
+**After fixing address bugs:** Hard reset the devnet. Old state has tokens at the wrong derivation addresses and cannot be recovered. Stale state also inflates balance displays (espo aggregates across old + new outpoints) which causes users to attempt swaps larger than their actual spendable balance.
+
+**"Insufficient alkanes" errors:** Almost always caused by stale devnet state, NOT SDK bugs. The SDK correctly aggregates alkane balances across multiple outpoints (verified 2026-03-31 via vitest E2E). If you see this error: hard reset the devnet first, then retry. Only investigate further if the error persists on a fresh instance.
 
 ### Data Layer — Espo Serves ALL Data Queries
 ALL data queries on devnet (pool discovery, balance queries, token lists) go through the **espo tertiary indexer** via REST endpoints:
