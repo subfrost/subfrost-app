@@ -169,14 +169,14 @@ export function parseOrderbookResponse(data: string | number[]): OrderbookData |
   const bestBid = bids.length > 0 ? parseFloat(bids[0].price.replace(/,/g, '')) : 0;
   const bestAsk = asks.length > 0 ? parseFloat(asks[0].price.replace(/,/g, '')) : 0;
   const midPrice = (bestBid + bestAsk) / 2 || bestBid || bestAsk;
-  const spread = bestAsk - bestBid;
+  const spread = Math.abs(bestAsk - bestBid);
 
   return {
     bids,
     asks,
-    spread: spread.toFixed(2),
+    spread: formatPrice(spread),
     spreadPercent: midPrice > 0 ? ((spread / midPrice) * 100).toFixed(3) : '0.000',
-    midPrice: midPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+    midPrice: formatPrice(midPrice),
   };
 }
 
@@ -199,34 +199,57 @@ export function useOrderbook(baseToken?: string, quoteToken?: string) {
           const [baseBlock, baseTx] = baseToken.includes(':') ? baseToken.split(':') : ['0', '0'];
           const [quoteBlock, quoteTx] = quoteToken.includes(':') ? quoteToken.split(':') : ['0', '0'];
 
-          const resp = await fetch(getRpcUrl(network), {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              jsonrpc: '2.0',
-              method: 'alkanes_simulate',
-              params: [{
-                target: { block: ctrlBlock, tx: ctrlTx },
-                inputs: ['24', baseBlock, baseTx, quoteBlock, quoteTx, '10'],
-                alkanes: [],
-                transaction: '0x',
-                block: '0x',
-                height: '999999',
-                txindex: 0,
-                vout: 0,
-              }],
-              id: 1,
-            }),
-          });
-          const data = await resp.json();
-          const exec = data?.result?.execution;
+          // The Carbine controller keys orders by pair hash. The pair order
+          // matters — (DIESEL,frBTC) and (frBTC,DIESEL) are different pairs.
+          // LimitOrderPanel sends pairs as [base, quote], but the controller
+          // may store them in either order. Try both and use whichever has data.
+          // Verified on devnet 2026-04-01: orders placed as DIESEL/frBTC were
+          // found under (frBTC,DIESEL) = (32:0, 2:0), not (2:0, 32:0).
+          const pairOrders = [
+            [baseBlock, baseTx, quoteBlock, quoteTx],   // base/quote as-is
+            [quoteBlock, quoteTx, baseBlock, baseTx],    // reversed
+          ];
+
+          let exec: any = null;
+          for (const [b1, t1, b2, t2] of pairOrders) {
+            const resp = await fetch(getRpcUrl(network), {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                jsonrpc: '2.0',
+                method: 'alkanes_simulate',
+                params: [{
+                  target: { block: ctrlBlock, tx: ctrlTx },
+                  inputs: ['24', b1, t1, b2, t2, '10'],
+                  alkanes: [],
+                  transaction: '0x',
+                  block: '0x',
+                  height: '999999',
+                  txindex: 0,
+                  vout: 0,
+                }],
+                id: 1,
+              }),
+            });
+            const data = await resp.json();
+            const tryExec = data?.result?.execution;
+            if (tryExec?.data) {
+              const hex = tryExec.data.replace(/^0x/, '');
+              // Check if this response has actual orders (not just 8 zero bytes)
+              if (hex.length > 16 && hex !== '0000000000000000') {
+                exec = tryExec;
+                break;
+              }
+            }
+            if (!exec) exec = tryExec; // keep last result for error reporting
+          }
 
           if (exec?.error) {
             console.warn('[useOrderbook] Carbine simulate error:', exec.error);
           } else if (exec?.data) {
             const hex = exec.data.replace(/^0x/, '');
             const byteLen = hex.length / 2;
-            console.log('[useOrderbook] FULL RAW HEX (' + byteLen + ' bytes):', hex);
+            console.log('[useOrderbook] RAW HEX (' + byteLen + ' bytes):', hex.slice(0, 128));
             const parsed = parseOrderbookResponse(exec.data);
             if (parsed) {
               console.log('[useOrderbook] Parsed orderbook:', parsed.bids.length, 'bids,', parsed.asks.length, 'asks, spread:', parsed.spread);
