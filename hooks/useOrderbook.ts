@@ -163,7 +163,7 @@ export function useOrderbook(baseToken?: string, quoteToken?: string) {
               method: 'alkanes_simulate',
               params: [{
                 target: { block: ctrlBlock, tx: ctrlTx },
-                inputs: ['24', baseBlock, baseTx, quoteBlock, quoteTx],
+                inputs: ['24', baseBlock, baseTx, quoteBlock, quoteTx, '10'],
                 alkanes: [],
                 transaction: '0x',
                 block: '0x',
