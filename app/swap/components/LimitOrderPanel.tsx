@@ -25,22 +25,29 @@
  *   For buy:  inputReqs = '32:0:{priceScaled * amountScaled / 1e8}'  (send frBTC)
  *
  * =============================================================================
- * KNOWN ISSUE (2026-04-01): Sell orders not appearing in orderbook display
+ * KNOWN ISSUE (2026-04-01): Sell orders show corrupted amounts in orderbook
  * =============================================================================
- * Buy orders (side=0) display correctly in the Order Book panel as green bid rows.
- * Sell orders (side=1) are confirmed on-chain (opcode 25 order count increments)
- * but do NOT appear as red ask rows in the orderbook.
+ * Buy orders (side=0) display correctly. Sell orders (side=1) confirmed on-chain
+ * (opcode 25 count increments) but depth query returns 10 entries all with
+ * U128_MAX amounts. Root cause investigation (2026-04-01):
  *
- * HYPOTHESIS: The Carbine contract stores sell orders under a different pair key
- * or trie position than buy orders. GetOrderbookDepth (opcode 24) with pair
- * (DIESEL=2:0, frBTC=32:0) returns the correct bid depth but ask entries all have
- * U128_MAX amounts (sentinel/empty slots). Real ask amounts are zero or stored
- * differently. Need to inspect carbine-controller source at:
- *   subfrost-alkanes/alkanes/carbine-controller/src/lib.rs
- * Specifically how PlaceLimitOrder stores side=1 vs side=0, and how
- * GetOrderbookDepth traverses the trie for asks.
+ * CONFIRMED from carbine-controller/src/lib.rs:
+ *   - _get_orderbook_depth does NOT pad — uses break, returns real count
+ *   - Ask prices ARE un-inverted by contract (line 760: real_price = MAX - token_id)
+ *   - 10 all-0xff ask entries = trie has 10 real keys but level amounts = MAX
+ *   - Most likely cause: devnet OOM crash mid-write corrupted level storage
  *
- * NEXT STEP: Read carbine-controller source to understand ask trie storage.
+ * FIXES APPLIED in useOrderbook.ts:
+ *   1. Removed double-un-inversion of ask prices (was inverting already-real prices)
+ *   2. Replaced U128_MAX filter with MAX_SANE_AMOUNT guard (1e18) + warning
+ *   3. Removed wrong deduplication (bids/asks in separate trie halves, no echo)
+ *   4. Added [QA] bestBid/bestAsk diagnostics for BOTH pair orderings
+ *   5. Parallel depth queries with better pair selection logic
+ *
+ * DIAGNOSIS: After fresh devnet reset + sell order placement, observe:
+ *   [QA] pair X/Y bestAsk: price=N, amount=M  ← sell IS in trie
+ *   [QA] depth pair X/Y: numBids=0 numAsks=1  ← correct
+ * If all [QA] bestAsk still shows corrupted data → devnet reset needed
  * =============================================================================
  */
 

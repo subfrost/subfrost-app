@@ -36,23 +36,42 @@
  *   [N..N+3] numAsks (u32 LE)
  *   [N+4..M] ask[i]: [u128 price LE (16 bytes), u128 amount LE (16 bytes)]
  *
- * ## Ask price inversion (VERIFIED 2026-04-01 — do not remove un-inversion)
- *   Ask prices in the response are INVERTED trie keys: stored = u128::MAX - real.
- *   The contract source (lib.rs:760) suggests it un-inverts before returning, but
- *   live devnet data proves it does NOT — stored value came back as
- *   340282366920938463463374607431768211355 and real price was 100.
- *   The parser MUST un-invert: real = U128_MAX - stored.
- *   Formula check: stored > U128_MAX/2 → it's an inverted ask.
+ * ## Ask price inversion (CORRECTED 2026-04-01)
+ *   Contract source lib.rs:760 confirms: `let real_price = u128::MAX - token_id`
+ *   and writes real_price to the response. Ask prices are ALREADY un-inverted.
+ *   Previous parser was applying a second un-inversion which produced wrong prices.
+ *   Parser must NOT un-invert ask prices — they arrive as real prices from the contract.
  *
  * ## Price/amount scaling
  *   All raw values are in 1e8 (satoshi) units. Divide by 1e8 for display.
  *   PlaceLimitOrder sends: price_scaled = human_price * 1e8,
  *                          amount_scaled = human_amount * 1e8
  *
- * ## Deduplication
- *   A single order appears in BOTH bids and asks within the trie traversal when
- *   depth crosses the bid/ask boundary. The hook filters out ask entries that
- *   have identical price+amount to a bid entry — those are the same order echoed.
+ * ## Trie layout (VERIFIED from carbine-controller/src/lib.rs)
+ *   BUY orders stored at trie key = raw_price (below MAX/2)
+ *   SELL orders stored at trie key = MAX - raw_price (above MAX/2)
+ *   GetOrderbookDepth:
+ *     bids: trie.prev(MAX/2) → iterates keys < MAX/2 (buy orders)
+ *     asks: trie.next(MAX/2) → iterates keys > MAX/2 (sell orders)
+ *   The two halves are SEPARATE — a buy order does NOT appear in asks.
+ *   Earlier "deduplication" code was wrong and has been removed.
+ *
+ * ## U128_MAX in ask amounts
+ *   The contract does NOT pad empty slots with U128_MAX — it uses break.
+ *   If ask amounts read as U128_MAX, the devnet state is corrupted (likely
+ *   from OOM crash mid-write). These entries are skipped with a warning.
+ *   Real amounts from properly-placed orders will be much smaller.
+ *
+ * ## Ask price un-inversion (CONFIRMED from source line 760)
+ *   Contract un-inverts before writing: real_price = MAX - token_id.
+ *   So ask prices in the response ARE already real prices — DO NOT un-invert again.
+ *   Earlier code was double-un-inverting which caused wrong prices.
+ *
+ * ## Diagnostic: [QA] bestAsk / bestBid
+ *   These opcode 22/23 queries run in parallel with depth.
+ *   If bestAsk returns "0x00" → no asks in trie (wrong pair key OR no sell orders)
+ *   If bestAsk returns "0x01 + price(16B) + amount(16B)" → ask exists in trie
+ *   Cross-reference with depth results to diagnose pair key mismatches.
  *
  * ## Verification script (run in browser console on devnet)
  *   // Check open order count:
@@ -168,13 +187,12 @@ const U128_MAX = (BigInt(1) << BigInt(128)) - BigInt(1);
  *   u32 numAsks (4 bytes LE)
  *   [u128 price, u128 amount] x numAsks (32 bytes each)
  *
- * Price encoding (VERIFIED against live devnet data 2026-04-01):
+ * Price encoding (VERIFIED from carbine-controller/src/lib.rs 2026-04-01):
  *   - Bid prices are REAL prices (raw u128, no transformation needed)
- *   - Ask prices are INVERTED trie keys: stored as u128::MAX - real_price
- *     Despite source code suggesting un-inversion at line 760, the actual
- *     response returns raw trie keys. Parser MUST un-invert: real = MAX - stored.
+ *   - Ask prices are ALREADY REAL — contract un-inverts at line 760 before writing.
+ *     DO NOT un-invert again. Earlier code was double-un-inverting (now fixed).
  *   - Prices are in the token's native denomination (raw u128, no 1e8 scaling)
- *   - Empty/padding slots have price=0 or amount=0 and are skipped
+ *   - Zero amount slots are skipped; no U128_MAX padding — contract uses break
  *
  * Debug tip — verify orderbook data from browser console on devnet:
  *   const r = await fetch('http://localhost:18888', { method: 'POST',
@@ -206,12 +224,17 @@ export function parseOrderbookResponse(data: string | number[]): OrderbookData |
 
   const bids: OrderLevel[] = [];
   let bidCumTotal = 0;
+  // Max sane amount: 1e18 raw = 1e10 tokens. Larger values = corrupted devnet state.
+  const MAX_SANE_AMOUNT_BID = BigInt('1000000000000000000'); // 1e18
   for (let i = 0; i < numBids; i++) {
     const rawPriceBigB = readU128LE(bytes, offset);
     const rawAmountBigB = readU128LE(bytes, offset + 16);
     offset += 32;
-    // Skip sentinel slots (U128_MAX = empty padding, 0 = no amount)
-    if (rawAmountBigB === BigInt(0) || rawAmountBigB === U128_MAX) continue;
+    if (rawAmountBigB === BigInt(0)) continue;
+    if (rawAmountBigB > MAX_SANE_AMOUNT_BID) {
+      console.warn(`[useOrderbook] bid[${i}] amount=${rawAmountBigB} exceeds sanity limit (corrupted devnet state?), price=${rawPriceBigB} — skipping`);
+      continue;
+    }
     const rawPrice = Number(rawPriceBigB);
     const rawAmount = Number(rawAmountBigB);
     const price = rawPrice / DECIMALS;
@@ -232,18 +255,22 @@ export function parseOrderbookResponse(data: string | number[]): OrderbookData |
 
   const asks: OrderLevel[] = [];
   let askCumTotal = 0;
+  // Max sane amount: 1e18 raw = 1e10 tokens (10 billion). Anything above this
+  // is from corrupted/OOM-crashed devnet state and should be skipped with a warning.
+  const MAX_SANE_AMOUNT = BigInt('1000000000000000000'); // 1e18
   for (let i = 0; i < numAsks; i++) {
-    // Ask prices in the response are INVERTED trie keys (u128::MAX - real_price).
-    // We must un-invert to get the real price. Verified on devnet 2026-04-01:
-    // stored=340282366920938463463374607431768211355, real=100 (correct).
+    // Ask prices in the response are ALREADY real prices — the contract un-inverts
+    // at lib.rs:760 with `let real_price = u128::MAX - token_id` before writing.
+    // Do NOT un-invert here — that was a previous bug that double-inverted prices.
     const rawPriceBig = readU128LE(bytes, offset);
     const rawAmountBig = readU128LE(bytes, offset + 16);
     offset += 32;
-    // Skip sentinel slots: contract pads depth response with U128_MAX entries
-    // when fewer real orders exist. U128_MAX amount = empty slot.
-    if (rawAmountBig === BigInt(0) || rawAmountBig === U128_MAX) continue;
-    const realPriceBig = rawPriceBig > U128_MAX / BigInt(2) ? U128_MAX - rawPriceBig : rawPriceBig;
-    const rawPrice = Number(realPriceBig);
+    if (rawAmountBig === BigInt(0)) continue;
+    if (rawAmountBig > MAX_SANE_AMOUNT) {
+      console.warn(`[useOrderbook] ask[${i}] amount=${rawAmountBig} exceeds sanity limit (corrupted devnet state?), price=${rawPriceBig} — skipping`);
+      continue;
+    }
+    const rawPrice = Number(rawPriceBig);
     const rawAmount = Number(rawAmountBig);
     const price = rawPrice / DECIMALS;
     const amount = rawAmount / DECIMALS;
@@ -255,26 +282,10 @@ export function parseOrderbookResponse(data: string | number[]): OrderbookData |
     });
   }
 
-  // Deduplicate: The Carbine trie stores orders across the full u128 range.
-  // A single buy order at price X appears as BOTH a bid (price=X, below MAX/2)
-  // and an ask (price=MAX-X, above MAX/2) in the depth traversal. When bid and
-  // ask levels have identical price+amount, it's the same order echoed on both
-  // sides — remove the duplicate. Verified on devnet: 1 buy order → depth
-  // returned 1 bid + 1 ask with same price=100, amount=100000000.
-  if (bids.length > 0 && asks.length > 0) {
-    const dedupedAsks = asks.filter(ask => {
-      return !bids.some(bid => bid.price === ask.price && bid.amount === ask.amount);
-    });
-    const dedupedBids = bids.filter(bid => {
-      return !asks.some(ask => ask.price === bid.price && ask.amount === bid.amount && dedupedAsks.includes(ask));
-    });
-    // Only apply dedup if it actually removed duplicates (not independent orders)
-    if (dedupedAsks.length < asks.length || dedupedBids.length < bids.length) {
-      asks.length = 0;
-      asks.push(...dedupedAsks);
-      // Keep bids as-is since we removed the ask duplicates
-    }
-  }
+  // NOTE: Deduplication removed (2026-04-01).
+  // Buy orders (trie keys < MAX/2) and sell orders (trie keys > MAX/2) are stored
+  // in separate halves of the trie. A buy order does NOT echo in the asks side.
+  // The previous dedup was based on a wrong assumption about trie traversal.
 
   if (bids.length === 0 && asks.length === 0) return null;
 
@@ -322,10 +333,49 @@ export function useOrderbook(baseToken?: string, quoteToken?: string) {
             [quoteBlock, quoteTx, baseBlock, baseTx],    // reversed
           ];
 
-          let exec: any = null;
-          for (const [b1, t1, b2, t2] of pairOrders) {
-            console.log(`[QA] useOrderbook querying pair ${b1}:${t1}/${b2}:${t2} on controller ${ctrlBlock}:${ctrlTx}`);
-            const resp = await fetch(getRpcUrl(network), {
+          // Diagnostic: query best bid (opcode 22) and best ask (opcode 23)
+          // for BOTH pair orderings. Response format:
+          //   0x00 = no order in trie (empty)
+          //   0x01 + price(16B LE) + amount(16B LE) = order found
+          // Use this to determine if sell orders are being stored at all,
+          // and which pair ordering matches the stored data.
+          const diagPairs = [
+            { label: `${baseBlock}:${baseTx}/${quoteBlock}:${quoteTx}`, inputs_suffix: [baseBlock, baseTx, quoteBlock, quoteTx] },
+            { label: `${quoteBlock}:${quoteTx}/${baseBlock}:${baseTx}`, inputs_suffix: [quoteBlock, quoteTx, baseBlock, baseTx] },
+          ];
+          for (const dp of diagPairs) {
+            const [bbR, baR] = await Promise.all([
+              fetch(getRpcUrl(network), { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ jsonrpc: '2.0', method: 'alkanes_simulate',
+                  params: [{ target: { block: ctrlBlock, tx: ctrlTx },
+                    inputs: ['22', ...dp.inputs_suffix], block_tag: 'latest' }], id: 97 }),
+              }).then(r => r.json()).then(j => j?.result?.execution),
+              fetch(getRpcUrl(network), { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ jsonrpc: '2.0', method: 'alkanes_simulate',
+                  params: [{ target: { block: ctrlBlock, tx: ctrlTx },
+                    inputs: ['23', ...dp.inputs_suffix], block_tag: 'latest' }], id: 98 }),
+              }).then(r => r.json()).then(j => j?.result?.execution),
+            ]);
+            // Decode: first byte 0x01 means data present, then 16B price + 16B amount
+            const decodeBestLevel = (hex: string | undefined) => {
+              if (!hex) return 'null';
+              const h = hex.replace(/^0x/, '');
+              if (h === '' || h === '00') return 'EMPTY (no order in trie)';
+              if (h.startsWith('01') && h.length >= 66) {
+                const bytes = Array.from(Buffer.from(h, 'hex'));
+                const priceBig = readU128LE(bytes, 1);
+                const amtBig = readU128LE(bytes, 17);
+                return `price=${priceBig} (${Number(priceBig)/1e8} display), amount=${amtBig} (${Number(amtBig)/1e8} display)`;
+              }
+              return `raw=${h}`;
+            };
+            console.log(`[QA] pair ${dp.label} bestBid:`, decodeBestLevel(bbR?.data), '| err:', bbR?.error);
+            console.log(`[QA] pair ${dp.label} bestAsk:`, decodeBestLevel(baR?.data), '| err:', baR?.error);
+          }
+
+          // Query both pair orderings in parallel, then pick the one with real orders
+          const depthResps = await Promise.all(pairOrders.map(([b1, t1, b2, t2]) =>
+            fetch(getRpcUrl(network), {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -338,19 +388,25 @@ export function useOrderbook(baseToken?: string, quoteToken?: string) {
                 }],
                 id: 1,
               }),
-            });
-            const data = await resp.json();
-            const tryExec = data?.result?.execution;
-            if (tryExec?.data) {
-              const hex = tryExec.data.replace(/^0x/, '');
-              console.log(`[QA] useOrderbook pair ${b1}:${t1}/${b2}:${t2} response: ${hex.slice(0,32)} (${hex.length/2} bytes) err:`, tryExec.error);
-              // Check if this response has actual orders (not just 8 zero bytes)
-              if (hex.length > 16 && hex !== '0000000000000000') {
-                exec = tryExec;
-                break;
-              }
+            }).then(r => r.json()).then(d => ({ pair: `${b1}:${t1}/${b2}:${t2}`, exec: d?.result?.execution }))
+          ));
+
+          // Pick the pair response with non-zero numBids or numAsks.
+          // Log all responses for diagnostics.
+          let exec: any = null;
+          for (const { pair, exec: tryExec } of depthResps) {
+            if (!tryExec?.data) { console.log(`[QA] depth pair ${pair}: no data`); continue; }
+            const hex = tryExec.data.replace(/^0x/, '');
+            const bytes = Array.from(Buffer.from(hex, 'hex'));
+            const numBids = bytes.length >= 4 ? readU32LE(bytes, 0) : 0;
+            // numAsks is at offset 4 + numBids*32
+            const askOffset = 4 + numBids * 32;
+            const numAsks = bytes.length >= askOffset + 4 ? readU32LE(bytes, askOffset) : 0;
+            console.log(`[QA] depth pair ${pair}: ${hex.length/2}B numBids=${numBids} numAsks=${numAsks} firstBytes=${hex.slice(0,32)} err:`, tryExec.error);
+            if ((numBids > 0 || numAsks > 0) && !exec) {
+              exec = tryExec; // use first pair with actual orders
             }
-            if (!exec) exec = tryExec; // keep last result for error reporting
+            if (!exec) exec = tryExec; // fallback to last if none has orders
           }
 
           if (exec?.error) {
