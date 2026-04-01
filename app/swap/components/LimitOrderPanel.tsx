@@ -55,7 +55,6 @@
 'use client';
 
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
 import { useWallet } from '@/context/WalletContext';
 import { useTheme } from '@/context/ThemeContext';
 import { useModalStore } from '@/stores/modals';
@@ -64,8 +63,8 @@ import NumberField from '@/app/components/NumberField';
 import TokenIcon from '@/app/components/TokenIcon';
 import { useGlobalStore } from '@/stores/global';
 import { useFeeRate, type FeeSelection } from '@/hooks/useFeeRate';
-import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { useNotification } from '@/context/NotificationContext';
+import { useLimitOrderMutation } from '@/hooks/useLimitOrderMutation';
 import { getConfig } from '@/utils/getConfig';
 import type { TokenMeta } from '../types';
 import type { Network } from '@/utils/constants';
@@ -93,16 +92,14 @@ export default function LimitOrderPanel({
   onMaxFrom,
   network,
 }: Props) {
-  const { isConnected, account, signTaprootPsbt, signSegwitPsbt } = useWallet();
+  const { isConnected } = useWallet();
   const { theme } = useTheme();
   const { openTokenSelector } = useModalStore();
   const { deadlineBlocks, setDeadlineBlocks } = useGlobalStore();
   const fee = useFeeRate();
-  const queryClient = useQueryClient();
   const [side, setSide] = useState<'buy' | 'sell'>('buy');
   const [price, setPrice] = useState('');
   const [amount, setAmount] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [priceFocused, setPriceFocused] = useState(false);
   const [amountFocused, setAmountFocused] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -123,136 +120,39 @@ export default function LimitOrderPanel({
     return (p * a).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }, [price, amount]);
 
-  const { provider: sdkProvider } = useAlkanesSDK();
+  const limitOrderMutation = useLimitOrderMutation();
+  const isSubmitting = limitOrderMutation.isPending;
   const { showNotification } = useNotification();
 
   const handleSubmit = async () => {
     if (!price || !amount || !isConnected) return;
-    setIsSubmitting(true);
     try {
       const effectiveNetwork = network || 'devnet';
-      console.log('[LimitOrder] Network:', network, '→ effective:', effectiveNetwork);
       const config = getConfig(effectiveNetwork);
       const controllerId = (config as any).CARBINE_CONTROLLER_ID;
-      console.log('[LimitOrder] Config keys:', Object.keys(config));
-      console.log('[LimitOrder] CARBINE_CONTROLLER_ID:', controllerId);
       if (!controllerId) throw new Error('Carbine controller not configured for this network');
 
-      const [cBlock, cTx] = controllerId.split(':');
-      // PlaceLimitOrder: opcode 20, pair tokens, side, price, amount
-      // For now, use DIESEL (2:0) and frBTC (32:0) as the default pair
-      const pairA = fromToken?.id || '2:0';
-      const pairB = '32:0';
-      const [aBlock, aTx] = pairA.split(':');
-      const sideNum = side === 'buy' ? 0 : 1;
-      const priceScaled = Math.floor(parseFloat(price) * 1e8);
-      const amountScaled = Math.floor(parseFloat(amount) * 1e8);
+      const baseTokenId = fromToken?.id || '2:0';
+      const quoteTokenId = '32:0';
+      const priceScaled = Math.floor(parseFloat(price) * 1e8).toString();
+      const amountScaled = Math.floor(parseFloat(amount) * 1e8).toString();
 
-      const protostone = `[${cBlock},${cTx},20,${aBlock},${aTx},32,0,${sideNum},${priceScaled},${amountScaled}]:v0:v0`;
-
-      // Input requirements: PlaceLimitOrder DOES require token deposits.
-      // Buy: deposit quote token (frBTC) = price * amount / 1e8
-      // Sell: deposit base token (DIESEL) = amount
-      // Verified from e2e-carbine-clob.test.ts:951 — sell sends '2:0:${sellAmount}'
-      // and DIESEL balance decreases after placement ("DIESEL locked").
-      //
-      // IMPORTANT: inputReqs uses RAW amounts (not scaled). The test uses
-      // raw amounts directly (e.g., sellAmount=1000 raw, not 1000*1e8).
-      // But the UI scales amount by 1e8, so amountScaled is already raw.
-      //
-      // For sell: send base token amount
-      // For buy: send quote token amount = price * quantity (both already scaled)
-      const inputReqs = side === 'buy'
-        ? `32:0:${Math.floor(priceScaled * amountScaled / 1e8)}`
-        : `2:0:${amountScaled}`;
-
-      console.log('[LimitOrder] Side:', side, 'inputReqs:', inputReqs, 'protostone:', protostone);
-
-      if (!sdkProvider) throw new Error('SDK provider not ready');
-
-      const taproot = account?.taproot?.address || '';
-      const segwit = account?.nativeSegwit?.address || '';
-      if (!taproot && !segwit) throw new Error('No wallet address available');
-
-      const fromAddrs = [segwit, taproot].filter(Boolean);
-
-      // Use alkanesExecuteTyped — same method useSwapMutation uses, which
-      // successfully finds DIESEL UTXOs for sell swaps. alkanesExecuteFull and
-      // alkanesExecuteWithStrings both fail with "have 0" DIESEL in browser
-      // despite the wallet having balance. alkanesExecuteTyped uses a different
-      // UTXO selection path that works.
-      const useActualAddresses = network === 'devnet' || !segwit;
-      const result = await sdkProvider.alkanesExecuteTyped({
-        inputRequirements: inputReqs,
-        protostones: protostone,
+      const result = await limitOrderMutation.mutateAsync({
+        controllerId,
+        baseTokenId,
+        quoteTokenId,
+        side: side === 'buy' ? 0 : 1,
+        price: priceScaled,
+        amount: amountScaled,
         feeRate: Math.round(fee.feeRate),
-        autoConfirm: false,
-        fromAddresses: useActualAddresses ? fromAddrs : ['p2wpkh:0', 'p2tr:0'],
-        toAddresses: useActualAddresses ? [taproot || segwit] : ['p2tr:0'],
-        changeAddress: useActualAddresses ? (segwit || taproot) : 'p2wpkh:0',
-        alkanesChangeAddress: useActualAddresses ? (taproot || segwit) : 'p2tr:0',
-        ordinalsStrategy: 'burn',
       });
 
-      if (result) {
-        console.log('[LimitOrder] SDK result:', result);
-        let txid = result.txid || result.reveal_txid;
-
-        // If SDK returned readyToSign, we need to sign + broadcast manually
-        if (!txid && result.readyToSign?.psbt) {
-          console.log('[LimitOrder] Signing readyToSign PSBT...');
-          const { extractPsbtBase64 } = await import('@/lib/alkanes/helpers');
-          const bitcoin = await import('bitcoinjs-lib');
-          const ecc = await import('@bitcoinerlab/secp256k1');
-          bitcoin.initEccLib(ecc);
-
-          let psbtBase64 = extractPsbtBase64(result.readyToSign.psbt);
-
-          // Sign with both keys
-          psbtBase64 = await signSegwitPsbt(psbtBase64);
-          psbtBase64 = await signTaprootPsbt(psbtBase64);
-
-          // Finalize and extract
-          const btcNetwork = network === 'devnet' || network?.includes('regtest')
-            ? bitcoin.networks.regtest : bitcoin.networks.bitcoin;
-          const psbt = bitcoin.Psbt.fromBase64(psbtBase64, { network: btcNetwork });
-          const alreadyFinalized = psbt.data.inputs.every(
-            (input: any) => input.finalScriptWitness || input.finalScriptSig
-          );
-          if (!alreadyFinalized) psbt.finalizeAllInputs();
-          const txHex = psbt.extractTransaction().toHex();
-          txid = psbt.extractTransaction().getId();
-
-          console.log('[LimitOrder] Broadcasting signed tx:', txid);
-          await sdkProvider.broadcastTransaction(txHex);
-
-          // Mine block on devnet
-          if (network === 'devnet') {
-            await fetch('http://localhost:18888', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                jsonrpc: '2.0', method: 'generatetoaddress',
-                params: [1, segwit || taproot], id: 1,
-              }),
-            });
-            console.log('[LimitOrder] Devnet: mined 1 block');
-          }
-        }
-
-        if (txid) {
-          console.log('[LimitOrder] Order placed! txid:', txid);
-          showNotification(txid, 'swap' as any);
-        }
-        // Invalidate orderbook + balance queries so UI updates
-        queryClient.invalidateQueries({ queryKey: ['orderbook'] }).catch(() => {});
-        queryClient.invalidateQueries({ queryKey: ['alkane-balances'] }).catch(() => {});
+      if (result.transactionId) {
+        showNotification(result.transactionId, 'swap' as any);
       }
     } catch (e: any) {
       console.error('[LimitOrder] Failed:', e);
       window.alert?.(`Limit order failed: ${e?.message || 'Unknown error'}`);
-    } finally {
-      setIsSubmitting(false);
     }
   };
 
