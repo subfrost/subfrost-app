@@ -96,15 +96,23 @@ export default function LimitOrderPanel({
 
       const protostone = `[${cBlock},${cTx},20,${aBlock},${aTx},32,0,${sideNum},${priceScaled},${amountScaled}]:v0:v0`;
 
-      // Input requirements: PlaceLimitOrder does NOT require token deposits.
-      // The order is a resting entry in the trie — actual token settlement
-      // happens during fill/cancel via the carbine NFT mechanism.
-      // Only BTC for transaction fees is needed.
-      // Source: carbine-controller/src/lib.rs _place_limit_order() — no
-      // incoming_alkanes check, price/amount are purely callpack inputs.
-      const inputReqs = 'B:100000:v0';
+      // Input requirements: PlaceLimitOrder DOES require token deposits.
+      // Buy: deposit quote token (frBTC) = price * amount / 1e8
+      // Sell: deposit base token (DIESEL) = amount
+      // Verified from e2e-carbine-clob.test.ts:951 — sell sends '2:0:${sellAmount}'
+      // and DIESEL balance decreases after placement ("DIESEL locked").
+      //
+      // IMPORTANT: inputReqs uses RAW amounts (not scaled). The test uses
+      // raw amounts directly (e.g., sellAmount=1000 raw, not 1000*1e8).
+      // But the UI scales amount by 1e8, so amountScaled is already raw.
+      //
+      // For sell: send base token amount
+      // For buy: send quote token amount = price * quantity (both already scaled)
+      const inputReqs = side === 'buy'
+        ? `32:0:${Math.floor(priceScaled * amountScaled / 1e8)}`
+        : `2:0:${amountScaled}`;
 
-      console.log('[LimitOrder] Side:', side, 'pairA:', pairA, 'inputReqs:', inputReqs, 'protostone:', protostone);
+      console.log('[LimitOrder] Side:', side, 'inputReqs:', inputReqs, 'protostone:', protostone);
 
       if (!sdkProvider) throw new Error('SDK provider not ready');
 
@@ -114,11 +122,16 @@ export default function LimitOrderPanel({
 
       const fromAddrs = [segwit, taproot].filter(Boolean);
 
-      const result = await sdkProvider.alkanesExecuteWithStrings(
+      // Use alkanesExecuteFull — same method the working vitest E2E test uses.
+      // alkanesExecuteWithStrings has UTXO scanning issues where it can't find
+      // DIESEL-bearing outpoints despite the wallet having balance (reports
+      // "have 0" for sell orders). alkanesExecuteFull bypasses this by using
+      // the provider's own UTXO resolution with actual addresses.
+      const result = await sdkProvider.alkanesExecuteFull(
         JSON.stringify([taproot || segwit]),
         inputReqs,
         protostone,
-        Math.round(fee.feeRate),
+        Math.round(fee.feeRate).toString(),
         null,
         JSON.stringify({
           from_addresses: fromAddrs,
