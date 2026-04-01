@@ -1104,7 +1104,15 @@ async function deployFullProtocol(
       'universal_router', S.UNIVERSAL_ROUTER_IMPL, S.UNIVERSAL_ROUTER_PROXY,
       'Universal Router', onProgress, 90);
 
-    console.log('[devnet-boot] Carbine CLOB deployed (proxied)');
+    // Initialize controller through proxy with template reference.
+    // Without this, PlaceLimitOrder fails because the controller doesn't know
+    // where the template contract is for spawning carbine NFTs.
+    // Opcode 0 = Initialize, args = [4, 70001] = template at [4:CARBINE_TEMPLATE]
+    await initThroughProxy(provider, harness, segwit, taproot,
+      S.CARBINE_CTRL_PROXY, [0, 4, S.CARBINE_TEMPLATE],
+      'Carbine Controller');
+
+    console.log('[devnet-boot] Carbine CLOB deployed and initialized');
   } catch (e: any) {
     console.warn('[devnet-boot] Carbine deployment failed (non-fatal):', e?.message?.substring(0, 80));
   }
