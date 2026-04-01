@@ -195,6 +195,30 @@ export function useLimitOrderMutation() {
           const broadcastTxid = await provider.broadcastTransaction(txHex);
           console.log('[LimitOrder] Broadcast successful:', broadcastTxid);
 
+          // On devnet, mine a block so the transaction is included.
+          // Without this, the tx sits in mempool and the Carbine controller
+          // never executes — the order never appears on-chain.
+          if (network === 'devnet') {
+            try {
+              const segwitAddr = account?.nativeSegwit?.address;
+              if (segwitAddr) {
+                await fetch('http://localhost:18888', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    jsonrpc: '2.0',
+                    method: 'generatetoaddress',
+                    params: [1, segwitAddr],
+                    id: 1,
+                  }),
+                });
+                console.log('[LimitOrder] Devnet: mined 1 block');
+              }
+            } catch (e) {
+              console.warn('[LimitOrder] Devnet mine failed (non-fatal):', e);
+            }
+          }
+
           return {
             success: true as const,
             transactionId: broadcastTxid || txid,
