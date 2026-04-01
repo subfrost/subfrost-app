@@ -164,6 +164,27 @@ export function parseOrderbookResponse(data: string | number[]): OrderbookData |
     });
   }
 
+  // Deduplicate: The Carbine trie stores orders across the full u128 range.
+  // A single buy order at price X appears as BOTH a bid (price=X, below MAX/2)
+  // and an ask (price=MAX-X, above MAX/2) in the depth traversal. When bid and
+  // ask levels have identical price+amount, it's the same order echoed on both
+  // sides — remove the duplicate. Verified on devnet: 1 buy order → depth
+  // returned 1 bid + 1 ask with same price=100, amount=100000000.
+  if (bids.length > 0 && asks.length > 0) {
+    const dedupedAsks = asks.filter(ask => {
+      return !bids.some(bid => bid.price === ask.price && bid.amount === ask.amount);
+    });
+    const dedupedBids = bids.filter(bid => {
+      return !asks.some(ask => ask.price === bid.price && ask.amount === bid.amount && dedupedAsks.includes(ask));
+    });
+    // Only apply dedup if it actually removed duplicates (not independent orders)
+    if (dedupedAsks.length < asks.length || dedupedBids.length < bids.length) {
+      asks.length = 0;
+      asks.push(...dedupedAsks);
+      // Keep bids as-is since we removed the ask duplicates
+    }
+  }
+
   if (bids.length === 0 && asks.length === 0) return null;
 
   const bestBid = bids.length > 0 ? parseFloat(bids[0].price.replace(/,/g, '')) : 0;
