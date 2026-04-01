@@ -2,6 +2,21 @@ import { useQuery } from '@tanstack/react-query';
 import { useWallet } from '@/context/WalletContext';
 import { getConfig, getRpcUrl } from '@/utils/getConfig';
 
+/** Format a price value for display — show enough decimals for small values */
+function formatPrice(price: number): string {
+  if (price === 0) return '0.00';
+  if (price >= 1) return price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  // For sub-1 prices, show up to 8 significant decimals
+  return price.toFixed(8).replace(/0+$/, '').replace(/\.$/, '.00');
+}
+
+/** Format an amount value for display */
+function formatAmount(amount: number): string {
+  if (amount >= 1000) return amount.toLocaleString('en-US', { maximumFractionDigits: 2 });
+  if (amount >= 1) return amount.toLocaleString('en-US', { maximumFractionDigits: 4 });
+  return amount.toFixed(8).replace(/0+$/, '').replace(/\.$/, '.0');
+}
+
 export interface OrderLevel {
   price: string;
   amount: string;
@@ -89,6 +104,13 @@ export function parseOrderbookResponse(data: string | number[]): OrderbookData |
 
   if (bytes.length < 8) return null;
 
+  // Both prices and amounts from the Carbine controller are raw u128 values
+  // in 8-decimal (1e8) precision — same as Bitcoin satoshi convention.
+  // Example: user enters price=0.000001, UI scales by 1e8 → 100 raw.
+  //          user enters amount=1.0, UI scales by 1e8 → 100000000 raw.
+  // We divide by 1e8 here to get human-readable display values.
+  const DECIMALS = 1e8;
+
   let offset = 0;
   const numBids = readU32LE(bytes, offset);
   offset += 4;
@@ -98,17 +120,19 @@ export function parseOrderbookResponse(data: string | number[]): OrderbookData |
   const bids: OrderLevel[] = [];
   let bidCumTotal = 0;
   for (let i = 0; i < numBids; i++) {
-    const price = Number(readU128LE(bytes, offset));
-    const amount = Number(readU128LE(bytes, offset + 16));
+    const rawPrice = Number(readU128LE(bytes, offset));
+    const rawAmount = Number(readU128LE(bytes, offset + 16));
     offset += 32;
     // Skip only if amount is 0 (empty padding slot). Price=0 is valid
     // (the contract may encode prices differently than expected).
-    if (amount <= 0) continue;
+    if (rawAmount <= 0) continue;
+    const price = rawPrice / DECIMALS;
+    const amount = rawAmount / DECIMALS;
     bidCumTotal += amount;
     bids.push({
-      price: price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-      amount: amount.toLocaleString('en-US', { maximumFractionDigits: 4 }),
-      total: bidCumTotal.toLocaleString('en-US', { maximumFractionDigits: 4 }),
+      price: formatPrice(price),
+      amount: formatAmount(amount),
+      total: formatAmount(bidCumTotal),
     });
   }
 
@@ -124,17 +148,19 @@ export function parseOrderbookResponse(data: string | number[]): OrderbookData |
     // Ask prices in the response are INVERTED trie keys (u128::MAX - real_price).
     // We must un-invert to get the real price. Verified on devnet 2026-04-01:
     // stored=340282366920938463463374607431768211355, real=100 (correct).
-    const rawPrice = readU128LE(bytes, offset);
-    const realPrice = rawPrice > U128_MAX / BigInt(2) ? U128_MAX - rawPrice : rawPrice;
-    const price = Number(realPrice);
-    const amount = Number(readU128LE(bytes, offset + 16));
+    const rawPriceBig = readU128LE(bytes, offset);
+    const realPriceBig = rawPriceBig > U128_MAX / BigInt(2) ? U128_MAX - rawPriceBig : rawPriceBig;
+    const rawPrice = Number(realPriceBig);
+    const rawAmount = Number(readU128LE(bytes, offset + 16));
     offset += 32;
-    if (amount <= 0) continue;
-    askCumTotal += price * amount;
+    if (rawAmount <= 0) continue;
+    const price = rawPrice / DECIMALS;
+    const amount = rawAmount / DECIMALS;
+    askCumTotal += amount;
     asks.push({
-      price: price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-      amount: amount.toFixed(4),
-      total: askCumTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+      price: formatPrice(price),
+      amount: formatAmount(amount),
+      total: formatAmount(askCumTotal),
     });
   }
 
@@ -200,6 +226,7 @@ export function useOrderbook(baseToken?: string, quoteToken?: string) {
           } else if (exec?.data) {
             const hex = exec.data.replace(/^0x/, '');
             const byteLen = hex.length / 2;
+            console.log('[useOrderbook] FULL RAW HEX (' + byteLen + ' bytes):', hex);
             const parsed = parseOrderbookResponse(exec.data);
             if (parsed) {
               console.log('[useOrderbook] Parsed orderbook:', parsed.bids.length, 'bids,', parsed.asks.length, 'asks, spread:', parsed.spread);
