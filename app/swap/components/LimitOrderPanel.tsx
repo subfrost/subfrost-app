@@ -137,6 +137,8 @@ export default function LimitOrderPanel({
       const priceScaled = Math.floor(parseFloat(price) * 1e8).toString();
       const amountScaled = Math.floor(parseFloat(amount) * 1e8).toString();
 
+      console.log('[QA] handleSubmit params:', { controllerId, baseTokenId, quoteTokenId, side, priceScaled, amountScaled, network: effectiveNetwork });
+
       const result = await limitOrderMutation.mutateAsync({
         controllerId,
         baseTokenId,

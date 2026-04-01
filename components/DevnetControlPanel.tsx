@@ -5,7 +5,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useDevnet } from '@/context/DevnetContext';
 import { useWallet } from '@/context/WalletContext';
 import { getBootAddresses } from '@/lib/devnet/boot';
-import { Loader2, RotateCcw, Play, Pause, Square, Activity } from 'lucide-react';
+import { Loader2, RotateCcw, Play, Pause, Square, Activity, Trash2 } from 'lucide-react';
+import { clearDevnetState } from '@/lib/devnet/persistence';
 import type { SimLogEntry } from '@/lib/devnet/types';
 
 type BusyAction = 'mine' | 'btc' | 'diesel' | 'fuel' | 'frbtc' | 'usdt' | 'usdc' | 'bridge' | 'reset' | null;
@@ -456,14 +457,27 @@ export function DevnetControlPanel() {
             <div className="text-[10px] text-zinc-600 font-mono">
               In-browser Bitcoin node
             </div>
-            <ActionButton
-              action="reset"
-              onClick={() => runAction('reset', () => controls.resetDevnet())}
-              className="flex items-center gap-1 px-2 py-1 text-[10px] text-zinc-500 hover:text-red-400 rounded transition-colors"
-            >
-              <RotateCcw size={10} />
-              Reset
-            </ActionButton>
+            <div className="flex items-center gap-1">
+              <ActionButton
+                action="reset"
+                onClick={() => runAction('reset', () => controls.resetDevnet())}
+                className="flex items-center gap-1 px-2 py-1 text-[10px] text-zinc-500 hover:text-red-400 rounded transition-colors"
+              >
+                <RotateCcw size={10} />
+                Reset
+              </ActionButton>
+              <button
+                onClick={async () => {
+                  await clearDevnetState();
+                  window.location.reload();
+                }}
+                title="Clear IndexedDB state and reload — fixes WASM out-of-memory errors"
+                className="flex items-center gap-1 px-2 py-1 text-[10px] text-zinc-500 hover:text-orange-400 rounded transition-colors"
+              >
+                <Trash2 size={10} />
+                Clear & Reload
+              </button>
+            </div>
           </div>
         </div>
       )}

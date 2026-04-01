@@ -207,12 +207,13 @@ export function parseOrderbookResponse(data: string | number[]): OrderbookData |
   const bids: OrderLevel[] = [];
   let bidCumTotal = 0;
   for (let i = 0; i < numBids; i++) {
-    const rawPrice = Number(readU128LE(bytes, offset));
-    const rawAmount = Number(readU128LE(bytes, offset + 16));
+    const rawPriceBigB = readU128LE(bytes, offset);
+    const rawAmountBigB = readU128LE(bytes, offset + 16);
     offset += 32;
-    // Skip only if amount is 0 (empty padding slot). Price=0 is valid
-    // (the contract may encode prices differently than expected).
-    if (rawAmount <= 0) continue;
+    // Skip sentinel slots (U128_MAX = empty padding, 0 = no amount)
+    if (rawAmountBigB === BigInt(0) || rawAmountBigB === U128_MAX) continue;
+    const rawPrice = Number(rawPriceBigB);
+    const rawAmount = Number(rawAmountBigB);
     const price = rawPrice / DECIMALS;
     const amount = rawAmount / DECIMALS;
     bidCumTotal += amount;
@@ -236,11 +237,14 @@ export function parseOrderbookResponse(data: string | number[]): OrderbookData |
     // We must un-invert to get the real price. Verified on devnet 2026-04-01:
     // stored=340282366920938463463374607431768211355, real=100 (correct).
     const rawPriceBig = readU128LE(bytes, offset);
+    const rawAmountBig = readU128LE(bytes, offset + 16);
+    offset += 32;
+    // Skip sentinel slots: contract pads depth response with U128_MAX entries
+    // when fewer real orders exist. U128_MAX amount = empty slot.
+    if (rawAmountBig === BigInt(0) || rawAmountBig === U128_MAX) continue;
     const realPriceBig = rawPriceBig > U128_MAX / BigInt(2) ? U128_MAX - rawPriceBig : rawPriceBig;
     const rawPrice = Number(realPriceBig);
-    const rawAmount = Number(readU128LE(bytes, offset + 16));
-    offset += 32;
-    if (rawAmount <= 0) continue;
+    const rawAmount = Number(rawAmountBig);
     const price = rawPrice / DECIMALS;
     const amount = rawAmount / DECIMALS;
     askCumTotal += amount;
@@ -320,6 +324,7 @@ export function useOrderbook(baseToken?: string, quoteToken?: string) {
 
           let exec: any = null;
           for (const [b1, t1, b2, t2] of pairOrders) {
+            console.log(`[QA] useOrderbook querying pair ${b1}:${t1}/${b2}:${t2} on controller ${ctrlBlock}:${ctrlTx}`);
             const resp = await fetch(getRpcUrl(network), {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -338,6 +343,7 @@ export function useOrderbook(baseToken?: string, quoteToken?: string) {
             const tryExec = data?.result?.execution;
             if (tryExec?.data) {
               const hex = tryExec.data.replace(/^0x/, '');
+              console.log(`[QA] useOrderbook pair ${b1}:${t1}/${b2}:${t2} response: ${hex.slice(0,32)} (${hex.length/2} bytes) err:`, tryExec.error);
               // Check if this response has actual orders (not just 8 zero bytes)
               if (hex.length > 16 && hex !== '0000000000000000') {
                 exec = tryExec;
