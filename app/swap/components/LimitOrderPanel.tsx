@@ -39,7 +39,7 @@ export default function LimitOrderPanel({
   onMaxFrom,
   network,
 }: Props) {
-  const { isConnected, account } = useWallet();
+  const { isConnected, account, signTaprootPsbt, signSegwitPsbt } = useWallet();
   const { theme } = useTheme();
   const { openTokenSelector } = useModalStore();
   const { deadlineBlocks, setDeadlineBlocks } = useGlobalStore();
@@ -118,8 +118,55 @@ export default function LimitOrderPanel({
       );
 
       if (result) {
-        console.log('[LimitOrder] Placed:', result);
-        showNotification(result.txid || result.reveal_txid || 'order', 'swap' as any);
+        console.log('[LimitOrder] SDK result:', result);
+        let txid = result.txid || result.reveal_txid;
+
+        // If SDK returned readyToSign, we need to sign + broadcast manually
+        if (!txid && result.readyToSign?.psbt) {
+          console.log('[LimitOrder] Signing readyToSign PSBT...');
+          const { extractPsbtBase64 } = await import('@/lib/alkanes/helpers');
+          const bitcoin = await import('bitcoinjs-lib');
+          const ecc = await import('@bitcoinerlab/secp256k1');
+          bitcoin.initEccLib(ecc);
+
+          let psbtBase64 = extractPsbtBase64(result.readyToSign.psbt);
+
+          // Sign with both keys
+          psbtBase64 = await signSegwitPsbt(psbtBase64);
+          psbtBase64 = await signTaprootPsbt(psbtBase64);
+
+          // Finalize and extract
+          const btcNetwork = network === 'devnet' || network?.includes('regtest')
+            ? bitcoin.networks.regtest : bitcoin.networks.bitcoin;
+          const psbt = bitcoin.Psbt.fromBase64(psbtBase64, { network: btcNetwork });
+          const alreadyFinalized = psbt.data.inputs.every(
+            (input: any) => input.finalScriptWitness || input.finalScriptSig
+          );
+          if (!alreadyFinalized) psbt.finalizeAllInputs();
+          const txHex = psbt.extractTransaction().toHex();
+          txid = psbt.extractTransaction().getId();
+
+          console.log('[LimitOrder] Broadcasting signed tx:', txid);
+          await sdkProvider.broadcastTransaction(txHex);
+
+          // Mine block on devnet
+          if (network === 'devnet') {
+            await fetch('http://localhost:18888', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                jsonrpc: '2.0', method: 'generatetoaddress',
+                params: [1, segwit || taproot], id: 1,
+              }),
+            });
+            console.log('[LimitOrder] Devnet: mined 1 block');
+          }
+        }
+
+        if (txid) {
+          console.log('[LimitOrder] Order placed! txid:', txid);
+          showNotification(txid, 'swap' as any);
+        }
         // Invalidate orderbook + balance queries so UI updates
         queryClient.invalidateQueries({ queryKey: ['orderbook'] }).catch(() => {});
         queryClient.invalidateQueries({ queryKey: ['alkane-balances'] }).catch(() => {});
