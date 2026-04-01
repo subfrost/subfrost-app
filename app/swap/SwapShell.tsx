@@ -2249,6 +2249,8 @@ export default function SwapShell() {
               }}
               baseToken={fromToken?.symbol || 'DIESEL'}
               quoteToken={toToken?.symbol || 'frBTC'}
+              baseTokenId={fromToken?.id || '2:0'}
+              quoteTokenId={toToken?.id || '32:0'}
               limitSelectedPrice={limitSelectedPrice}
               onLimitPriceSelect={setLimitSelectedPrice}
               onOpenLiquidity={() => setIsLiquidityModalOpen(true)}

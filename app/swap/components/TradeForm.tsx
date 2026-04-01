@@ -16,6 +16,8 @@ interface Props {
   swapInputsProps: any;
   baseToken: string;
   quoteToken: string;
+  baseTokenId?: string;
+  quoteTokenId?: string;
   limitSelectedPrice?: string;
   onLimitPriceSelect: (price: string) => void;
   onOpenLiquidity: () => void;
@@ -38,6 +40,8 @@ export default function TradeForm({
   swapInputsProps,
   baseToken,
   quoteToken,
+  baseTokenId,
+  quoteTokenId,
   limitSelectedPrice,
   onLimitPriceSelect,
   onOpenLiquidity,
@@ -102,8 +106,8 @@ export default function TradeForm({
       {orderType === 'orderbook' ? (
         <div className="flex-1 min-h-0" style={{ minHeight: '450px' }}>
           <OrderbookPanel
-            baseToken={baseToken}
-            quoteToken={quoteToken}
+            baseToken={baseTokenId || baseToken}
+            quoteToken={quoteTokenId || quoteToken}
             onPriceSelect={onLimitPriceSelect}
           />
         </div>
