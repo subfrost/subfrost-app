@@ -158,7 +158,7 @@ describe('formatCompact', () => {
 describe('Constants', () => {
   it('should have correct FIRE supply values', () => {
     expect(FIRE_MAX_SUPPLY).toBe(2_100_000);
-    expect(FIRE_EMISSION_POOL).toBe(630_000);
+    expect(FIRE_EMISSION_POOL).toBe(2_100_000);
   });
 
   it('should have 6 lock tiers', () => {
