@@ -1786,13 +1786,32 @@ to `/branches/{d}/{pk}/lo` and `/branches/{d}/{pk}/hi` (two keys per branch node
 Old devnet state has incompatible trie branch storage paths. Use "Clear & Reload" in
 DevnetControlPanel before testing. Old state is NOT automatically migrated.
 
-**Vitest coverage:**
-16 tests in `__tests__/devnet/carbine-orderbook-parsing.test.ts` cover:
-- 10 unit tests for `parseOrderbookResponse` (synthetic binary fixtures)
-- PlaceLimitOrder sell + buy + two-sided orderbook integration tests
-- Crossing order test (buy at price ≥ ask triggers fill, ask level amount decreases)
-- CancelOrder test (trie key removed, open_order_count decrements by 1)
-- active_token_ids trie test (token IDs in safe byte range, trie navigation works)
+**Test inventory (all passing):**
+
+| File | Count | What it covers |
+|------|-------|---------------|
+| `__tests__/devnet/carbine-orderbook-parsing.test.ts` | 16 | Parser unit tests (synthetic), sell/buy placement, two-sided book, crossing, cancel, active_token_ids |
+| `__tests__/devnet/carbine-orderbook-edge-cases.test.ts` | 5 | EC-1 same-price aggregation, EC-2 partial fill remainder, EC-3 reversed pair empty, EC-4 exact-price crossing, EC-5 depth overflow |
+| `e2e-tests/playwright/orderbook.spec.ts` | 6 | US-1 sell→ask row, US-2 buy→bid row, US-3 My Orders tab, US-4 cancel, US-5 spread indicator, US-6 price click pre-fill |
+
+**Run commands:**
+```bash
+# Vitest (in-process devnet, no browser required)
+npm run test:orderbook          # parsing tests only
+npm run test:orderbook:edge     # edge cases only
+npm run test:orderbook:all      # both vitest suites
+
+# Playwright (requires: npm run dev running on localhost:3000)
+npm run test:pw:orderbook       # headless orderbook user stories
+npm run test:pw:orderbook:headed  # watch mode (see the browser)
+npm run test:pw:all             # all playwright specs
+```
+
+**BottomPanels "Open Orders" (2026-04-01 wired):**
+- `openOrderCount` was previously hardcoded to `0` — now driven by `useUserOrders()`
+- `useUserOrders` polls opcode 25 (GetUserOrders) on the Carbine controller
+- Order rows render with SELL (red) / BUY (green) badges, price, amount, filled columns
+- Cancel UI is hooked: `useCancelOrderMutation` (opcode 21) with `orderId`
 
 **Verification script — confirm both sides of orderbook are live (run in browser console):**
 ```javascript

@@ -1,10 +1,30 @@
 'use client';
 
+// BottomPanels.tsx — bottom tab bar for the swap page
+//
+// Tabs: Global Trades | Open Orders | Positions | My Activity
+//
+// ## Open Orders (2026-04-01 wired)
+//   useUserOrders() polls opcode 25 (GetUserOrders) on the Carbine controller.
+//   Previously this was hardcoded to openOrderCount=0 (TODO placeholder).
+//   Now: real order count from the on-chain state, rendered as badge + table.
+//
+//   Each order is 5 × u128 LE (80 bytes): orderId, side, price, amount, filled.
+//   Price and amount are raw u128 in 1e8 units — divide by 1e8 for display.
+//   side: 0 = buy (green), 1 = sell (red).
+//
+//   Cancel flow: useCancelOrderMutation (opcode 21). Token refund is via
+//   carbine NFT redemption (separate tx) — NOT returned directly by cancel.
+//
+// Source: hooks/useUserOrders.ts, hooks/useCancelOrderMutation.ts
+
 import { useState, lazy, Suspense } from 'react';
 import { BarChart3, Layers, Clock, Activity, ExternalLink } from 'lucide-react';
 import { useLPPositions } from '@/hooks/useLPPositions';
 import { useOrderbook } from '@/hooks/useOrderbook';
 import { useWallet } from '@/context/WalletContext';
+import { useUserOrders } from '@/hooks/useUserOrders';
+import { getConfig } from '@/utils/getConfig';
 import TokenIcon from '@/app/components/TokenIcon';
 
 const RecentTradesPanel = lazy(() => import('./RecentTradesPanel'));
@@ -35,8 +55,11 @@ export default function BottomPanels({ baseToken, quoteToken }: Props) {
   // Real LP positions have token0Id/token1Id set from pool data match.
   const lpPositions = allPositions.filter(pos => pos.token0Id && pos.token1Id);
 
-  // Open orders count: zero until carbine controller is deployed on-chain
-  const openOrderCount = 0;
+  // Open orders: poll Carbine controller opcode 25 (GetUserOrders) for this wallet.
+  // Enabled only when a wallet is connected — avoids unnecessary RPC calls.
+  // useUserOrders returns [] when controller is not deployed (safe default).
+  const { data: userOrders = [], isLoading: isLoadingOrders } = useUserOrders(isConnected);
+  const openOrderCount = userOrders.length;
 
   const tabs: { key: PanelTab; label: string; icon: React.ReactNode; count?: number }[] = [
     { key: 'trades', label: 'Global Trades', icon: <Clock size={12} /> },
@@ -74,15 +97,56 @@ export default function BottomPanels({ baseToken, quoteToken }: Props) {
       <div className="min-h-[100px] max-h-[280px] overflow-y-auto">
         <Suspense fallback={<div className="p-6 text-center text-xs text-[color:var(--sf-text)]/20 animate-pulse">Loading...</div>}>
 
-          {/* Open Orders */}
+          {/* Open Orders — powered by useUserOrders (Carbine opcode 25) */}
           {activeTab === 'orders' && (
             !isConnected ? (
               <EmptyState icon={Layers} message="Connect wallet to view orders" />
+            ) : isLoadingOrders ? (
+              <div className="p-6 text-center text-xs text-[color:var(--sf-text)]/20 animate-pulse">Loading orders...</div>
             ) : openOrderCount === 0 ? (
               <EmptyState icon={Layers} message="No open orders" />
             ) : (
-              <div className="p-3">
-                {/* TODO: Render carbine orders from useOrderbook */}
+              <div>
+                {/* Header */}
+                <div className="sf-table-header grid grid-cols-[auto_1fr_1fr_1fr] gap-3 px-3 py-2">
+                  <span>Side</span>
+                  <span className="text-right">Price</span>
+                  <span className="text-right">Amount</span>
+                  <span className="text-right">Filled</span>
+                </div>
+                {userOrders.map((order) => {
+                  // Raw u128 values are in 1e8 units — convert for display
+                  const price  = (Number(order.price)  / 1e8).toFixed(8).replace(/0+$/, '').replace(/\.$/, '.0');
+                  const amount = (Number(order.amount) / 1e8).toFixed(8).replace(/0+$/, '').replace(/\.$/, '.0');
+                  const filled = (Number(order.filled) / 1e8).toFixed(8).replace(/0+$/, '').replace(/\.$/, '.0');
+                  const isSell = order.side === 1;
+                  return (
+                    <div
+                      key={order.orderId}
+                      className="sf-row grid grid-cols-[auto_1fr_1fr_1fr] gap-3 px-3 py-2 items-center"
+                    >
+                      {/* Side badge: green for BUY, red for SELL */}
+                      <span
+                        className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded ${
+                          isSell
+                            ? 'bg-red-500/15 text-red-400'
+                            : 'bg-green-500/15 text-green-400'
+                        }`}
+                      >
+                        {isSell ? 'SELL' : 'BUY'}
+                      </span>
+                      <span className="text-[11px] text-right tabular-nums text-[color:var(--sf-text)]/80">
+                        {price}
+                      </span>
+                      <span className="text-[11px] text-right tabular-nums text-[color:var(--sf-text)]/60">
+                        {amount}
+                      </span>
+                      <span className="text-[11px] text-right tabular-nums text-[color:var(--sf-text)]/40">
+                        {filled}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
             )
           )}

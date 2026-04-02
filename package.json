@@ -47,7 +47,14 @@
     "test:tier2:wallets:swap": "TIER2=true vitest run __tests__/tier2/browser-wallet-swap.puppeteer.test.ts --testTimeout=180000",
     "test:tier2:wallets:send": "TIER2=true vitest run __tests__/tier2/browser-wallet-send.puppeteer.test.ts --testTimeout=180000",
     "test:tier2:wallets:send-alkane": "TIER2=true vitest run __tests__/tier2/browser-wallet-send-alkane.puppeteer.test.ts --testTimeout=180000",
-    "test:progressive": "npm run test:tier1 && npm run test:tier2"
+    "test:progressive": "npm run test:tier1 && npm run test:tier2",
+    "test:orderbook": "vitest run __tests__/devnet/carbine-orderbook-parsing.test.ts --testTimeout=600000 --fileParallelism=false",
+    "test:orderbook:edge": "vitest run __tests__/devnet/carbine-orderbook-edge-cases.test.ts --testTimeout=600000 --fileParallelism=false",
+    "test:orderbook:all": "npm run test:orderbook && npm run test:orderbook:edge",
+    "test:pw:orderbook": "npx playwright test orderbook --project=chromium-orderbook",
+    "test:pw:orderbook:headed": "npx playwright test orderbook --project=chromium-orderbook --headed",
+    "test:pw:smoke": "npx playwright test smoke --project=chromium-smoke",
+    "test:pw:all": "npx playwright test"
   },
   "dependencies": {
     "@alkanes/ts-sdk": "https://pkg.alkanes.build/dist/@alkanes/ts-sdk?v=0.1.5-14a5493",
