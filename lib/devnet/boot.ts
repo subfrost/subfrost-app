@@ -17,6 +17,47 @@
  * Uses browser fetch() for WASMs instead of Node.js readFileSync.
  * Deployment order: std WASMs -> AMM -> DIESEL mint -> frBTC wrap -> pool creation ->
  * FIRE protocol -> core protocol (FUEL, ftrBTC, dxBTC, gauges) -> Fujin.
+ *
+ * JOURNAL (2026-04-01): Carbine CLOB trie bug fixed — WASM upgrade procedure.
+ *
+ * ## Root cause
+ * SparseTrie in carbine-traits/src/trie.rs used `1u128 << byte` for branch masks.
+ * For sell-side keys (price_token_id = MAX - price, byte 0 = 0xFF = 255),
+ * `1u128 << 255` = 0 in WASM release mode (shift overflow). Sell orders were
+ * stored in the level pointer but the trie branch mask was never updated, so
+ * next(MAX/2) could never find any sell key. Result: GetBestAsk returned garbage,
+ * GetOrderbookDepth showed 0 asks, and crossing orders never matched.
+ *
+ * ## Fix
+ * Replaced u128 branch mask with Mask256 (two u128 words: lo=bits 0-127,
+ * hi=bits 128-255). Source: reference/subfrost-alkanes/crates/carbine-traits/src/trie.rs.
+ * 30 unit tests cover all edge cases including high-byte keys (bytes 128-255).
+ *
+ * ## Storage path change — NOT backward compatible
+ * Old: /branches/{depth}/{partial_key}       → u128
+ * New: /branches/{depth}/{partial_key}/lo    → u128 (bytes 0-127)
+ *      /branches/{depth}/{partial_key}/hi    → u128 (bytes 128-255)
+ * Any devnet state from before 2026-04-01 has wrong trie paths. Old sell orders
+ * are permanently invisible to the new binary (level pointers exist but no branch
+ * bits). Old orders cannot be cancelled (remove() reads/writes new paths too).
+ *
+ * ## Required procedure after deploying fixed WASM
+ * 1. Updated WASMs: public/wasm/carbine_controller.wasm (272K) — built 2026-04-01
+ *    Also prod_wasms/carbine_controller.wasm (same binary, for devnet harness tests).
+ * 2. In browser: DevTools → Application → IndexedDB → delete all, OR use
+ *    the "Clear & Reload" button in the devnet UI (calls resetDevnet() below).
+ *    This triggers clearDevnetState() + a fresh boot() from block 0.
+ * 3. After fresh boot: all contract deployments happen with the new binary.
+ *    New sell orders will correctly appear in GetBestAsk / GetOrderbookDepth.
+ * 4. Do NOT use importState() to restore a snapshot from before this fix —
+ *    the snapshot's trie data is incompatible.
+ *
+ * ## Verification after fresh boot
+ * 1. Place a sell order at any price via the CLOB UI.
+ * 2. Open browser DevTools console; look for no errors from useOrderbook.
+ * 3. The asks panel must show the order at the correct display price.
+ * 4. Run: npx vitest run __tests__/devnet/carbine-orderbook-parsing.test.ts
+ *    All 16 tests (10 unit + 6 integration) must pass.
  */
 
 import type { DeployedContracts } from './types';
@@ -902,10 +943,23 @@ async function deployFullProtocol(
   // points at an empty slot. Every extcall then fails with "unexpected end
   // of file". The fix: deploy impls with contract-specific safe opcodes.
   //
-  // Verified init args from e2e-carbine-clob.test.ts (PlaceLimitOrder works):
+  // Verified init args (from __tests__/devnet/carbine-orderbook-parsing.test.ts):
   //   Controller impl: [0, 0, 0]  — opcode 0 (Initialize) with dummy template [0:0]
   //   Template impl:   [3]        — opcode 3 (query_metadata), read-only
   //   Router impl:     [0]        — opcode 0 (Initialize)
+  //
+  // ⚠ WASM VERSION PINNED: public/wasm/carbine_controller.wasm contains the
+  //   Mask256 fix (2026-04-01). This fixes sell orders (side=1) being invisible
+  //   in GetOrderbookDepth. The old u128 branch mask caused 1u128<<255==0 in
+  //   WASM release mode, making all sell-side trie keys unnavigable.
+  //
+  // ⚠ STORAGE INCOMPATIBILITY: The Mask256 fix changes trie branch storage paths
+  //   from /branches/{depth}/{partial_key}       (single u128 key, old)
+  //   to   /branches/{depth}/{partial_key}/lo    (bits 0-127)
+  //        /branches/{depth}/{partial_key}/hi    (bits 128-255)
+  //   Old devnet state CANNOT be read by the new WASM. If the app was booted
+  //   before this WASM update, use "Clear & Reload" in DevnetControlPanel.
+  //   A fresh boot always deploys the correct binary, so new devnets are fine.
   // -----------------------------------------------------------------------
   onProgress('Deploying Carbine CLOB...', 40);
   console.log('[devnet-boot] Phase 3a: Carbine CLOB (proxied)...');

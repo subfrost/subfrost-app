@@ -36,36 +36,41 @@
  *   [N..N+3] numAsks (u32 LE)
  *   [N+4..M] ask[i]: [u128 price LE (16 bytes), u128 amount LE (16 bytes)]
  *
- * ## Ask price inversion (CORRECTED 2026-04-01)
- *   Contract source lib.rs:760 confirms: `let real_price = u128::MAX - token_id`
- *   and writes real_price to the response. Ask prices are ALREADY un-inverted.
- *   Previous parser was applying a second un-inversion which produced wrong prices.
- *   Parser must NOT un-invert ask prices — they arrive as real prices from the contract.
+ * ## Ask price encoding — DO NOT un-invert in the parser (CONFIRMED 2026-04-01)
+ *   Sell-side trie keys are stored as `u128::MAX - real_price` internally,
+ *   but GetOrderbookDepth (lib.rs:760) un-inverts BEFORE writing to the response:
+ *     `let real_price = u128::MAX - token_id`
+ *   Ask prices in the response ARE already real prices. DO NOT un-invert again.
+ *   Double-inversion produces values near u128::MAX — a distinctive wrong-answer signal.
  *
  * ## Price/amount scaling
  *   All raw values are in 1e8 (satoshi) units. Divide by 1e8 for display.
  *   PlaceLimitOrder sends: price_scaled = human_price * 1e8,
  *                          amount_scaled = human_amount * 1e8
  *
- * ## Trie layout (VERIFIED from carbine-controller/src/lib.rs)
- *   BUY orders stored at trie key = raw_price (below MAX/2)
- *   SELL orders stored at trie key = MAX - raw_price (above MAX/2)
- *   GetOrderbookDepth:
- *     bids: trie.prev(MAX/2) → iterates keys < MAX/2 (buy orders)
- *     asks: trie.next(MAX/2) → iterates keys > MAX/2 (sell orders)
- *   The two halves are SEPARATE — a buy order does NOT appear in asks.
- *   Earlier "deduplication" code was wrong and has been removed.
+ * ## Trie layout — two halves, no overlap (VERIFIED from carbine-controller/src/lib.rs)
+ *   BUY  orders: trie key = raw_price          (below MAX/2)
+ *   SELL orders: trie key = MAX - raw_price     (above MAX/2)
+ *   GetOrderbookDepth traversal:
+ *     bids: trie.prev(MAX/2) → keys < MAX/2  (buy orders, descending)
+ *     asks: trie.next(MAX/2) → keys > MAX/2  (sell orders, ascending by key = descending by real price)
+ *   The two halves are COMPLETELY SEPARATE. A buy order NEVER appears in the ask list.
+ *   Any deduplication logic is wrong and must not be added.
  *
- * ## U128_MAX in ask amounts
+ * ## Root cause of the sell order invisibility bug (FIXED 2026-04-01)
+ *   carbine-traits/src/trie.rs used a single u128 as a branch mask (bits 0-127 only).
+ *   In WASM release mode: 1u128 << 255 == 0 (silent overflow, no panic).
+ *   Sell keys have byte[0] = 0xFF = 255. The branch mask bit was never set,
+ *   so trie.next() could never find any sell-side key — they were invisible.
+ *   Fix: Mask256 { lo: u128, hi: u128 } covers all 256 byte values.
+ *   Storage path changed: /branches/{d}/{pk} → /branches/{d}/{pk}/lo + /hi
+ *   ⚠ NOT backward compatible — requires fresh devnet ("Clear & Reload").
+ *
+ * ## U128_MAX in ask amounts — corrupted devnet state
  *   The contract does NOT pad empty slots with U128_MAX — it uses break.
  *   If ask amounts read as U128_MAX, the devnet state is corrupted (likely
- *   from OOM crash mid-write). These entries are skipped with a warning.
- *   Real amounts from properly-placed orders will be much smaller.
- *
- * ## Ask price un-inversion (CONFIRMED from source line 760)
- *   Contract un-inverts before writing: real_price = MAX - token_id.
- *   So ask prices in the response ARE already real prices — DO NOT un-invert again.
- *   Earlier code was double-un-inverting which caused wrong prices.
+ *   from OOM crash mid-write or stale pre-fix WASM). These entries are skipped.
+ *   Fix: use "Clear & Reload" in DevnetControlPanel.
  *
  * ## Diagnostic: [QA] bestAsk / bestBid
  *   These opcode 22/23 queries run in parallel with depth.

@@ -1646,19 +1646,20 @@ Bytes [N..N+3] — u32 LE: numAsks
 Bytes [N+4..M] — per ask: [u128 LE price (16 bytes), u128 LE amount (16 bytes)]
 ```
 
-**Price encoding (VERIFIED on devnet 2026-04-01):**
+**Price encoding (VERIFIED from source + devnet 2026-04-01):**
 - Bid prices: real value, no transformation needed
-- Ask prices: INVERTED trie keys — stored as `u128::MAX - real_price`
-  - The Rust source (lib.rs:760) implies un-inversion before return, but live data
-    shows it does NOT un-invert. Parser MUST do: `real = U128_MAX - stored`
-  - Detection heuristic: `stored > U128_MAX / 2` → it's an inverted ask price
-  - Verified: stored=340282366920938463463374607431768211355, real=100 ✓
+- Ask prices: ALREADY UN-INVERTED by the contract (lib.rs:760: `let real_price = u128::MAX - token_id`)
+  - The contract writes the real price, NOT the inverted trie key.
+  - **DO NOT un-invert ask prices in the parser** — doing so double-inverts them and produces
+    garbage values near u128::MAX. `useOrderbook.ts` is correct as-is (no un-inversion).
+  - The sell-side trie key IS `u128::MAX - real_price` internally, but `GetOrderbookDepth`
+    reverses this before serialising. The parser receives real prices for both sides.
 - All raw values are in 1e8 units — divide by 1e8 for human display
 - Filter out slots where `amount === 0` (empty padding). Price=0 is a VALID order.
 
-**Deduplication:** A single order may appear in BOTH bid and ask lists within the
-same depth traversal. When a bid and ask entry have identical price+amount, they
-are the same order echoed — remove the ask duplicate.
+**No deduplication needed:** Buy and sell orders occupy separate halves of the trie
+(buy keys < MAX/2, sell keys > MAX/2). A buy order NEVER appears in the ask list and
+vice versa. Any deduplication code is wrong and must be removed.
 
 ### CRITICAL: Pair ordering for GetOrderbookDepth
 
@@ -1757,52 +1758,59 @@ indexer. Filter: enter `-__get_len` in Chrome DevTools console filter field.
 | `lib/devnet/boot.ts` Phase 3a | Carbine deployment + initialization (lines ~896-960) |
 | `utils/getConfig.ts` | `CARBINE_CONTROLLER_ID` config key |
 
-### Current Status (2026-04-01 updated) — Known Working / Known Broken
+### Current Status (2026-04-01 resolved) — All Core Flows Working
 
 **Working:**
-- App boots and loads cleanly on devnet
-- Carbine deploys successfully in Phase 3a with correct init args
-- Buy orders (side=0) place successfully AND display as green bid rows in orderbook ✅
+- App boots and loads cleanly on devnet ✅
+- Carbine deploys successfully in Phase 3a with correct init args ✅
+- Buy orders (side=0): place successfully, appear as green bid rows in orderbook ✅
+- Sell orders (side=1): place successfully, appear as red ask rows in orderbook ✅
 - GetOrderbookDepth (opcode 24) with `block_tag: latest` returns correct binary data ✅
-- Orderbook UI renders bid rows correctly ✅
-- U128_MAX sentinel slots (depth padding) correctly filtered out ✅
+- Orderbook UI renders both bids and asks correctly ✅
 - DevnetControlPanel "Clear & Reload" button clears IndexedDB + reloads (fixes WASM OOM) ✅
+- UI token ID flow end-to-end: SwapShell → baseTokenId → TradeForm → OrderbookPanel → useOrderbook ✅
 
-**Known issues to debug next session:**
-- Sell orders (side=1): confirmed on-chain (opcode 25 count increments) but do NOT
-  appear as red ask rows in orderbook. GetOrderbookDepth returns 10 asks but all have
-  U128_MAX amounts (sentinel values) — the real sell orders are NOT in the ask depth.
-  **Root cause hypothesis**: Carbine stores ask orders in a separate trie keyed differently
-  from bid orders. The depth traversal for asks may use a different range or the sell
-  orders are stored under the inverted price key but with zero or U128_MAX amount as a
-  placeholder until matched. Need to read carbine-controller/src/lib.rs PlaceLimitOrder
-  and GetOrderbookDepth source to understand the exact trie layout for side=1.
+**Root cause of the sell order bug (RESOLVED 2026-04-01):**
+The `SparseTrie` in `carbine-traits/src/trie.rs` used a single `u128` branch mask to
+track which byte values (0–255) were present at each node. In WASM release mode,
+`1u128 << 255 == 0` (silent overflow), so any key with byte 0 = 0xFF was never inserted
+into the branch mask and thus invisible to `next()`/`prev()` traversal.
 
-**Next session debugging protocol:**
-1. Clone subfrost-alkanes repo to `./reference/` and read carbine-controller/src/lib.rs
-2. Find PlaceLimitOrder (opcode 20): how does side=1 differ from side=0 in trie storage?
-3. Find GetOrderbookDepth (opcode 24): what trie range does it traverse for asks?
-4. Check if sell orders need to be placed with frBTC as `inputReqs` (the quote token)
-   instead of DIESEL — maybe the buy/sell token deposit is inverted in useLimitOrderMutation
-5. Run vitest e2e: `npm run test:sdk -- e2e-carbine-clob` to verify contract behavior
+Sell keys are stored as `u128::MAX - price`, whose most-significant byte is `0xFF`. This
+meant every sell order was silently dropped from trie navigation — they existed in storage
+but could never be found. The fix replaces `u128` with `Mask256 { lo: u128, hi: u128 }`,
+covering all 256 byte values. Storage paths changed from `/branches/{d}/{pk}` (single key)
+to `/branches/{d}/{pk}/lo` and `/branches/{d}/{pk}/hi` (two keys per branch node).
 
-**Debug script — check sell order after placing:**
+**⚠️ Fresh devnet required after WASM upgrade:**
+Old devnet state has incompatible trie branch storage paths. Use "Clear & Reload" in
+DevnetControlPanel before testing. Old state is NOT automatically migrated.
+
+**Vitest coverage:**
+16 tests in `__tests__/devnet/carbine-orderbook-parsing.test.ts` cover:
+- 10 unit tests for `parseOrderbookResponse` (synthetic binary fixtures)
+- PlaceLimitOrder sell + buy + two-sided orderbook integration tests
+- Crossing order test (buy at price ≥ ask triggers fill, ask level amount decreases)
+- CancelOrder test (trie key removed, open_order_count decrements by 1)
+- active_token_ids trie test (token IDs in safe byte range, trie navigation works)
+
+**Verification script — confirm both sides of orderbook are live (run in browser console):**
 ```javascript
-// Run after placing a sell order:
+// Verifies buy + sell orders both appear. useOrderbook handles pair ordering automatically.
 (async () => {
-  // Check total order count
+  // Total open orders (opcode 25): should be 1+ after placing any order
   const r1 = await fetch('http://localhost:18888', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ jsonrpc: '2.0', method: 'alkanes_simulate', params: [{ target: { block: '4', tx: '70000' }, inputs: ['25'], block_tag: 'latest' }], id: 1 }) });
   const j1 = await r1.json();
   console.log('Total open orders:', j1?.result?.execution?.data);
 
-  // Check depth with DIESEL-base, frBTC-quote (what LimitOrderPanel sends)
-  const r2 = await fetch('http://localhost:18888', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ jsonrpc: '2.0', method: 'alkanes_simulate', params: [{ target: { block: '4', tx: '70000' }, inputs: ['24', '2', '0', '32', '0', '10'], block_tag: 'latest' }], id: 2 }) });
+  // Depth — frBTC base, DIESEL quote (correct ordering for DIESEL/frBTC pair):
+  const r2 = await fetch('http://localhost:18888', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ jsonrpc: '2.0', method: 'alkanes_simulate', params: [{ target: { block: '4', tx: '70000' }, inputs: ['24', '32', '0', '2', '0', '10'], block_tag: 'latest' }], id: 2 }) });
   const j2 = await r2.json();
-  console.log('Depth (DIESEL/frBTC):', j2?.result?.execution?.data, 'err:', j2?.result?.execution?.error);
+  console.log('Depth (frBTC/DIESEL):', j2?.result?.execution?.data, 'err:', j2?.result?.execution?.error);
 
-  // Check depth with frBTC-base, DIESEL-quote (what useOrderbook queries)
-  const r3 = await fetch('http://localhost:18888', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ jsonrpc: '2.0', method: 'alkanes_simulate', params: [{ target: { block: '4', tx: '70000' }, inputs: ['24', '32', '0', '2', '0', '10'], block_tag: 'latest' }], id: 3 }) });
+  // Depth — DIESEL base, frBTC quote (reversed, usually empty — useOrderbook tries both):
+  const r3 = await fetch('http://localhost:18888', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ jsonrpc: '2.0', method: 'alkanes_simulate', params: [{ target: { block: '4', tx: '70000' }, inputs: ['24', '2', '0', '32', '0', '10'], block_tag: 'latest' }], id: 3 }) });
   const j3 = await r3.json();
-  console.log('Depth (frBTC/DIESEL):', j3?.result?.execution?.data, 'err:', j3?.result?.execution?.error);
+  console.log('Depth (DIESEL/frBTC):', j3?.result?.execution?.data, 'err:', j3?.result?.execution?.error);
 })();
 ```
