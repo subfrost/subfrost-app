@@ -54,8 +54,8 @@ const DEFAULT_SWAP_FEE_RATE = 0.003;
  * Returns 0 if TVL is too small to avoid division by zero or absurd values.
  */
 function calculateApr(vol24hUsd: number, tvlUsd: number, feeRate: number = DEFAULT_SWAP_FEE_RATE): number {
-  // Require minimum $100 TVL to avoid division by near-zero
-  if (!tvlUsd || tvlUsd < 100) return 0;
+  // Require minimum $5 TVL (matches MIN_TVL_USD display filter) to avoid division by near-zero
+  if (!tvlUsd || tvlUsd < 5) return 0;
   if (!vol24hUsd || vol24hUsd <= 0) return 0;
 
   const dailyFees = vol24hUsd * feeRate;
@@ -238,10 +238,10 @@ async function fetchPoolsFromDataApi(
     const token0Name = getTokenName(token0Id, token0NameFromPool, tokenMetaMap);
     const token1Name = getTokenName(token1Id, token1NameFromPool, tokenMetaMap);
 
-    const tvlUsd = p.poolTvlInUsd ?? 0;
-    const vol24hUsd = p.poolVolume1dInUsd ?? 0;
+    const tvlUsd = p.poolTvlInUsd ?? p.tvl ?? 0;
+    const vol24hUsd = p.poolVolume1dInUsd ?? p.volume1d ?? 0;
     // Use backend APR if provided, otherwise calculate from volume/TVL
-    const apr = p.poolApr ?? calculateApr(vol24hUsd, tvlUsd);
+    const apr = p.poolApr ?? p.apr ?? calculateApr(vol24hUsd, tvlUsd);
 
     items.push({
       id: poolId,
@@ -252,8 +252,8 @@ async function fetchPoolsFromDataApi(
       token0TvlUsd: p.token0TvlInUsd ?? 0,
       token1TvlUsd: p.token1TvlInUsd ?? 0,
       vol24hUsd,
-      vol7dUsd: p.poolVolume7dInUsd ?? 0,
-      vol30dUsd: p.poolVolume30dInUsd ?? 0,
+      vol7dUsd: p.poolVolume7dInUsd ?? p.volume7d ?? 0,
+      vol30dUsd: p.poolVolume30dInUsd ?? p.volume30d ?? 0,
       apr,
       token0Amount: p.token0Amount || p.reserve0 || p.token0?.token0Amount || '0',
       token1Amount: p.token1Amount || p.reserve1 || p.token1?.token1Amount || '0',
@@ -333,9 +333,9 @@ async function fetchPoolsFromPoolsDetailsRest(
     const token0Name = getTokenName(token0Id, t0Name, tokenMetaMap);
     const token1Name = getTokenName(token1Id, t1Name, tokenMetaMap);
 
-    const tvlUsd = p.poolTvlInUsd ?? 0;
-    const vol24hUsd = p.poolVolume1dInUsd ?? 0;
-    const apr = p.poolApr ?? calculateApr(vol24hUsd, tvlUsd);
+    const tvlUsd = p.poolTvlInUsd ?? p.tvl ?? 0;
+    const vol24hUsd = p.poolVolume1dInUsd ?? p.volume1d ?? 0;
+    const apr = p.poolApr ?? p.apr ?? calculateApr(vol24hUsd, tvlUsd);
 
     items.push({
       id: poolId,
@@ -346,8 +346,8 @@ async function fetchPoolsFromPoolsDetailsRest(
       token0TvlUsd: p.token0TvlInUsd ?? 0,
       token1TvlUsd: p.token1TvlInUsd ?? 0,
       vol24hUsd,
-      vol7dUsd: p.poolVolume7dInUsd ?? 0,
-      vol30dUsd: p.poolVolume30dInUsd ?? 0,
+      vol7dUsd: p.poolVolume7dInUsd ?? p.volume7d ?? 0,
+      vol30dUsd: p.poolVolume30dInUsd ?? p.volume30d ?? 0,
       apr,
       token0Amount: p.token0Amount || p.reserve0 || p.token0?.token0Amount || '0',
       token1Amount: p.token1Amount || p.reserve1 || p.token1?.token1Amount || '0',
@@ -418,9 +418,9 @@ async function fetchPoolsFromTokenPairsRest(
     const token0Name = getTokenName(token0Id, t0Name, tokenMetaMap);
     const token1Name = getTokenName(token1Id, t1Name, tokenMetaMap);
 
-    const tvlUsd = p.poolTvlInUsd ?? 0;
-    const vol24hUsd = p.poolVolume1dInUsd ?? 0;
-    const apr = p.poolApr ?? calculateApr(vol24hUsd, tvlUsd);
+    const tvlUsd = p.poolTvlInUsd ?? p.tvl ?? 0;
+    const vol24hUsd = p.poolVolume1dInUsd ?? p.volume1d ?? 0;
+    const apr = p.poolApr ?? p.apr ?? calculateApr(vol24hUsd, tvlUsd);
 
     items.push({
       id: poolId,
@@ -431,8 +431,8 @@ async function fetchPoolsFromTokenPairsRest(
       token0TvlUsd: p.token0TvlInUsd ?? 0,
       token1TvlUsd: p.token1TvlInUsd ?? 0,
       vol24hUsd,
-      vol7dUsd: p.poolVolume7dInUsd ?? 0,
-      vol30dUsd: p.poolVolume30dInUsd ?? 0,
+      vol7dUsd: p.poolVolume7dInUsd ?? p.volume7d ?? 0,
+      vol30dUsd: p.poolVolume30dInUsd ?? p.volume30d ?? 0,
       apr,
       token0Amount: p.token0Amount || p.reserve0 || p.token0?.token0Amount || '0',
       token1Amount: p.token1Amount || p.reserve1 || p.token1?.token1Amount || '0',
@@ -502,9 +502,9 @@ async function fetchPoolsFromTokenPairsApi(
     const token0Name = getTokenName(token0Id, token0NameFromPool, tokenMetaMap);
     const token1Name = getTokenName(token1Id, token1NameFromPool, tokenMetaMap);
 
-    const tvlUsd = p.poolTvlInUsd ?? 0;
-    const vol24hUsd = p.poolVolume1dInUsd ?? 0;
-    const apr = p.poolApr ?? calculateApr(vol24hUsd, tvlUsd);
+    const tvlUsd = p.poolTvlInUsd ?? p.tvl ?? 0;
+    const vol24hUsd = p.poolVolume1dInUsd ?? p.volume1d ?? 0;
+    const apr = p.poolApr ?? p.apr ?? calculateApr(vol24hUsd, tvlUsd);
 
     // get-all-token-pairs provides TVL and volume data
     items.push({
@@ -516,8 +516,8 @@ async function fetchPoolsFromTokenPairsApi(
       token0TvlUsd: p.token0TvlInUsd ?? 0,
       token1TvlUsd: p.token1TvlInUsd ?? 0,
       vol24hUsd,
-      vol7dUsd: p.poolVolume7dInUsd ?? 0,
-      vol30dUsd: p.poolVolume30dInUsd ?? 0,
+      vol7dUsd: p.poolVolume7dInUsd ?? p.volume7d ?? 0,
+      vol30dUsd: p.poolVolume30dInUsd ?? p.volume30d ?? 0,
       apr,
       // Get reserve amounts from the token objects or top-level
       token0Amount: p.reserve0 || p.token0?.token0Amount || '0',
@@ -626,23 +626,24 @@ export function usePools(params: UsePoolsParams = {}) {
       let items: PoolsListItem[] = [];
       let tokenMetaMap: Map<string, { name: string; symbol: string }> = new Map();
 
-      // Primary: Data API (single call with pre-calculated TVL/volume/APR)
+      // Primary: Direct REST call to get-all-pools-details (preserves ALL API fields
+      // including poolApr, poolVolume30dInUsd, etc. which the SDK WASM deserializer drops).
       // On devnet, the fetch interceptor routes these REST calls through quspo.
       try {
         tokenMetaMap = await tokenMetaPromise;
         console.log('[usePools] Token metadata loaded:', tokenMetaMap.size, 'tokens');
-        items = await fetchPoolsFromDataApi(provider, ALKANE_FACTORY_ID, network, tokenMetaMap);
+        items = await fetchPoolsFromPoolsDetailsRest(ALKANE_FACTORY_ID, network, tokenMetaMap);
       } catch (e) {
-        console.warn('[usePools] dataApiGetAllPoolsDetails failed, falling back to REST:', e);
+        console.warn('[usePools] get-all-pools-details REST failed, falling back to SDK WASM:', e);
         try { tokenMetaMap = await tokenMetaPromise; } catch { /* ignore */ }
       }
 
-      // Fallback 1: get-all-pools-details REST
+      // Fallback 1: SDK WASM dataApiGetAllPoolsDetails (may drop some fields like poolApr)
       if (items.length === 0) {
         try {
-          items = await fetchPoolsFromPoolsDetailsRest(ALKANE_FACTORY_ID, network, tokenMetaMap);
+          items = await fetchPoolsFromDataApi(provider, ALKANE_FACTORY_ID, network, tokenMetaMap);
         } catch (e) {
-          console.warn('[usePools] get-all-pools-details REST failed:', e);
+          console.warn('[usePools] dataApiGetAllPoolsDetails failed:', e);
         }
       }
 
