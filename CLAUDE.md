@@ -48,7 +48,7 @@ u32 numAsks (4 bytes LE)  ← NOT u128
 [u128 price, u128 amount] × numAsks
 ```
 - Prices are **raw u128** in 1e8 units — divide by 1e8 for display
-- Ask prices are **INVERTED trie keys** (u128::MAX - real_price) — the parser MUST un-invert. The contract source (lib.rs:760) implies it un-inverts before returning, but live devnet data (2026-04-01) proves the raw inverted value is what actually comes back. Parser check: if `stored > U128_MAX/2` → un-invert.
+- Ask prices are **already un-inverted** by the contract (lib.rs:760: `let real_price = u128::MAX - token_id`). The parser receives real prices for both sides — do NOT un-invert in the parser. ~~(old claim: "parser MUST un-invert" — this was wrong; double-inversion produces garbage)~~
 - Bid prices are real (no transformation needed)
 - Empty padding slots (amount=0) must be filtered; price=0 is a valid real order
 - Source: `subfrost-alkanes/alkanes/carbine-controller/src/lib.rs:730-774`
@@ -1806,6 +1806,67 @@ npm run test:pw:orderbook       # headless orderbook user stories
 npm run test:pw:orderbook:headed  # watch mode (see the browser)
 npm run test:pw:all             # all playwright specs
 ```
+
+---
+
+### ⚠️ CRITICAL: Vitest Devnet Test Authoring Rules (burned 2× — do not repeat)
+
+**`restoreSnapshot()` + `executeAlkanes()` = "Indexer sync timed out"**
+
+`DevnetTestHarness.importState(blob)` restores the alkanes/metashrew indexer state to the
+snapshot height, but does NOT restore the bitcoind chain height. After restore:
+- `metashrew_height` → snapshot height N
+- `getblockcount` → current height N+k (where k = blocks mined during prior tests)
+
+The WASM provider checks `metashrew_height == getblockcount` before broadcasting any tx.
+When they diverge it times out: `"Indexer sync timed out: metashrew at N, bitcoind at N+k after 30s"`
+
+**Rules:**
+1. **NEVER call `restoreSnapshot()` then `executeAlkanes()` in the same test** unless that test
+   is the very first test in the suite (before any blocks have been mined by prior tests).
+2. **Run integration tests sequentially with cumulative state.** This is the pattern in
+   `carbine-orderbook-parsing.test.ts` — tests build on each other, no per-test restore.
+3. **Use `simulate()` (read-only RPC) freely after `restoreSnapshot()`** — it does not trigger
+   the sync check.
+4. **Assertions must be delta-based, not absolute**, when state is cumulative. Compare
+   before/after values rather than hardcoded expected amounts.
+
+**Correct `alkanesExecuteFull` wallet options format:**
+```typescript
+// For deployWasm (WASM envelope calls) — use `from` + `mine_enabled: true`
+JSON.stringify({
+  from: [segwitAddress, taprootAddress],
+  change_address: segwitAddress,
+  alkanes_change_address: taprootAddress,
+  mine_enabled: true,
+})
+// For executeAlkanes (regular tx calls) — use `from_addresses` + `ordinals_strategy`
+JSON.stringify({
+  from_addresses: [segwitAddress, taprootAddress],
+  change_address: segwitAddress,
+  alkanes_change_address: taprootAddress,
+  ordinals_strategy: 'burn',
+})
+```
+`mine_enabled: true` tells the WASM to mine via the fetch interceptor. Required for WASM deploys.
+NOT needed (and should NOT be used) for regular PlaceLimitOrder / protocol calls — those use
+`from_addresses`. Source: `carbine-orderbook-parsing.test.ts` (ground truth, all 16 tests pass).
+
+**`simulate()` options format:**
+```typescript
+rpcCall('alkanes_simulate', [{
+  target: { block, tx },
+  inputs,
+  alkanes: [],
+  transaction: '0x',  // string, not []
+  block: '0x',        // string, not []
+  height: '999',
+  txindex: 0,
+  vout: 0,
+}]);
+```
+
+---
 
 **BottomPanels "Open Orders" (2026-04-01 wired):**
 - `openOrderCount` was previously hardcoded to `0` — now driven by `useUserOrders()`

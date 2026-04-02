@@ -470,6 +470,10 @@ describe('Carbine CLOB — on-chain orderbook parsing', () => {
   it('PlaceLimitOrder(sell): DIESEL locked == order amount, ask appears in depth', async () => {
     // If this fails, carbine deployment is broken — fix beforeAll, not this assertion.
     expect(carbineDeployed).toBe(true);
+    // ⚠ restoreSnapshot() is safe HERE because this is the FIRST test — no prior test has
+    // mined any blocks, so metashrew_height == getblockcount after restore.
+    // DO NOT add restoreSnapshot() to later tests: it resets metashrew but NOT bitcoind height,
+    // causing "Indexer sync timed out" in subsequent executeAlkanes() calls. See CLAUDE.md.
     restoreSnapshot('carbine-deployed');
 
     const [cBlock, cTx] = CONTROLLER_ID.split(':');

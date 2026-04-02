@@ -27,11 +27,11 @@
  *   After restore, metashrew_height < getblockcount, causing "Indexer sync timed out".
  *   Tests run sequentially and accumulate state (same pattern as carbine-orderbook-parsing.test.ts).
  *
- * ## Key findings from parsing test output (verified 2026-04-02):
- *   - executeAlkanes/deployWasm MUST use `from` + `mine_enabled: true` (NOT `from_addresses`)
- *     Without mine_enabled, WASM does external indexer sync which times out in harness:
- *     "Indexer sync timed out: metashrew at N, bitcoind at N+k after 30s"
- *   - alkanesExecuteFull feeRate arg must be string '1' (not number 1) — matches parsing test
+ * ## Key findings from investigation (verified 2026-04-02):
+ *   - deployWasm uses `from` + `mine_enabled: true` (WASM envelope, needs internal mining)
+ *   - executeAlkanes uses `from_addresses` + `ordinals_strategy: 'burn'` (regular calls)
+ *   - The restoreSnapshot sync bug (not the mine_enabled choice) was the root cause of all
+ *     "Indexer sync timed out" failures. See CLAUDE.md Vitest Devnet Test Authoring Rules.
  *   - beacon-proxy MUST use 0x7fff (initialize), NOT 0x8fff (forward) — sets /beacon storage
  *   - simulate() transaction/block args must be '0x' strings
  *
