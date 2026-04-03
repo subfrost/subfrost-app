@@ -693,8 +693,62 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       };
     }
 
-    const segwitInfo = wallet.deriveAddress(AddressType.P2WPKH, 0, 0);
-    const taprootInfo = wallet.deriveAddress(AddressType.P2TR, 0, 0);
+    let segwitInfo = wallet.deriveAddress(AddressType.P2WPKH, 0, 0);
+    let taprootInfo = wallet.deriveAddress(AddressType.P2TR, 0, 0);
+
+    // ⚠️ DEVNET OVERRIDE: The SDK's createWalletFromMnemonic uses coinType=0 for
+    // derivation, but the WASM provider's walletLoadMnemonic uses coinType=1 for regtest.
+    // boot.ts uses coinType=1 to match the WASM provider. If we display coinType=0
+    // addresses, all boot-seeded state (tokens, orders, positions) is invisible.
+    //
+    // Fix: On devnet, re-derive addresses with coinType=1 to match boot.ts + WASM provider.
+    // This ensures the UI's "connected wallet" addresses match where boot.ts sent tokens.
+    if (network === 'devnet') {
+      try {
+        const bip39Mod = require('bip39');
+        const bip32Mod = require('bip32');
+        const eccMod = require('@bitcoinerlab/secp256k1');
+        const bitcoinMod = require('bitcoinjs-lib');
+        const bip32Factory = bip32Mod.default || bip32Mod;
+        const bip32 = bip32Factory(eccMod);
+        try { bitcoinMod.initEccLib(eccMod); } catch {}
+
+        const sessionMnemonic = typeof sessionStorage !== 'undefined'
+          ? sessionStorage.getItem(SESSION_MNEMONIC_KEY) : null;
+        if (sessionMnemonic) {
+          const seed = bip39Mod.mnemonicToSeedSync(sessionMnemonic);
+          const root = bip32.fromSeed(seed);
+          // coinType=1 paths — matching boot.ts and the WASM provider
+          const segChild = root.derivePath("m/84'/1'/0'/0/0");
+          const tapChild = root.derivePath("m/86'/1'/0'/0/0");
+          const regNetwork = bitcoinMod.networks.regtest;
+
+          const segPayment = bitcoinMod.payments.p2wpkh({
+            pubkey: Buffer.from(segChild.publicKey), network: regNetwork });
+          const xOnly = Buffer.from(tapChild.publicKey).slice(1);
+          const tapPayment = bitcoinMod.payments.p2tr({
+            internalPubkey: xOnly, network: regNetwork });
+
+          if (segPayment.address && tapPayment.address) {
+            segwitInfo = {
+              address: segPayment.address,
+              publicKey: segChild.publicKey.toString('hex'),
+              path: "m/84'/1'/0'/0/0",
+            };
+            taprootInfo = {
+              address: tapPayment.address,
+              publicKey: tapChild.publicKey.toString('hex'),
+              path: "m/86'/1'/0'/0/0",
+            };
+            console.log('[WalletContext] Devnet: using coinType=1 addresses (matches boot.ts + WASM provider)');
+            console.log('[WalletContext]   segwit:', segPayment.address);
+            console.log('[WalletContext]   taproot:', tapPayment.address);
+          }
+        }
+      } catch (e) {
+        console.warn('[WalletContext] Devnet coinType=1 override failed, using coinType=0:', e);
+      }
+    }
 
     // Derive Zcash address from the same mnemonic (BIP44 m/44'/133'/0'/0/0)
     // On mainnet, show the real ZEC address alongside BTC addresses
