@@ -74,41 +74,43 @@ When you see this error, the tokens are NOT in the wallet's UTXOs even though th
 
 All rules below were established 2026-03-31 after 16+ hours debugging. Each one prevented a bug from being re-introduced. Test enforcement exists for all of them.
 
-### ⚠️⚠️⚠️ Address Derivation — coinType MUST Be 0 ⚠️⚠️⚠️
+### ⚠️⚠️⚠️ Address Derivation — Two CoinType Systems ⚠️⚠️⚠️
 
-**THIS BUG HAS COST MULTIPLE FULL-DAY DEBUGGING SESSIONS. READ THIS BEFORE TOUCHING ANY DERIVATION CODE.**
+**THIS HAS COST MULTIPLE FULL-DAY DEBUGGING SESSIONS. READ THIS BEFORE TOUCHING ANY DERIVATION CODE.**
 
-The SDK's `createWalletFromMnemonic()` hardcodes `coinType: 0` in its BIP32 derivation paths:
-```
-BIP84 (segwit):  m/84'/0'/0'/0/0
-BIP86 (taproot): m/86'/0'/0'/0/0
-```
+The Alkanes SDK has **two separate derivation systems** that use **different coinTypes**:
 
-This is true **regardless of the `network` parameter** — even on regtest/testnet, the SDK uses coinType=0.
+| System | Used by | coinType | Paths | Where |
+|--------|---------|----------|-------|-------|
+| **WASM provider** (`walletLoadMnemonic`) | boot.ts `alkanesExecuteFull`, all on-chain txs | **1** (regtest) | `m/84'/1'/0'/0/0`, `m/86'/1'/0'/0/0` | WASM binary internals |
+| **JS SDK** (`createWalletFromMnemonic`) | WalletContext, UI address display | **0** (hardcoded) | `m/84'/0'/0'/0/0`, `m/86'/0'/0'/0/0` | `@alkanes/ts-sdk/src/wallet` |
 
-**boot.ts MUST use the same paths.** If boot.ts uses `coinType: 1` (the "correct" testnet convention: `m/84'/1'/0'/0/0`), the derived addresses will be **completely different** from the connected wallet, even though both use the same mnemonic. The result:
+**Same mnemonic, different coinType = completely different addresses.**
 
-- All boot-seeded tokens (DIESEL, frBTC, LP, FIRE, dxBTC) are at the WRONG address
-- All CLOB orders belong to the WRONG address → Open Orders tab is empty
-- All swap/mint/burn transactions are from the WRONG address → My Activity tab is empty
-- All LP positions are at the WRONG address → Positions tab is empty
-- `getAlkaneBalance()` returns 0 for the connected wallet → "Insufficient alkanes" everywhere
-- `alkanes_simulate` still shows correct contract state (reads trie, not address index) → misleading
+**boot.ts MUST use coinType=1** because `alkanesExecuteFull` resolves `from_addresses` against the WASM provider's internal keystore (coinType=1). Using coinType=0 addresses causes `"Address not found in keystore"` errors on every transaction.
 
-**The coinType only changes the BIP32 path — both coinType=0 and coinType=1 produce valid regtest addresses.** There is no Bitcoin-level reason to prefer one over the other. The ONLY requirement is that boot.ts and the SDK agree.
+**WalletContext uses coinType=0** because `createWalletFromMnemonic` hardcodes it. The UI displays coinType=0 addresses.
 
-**Verification:** After changing derivation paths, the boot wallet's segwit and taproot addresses must match what `createWalletFromMnemonic(mnemonic, 'regtest')` produces. If they don't, all devnet seeding is invisible to the UI.
+**Consequence for boot-seeded state:**
+- **Global Trades**: ✅ Shows all trades (no address filter) — boot swaps visible
+- **Orderbook**: ✅ Shows all orders (stored by pair, not by address)
+- **Open Orders**: ⚠️ Uses simulate context with WASM provider address — may or may not match
+- **Positions (LP)**: ❌ Queries connected wallet address (coinType=0) — boot LP is at coinType=1
+- **My Activity**: ❌ Queries connected wallet address — boot txs are from coinType=1
 
-**Files that MUST stay in sync:**
-- `lib/devnet/boot.ts` lines 185, 273-274 — BIP32 derivation paths
-- `@alkanes/ts-sdk` `DERIVATION_PATHS` constant — hardcoded coinType=0
-- `context/WalletContext.tsx` line 546 — calls `createWalletFromMnemonic(BOOT_MNEMONIC, ...)`
+**What this means for QA:**
+- Contract deployments, pool creation, CLOB orders, and swaps all WORK (WASM provider handles them)
+- Global Trades and Orderbook show boot-seeded data (no address filter)
+- Positions and My Activity only show data from USER-initiated actions (not boot-seeded)
+- To QA Positions/My Activity, the user must manually execute a swap or add liquidity from the UI
 
-**History:** This bug was introduced at project inception and not caught until 2026-04-03 because:
-1. Boot.ts logs didn't show the derived addresses
-2. `alkanes_simulate` (state trie reads) worked fine, masking the address mismatch
-3. The UI showed empty panels but no error messages — silent failure
-4. The connected wallet auto-connected on devnet, so it appeared to be "working"
+**DO NOT try to "fix" this by changing boot.ts to coinType=0.** That was attempted 2026-04-03 and caused `"Address not found in keystore"` on every transaction, breaking the entire boot sequence. The WASM provider's internal keystore is the constraint — it cannot be changed without rebuilding the WASM.
+
+**Files involved:**
+- `lib/devnet/boot.ts` — coinType=1 (MUST match WASM provider)
+- `context/WalletContext.tsx` — coinType=0 (MUST match JS SDK `createWalletFromMnemonic`)
+- `@alkanes/ts-sdk` WASM — coinType=1 for regtest (immutable without WASM rebuild)
+- `@alkanes/ts-sdk` JS — coinType=0 always (immutable without SDK source change)
 
 ### Address Handling — useActualAddresses is MANDATORY
 Every mutation hook MUST use `useActualAddresses = isBrowserWallet || network === 'devnet'` for address ternaries (fromAddresses, toAddresses, changeAddr, alkanesChangeAddr).

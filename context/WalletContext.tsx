@@ -541,12 +541,16 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
     // import the boot mnemonic — and if they don't, faucet-minted tokens land at
     // addresses the SDK can't spend from.
     //
-    // ⚠️ CRITICAL: createWalletFromMnemonic uses coinType=0 in derivation paths
-    // (m/84'/0'/0'/0/0 for segwit, m/86'/0'/0'/0/0 for taproot) regardless of
-    // network. boot.ts MUST use the same coinType=0 paths. If they diverge,
-    // all boot-seeded state (tokens, orders, positions, history) becomes invisible.
-    // This bug cost multiple full-day debugging sessions before being identified.
-    // See CLAUDE.md "Address Derivation — coinType MUST Be 0" for full history.
+    // ⚠️ CRITICAL: Two different coinType derivation systems coexist:
+    //   - createWalletFromMnemonic (this call) → coinType=0 → UI addresses
+    //   - walletLoadMnemonic (WASM provider in boot.ts) → coinType=1 → on-chain txs
+    // These produce DIFFERENT addresses from the same mnemonic.
+    // Boot-seeded state (tokens, orders, LP) lives at coinType=1 addresses.
+    // The connected wallet displays coinType=0 addresses.
+    // Global Trades + Orderbook show boot data (no address filter).
+    // Positions + My Activity only show user-initiated actions.
+    // DO NOT change boot.ts to coinType=0 — breaks WASM keystore.
+    // See CLAUDE.md "Address Derivation — Two CoinType Systems" for full history.
     if (network === 'devnet' && !wallet) {
       const BOOT_MNEMONIC = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
       try {
