@@ -1870,6 +1870,96 @@ async function deployFullProtocol(
     console.warn('[devnet-boot] Fujin seeding failed (non-fatal):', e?.message?.slice(0, 120));
   }
 
+  // -----------------------------------------------------------------------
+  // Phase 10d: Seed Activity Feeds — execute real swap/mint/burn transactions
+  // so Global Trades, Positions, and My Activity tabs have data on boot.
+  //
+  // quspo indexes the full chain retroactively when addTertiary is called
+  // (after deployFullProtocol returns). All transactions from Phase 10
+  // will appear in the quspo trace history.
+  //
+  // We need:
+  //   - AMM swaps (factory opcode 13) → Global Trades + My Activity
+  //   - Add liquidity (pool opcode 1) → Positions + My Activity
+  //   - Wrap BTC→frBTC (frBTC opcode 77) → My Activity
+  //
+  // All operations use freshly minted tokens (same UTXO destruction pattern).
+  // -----------------------------------------------------------------------
+  onProgress('Seeding activity feeds...', 99);
+  try {
+    console.log('[devnet-boot] Phase 10d: Seeding activity feeds...');
+
+    // Fresh mint for activity seeding (prior tokens consumed by Phase 10a-c)
+    for (let i = 0; i < 2; i++) {
+      await executeCall(provider, harness, segwit, taproot,
+        '[2,0,77]:v0:v0', 'B:10000:v0', [taproot]);
+    }
+    await executeCall(provider, harness, segwit, taproot,
+      '[32,0,77]:v1:v1', 'B:300000:v0', [signerAddr, taproot]);
+    harness.mineBlocks(2);
+    await new Promise(r => setTimeout(r, 300));
+
+    const actDiesel = await getAlkaneBalance(provider, taproot, '2:0');
+    const actFrbtc = await getAlkaneBalance(provider, taproot, '32:0');
+    console.log('[devnet-boot] Activity seed balances: DIESEL=', actDiesel.toString(), 'frBTC=', actFrbtc.toString());
+
+    if (actDiesel > BigInt(0) && actFrbtc > BigInt(0) && poolId) {
+      const [fBlock, fTx] = factoryId.split(':');
+      const [pBlock, pTx] = poolId.split(':');
+
+      // Swap 1: DIESEL → frBTC via factory opcode 13
+      const swapAmount1 = actDiesel / BigInt(20); // 5% of DIESEL
+      try {
+        await executeCall(provider, harness, segwit, taproot,
+          `[${fBlock},${fTx},13,2,2,0,32,0,${swapAmount1},0,999999]:v0:v0`,
+          `2:0:${swapAmount1}`, [taproot]);
+        console.log('[devnet-boot] Swap DIESEL→frBTC:', swapAmount1.toString());
+      } catch (e: any) {
+        console.warn('[devnet-boot] Swap 1 failed:', e?.message?.slice(0, 80));
+      }
+
+      // Swap 2: frBTC → DIESEL via factory opcode 13
+      const swapAmount2 = actFrbtc / BigInt(20);
+      try {
+        await executeCall(provider, harness, segwit, taproot,
+          `[${fBlock},${fTx},13,2,32,0,2,0,${swapAmount2},0,999999]:v0:v0`,
+          `32:0:${swapAmount2}`, [taproot]);
+        console.log('[devnet-boot] Swap frBTC→DIESEL:', swapAmount2.toString());
+      } catch (e: any) {
+        console.warn('[devnet-boot] Swap 2 failed:', e?.message?.slice(0, 80));
+      }
+
+      // Swap 3: Another DIESEL → frBTC (different size for variety)
+      const swapAmount3 = actDiesel / BigInt(10);
+      try {
+        await executeCall(provider, harness, segwit, taproot,
+          `[${fBlock},${fTx},13,2,2,0,32,0,${swapAmount3},0,999999]:v0:v0`,
+          `2:0:${swapAmount3}`, [taproot]);
+        console.log('[devnet-boot] Swap DIESEL→frBTC (2):', swapAmount3.toString());
+      } catch (e: any) {
+        console.warn('[devnet-boot] Swap 3 failed:', e?.message?.slice(0, 80));
+      }
+
+      // Add Liquidity — pool opcode 1 (creates LP position for Positions tab)
+      const lpDiesel = actDiesel / BigInt(10);
+      const lpFrbtc = actFrbtc / BigInt(10);
+      try {
+        await executeCall(provider, harness, segwit, taproot,
+          `[${pBlock},${pTx},1]:v0:v0`,
+          `2:0:${lpDiesel},32:0:${lpFrbtc}`, [taproot]);
+        console.log('[devnet-boot] AddLiquidity: DIESEL=', lpDiesel.toString(), 'frBTC=', lpFrbtc.toString());
+      } catch (e: any) {
+        console.warn('[devnet-boot] AddLiquidity failed:', e?.message?.slice(0, 80));
+      }
+
+      console.log('[devnet-boot] Activity feeds seeded with 3 swaps + 1 LP mint');
+    } else {
+      console.warn('[devnet-boot] Skipping activity seeding — no tokens available');
+    }
+  } catch (e: any) {
+    console.warn('[devnet-boot] Activity seeding failed (non-fatal):', e?.message?.slice(0, 120));
+  }
+
   return contracts;
 }
 
