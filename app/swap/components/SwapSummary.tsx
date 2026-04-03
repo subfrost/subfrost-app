@@ -249,6 +249,24 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
             </div>
           )}
           
+          {/* Routing source indicator — shown when Universal Router provides a better price */}
+          {quote?.routeSource && quote.routeSource !== 'amm' && (
+            <div className="mx-4 mt-2 flex items-center gap-1.5">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/40">Routed via</span>
+              <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                quote.routeSource === 'clob'
+                  ? 'bg-emerald-500/15 text-emerald-400'
+                  : 'bg-[color:var(--sf-primary)]/15 text-[color:var(--sf-primary)]'
+              }`}>
+                <svg className="h-2.5 w-2.5" fill="currentColor" viewBox="0 0 16 16">
+                  <path d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0ZM6.79 5.093A.5.5 0 0 0 6 5.5v5a.5.5 0 0 0 .79.407l3.5-2.5a.5.5 0 0 0 0-.814l-3.5-2.5Z"/>
+                </svg>
+                {quote.routeSource === 'clob' ? 'Orderbook' : 'Hybrid'}
+              </span>
+              <span className="text-[10px] text-emerald-400/80">Better price</span>
+            </div>
+          )}
+
           {/* Settings rows - px-4 to align with Swap Route content */}
           <div className="flex flex-col gap-2.5 px-4">
             {direction === 'sell' ? (

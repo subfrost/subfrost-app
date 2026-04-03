@@ -15,7 +15,7 @@ type Props = {
   disabled?: boolean;
 };
 
-function formatApyBadge(apy: string | undefined): string {
+export function formatApyBadge(apy: string | undefined): string {
   if (!apy) return '-';
   const rounded = Math.ceil(parseFloat(apy));
   return `~${rounded}%`;

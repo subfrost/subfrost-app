@@ -21,7 +21,7 @@ export type VaultDepositData = {
  * Build protostone string for vault deposit (Purchase) operation
  * Format: [vault_block,vault_tx,opcode,amount]:pointer:refund
  */
-function buildVaultDepositProtostone(params: {
+export function buildVaultDepositProtostone(params: {
   vaultContractId: string;
   amount: string;
   pointer?: string;
@@ -45,7 +45,7 @@ function buildVaultDepositProtostone(params: {
  * Build input requirements string for vault deposit
  * Format: "block:tx:amount" for the token being deposited
  */
-function buildVaultDepositInputRequirements(params: {
+export function buildVaultDepositInputRequirements(params: {
   tokenId: string;
   amount: string;
 }): string {

@@ -20,6 +20,7 @@ import {
   FRETH_WRAP_OPCODE,
   FRETH_UNWRAP_OPCODE,
   POOL_OPCODES,
+  ROUTER_OPCODES,
 } from './constants';
 
 // ---------------------------------------------------------------------------
@@ -100,6 +101,57 @@ export function buildSwapInputRequirements(params: {
   }
 
   return parts.join(',');
+}
+
+// ---------------------------------------------------------------------------
+// Router Swap (hybrid CLOB+AMM via Universal Router)
+// ---------------------------------------------------------------------------
+
+/**
+ * Build protostone for swap via Universal Router opcode 1 (Swap).
+ *
+ * The router internally compares CLOB and AMM quotes and routes to the
+ * source providing the best price. Calldata format:
+ *   [router_block, router_tx, 1, input_block, input_tx, output_block, output_tx, amount_in, min_amount_out]
+ *
+ * Source: reference/subfrost-alkanes/alkanes/universal-router/src/lib.rs
+ */
+export function buildRouterSwapProtostone(params: {
+  routerId: string;
+  sellTokenId: string;
+  buyTokenId: string;
+  sellAmount: string;
+  minOutput: string;
+  pointer?: string;
+  refund?: string;
+}): string {
+  const {
+    routerId,
+    sellTokenId,
+    buyTokenId,
+    sellAmount,
+    minOutput,
+    pointer = 'v0',
+    refund = 'v0',
+  } = params;
+
+  const [routerBlock, routerTx] = routerId.split(':');
+  const [sellBlock, sellTx] = sellTokenId.split(':');
+  const [buyBlock, buyTx] = buyTokenId.split(':');
+
+  const cellpack = [
+    routerBlock,
+    routerTx,
+    ROUTER_OPCODES.Swap,
+    sellBlock,
+    sellTx,
+    buyBlock,
+    buyTx,
+    sellAmount,
+    minOutput,
+  ].join(',');
+
+  return `[${cellpack}]:${pointer}:${refund}`;
 }
 
 // ---------------------------------------------------------------------------

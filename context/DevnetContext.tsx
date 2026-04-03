@@ -468,7 +468,11 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
           console.warn('[devnet] Address conversion failed, using raw:', e?.message);
         }
       }
-      // Use generatetoaddress RPC — mines a block with coinbase paying to the user's address
+      // Use generatetoaddress RPC — mines a block with coinbase paying to the user's address.
+      // JOURNAL (2026-04-02): generatetoaddress via handleRpc advances bitcoind WITHOUT
+      // running the metashrew indexer, creating a 1-block gap. Fix: immediately call
+      // mineBlocks(1) after generatetoaddress so metashrew catches up through that block
+      // before the 100 maturity blocks are mined.
       const result = harnessRef.current.server.handleRpc(JSON.stringify({
         jsonrpc: '2.0',
         method: 'generatetoaddress',
@@ -479,6 +483,9 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
       if (parsed.error) {
         console.warn('[devnet] generatetoaddress error:', parsed.error, 'addr:', devnetAddr);
       }
+      // Immediately index the generatetoaddress block through metashrew by mining one more
+      // block via the harness (which runs the indexer sequentially from last_indexed_height).
+      harnessRef.current.mineBlocks(1);
       // CRITICAL: Coinbase outputs require 100 confirmations before they're spendable.
       // Without these extra blocks, the BTC appears in the UTXO set but lua_evalsaved
       // (getEnrichedBalances) filters it as immature, so the UI shows 0 BTC.
@@ -497,6 +504,16 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
     // block (devnet has no external miner). The tx "succeeds" (no exception) but
     // tokens never appear. The post-call mineBlocks(1) mines an EMPTY block.
     // With mine_enabled:true, the SDK mines the commit+reveal blocks internally.
+    //
+    // JOURNAL (2026-04-02): mine_enabled:true causes metashrew/bitcoind height desync.
+    // alkanesExecuteFull with mine_enabled uses generatetoaddress RPC for commit+reveal,
+    // which advances bitcoind WITHOUT running the metashrew indexer. This creates a
+    // permanent 2-block gap (commit + reveal). The gap triggers "Indexer sync timed out"
+    // on the next alkanesExecuteTyped call.
+    // Fix: after alkanesExecuteFull(mine_enabled:true), call mineBlocks(2) so the
+    // metashrew indexer catches up through the 2 unindexed generatetoaddress blocks.
+    // mineBlocks runs the indexer sequentially from last_indexed_height to chain tip,
+    // processing all skipped blocks before adding the new ones. Gap = 0 after call.
     faucetDiesel: async (address: string) => {
       if (!providerRef.current || !harnessRef.current) throw new Error('Devnet not ready');
       // Use boot wallet to fund the tx, output DIESEL to user's address
@@ -515,7 +532,10 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
           mine_enabled: true,
         }),
       );
-      harnessRef.current.mineBlocks(1);
+      // mineBlocks(2): catches up metashrew through the 2 generatetoaddress blocks
+      // (commit+reveal) that mine_enabled:true created. Without this, subsequent
+      // alkanesExecuteTyped calls fail with "Indexer sync timed out".
+      harnessRef.current.mineBlocks(2);
       console.log('[devnet] DIESEL minted to', address);
       setState(prev => ({ ...prev, chainHeight: harnessRef.current.height }));
       debounceSave();
@@ -538,7 +558,8 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
           mine_enabled: true,
         }),
       );
-      harnessRef.current.mineBlocks(1);
+      // mineBlocks(2): same generatetoaddress desync fix as faucetDiesel above
+      harnessRef.current.mineBlocks(2);
       console.log('[devnet] FUEL minted to', address);
       setState(prev => ({ ...prev, chainHeight: harnessRef.current.height }));
       debounceSave();
@@ -599,7 +620,10 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
           mine_enabled: true,
         }),
       );
-      harnessRef.current.mineBlocks(1);
+      // mineBlocks(2): same generatetoaddress desync fix — mine_enabled:true creates
+      // 2 unindexed blocks (commit+reveal via generatetoaddress). mineBlocks(2) runs
+      // the indexer from last_indexed_height, catching up through all skipped blocks.
+      harnessRef.current.mineBlocks(2);
       console.log('[devnet] frBTC wrapped to', address);
       setState(prev => ({ ...prev, chainHeight: harnessRef.current.height }));
       debounceSave();

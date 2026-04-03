@@ -68,6 +68,16 @@
  *   3. Only then investigate the UTXO selection path further.
  *
  * =============================================================================
+ * JOURNAL (2026-04-02): "Insufficient alkanes" on devnet = STALE CACHE
+ * =============================================================================
+ * If limit orders fail with "Insufficient alkanes: need X, have 0" on devnet,
+ * use DevnetControlPanel → "Clear & Reload" to wipe stale IndexedDB cache.
+ * This resets the in-browser Bitcoin node and re-runs the full boot sequence,
+ * which re-deploys contracts and re-mints tokens at fresh addresses.
+ * The sandshrew_rpc_url() detection in execute.ts works correctly for fresh boots.
+ * =============================================================================
+ *
+ * =============================================================================
  * CRITICAL: BROWSER WALLET OUTPUT ADDRESS BUG (2026-03-01)
  * =============================================================================
  * When using browser wallets, you MUST pass ACTUAL addresses to
@@ -81,6 +91,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useWallet } from '@/context/WalletContext';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { useSandshrewProvider } from '@/hooks/useSandshrewProvider';
+import { useDevnet } from '@/context/DevnetContext';
 import { getConfig } from '@/utils/getConfig';
 import { patchInputsOnly } from '@/lib/psbt-patching';
 import { extractPsbtBase64, getBitcoinNetwork } from '@/lib/alkanes/helpers';
@@ -102,6 +113,7 @@ export interface LimitOrderParams {
 export function useLimitOrderMutation() {
   const { account, network, isConnected, signTaprootPsbt, signSegwitPsbt, walletType } = useWallet();
   const provider = useSandshrewProvider();
+  const { controls: devnetControls } = useDevnet();
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -251,22 +263,15 @@ export function useLimitOrderMutation() {
           // On devnet, mine a block so the transaction is included.
           // Without this, the tx sits in mempool and the Carbine controller
           // never executes — the order never appears on-chain.
+          // CRITICAL: use devnetControls.mineBlocks (harness path) NOT generatetoaddress.
+          // generatetoaddress advances bitcoind WITHOUT running the metashrew indexer,
+          // creating a permanent height gap that causes "Indexer sync timed out" on
+          // the next alkanesExecuteTyped call (the WASM checks metashrew_height == getblockcount).
+          // devnetControls.mineBlocks(1) runs the harness mineBlocks which indexes synchronously.
           if (network === 'devnet') {
             try {
-              const segwitAddr = account?.nativeSegwit?.address;
-              if (segwitAddr) {
-                await fetch('http://localhost:18888', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    jsonrpc: '2.0',
-                    method: 'generatetoaddress',
-                    params: [1, segwitAddr],
-                    id: 1,
-                  }),
-                });
-                console.log('[LimitOrder] Devnet: mined 1 block');
-              }
+              await devnetControls.mineBlocks(1);
+              console.log('[LimitOrder] Devnet: mined 1 block via harness (sync-safe)');
             } catch (e) {
               console.warn('[LimitOrder] Devnet mine failed (non-fatal):', e);
             }

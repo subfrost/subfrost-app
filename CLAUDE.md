@@ -10,6 +10,64 @@
 ### Rule 0 — Verify Before Asserting Impossibility
 NEVER declare something "impossible" based on code comments alone. Check git history first (`git log --all --grep="keyword"`), then run the code. A deployment bug is not an architectural limitation. Never add environment-specific workarounds — if an SDK method fails, debug WHY and fix the root cause.
 
+### Rule 0a — Self-Audit All Work Before Reporting Complete
+NEVER report work as complete without a structured self-audit. After implementing changes, verify each assumption against source code — not against your own comments or memory:
+
+1. **Opcode args**: For every contract call, re-read the Rust source and confirm each argument position matches. The runtime strips target+opcode; remaining inputs become the function args in order.
+2. **Hardcoded values**: Any hardcoded number (prices, amounts, slot IDs, byte offsets) must be verified against the live state or computed dynamically. Devnet pool reserves vary per boot — never assume specific values.
+3. **Type propagation**: Trace `routeSource`, `poolId`, or any new field end-to-end: hook → component → mutation → protostone. Verify structural type compatibility across file boundaries.
+4. **Binary parsing**: For every LE byte parse, verify byte offsets against the contract's response layout. u128 = 16 bytes (not 8). u32 = 4 bytes (not 16).
+5. **Address handling**: Confirm `useActualAddresses` pattern is used. Confirm router/factory receives tokens via `incomingAlkanes` (two-protostone or SDK auto-edict).
+6. **Run tsc + tests**: `npx tsc --noEmit` and run all affected vitest suites. Do not report success until both pass.
+
+This rule exists because LLM-generated code frequently has correct structure but wrong constants, reversed argument order, or off-by-one byte offsets. The audit catches these before they reach the user.
+
+### Rule 0b — Never Remove Functionality to "Fix" a Problem
+When a feature depends on data you don't have (auth tokens, state from prior steps, etc.), the fix is to OBTAIN that data — not to delete the code that uses it. Removing functionality to make code compile or tests pass is the most dangerous class of LLM error because it silently regresses capabilities.
+
+**Before deleting any code, ask:** "Am I removing this because it's wrong, or because I can't figure out how to make it work?" If the answer is the latter, investigate harder. Read how the existing E2E tests solve the same problem. The answer is almost always in the test suite.
+
+**Applies to:** Boot seeding steps, auth token flows, contract interactions, wallet signing paths, PSBT patching. All of these have been regressed at least once by premature deletion.
+
+---
+
+## Alkane UTXO Model (CRITICAL — Understand Before Touching Any Token Code)
+
+### Alkane Tokens ARE Bitcoin UTXOs
+
+Alkane tokens (DIESEL, frBTC, LP, FIRE, dxBTC, etc.) are encoded as **protorunes** on Bitcoin UTXOs. Each token balance lives inside a normal Bitcoin UTXO with dust value (~546-600 sats). There is no separate token ledger — the Bitcoin UTXO set IS the token ledger.
+
+**Fundamental consequence:** Any transaction that spends a UTXO for BTC fees **permanently destroys** the alkane tokens it carries. There is no Bitcoin-level protection. The protorune data is in the witness script, and spending the UTXO removes it from the UTXO set forever.
+
+### How Tokens Get Destroyed Silently
+
+When the SDK builds a PSBT, it selects UTXOs from `from_addresses` to fund BTC fees. Without `ordinals_strategy: 'preserve'`, it picks ANY UTXO with sufficient BTC — including dust UTXOs carrying alkane tokens. The SDK has no way to distinguish "this 546-sat UTXO carries 5 billion DIESEL" from "this 546-sat UTXO is empty dust" at the BTC level.
+
+**In boot.ts specifically:** After Phase 2 mints DIESEL and wraps frBTC, the remaining tokens sit in change UTXOs at the deployer's addresses. The 50+ `deployWasm()` calls in Phases 3-8 each need ~100,000 sats for WASM envelopes. The SDK picks UTXOs from `[segwit, taproot]` to fund these — and silently spends the alkane change UTXOs as fee inputs, destroying all DIESEL and frBTC balances by Phase 9.
+
+**Symptoms:** `getAlkaneBalance()` returns 0 for all tokens. `Insufficient alkanes: need X of Y, have 0` on every operation that requires tokens. But `alkanes_simulate` (which reads the state trie, not the UTXO set) still shows correct pool reserves — making it seem like tokens exist when they don't.
+
+**Fix pattern:** Re-mint / re-wrap tokens immediately before the operations that need them. Do not assume alkane balances survive across sequences of unrelated transactions. In boot.ts, Phase 10a re-mints DIESEL and re-wraps frBTC specifically for CLOB/vault/FIRE seeding.
+
+### Where This Matters in the Codebase
+
+| File | Risk | Protection |
+|------|------|-----------|
+| `lib/devnet/boot.ts` — `deployWasm()` | Consumes alkane UTXOs as fee inputs | Phase 10a re-mints tokens after all deploys |
+| `lib/devnet/boot.ts` — `executeCall()` | Same risk for any non-deploy call | Document risk, re-mint if needed |
+| `lib/alkanes/buildAlkaneTransferPsbt.ts` | User sends DIESEL, PSBT picks inscription UTXO | Smart UTXO selection + collateral warning |
+| `hooks/useSwapMutation.ts` | Swap PSBT picks wrong UTXOs | SDK handles via `alkanesExecuteTyped` with `from_addresses` |
+| Any frontend mutation hook | Browser wallet PSBT construction | `patchInputsOnly` for witnessUtxo scripts |
+
+### Diagnostic: "Insufficient alkanes: have 0"
+
+When you see this error, the tokens are NOT in the wallet's UTXOs even though they may appear to exist in contract state. Check:
+
+1. **Were deploy transactions run between the mint and the spend?** Each deploy can consume alkane UTXOs.
+2. **Is `ordinals_strategy` set?** Without it, any UTXO is fair game for fee inputs.
+3. **Are you querying the right address?** Alkane change goes to `alkanes_change_address` (taproot), BTC change goes to `change_address` (segwit). Check both.
+4. **Has the indexer caught up?** `alkanes_protorunesbyaddress` depends on the address index, which lags behind after rapid block mining. `alkanes_simulate` reads state directly and is always current.
+
 ---
 
 ## Devnet Architecture (CRITICAL — Read Before Touching Devnet Code)
@@ -708,6 +766,161 @@ alkanes-cli -p subfrost-regtest \
 - **CLI deployer (p2tr:0):** `bcrt1p0mrr2pfespj94knxwhccgsue38rgmc9yg6rcclj2e4g948t73vssj2j648`
 - **App user (taproot):** `bcrt1pqjwdlfg4lht3jwl0p5u58yn8fc2ksqx5v44g6ekcru5szdm2u32qum3gpe`
 - **App user (segwit):** `bcrt1qvjucyzgwjjkmgl5wg3fdeacgthmh29nv4pk82x`
+
+---
+
+## Devnet Testing & QA Methodology
+
+### Two-Tier Testing: Vitest Harness → Browser Devnet
+
+The testing flow uses two tiers. Vitest runs an in-process WASM indexer for fast contract-level verification. The browser devnet runs the full stack for human QA. Code changes must pass BOTH tiers.
+
+**Tier 1 — Vitest E2E (contract-level, no browser):**
+```bash
+# Vault + FIRE + Gauge lifecycle
+npx vitest run __tests__/devnet/e2e-vault-fire-gauge.test.ts --testTimeout=900000
+
+# FIRE protocol full lifecycle (staking, bonding, redemption, distribution)
+npx vitest run __tests__/devnet/e2e-fire.test.ts --testTimeout=900000
+
+# Carbine CLOB + hybrid router (68 tests)
+npx vitest run __tests__/devnet/e2e-carbine-clob.test.ts --testTimeout=900000
+
+# Vault unit tests (calldata, stats, parsing — 115+ tests, fast)
+npx vitest run hooks/__tests__/vaultFullCoverage.vitest.test.ts
+```
+
+**Tier 2 — Browser Devnet (full UX, human QA):**
+1. Start dev server: `pnpm dev`
+2. Open `localhost:3000` → boot runs automatically (2-3 min)
+3. Or use DevnetControlPanel "Clear & Reload" for fresh state
+4. All boot logs go to `/tmp/subfrost-boot.log` (see Boot Log Pipe below)
+
+### Boot Log Pipe — Debugging Boot Failures
+
+Boot.ts runs in the browser, not Node.js. Console logs are captured by an interceptor and relayed to `/api/boot-log` which appends to `/tmp/subfrost-boot.log`. To diagnose boot failures:
+
+```bash
+# Clear old logs, then tail as the boot runs
+rm -f /tmp/subfrost-boot.log && tail -f /tmp/subfrost-boot.log
+
+# After boot completes, filter for specific issues:
+grep -E "CLOB|seed|spot|reserves|vault|FIRE|failed|error" /tmp/subfrost-boot.log
+```
+
+The interceptor only captures lines containing `[devnet-boot]`. It batches up to 10 lines per POST, flushed every 300ms. Source: `lib/devnet/boot.ts` lines 137-166, API route: `app/api/boot-log/route.ts`.
+
+### Vitest Harness Limitations vs Browser Devnet
+
+The vitest harness and browser devnet share the same WASM contracts but differ in runtime behavior:
+
+| Behavior | Vitest Harness | Browser Devnet |
+|----------|---------------|----------------|
+| Proxy delegatecall extcalls | **Silently fail** — tx broadcasts but inner call returns empty | **Work correctly** — full extcall chain executes |
+| `Buffer.readBigUInt64LE` | Works (Node.js Buffer) | **Fails** — browser Buffer polyfill lacks BigInt methods |
+| `console.log` visibility | Visible in test output | Must use `/tmp/subfrost-boot.log` pipe |
+| State persistence | Fresh per test suite | Persisted in IndexedDB across page reloads |
+| UTXO count | Low (~5-20 per test) | High (300+ after full boot — O(n²) PSBT risk) |
+
+**Critical implication:** Tests that pass in vitest may fail in the browser (Buffer APIs), and vice versa (extcall through proxy). Always test BOTH tiers before declaring a flow ready for QA.
+
+### Browser-Safe Binary Parsing
+
+boot.ts runs in the browser. **NEVER use:**
+- `Buffer.readBigUInt64LE()` — not available in browser Buffer polyfill
+- `Buffer.readBigInt64LE()` — same issue
+- Any Buffer method that returns `BigInt`
+
+**ALWAYS use** the browser-safe helpers defined in boot.ts:
+```typescript
+parseLeU128FromHex(hex, byteOffset)  // Returns number (safe for < MAX_SAFE_INTEGER)
+parseLeU128BigInt(hex, byteOffset)   // Returns bigint (safe for any u128)
+```
+
+This was the root cause of the 2026-04-03 boot seeding failure: pool discovery used `readBigUInt64LE`, got "not a function", poolId was empty, all seeding was skipped.
+
+### Boot.ts Phase Execution Order & Seeding Dependencies
+
+`deployFullProtocol()` in boot.ts runs phases in this order:
+
+```
+Phase 1: AMM Infrastructure (factory, pool logic, beacon)
+Phase 2: Seed Tokens (mint DIESEL, wrap frBTC, create AMM pool)
+         → poolId is set HERE. All subsequent phases can use it.
+Phase 3a: Carbine CLOB (controller, template, router) + order seeding
+Phase 3: FIRE Protocol (6 contracts: token, staking, treasury, bonding, redemption, distributor)
+Phase 4: Core Protocol (FUEL, yvfrBTC vault, dxBTC vault, gauges)
+Phase 5: Fujin Difficulty Futures
+Phase 7: Bridge contracts (frZEC, frETH)
+Phase 8: Synth Pools (6 beacon-proxy instances)
+Phase 9: Seed Vault State (deposit frBTC into dxBTC, deposit fees)
+Phase 10: Seed FIRE State (authorize treasury, stake LP, claim rewards, bond, contribute)
+```
+
+**Seeding dependencies:**
+- CLOB seeding needs `poolId` + wallet frBTC/DIESEL → must run after Phase 2
+- Vault seeding needs dxBTC vault deployed → must run after Phase 4
+- FIRE seeding needs treasury auth token + LP tokens + FIRE staking → must run after Phase 3
+- All seeding uses `executeCall()` which needs UTXO availability at the sending address
+
+**Common boot seeding failures:**
+1. `poolId` empty → Phase 2 pool discovery failed (e.g. browser Buffer issue — use `parseLeU128FromHex` not `readBigUInt64LE`)
+2. `DIESEL= 0 frBTC= 0` → **alkane UTXOs consumed by deployWasm fee inputs** (see "Alkane UTXO Model" section). Fix: re-mint tokens in Phase 10a before seeding.
+3. `Skipping CLOB seeding — could not determine AMM spot price` → reserves query returned empty or spot calculation failed
+4. `No frBTC remaining for vault seeding` → same root cause as #2: deploys consumed frBTC UTXOs
+5. `FIRE claimed, balance: 0` → no blocks mined between stake and claim, or staking failed due to #2
+6. `Insufficient alkanes: need X of Y, have 0` → tokens exist in contract state but NOT in wallet UTXOs — the alkane UTXOs were spent as BTC fee inputs by prior transactions
+
+### Opcode Mapping — Use alkanes.toml, NOT WIT Declaration Order
+
+Contract opcodes are defined in `alkanes.toml`, NOT by sequential WIT function declaration order. The code generator assigns opcodes from the toml's `[opcodes]` section. Example from dx-btc:
+
+```toml
+# dx-btc/alkanes.toml — THESE are the real opcodes
+[opcodes]
+swap = 1
+mint = 2
+burn = 3
+deposit-fees = 6
+total-assets = 11        # NOT 7 (WIT position)
+convert-to-shares = 12   # NOT 8
+get-twap-rate = 31        # NOT 15
+get-name = 99             # NOT 16
+get-total-supply = 101    # NOT 18
+```
+
+**Before writing ANY contract call, read the alkanes.toml** in `reference/subfrost-alkanes/alkanes/{contract}/alkanes.toml`. The WIT file shows the interface but NOT the opcode numbers. This caused incorrect test assertions (2026-04-03) where opcodes 7, 8, 15, 16, 18 were used instead of 11, 12, 31, 99, 101.
+
+### Auth Token Discovery Pattern
+
+Proxy deployments (`deployWithProxy`) mint an auth token at `[2:N]`. The token ID is discovered via `discoverAuthTokens(address)` which scans `alkanes_protorunesbyaddress` for `block === 2` entries. The last token found belongs to the most recent deployment.
+
+```typescript
+// Auth tokens are NOT consumed — contract checks incoming_alkanes then returns them
+// So one auth token can authorize multiple operations in sequence
+const treasuryAuth = contracts.fireTreasury.authTokenId; // e.g. "2:7"
+await executeCall(provider, harness, segwit, taproot,
+  `[4,${TREASURY_PROXY},1,0,4,${BONDING_PROXY}]:v0:v0`,  // SetAuthorizedContract
+  `${treasuryAuth}:1`,  // Send 1 unit of auth token as incomingAlkanes
+  [taproot]);
+```
+
+Pattern source: `e2e-fire.test.ts` lines 413-487. Auth tokens are checked but forwarded back to the caller — they can be reused across multiple admin calls.
+
+### UTXO Bloat and fromAddressesOverride
+
+By late boot (Phase 9+), the segwit address has 300+ UTXOs from all prior deploys. The WASM PSBT builder is O(n²) on UTXO count. Passing both `[segwit, taproot]` as `from_addresses` can hang the JS thread indefinitely.
+
+**Fix:** For late-boot operations, pass `fromAddressesOverride: [taproot]` to `executeCall()` — taproot has ~5 UTXOs. But for operations that need alkane tokens (which may be on segwit UTXOs), omit the override so both addresses are searched.
+
+```typescript
+// Late boot — only taproot (fast, avoids UTXO bloat hang):
+await executeCall(provider, harness, segwit, taproot, protostone, reqs, [taproot], [taproot]);
+
+// Needs alkane tokens that may be on segwit (slower but finds all UTXOs):
+await executeCall(provider, harness, segwit, taproot, protostone, reqs, [taproot]);
+// fromAddressesOverride omitted → defaults to [segwit, taproot]
+```
 
 ---
 
@@ -1599,7 +1812,7 @@ atomically, the WASM binary is never stored, and every future call fails with
 | Controller proxy [4:70000] | `[0x7fff, 4, 80000, 1]` | upgradeable proxy setup |
 | Template impl [4:80001] | `[3]` | query_metadata (read-only, safe) |
 | Template beacon [4:90001] | `[0x7fff, 4, 80001, 1]` | upgradeable beacon setup |
-| Router impl [4:80002] | `[0]` | Initialize |
+| Router impl [4:80002] | `[0]` | Initialize(0,0,0,0) — writes to impl storage, NOT proxy storage (safe) |
 
 After all contracts are deployed, the controller is initialized through the proxy:
 ```
@@ -1873,6 +2086,76 @@ rpcCall('alkanes_simulate', [{
 - `useUserOrders` polls opcode 25 (GetUserOrders) on the Carbine controller
 - Order rows render with SELL (red) / BUY (green) badges, price, amount, filled columns
 - Cancel UI is hooked: `useCancelOrderMutation` (opcode 21) with `orderId`
+
+### Universal Router — Deployment Status (2026-04-02)
+
+The Universal Router contract [4:70002] implements hybrid CLOB+AMM routing. Source:
+`reference/subfrost-alkanes/alkanes/universal-router/src/lib.rs`
+
+**Opcode map** (source of truth: `alkanes/universal-router/alkanes.toml`):
+| Opcode | Name |
+|--------|------|
+| 0 | initialize |
+| 1 | swap |
+| 2 | quote |
+| 3 | add-route |
+| 10 | get-routes |
+| **11** | **get-controller** |
+| 99 | get-name |
+
+⚠️ `GetController = 11` NOT 5. Using opcode 5 returns "Unrecognized opcode" which
+causes the init verification in boot.ts/tests to silently report failure even when
+the init TX succeeded. This was a bug in the initial test code — fixed 2026-04-02.
+
+**Current status:** Deployed and initialized in browser devnet (fix applied).
+
+**Router init hangs boot.ts (ROOT CAUSE CONFIRMED 2026-04-02):**
+
+Two causes:
+1. **UTXO bloat**: By the time router init runs in boot.ts, segwit has 300+ UTXOs.
+   The WASM PSBT builder is O(n²), blocking the JS thread indefinitely.
+2. **Wrong opcode for init verification**: `GetController` was called with opcode 5
+   (unrecognized), causing the check to appear failed even when init succeeded.
+
+**Fix (both applied):**
+1. `initThroughProxy` for router passes `fromAddressesOverride: [taproot]` — taproot
+   has ~5 UTXOs so PSBT construction completes in ~200ms.
+2. `ROUTER_OPS.GetController = 11` (corrected from 5) in test code and boot.ts.
+
+**Verified:** Isolated vitest (`router-init-isolated.test.ts`) confirms init through
+proxy succeeds in 75ms with 118 UTXOs. The init is contractually correct —
+`observe_initialization()` writes to proxy's `/initialized` (via delegatecall),
+distinct from the impl's storage (set during CREATERESERVED with args `[0]`).
+
+**Vitest:** 5 on-chain router tests exist but soft-skip due to proxy simulation
+limitation in the vitest harness (delegatecall to impl returns "unexpected end of file"
+in static simulation). The init and GetController tests pass.
+
+### "Insufficient alkanes" on devnet = STALE CACHE (2026-04-02)
+
+**Symptom:** Placing any limit order on devnet fails with:
+`Insufficient alkanes: need 1000000000 of 2:0, have 0`
+
+**Root cause:** Stale IndexedDB cache. The in-browser devnet persists state across page
+reloads. After code changes, WASM rebuilds, or failed transactions, the cached state can
+become inconsistent — tokens at old derivation addresses, wrong contract slots, etc.
+
+**Fix:** Use DevnetControlPanel → **"Clear & Reload"** button. This wipes IndexedDB and
+re-runs the full boot sequence from scratch (takes ~2-3 minutes). All contracts are
+redeployed, tokens re-minted, and the wallet gets fresh balances.
+
+**This is NOT a code bug** — the `sandshrew_rpc_url()` detection in `execute.ts` works
+correctly for fresh devnet boots. Do not add workarounds for this in mutation hooks.
+
+### ammGetAmountIn bug in hybrid routing tests (2026-04-02 FIXED)
+
+The `hybridRoute()` JS simulation helper in `e2e-carbine-clob.test.ts` used
+`ammGetAmountOut(chunk, curRb, curRa)` for the AMM cost calculation. This computes
+"frBTC output for DIESEL input" — but the test models BUYING DIESEL with frBTC.
+The correct function is `ammGetAmountIn(chunk, curRb, curRa)` which computes
+"frBTC cost to buy `chunk` DIESEL from the pool".
+
+5 pre-existing test failures were caused by this direction bug. All 68 tests now pass.
 
 **Verification script — confirm both sides of orderbook are live (run in browser console):**
 ```javascript

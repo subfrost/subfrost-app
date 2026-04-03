@@ -1521,6 +1521,7 @@ export default function SwapShell() {
       tokenPath: quote.route ?? [fromToken.id, toToken.id],
       poolId: quote.poolId,
       deadlineBlocks,
+      routeSource: (quote as any).routeSource,
     } as const;
 
     try {

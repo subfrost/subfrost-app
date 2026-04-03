@@ -41,6 +41,7 @@ import { queryPoolFeeWithProvider } from '@/hooks/usePoolFee';
 import { FRBTC_UNWRAP_FEE_PER_1000, FRBTC_WRAP_FEE_PER_1000 } from '@/constants/alkanes';
 import { calculateMaximumFromSlippage, calculateMinimumFromSlippage } from '@/utils/amm';
 import { useFrbtcPremium } from '@/hooks/useFrbtcPremium';
+import { fetchRouterQuote } from '@/hooks/useRouterQuote';
 
 type Direction = 'buy' | 'sell';
 
@@ -70,6 +71,13 @@ export type SwapQuote = {
    * Swaps are routed through the factory with opcode 13, not the pool directly.
    */
   poolId?: { block: string | number; tx: string | number };
+  /**
+   * Which routing source provides this quote's price.
+   * 'amm' = factory opcode 13 (default), 'clob' = Carbine orderbook,
+   * 'router' = Universal Router chose best of AMM/CLOB.
+   * Undefined when no router is configured (mainnet/regtest).
+   */
+  routeSource?: 'amm' | 'clob' | 'router';
 };
 
 const ALKS_DECIMALS = 8;
@@ -390,7 +398,7 @@ export function useSwapQuotes(
       );
       console.log('[useSwapQuotes] Direct pool found:', direct ? { poolId: direct.poolId, token0: direct.token0.id, token1: direct.token1.id } : 'NONE');
       if (direct) {
-        return calculateSwapPrice(
+        const ammQuote = await calculateSwapPrice(
           sellCurrencyId,
           buyCurrencyId,
           debouncedAmount,
@@ -403,6 +411,48 @@ export function useSwapQuotes(
           sellCurrency,
           buyCurrency,
         );
+
+        // Check if Universal Router offers a better price (hybrid CLOB+AMM).
+        // Router Quote opcode 2 compares CLOB orderbook vs AMM pool and returns
+        // the best output amount + source flag (1=CLOB, 0=AMM).
+        const config = getConfig(network);
+        const routerId = (config as any).UNIVERSAL_ROUTER_ID as string | undefined;
+
+        if (routerId && direction === 'sell') {
+          try {
+            const amountInAlks = toAlks(debouncedAmount);
+            const routerResult = await fetchRouterQuote(
+              network, routerId, sellCurrencyId, buyCurrencyId, amountInAlks,
+            );
+
+            if (routerResult && routerResult.amountOut !== '0') {
+              const routerOut = new BigNumber(routerResult.amountOut);
+              const ammOut = new BigNumber(ammQuote.buyAmount);
+
+              console.log('[useSwapQuotes] Router quote:', routerResult.amountOut, 'via', routerResult.source);
+              console.log('[useSwapQuotes] AMM quote:', ammQuote.buyAmount);
+
+              if (routerOut.gt(ammOut)) {
+                // Router found a better price (likely CLOB has a tighter spread)
+                const minReceived = calculateMinimumFromSlippage({ amount: routerResult.amountOut, maxSlippage });
+                console.log('[useSwapQuotes] Router wins — using', routerResult.source, 'route');
+                return {
+                  ...ammQuote,
+                  buyAmount: routerResult.amountOut,
+                  displayBuyAmount: fromAlks(routerResult.amountOut),
+                  minimumReceived: minReceived,
+                  displayMinimumReceived: fromAlks(minReceived),
+                  exchangeRate: new BigNumber(routerResult.amountOut).dividedBy(ammQuote.sellAmount || '1').toString(),
+                  routeSource: routerResult.source,
+                } as SwapQuote;
+              }
+            }
+          } catch (err) {
+            console.warn('[useSwapQuotes] Router quote failed, falling back to AMM:', err);
+          }
+        }
+
+        return { ...ammQuote, routeSource: 'amm' as const } as SwapQuote;
       }
 
       // BUSD bridge route

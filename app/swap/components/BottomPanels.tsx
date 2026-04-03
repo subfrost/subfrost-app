@@ -15,15 +15,18 @@
 //
 //   Cancel flow: useCancelOrderMutation (opcode 21). Token refund is via
 //   carbine NFT redemption (separate tx) — NOT returned directly by cancel.
+//   Cancel button is rendered per order row. On devnet, mines 1 block after
+//   broadcast to keep metashrew synced (same pattern as useLimitOrderMutation).
 //
 // Source: hooks/useUserOrders.ts, hooks/useCancelOrderMutation.ts
 
 import { useState, lazy, Suspense } from 'react';
-import { BarChart3, Layers, Clock, Activity, ExternalLink } from 'lucide-react';
+import { BarChart3, Layers, Clock, Activity, X } from 'lucide-react';
 import { useLPPositions } from '@/hooks/useLPPositions';
-import { useOrderbook } from '@/hooks/useOrderbook';
 import { useWallet } from '@/context/WalletContext';
 import { useUserOrders } from '@/hooks/useUserOrders';
+import { useCancelOrderMutation } from '@/hooks/useCancelOrderMutation';
+import { useDevnet } from '@/context/DevnetContext';
 import { getConfig } from '@/utils/getConfig';
 import TokenIcon from '@/app/components/TokenIcon';
 
@@ -50,6 +53,7 @@ export default function BottomPanels({ baseToken, quoteToken }: Props) {
   const [activeTab, setActiveTab] = useState<PanelTab>('trades');
   const { isConnected, network } = useWallet() as any;
   const { positions: allPositions, isLoading: isLoadingPositions } = useLPPositions();
+  const { controls: devnetControls } = useDevnet();
 
   // Filter to only real LP pool tokens — exclude staked positions (POS-*) on the swap page.
   // Real LP positions have token0Id/token1Id set from pool data match.
@@ -59,6 +63,26 @@ export default function BottomPanels({ baseToken, quoteToken }: Props) {
   // Enabled only when a wallet is connected — avoids unnecessary RPC calls.
   // useUserOrders returns [] when controller is not deployed (safe default).
   const { data: userOrders = [], isLoading: isLoadingOrders } = useUserOrders(isConnected);
+
+  // Cancel order mutation — opcode 21 (CancelOrder) on the Carbine controller.
+  // On devnet, mines 1 block after broadcast to keep metashrew synced.
+  const cancelMutation = useCancelOrderMutation();
+  const config = getConfig(network || 'mainnet');
+  const controllerId = (config as any).CARBINE_CONTROLLER_ID as string | undefined;
+
+  const handleCancelOrder = async (orderId: number) => {
+    if (!controllerId) return;
+    try {
+      await cancelMutation.mutateAsync({ controllerId, orderId, feeRate: 1 });
+      // On devnet: mine 1 block so metashrew indexes the cancel tx before the
+      // next useUserOrders refetch. Without this, the order still appears for ~5s.
+      if (network === 'devnet') {
+        try { await devnetControls.mineBlocks(1); } catch (_) {}
+      }
+    } catch (e) {
+      console.error('[BottomPanels] Cancel order failed:', e);
+    }
+  };
   const openOrderCount = userOrders.length;
 
   const tabs: { key: PanelTab; label: string; icon: React.ReactNode; count?: number }[] = [
@@ -108,11 +132,12 @@ export default function BottomPanels({ baseToken, quoteToken }: Props) {
             ) : (
               <div>
                 {/* Header */}
-                <div className="sf-table-header grid grid-cols-[auto_1fr_1fr_1fr] gap-3 px-3 py-2">
+                <div className="sf-table-header grid grid-cols-[auto_1fr_1fr_1fr_auto] gap-3 px-3 py-2">
                   <span>Side</span>
                   <span className="text-right">Price</span>
                   <span className="text-right">Amount</span>
                   <span className="text-right">Filled</span>
+                  <span />
                 </div>
                 {userOrders.map((order) => {
                   // Raw u128 values are in 1e8 units — convert for display
@@ -120,10 +145,11 @@ export default function BottomPanels({ baseToken, quoteToken }: Props) {
                   const amount = (Number(order.amount) / 1e8).toFixed(8).replace(/0+$/, '').replace(/\.$/, '.0');
                   const filled = (Number(order.filled) / 1e8).toFixed(8).replace(/0+$/, '').replace(/\.$/, '.0');
                   const isSell = order.side === 1;
+                  const isCancelling = cancelMutation.isPending && cancelMutation.variables?.orderId === order.orderId;
                   return (
                     <div
                       key={order.orderId}
-                      className="sf-row grid grid-cols-[auto_1fr_1fr_1fr] gap-3 px-3 py-2 items-center"
+                      className="sf-row grid grid-cols-[auto_1fr_1fr_1fr_auto] gap-3 px-3 py-2 items-center"
                     >
                       {/* Side badge: green for BUY, red for SELL */}
                       <span
@@ -144,6 +170,17 @@ export default function BottomPanels({ baseToken, quoteToken }: Props) {
                       <span className="text-[11px] text-right tabular-nums text-[color:var(--sf-text)]/40">
                         {filled}
                       </span>
+                      {/* Cancel button — triggers opcode 21 (CancelOrder) */}
+                      <button
+                        onClick={() => handleCancelOrder(order.orderId)}
+                        disabled={isCancelling || cancelMutation.isPending}
+                        title="Cancel order"
+                        className={`p-1 rounded hover:bg-red-500/20 transition-colors ${
+                          isCancelling ? 'opacity-40 cursor-not-allowed' : 'text-[color:var(--sf-text)]/30 hover:text-red-400'
+                        }`}
+                      >
+                        <X size={12} />
+                      </button>
                     </div>
                   );
                 })}

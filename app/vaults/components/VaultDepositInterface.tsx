@@ -22,7 +22,7 @@ const ALL_VAULT_TOKENS: Array<{ id: string; symbol: string }> = [
 ];
 
 // Get the corresponding vault for an input token
-const getVaultForInputToken = (tokenId: string): VaultConfig | null => {
+export const getVaultForInputToken = (tokenId: string): VaultConfig | null => {
   const tokenToVaultMap: Record<string, string> = {
     'btc': 'dx-btc',       // BTC -> dxBTC
     '32:0': 'dx-btc',      // frBTC -> dxBTC (prioritize dxBTC over yvfrBTC)
@@ -40,18 +40,18 @@ const getVaultForInputToken = (tokenId: string): VaultConfig | null => {
 
 // Get the initial input token for a vault (first supported token)
 // Check if a vault uses BTC-like decimals (8 decimals)
-const isBtcBasedVault = (vault: VaultConfig): boolean => {
+export const isBtcBasedVault = (vault: VaultConfig): boolean => {
   return vault.outputAsset === 'dxBTC' || vault.outputAsset === 'yvfrBTC';
 };
 
 // Format amount with appropriate decimals based on vault type
-const formatVaultAmount = (amount: string, vault: VaultConfig): string => {
+export const formatVaultAmount = (amount: string, vault: VaultConfig): string => {
   const decimals = isBtcBasedVault(vault) ? 8 : 2;
   if (!amount || isNaN(parseFloat(amount))) return (0).toFixed(decimals);
   return parseFloat(amount).toFixed(decimals);
 };
 
-const getInitialInputTokenForVault = (vault: VaultConfig): { id: string; symbol: string } => {
+export const getInitialInputTokenForVault = (vault: VaultConfig): { id: string; symbol: string } => {
   // Map of output asset to default input token
   const defaultInputMap: Record<string, { id: string; symbol: string }> = {
     'dxBTC': { id: 'btc', symbol: 'BTC' },

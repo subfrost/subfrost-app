@@ -36,6 +36,13 @@
  * On mainnet/regtest (non-devnet), the original alkanesExecuteWithStrings path is
  * used, returning a PSBT for the wallet to sign externally.
  *
+ * JOURNAL (2026-04-02): "Insufficient alkanes" on devnet is STALE CACHE
+ *
+ * If limit orders (or any mutation) fail with "Insufficient alkanes: need X, have 0"
+ * on devnet, this is almost always stale IndexedDB cache — NOT a code bug.
+ * Fix: Use DevnetControlPanel → "Clear & Reload" to wipe cached state and reboot.
+ * The sandshrew_rpc_url() detection works correctly for fresh devnet boots.
+ *
  * CREATERESERVED DEPLOYMENT NOTE (2026-03-30):
  * When using alkanesExecuteFull for contract deployment (CREATERESERVED [3,slot,...args]),
  * the `args` are executed as cellpack inputs by the WASM during deployment. If the WASM
@@ -104,7 +111,10 @@ export async function alkanesExecuteTyped(
   // which routes through quspo on devnet. Quspo may not have indexed all blocks,
   // causing "Insufficient alkanes" errors when the wallet has enough balance.
   // alkanesExecuteFull uses the primary alkanes indexer directly.
+  //
   // Detect devnet by checking if the fetch interceptor is installed (localhost:18888).
+  // NOTE (2026-04-02): "Insufficient alkanes" on devnet is almost always stale IndexedDB
+  // cache, NOT a detection bug. Use DevnetControlPanel "Clear & Reload" to reset state.
   let isDevnet = false;
   try {
     const rpcUrl = (provider as any).sandshrew_rpc_url?.();

@@ -39,6 +39,7 @@ export interface DeployedContracts {
 
   // Core Protocol — standalone proxies
   fuelToken: UpgradeableInfo;
+  yvFrbtcVault: UpgradeableInfo;  // yvfrBTC vault (dependency of dxBTC)
   dxBtcVault: UpgradeableInfo;
   carbineController: UpgradeableInfo;
   universalRouter: UpgradeableInfo;

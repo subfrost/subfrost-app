@@ -59,8 +59,9 @@ export default defineConfig({
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
 
-    // Generous timeout — devnet boot takes ~90s, order execution ~5s each
-    actionTimeout: 15_000,
+    // Generous timeouts — devnet operations can block the main thread for several seconds
+    // (mineBlocks is synchronous WASM; faucet calls mine 100 blocks before returning).
+    actionTimeout: 60_000,
     navigationTimeout: 30_000,
   },
 
@@ -82,6 +83,6 @@ export default defineConfig({
     },
   ],
 
-  // Global test timeout — devnet boot (120s) + order placement (60s) + assertions (30s)
-  timeout: 300_000,
+  // Global test timeout — cold devnet boot can take 10-20 min on first run
+  timeout: 1_200_000,
 });

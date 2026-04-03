@@ -105,7 +105,7 @@ export function getConfig(network: string) {
       } as const;
     case 'devnet':
       return {
-        ALKANE_FACTORY_ID: '4:65522',
+        ALKANE_FACTORY_ID: '4:65498', // working factory — oyl-amm source build (65522 = old broken)
         BUSD_ALKANE_ID: '2:0',
         DIESEL_CLAIM_MERKLE_DISTRIBUTOR_ID: '',
         FRBTC_ALKANE_ID: '32:0',

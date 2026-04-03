@@ -49,6 +49,25 @@ export const FRETH_SIGNER_ADDRESSES: Record<string, string> = {
 };
 
 /**
+ * Universal Router opcodes — hybrid CLOB+AMM DEX aggregator at [4:70002].
+ *
+ * The router compares CLOB and AMM quotes, routing to whichever source
+ * provides a better price. On devnet the router is initialized with
+ * controller=[4:70000] and factory=[4:65498].
+ *
+ * Source: reference/subfrost-alkanes/alkanes/universal-router/src/lib.rs
+ */
+export const ROUTER_OPCODES = {
+  Initialize: 0,
+  Swap: 1,
+  Quote: 2,
+  AddRoute: 3,
+  GetRoutes: 10,
+  GetController: 11,
+  GetName: 99,
+} as const;
+
+/**
  * Pool contract opcodes (NOT factory opcodes).
  * These are used when calling the pool contract directly.
  */

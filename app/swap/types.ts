@@ -31,6 +31,8 @@ export type SwapQuote = {
   maximumSent: string;
   route?: string[]; // Token IDs in swap path (e.g., ['32:0', '5:0', '2:0'])
   hops?: number; // Number of swaps (1 for direct, 2 for multi-hop)
+  /** Routing source: 'amm' (default), 'clob' (orderbook), or 'router' (hybrid best-price) */
+  routeSource?: 'amm' | 'clob' | 'router';
 };
 
 

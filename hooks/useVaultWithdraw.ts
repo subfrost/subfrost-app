@@ -22,7 +22,7 @@ export type VaultWithdrawData = {
  * Format: [vault_block,vault_tx,opcode]:pointer:refund
  * Note: No amount parameter needed, it's determined by incoming vault units
  */
-function buildVaultWithdrawProtostone(params: {
+export function buildVaultWithdrawProtostone(params: {
   vaultContractId: string;
   pointer?: string;
   refund?: string;
@@ -44,7 +44,7 @@ function buildVaultWithdrawProtostone(params: {
  * Build input requirements string for vault withdrawal
  * Format: "block:tx:amount" for the vault units being burned
  */
-function buildVaultWithdrawInputRequirements(params: {
+export function buildVaultWithdrawInputRequirements(params: {
   vaultUnitId: string;
   amount: string;
 }): string {

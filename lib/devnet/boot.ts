@@ -134,6 +134,37 @@ export async function bootDevnetWithWasms(
   taprootAddress: string;
   segwitAddress: string;
 }> {
+  // Install console interceptor: relay all [devnet-boot] lines to /api/boot-log
+  // so they can be tailed from the server side without needing Chrome DevTools open.
+  // Batches up to 10 lines per POST, flushed every 300ms or when buffer fills.
+  {
+    const _origLog = console.log.bind(console);
+    const _origWarn = console.warn.bind(console);
+    const _origError = console.error.bind(console);
+    let _buf: string[] = [];
+    let _timer: ReturnType<typeof setTimeout> | null = null;
+    const _flush = () => {
+      if (_buf.length === 0) return;
+      const lines = _buf.splice(0);
+      fetch('/api/boot-log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lines }),
+      }).catch(() => {/* best-effort */});
+    };
+    const _intercept = (level: string, args: any[]) => {
+      const msg = args.map(a => (typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' ');
+      if (msg.includes('[devnet-boot]') || msg.includes('[devnet]') || msg.includes('devnet-boot')) {
+        _buf.push(`[${level}] ${msg}`);
+        if (_buf.length >= 10) { if (_timer) clearTimeout(_timer); _timer = null; _flush(); }
+        else if (!_timer) { _timer = setTimeout(() => { _timer = null; _flush(); }, 300); }
+      }
+    };
+    console.log = (...args: any[]) => { _origLog(...args); _intercept('LOG', args); };
+    console.warn = (...args: any[]) => { _origWarn(...args); _intercept('WARN', args); };
+    console.error = (...args: any[]) => { _origError(...args); _intercept('ERROR', args); };
+  }
+
   // Import qubitcoin SDK from public dir (served as static ESM).
   // Cannot use bare '@qubitcoin/sdk' — browser can't resolve npm specifiers.
   console.log('[devnet-boot] Importing SDK from /sdk/qubitcoin/index.js...');
@@ -312,9 +343,12 @@ export async function bootDevnetWithWasms(
 const AMM_SLOTS = {
   AUTH_TOKEN_FACTORY: 0xffed,   // 65517
   POOL_BEACON_PROXY: 780993,
-  FACTORY_LOGIC:     0xfff4,    // 65524
-  POOL_LOGIC:        0xfff0,    // 65520
-  FACTORY_PROXY:     0xfff2,    // 65522
+  FACTORY_LOGIC:     0xfff4,    // 65524 — NOTE: prod_wasms build, missing opcodes 0/1/2
+  POOL_LOGIC:        0xfff0,    // 65520 — NOTE: missing Swap opcode 3 (use factory router op 13)
+  // JOURNAL (2026-04-02): 65522 = OLD broken factory proxy (missing CreateNewPool, Swap).
+  // 65498 = working factory proxy (built from oyl-amm source). All swap/pool ops route via 65498.
+  // Universal Router MUST point at 65498, not 65522, or hybrid routing silently fails.
+  FACTORY_PROXY:     65498,     // working factory (oyl-amm source build)
   BEACON:            0xfff3,    // 65523
 };
 
@@ -332,6 +366,7 @@ const FIRE_SLOTS = {
 const PROTOCOL_SLOTS = {
   // Standalone: proxy at original, impl at +10000
   FUEL_TOKEN_PROXY:    7000,  FUEL_TOKEN_IMPL:    17000,
+  YV_FRBTC_VAULT_PROXY: 7937, YV_FRBTC_VAULT_IMPL: 17937,  // yvfrBTC vault (dependency of dxBTC)
   DXBTC_VAULT_PROXY:   7020,  DXBTC_VAULT_IMPL:   17020,
   CARBINE_CTRL_PROXY:  70000, CARBINE_CTRL_IMPL:  80000,
   UNIVERSAL_ROUTER_PROXY: 70002, UNIVERSAL_ROUTER_IMPL: 80002,
@@ -405,6 +440,7 @@ function getDefaultContractIds(): DeployedContracts {
     fireRedemption:  upgradeableInfo(FIRE_SLOTS.REDEMPTION_PROXY,  FIRE_SLOTS.REDEMPTION_IMPL),
     fireDistributor: upgradeableInfo(FIRE_SLOTS.DISTRIBUTOR_PROXY, FIRE_SLOTS.DISTRIBUTOR_IMPL),
     fuelToken:       upgradeableInfo(S.FUEL_TOKEN_PROXY,           S.FUEL_TOKEN_IMPL),
+    yvFrbtcVault:    upgradeableInfo(S.YV_FRBTC_VAULT_PROXY,      S.YV_FRBTC_VAULT_IMPL),
     dxBtcVault:      upgradeableInfo(S.DXBTC_VAULT_PROXY,         S.DXBTC_VAULT_IMPL),
     carbineController: upgradeableInfo(S.CARBINE_CTRL_PROXY,       S.CARBINE_CTRL_IMPL),
     universalRouter: upgradeableInfo(S.UNIVERSAL_ROUTER_PROXY,     S.UNIVERSAL_ROUTER_IMPL),
@@ -517,6 +553,27 @@ async function fetchWasmHex(name: string): Promise<string> {
  * Source: alkanes-rs/src/message.rs — handle_message() returns Err on revert,
  * which prevents atomic.commit(), rolling back ptr.set() from run_special_cellpacks()
  */
+/**
+ * ⚠️ ALKANE UTXO DESTRUCTION WARNING ⚠️
+ *
+ * deployWasm uses from_addresses: [segwit, taproot] to find BTC for fee inputs.
+ * The SDK picks ANY UTXO with sufficient BTC value — including dust UTXOs that
+ * carry alkane tokens (DIESEL, frBTC, LP, FIRE, etc.). Since alkane tokens are
+ * encoded as protorunes on Bitcoin UTXOs, spending a UTXO for fees DESTROYS
+ * the alkane tokens it carries.
+ *
+ * NO ordinals_strategy is set, so the SDK does NOT protect alkane-bearing UTXOs.
+ *
+ * Consequence: After 50+ sequential deployWasm calls, ALL alkane UTXOs from
+ * prior operations (minting, wrapping, pool creation) have been consumed as
+ * fee inputs. Any getAlkaneBalance() call returns 0 for every token.
+ *
+ * Fix: Re-mint/re-wrap tokens AFTER all deployments complete (see Phase 10a).
+ * Do NOT rely on alkane balances surviving across deployment phases.
+ *
+ * This behavior was discovered 2026-04-03 after 6+ hours debugging why CLOB
+ * order seeding always reported "Insufficient alkanes: have 0".
+ */
 async function deployWasm(
   provider: any,
   harness: any,
@@ -560,6 +617,15 @@ async function deployWasm(
  * Execute a non-envelope alkane call (init, mint, swap, etc.)
  * Uses alkanesExecuteFull with no envelope.
  */
+/**
+ * Execute a non-envelope alkane call (init, admin ops, token operations, etc.)
+ *
+ * ⚠️ ALKANE UTXO RISK: Like deployWasm(), this function does NOT set
+ * ordinals_strategy, so the SDK may consume alkane-bearing UTXOs as BTC fee
+ * inputs. If you need to preserve alkane balances across multiple executeCall
+ * invocations, re-mint tokens before the operations that need them.
+ * See deployWasm() comment for the full explanation.
+ */
 async function executeCall(
   provider: any,
   harness: any,
@@ -568,8 +634,16 @@ async function executeCall(
   protostone: string,
   inputRequirements: string,
   toAddresses?: string[],
+  fromAddressesOverride?: string[],
 ): Promise<void> {
   try {
+    const t0 = Date.now();
+    console.log(`[devnet-boot] executeCall START: ${protostone.slice(0, 70)}`);
+    // fromAddressesOverride: pass [taproot] to avoid UTXO-bloat hang on late-boot txns.
+    // By the time router init runs, segwit has 300+ UTXOs from all prior deploys — the
+    // WASM PSBT builder is O(n²) and blocks the JS thread indefinitely with both addresses.
+    // Taproot has ~5 UTXOs (dust from alkane ops), completes in ~200ms.
+    const fromAddresses = fromAddressesOverride ?? [segwit, taproot];
     await provider.alkanesExecuteFull(
       JSON.stringify(toAddresses || [taproot]),
       inputRequirements,
@@ -577,12 +651,13 @@ async function executeCall(
       '1',
       null,
       JSON.stringify({
-        from_addresses: [segwit, taproot],
-        change_address: segwit,
+        from_addresses: fromAddresses,
+        change_address: fromAddresses[0] === taproot ? taproot : segwit,
         alkanes_change_address: taproot,
         mine_enabled: true,
       }),
     );
+    console.log(`[devnet-boot] executeCall DONE in ${Date.now() - t0}ms: ${protostone.slice(0, 50)}`);
     harness.mineBlocks(1);
     await new Promise(r => setTimeout(r, 200)); // GC yield + let indexer catch up
   } catch (e: any) {
@@ -601,6 +676,36 @@ async function rpcCall(method: string, params: any[]): Promise<any> {
     body: JSON.stringify({ jsonrpc: '2.0', method, params, id: _rpcId++ }),
   });
   return response.json();
+}
+
+/**
+ * Parse a little-endian u128 from a hex string at a given byte offset.
+ * Browser-safe — does NOT use Buffer.readBigUInt64LE (Node.js only).
+ * Returns a plain number (safe for values < Number.MAX_SAFE_INTEGER).
+ */
+function parseLeU128FromHex(hex: string, byteOffset: number): number {
+  // Each byte = 2 hex chars. Read 16 bytes (u128) in LE order.
+  let value = 0;
+  for (let i = 15; i >= 0; i--) {
+    const hexOffset = (byteOffset + i) * 2;
+    const byte = parseInt(hex.slice(hexOffset, hexOffset + 2), 16) || 0;
+    value = value * 256 + byte;
+  }
+  return value;
+}
+
+/**
+ * Parse a little-endian u128 from hex as BigInt (for large values).
+ * Browser-safe — no Buffer.readBigUInt64LE.
+ */
+function parseLeU128BigInt(hex: string, byteOffset: number): bigint {
+  let value = BigInt(0);
+  for (let i = 15; i >= 0; i--) {
+    const hexOffset = (byteOffset + i) * 2;
+    const byte = parseInt(hex.slice(hexOffset, hexOffset + 2), 16) || 0;
+    value = value * BigInt(256) + BigInt(byte);
+  }
+  return value;
 }
 
 /**
@@ -770,12 +875,13 @@ async function initThroughProxy(
   provider: any, harness: any, segwit: string, taproot: string,
   proxySlot: number, initArgs: (number | bigint)[],
   label: string,
+  fromAddressesOverride?: string[],
 ): Promise<void> {
   const argsStr = initArgs.map(a => a.toString()).join(',');
   const protostone = `[4,${proxySlot},${argsStr}]:v0:v0`;
   console.log(`[devnet-boot]   Init ${label} through proxy: ${protostone.slice(0, 80)}`);
   await executeCall(provider, harness, segwit, taproot,
-    protostone, 'B:100000:v0');
+    protostone, 'B:100000:v0', undefined, fromAddressesOverride);
 }
 
 /**
@@ -922,8 +1028,11 @@ async function deployFullProtocol(
       const findPool = await simulate(factoryId, ['2', '2', '0', '32', '0']);
       const poolData = findPool?.result?.execution?.data?.replace('0x', '') || '';
       if (poolData.length >= 64) {
-        const buf = Buffer.from(poolData, 'hex');
-        poolId = `${Number(buf.readBigUInt64LE(0))}:${Number(buf.readBigUInt64LE(16))}`;
+        // Parse two u128 LE values (pool block and tx) from hex.
+        // Browser Buffer polyfill may not support readBigUInt64LE, so parse manually.
+        const poolBlock128 = parseLeU128FromHex(poolData, 0);
+        const poolTx128 = parseLeU128FromHex(poolData, 16);
+        poolId = `${poolBlock128}:${poolTx128}`;
         console.log('[devnet-boot] AMM pool created:', poolId);
       }
     } catch (e: any) {
@@ -1007,6 +1116,46 @@ async function deployFullProtocol(
     await initThroughProxy(provider, harness, segwit, taproot,
       S.CARBINE_CTRL_PROXY, [0, 4, S.CARBINE_TEMPLATE],
       'Carbine Controller');
+
+    // Initialize Universal Router through proxy.
+    // Pre-flight: check heights, UTXO counts, and simulate before committing to alkanesExecuteFull.
+    try {
+      const heightRes = await rpcCall('metashrew_height', []);
+      const blockCountRes = await rpcCall('getblockcount', []);
+      console.log('[devnet-boot] Router pre-flight: metashrew=%s, bitcoind=%s',
+        JSON.stringify(heightRes?.result), JSON.stringify(blockCountRes?.result));
+
+      // Simulate the router init call to verify it would succeed
+      const simRes = await simulate(
+        `4:${S.UNIVERSAL_ROUTER_PROXY}`,
+        ['0', '4', String(S.CARBINE_CTRL_PROXY), '4', String(AMM_SLOTS.FACTORY_PROXY)],
+      );
+      console.log('[devnet-boot] Router init sim: err=%s data=%s',
+        simRes?.result?.execution?.error?.slice(0, 80) || 'null',
+        simRes?.result?.execution?.data?.slice(0, 40) || 'null');
+
+      console.log('[devnet-boot] Calling initThroughProxy for Universal Router (taproot-only from_addresses)...');
+      // CRITICAL: Pass [taproot] only — segwit has 300+ UTXOs at this point in boot.
+      // WASM PSBT builder is O(n²); both addresses cause an indefinite hang.
+      // Taproot has ~5 UTXOs (dust from alkane ops), completes in ~200ms.
+      // Verified in router-init-isolated.test.ts: 75ms with 118 UTXOs.
+      await initThroughProxy(provider, harness, segwit, taproot,
+        S.UNIVERSAL_ROUTER_PROXY,
+        [0, 4, S.CARBINE_CTRL_PROXY, 4, AMM_SLOTS.FACTORY_PROXY],
+        'Universal Router',
+        [taproot],  // taproot-only to avoid UTXO-bloat hang
+      );
+      console.log('[devnet-boot] Universal Router initialized!');
+    } catch (routerErr: any) {
+      console.error('[devnet-boot] Router init error:', routerErr?.message?.slice(0, 200));
+    }
+
+    // NOTE: CLOB order seeding moved to Phase 10 (after all deployments complete).
+    // The alkanes indexer needs time to process the pool creation tx before
+    // alkanes_protorunesbyaddress can discover the DIESEL/frBTC change UTXOs.
+    // During Phase 3a the indexer is still catching up → balance queries return 0
+    // → "Insufficient alkanes" on every order placement. Phase 10 runs after
+    // 50+ additional deploys have mined blocks, giving the indexer time to sync.
 
     console.log('[devnet-boot] Carbine CLOB deployed and initialized');
   } catch (e: any) {
@@ -1099,14 +1248,44 @@ async function deployFullProtocol(
     'ftr_btc', S.FTRBTC_IMPL, S.FTRBTC_BEACON,
     'ftrBTC Template', onProgress, 63);
 
+  // yvfrBTC Vault — standalone proxy (MUST deploy before dxBTC since dxBTC deposits into it)
+  // yv-fr-btc-vault accepts frBTC, stakes it into a gauge, and issues yvfrBTC shares.
+  // Source: reference/subfrost-alkanes/alkanes/yv-fr-btc-vault/src/lib.rs
+  // alkanes.toml opcodes: 0=initialize, 1=deposit, 2=withdraw, 3=harvest
+  //
+  // Initialize args: (yv_fr_btc: AlkaneId, yv_boost_id: AlkaneId, fr_btc_diesel_lp_id: AlkaneId, gauge_contract_id: AlkaneId)
+  //   yv_fr_btc     = frBTC [32:0] — the token the vault accepts for deposit
+  //   yv_boost_id   = yv-boost-vault — not deployed on devnet, use self as placeholder
+  //   fr_btc_diesel_lp_id = AMM pool LP token [poolBlock:poolTx]
+  //   gauge_contract_id   = vxFUEL gauge [4:VX_FUEL_GAUGE] — where staked tokens go
+  contracts.yvFrbtcVault = contracts.yvFrbtcVault || { proxyId: '', implId: '', authTokenId: '' };
+  contracts.yvFrbtcVault.authTokenId = await deployWithProxy(
+    provider, harness, segwit, taproot, upgradeableWasm,
+    'yv_fr_btc_vault', S.YV_FRBTC_VAULT_IMPL, S.YV_FRBTC_VAULT_PROXY,
+    'yvfrBTC Vault', onProgress, 64);
+  await initThroughProxy(provider, harness, segwit, taproot,
+    S.YV_FRBTC_VAULT_PROXY,
+    [0, 32, 0, 4, S.YV_FRBTC_VAULT_PROXY, poolBlock, poolTx, 4, S.VX_FUEL_GAUGE],
+    'yvfrBTC Vault');
+
   // dxBTC Vault — standalone proxy
+  // dxBTC deposits frBTC into yv-fr-btc-vault [4:YV_FRBTC_VAULT_PROXY] and issues dxBTC shares.
+  // Source: reference/subfrost-alkanes/alkanes/dx-btc/src/lib.rs
+  // alkanes.toml opcodes: 0=initialize, 1=swap, 2=mint, 3=burn, 6=deposit-fees,
+  //   11=total-assets, 12=convert-to-shares, 13=convert-to-assets, 99=get-name, 101=get-total-supply
+  //
+  // Initialize args: (asset_id: AlkaneId, yv_fr_btc_vault_id: AlkaneId, escrow_nft_id: AlkaneId, vx_fuel_gauge_id: AlkaneId)
+  //   asset_id           = frBTC [32:0]
+  //   yv_fr_btc_vault_id = yvfrBTC vault [4:YV_FRBTC_VAULT_PROXY] ← was wrong (pointed to FUEL)
+  //   escrow_nft_id      = dxBTC vault itself [4:DXBTC_VAULT_PROXY] (placeholder)
+  //   vx_fuel_gauge_id   = vxFUEL gauge [4:VX_FUEL_GAUGE]
   contracts.dxBtcVault.authTokenId = await deployWithProxy(
     provider, harness, segwit, taproot, upgradeableWasm,
     'dx_btc', S.DXBTC_VAULT_IMPL, S.DXBTC_VAULT_PROXY,
     'dxBTC Vault', onProgress, 65);
   await initThroughProxy(provider, harness, segwit, taproot,
     S.DXBTC_VAULT_PROXY,
-    [0, 32, 0, 4, S.FUEL_TOKEN_PROXY, 4, S.DXBTC_VAULT_PROXY, 4, S.VX_FUEL_GAUGE],
+    [0, 32, 0, 4, S.YV_FRBTC_VAULT_PROXY, 4, S.DXBTC_VAULT_PROXY, 4, S.VX_FUEL_GAUGE],
     'dxBTC Vault');
 
   // vx gauge template — beacon (shared impl for vxFUEL + vxBTCUSD instances)
@@ -1318,6 +1497,268 @@ async function deployFullProtocol(
   contracts.fujinMasterId     = `4:${S.FUJIN_MASTER_PROXY}`;
   contracts.frusdTokenId      = `${FRUSD_BLOCK}:${FRUSD_TX}`;
   contracts.frusdAuthTokenId  = '';
+
+  // Phase 9: Vault seeding moved to Phase 10a (after fresh token mint).
+  // See "alkane UTXOs consumed by deployWasm" comment in Phase 10a.
+
+  // -----------------------------------------------------------------------
+  // Phase 10a: Seed CLOB Orderbook — moved here from Phase 3a because the
+  // alkanes indexer needs time to process pool creation before balance queries
+  // return non-zero. By Phase 10 the indexer has caught up from 50+ deploy txs.
+  //
+  // Places buy orders (side=0, frBTC as input) and sell orders (side=1, DIESEL as input)
+  // at prices computed from actual AMM pool reserves.
+  // -----------------------------------------------------------------------
+  onProgress('Seeding CLOB orderbook...', 97);
+  try {
+    console.log('[devnet-boot] Phase 10a: Seeding CLOB orderbook...');
+    const ctrlProxy = S.CARBINE_CTRL_PROXY;
+
+    // Re-mint DIESEL + re-wrap frBTC for seeding.
+    // The original alkane UTXOs from Phase 2 were consumed as BTC fee inputs
+    // by the 50+ deployWasm() calls between Phase 2 and Phase 10. Each deploy
+    // uses from_addresses: [segwit, taproot] and picks ANY UTXO for fees —
+    // including dust UTXOs that carry alkane tokens. By Phase 10, all alkane
+    // change UTXOs have been spent as deployment fee inputs, destroying the
+    // DIESEL and frBTC balances.
+    //
+    // Fix: mint fresh tokens specifically for seeding.
+    console.log('[devnet-boot] Minting fresh DIESEL for CLOB seeding...');
+    await executeCall(provider, harness, segwit, taproot,
+      '[2,0,77]:v0:v0', 'B:10000:v0', [taproot]);
+
+    // Wrap fresh frBTC
+    console.log('[devnet-boot] Wrapping fresh frBTC for CLOB seeding...');
+    let signerAddr = taproot;
+    try {
+      const sigResult = await simulate('32:0', ['103']);
+      if (sigResult?.result?.execution?.data) {
+        const hex = sigResult.result.execution.data.replace('0x', '');
+        if (hex.length === 64) {
+          const bitcoin = await import('bitcoinjs-lib');
+          const ecc = await import('@bitcoinerlab/secp256k1');
+          bitcoin.initEccLib(ecc);
+          const xOnly = Buffer.from(hex, 'hex');
+          const p = bitcoin.payments.p2tr({ internalPubkey: xOnly, network: bitcoin.networks.regtest });
+          if (p.address) signerAddr = p.address;
+        }
+      }
+    } catch {}
+    await executeCall(provider, harness, segwit, taproot,
+      '[32,0,77]:v1:v1', 'B:500000:v0', [signerAddr, taproot]);
+    harness.mineBlocks(2);
+    await new Promise(r => setTimeout(r, 300));
+
+    // Now check balances
+    const dieselBefore = await getAlkaneBalance(provider, taproot, '2:0');
+    const frbtcBefore = await getAlkaneBalance(provider, taproot, '32:0');
+    console.log('[devnet-boot] CLOB pre-seed balances after fresh mint: DIESEL=', dieselBefore.toString(), 'frBTC=', frbtcBefore.toString());
+
+    // Compute spot price from pool reserves
+    let spotPrice = BigInt(0);
+    if (poolId) {
+      const reservesResult = await simulate(poolId, ['97']);
+      const resHex = reservesResult?.result?.execution?.data?.replace('0x', '') || '';
+      if (resHex.length >= 64) {
+        const reserve0 = parseLeU128BigInt(resHex, 0);
+        const reserve1 = parseLeU128BigInt(resHex, 16);
+        if (reserve0 > BigInt(0)) {
+          spotPrice = (reserve1 * BigInt(100000000)) / reserve0;
+        }
+        console.log('[devnet-boot] Pool reserves: r0=', reserve0.toString(), 'r1=', reserve1.toString(),
+          'spot=', spotPrice.toString());
+      }
+    }
+
+    if (spotPrice > BigInt(0) && dieselBefore > BigInt(0) && frbtcBefore > BigInt(0)) {
+      // Buy orders: offer frBTC to buy DIESEL at/above spot
+      const buyPremiums = [100, 105, 110];
+      const buyAmounts = ['500000000', '300000000', '200000000']; // 5, 3, 2 DIESEL
+      for (let i = 0; i < buyPremiums.length; i++) {
+        const price = (spotPrice * BigInt(buyPremiums[i]) / BigInt(100)).toString();
+        const amount = buyAmounts[i];
+        const frbtcCost = (BigInt(price) * BigInt(amount) / BigInt(100000000)).toString();
+        await executeCall(provider, harness, segwit, taproot,
+          `[4,${ctrlProxy},20,2,0,32,0,0,${price},${amount}]:v0:v0`,
+          `32:0:${frbtcCost}`, [taproot]);
+        console.log(`[devnet-boot] CLOB buy #${i + 1}: ${amount} DIESEL @ ${price}, cost=${frbtcCost} frBTC`);
+      }
+
+      // Sell orders: offer DIESEL, want frBTC at above-spot prices
+      const sellPremiums = [105, 110, 120];
+      const sellAmounts = ['500000000', '300000000', '200000000'];
+      for (let i = 0; i < sellPremiums.length; i++) {
+        const price = (spotPrice * BigInt(sellPremiums[i]) / BigInt(100)).toString();
+        const amount = sellAmounts[i];
+        await executeCall(provider, harness, segwit, taproot,
+          `[4,${ctrlProxy},20,2,0,32,0,1,${price},${amount}]:v0:v0`,
+          `2:0:${amount}`, [taproot]);
+        console.log(`[devnet-boot] CLOB sell #${i + 1}: ${amount} DIESEL @ ${price}`);
+      }
+      console.log('[devnet-boot] CLOB orderbook seeded with 3 buy + 3 sell orders');
+    } else {
+      console.warn('[devnet-boot] Skipping CLOB seeding — spot=', spotPrice.toString(),
+        'DIESEL=', dieselBefore.toString(), 'frBTC=', frbtcBefore.toString());
+    }
+
+    // Vault seeding: deposit frBTC into dxBTC vault (uses fresh frBTC from re-wrap above)
+    const frbtcForVault = await getAlkaneBalance(provider, taproot, '32:0');
+    if (frbtcForVault > BigInt(0)) {
+      const depositAmount = frbtcForVault / BigInt(5);
+      if (depositAmount > BigInt(0)) {
+        console.log('[devnet-boot] Depositing', depositAmount.toString(), 'frBTC into dxBTC vault...');
+        try {
+          await executeCall(provider, harness, segwit, taproot,
+            `[4,${S.DXBTC_VAULT_PROXY},1,0]:v0:v0`,
+            `32:0:${depositAmount}`, [taproot], [taproot]);
+          console.log('[devnet-boot] dxBTC vault deposit complete');
+        } catch (e: any) {
+          console.warn('[devnet-boot] Vault deposit failed:', e?.message?.slice(0, 80));
+        }
+        // Deposit fees to make share price > 1.0
+        const feeAmount = frbtcForVault / BigInt(50);
+        if (feeAmount > BigInt(0)) {
+          try {
+            await executeCall(provider, harness, segwit, taproot,
+              `[4,${S.DXBTC_VAULT_PROXY},6]:v0:v0`,
+              `32:0:${feeAmount}`, [taproot], [taproot]);
+            console.log('[devnet-boot] Protocol fee deposit complete');
+          } catch (e: any) {
+            console.warn('[devnet-boot] Fee deposit failed:', e?.message?.slice(0, 80));
+          }
+        }
+      }
+    }
+  } catch (e: any) {
+    console.warn('[devnet-boot] CLOB/vault seeding failed (non-fatal):', e?.message?.slice(0, 120));
+  }
+
+  // -----------------------------------------------------------------------
+  // Phase 10b: Seed FIRE Protocol State — full lifecycle seeding so every
+  // FIRE dashboard tab has non-zero metrics and every user flow is testable.
+  //
+  // Auth token pattern: deployWithProxy() discovers auth tokens via
+  // discoverAuthTokens() and stores them in contracts.fireTreasury.authTokenId.
+  // Treasury opcode 1 (SetAuthorizedContract) requires this auth token as
+  // incomingAlkanes. Pattern verified in e2e-fire.test.ts line 413-487.
+  //
+  // All opcodes verified against constants/index.ts and e2e-fire.test.ts.
+  // -----------------------------------------------------------------------
+  onProgress('Seeding FIRE protocol...', 98);
+  try {
+    console.log('[devnet-boot] Phase 10: Seeding FIRE protocol state...');
+    const treasuryAuth = contracts.fireTreasury.authTokenId;
+    console.log('[devnet-boot] Treasury auth token:', treasuryAuth || 'NOT FOUND');
+
+    // Step 1: Authorize bonding, redemption, and distributor on treasury.
+    // Treasury opcode 1 (SetAuthorizedContract): [1, type, block, tx]
+    //   type 0 = bonding, type 1 = redemption, type 2 = distributor
+    // Requires treasury auth token as incomingAlkanes: "authTokenId:1"
+    // Verified in e2e-fire.test.ts: "should set authorized contracts on treasury"
+    if (treasuryAuth) {
+      const authCalls = [
+        { type: 0, block: 4, tx: F.BONDING_PROXY,     label: 'Bonding' },
+        { type: 1, block: 4, tx: F.REDEMPTION_PROXY,   label: 'Redemption' },
+        { type: 2, block: 4, tx: F.DISTRIBUTOR_PROXY,  label: 'Distributor' },
+      ];
+      for (const auth of authCalls) {
+        try {
+          await executeCall(provider, harness, segwit, taproot,
+            `[4,${F.TREASURY_PROXY},1,${auth.type},${auth.block},${auth.tx}]:v0:v0`,
+            `${treasuryAuth}:1`, [taproot], [taproot]);
+          console.log(`[devnet-boot] Treasury authorized: ${auth.label} [${auth.block}:${auth.tx}]`);
+        } catch (e: any) {
+          console.warn(`[devnet-boot] Treasury auth ${auth.label} failed:`, e?.message?.slice(0, 80));
+        }
+      }
+    } else {
+      console.warn('[devnet-boot] Skipping treasury authorization — no auth token');
+    }
+
+    // Step 2: Deposit LP tokens into treasury as backing for bonding/redemption.
+    // Treasury opcode 10 (Deposit): send LP tokens as incomingAlkanes
+    const lpForTreasury = await getAlkaneBalance(provider, taproot, `${poolBlock}:${poolTx}`);
+    if (lpForTreasury > BigInt(0)) {
+      const treasuryDeposit = lpForTreasury / BigInt(10); // 10% of LP
+      try {
+        await executeCall(provider, harness, segwit, taproot,
+          `[4,${F.TREASURY_PROXY},10]:v0:v0`,
+          `${poolBlock}:${poolTx}:${treasuryDeposit}`, [taproot], [taproot]);
+        console.log('[devnet-boot] Treasury LP deposit:', treasuryDeposit.toString());
+      } catch (e: any) {
+        console.warn('[devnet-boot] Treasury deposit failed:', e?.message?.slice(0, 80));
+      }
+    }
+
+    // Step 3: Stake LP in FIRE staking (no lock) to start emission.
+    // Staking opcode 1 (Stake): [1, lock_duration=0] + LP as incomingAlkanes
+    // Verified in e2e-fire.test.ts: "should stake LP tokens with no lock"
+    const lpForStaking = await getAlkaneBalance(provider, taproot, `${poolBlock}:${poolTx}`);
+    if (lpForStaking > BigInt(0)) {
+      const stakeAmount = lpForStaking / BigInt(5); // 20% of remaining LP
+      try {
+        await executeCall(provider, harness, segwit, taproot,
+          `[4,${F.STAKING_PROXY},1,0]:v0:v0`,
+          `${poolBlock}:${poolTx}:${stakeAmount}`, [taproot], [taproot]);
+        console.log('[devnet-boot] FIRE staked LP:', stakeAmount.toString());
+        // Mine blocks to accrue rewards
+        harness.mineBlocks(10);
+      } catch (e: any) {
+        console.warn('[devnet-boot] FIRE staking failed:', e?.message?.slice(0, 80));
+      }
+    }
+
+    // Step 4: Claim FIRE rewards so user has FIRE tokens for bonding/redemption.
+    // Staking opcode 3 (ClaimRewards): no token input required
+    // Verified in e2e-fire.test.ts: "should claim rewards standalone"
+    try {
+      await executeCall(provider, harness, segwit, taproot,
+        `[4,${F.STAKING_PROXY},3]:v0:v0`,
+        'B:10000:v0', [taproot], [taproot]);
+      const fireBalance = await getAlkaneBalance(provider, taproot, `4:${F.TOKEN_PROXY}`);
+      console.log('[devnet-boot] FIRE claimed, balance:', fireBalance.toString());
+    } catch (e: any) {
+      console.warn('[devnet-boot] FIRE claim failed:', e?.message?.slice(0, 80));
+    }
+
+    // Step 5: Bond LP tokens for discounted FIRE (creates an active bond).
+    // Bonding opcode 1 (Bond): LP tokens as incomingAlkanes
+    // Verified in e2e-fire.test.ts: "should bond LP tokens for discounted FIRE"
+    const lpForBond = await getAlkaneBalance(provider, taproot, `${poolBlock}:${poolTx}`);
+    if (lpForBond > BigInt(0)) {
+      const bondAmount = lpForBond / BigInt(10); // 10% of remaining LP
+      try {
+        await executeCall(provider, harness, segwit, taproot,
+          `[4,${F.BONDING_PROXY},1]:v0:v0`,
+          `${poolBlock}:${poolTx}:${bondAmount}`, [taproot], [taproot]);
+        console.log('[devnet-boot] FIRE bonded LP:', bondAmount.toString());
+        // Mine blocks for partial vesting
+        harness.mineBlocks(5);
+      } catch (e: any) {
+        console.warn('[devnet-boot] FIRE bonding failed:', e?.message?.slice(0, 80));
+      }
+    }
+
+    // Step 6: Contribute frBTC to distributor (phase 0).
+    // Distributor opcode 1 (Contribute): frBTC as incomingAlkanes
+    // Verified in e2e-fire.test.ts: "should contribute frBTC during contribution phase"
+    const frbtcForDist = await getAlkaneBalance(provider, taproot, '32:0');
+    if (frbtcForDist > BigInt(1000)) {
+      const contributeAmount = frbtcForDist / BigInt(20); // 5% of frBTC
+      try {
+        await executeCall(provider, harness, segwit, taproot,
+          `[4,${F.DISTRIBUTOR_PROXY},1]:v0:v0`,
+          `32:0:${contributeAmount}`, [taproot], [taproot]);
+        console.log('[devnet-boot] Distributor contribution:', contributeAmount.toString(), 'frBTC');
+      } catch (e: any) {
+        console.warn('[devnet-boot] Distributor contribution failed:', e?.message?.slice(0, 80));
+      }
+    }
+
+    console.log('[devnet-boot] FIRE protocol seeding complete');
+  } catch (e: any) {
+    console.warn('[devnet-boot] FIRE seeding failed (non-fatal):', e?.message?.slice(0, 120));
+  }
 
   return contracts;
 }

@@ -21,7 +21,17 @@
  * only wanted to send 0.1 DIESEL. The transaction would have spent ALL the
  * user's ordinals/runes/alkanes!
  *
- * **ROOT CAUSE:**
+ * **ROOT CAUSE — FUNDAMENTAL BITCOIN PROTORUNE PROPERTY:**
+ * Alkane tokens are encoded as protorunes on Bitcoin UTXOs. Each alkane-bearing
+ * UTXO is a normal Bitcoin UTXO with dust value (~546-600 sats). ANY transaction
+ * that spends this UTXO for BTC fees DESTROYS the alkane tokens it carries.
+ * There is no Bitcoin-level protection — the protorune data is in the witness,
+ * and spending the UTXO removes it from the UTXO set permanently.
+ *
+ * This same issue affects boot.ts: deployWasm() calls consume alkane change UTXOs
+ * as BTC fee inputs, destroying DIESEL/frBTC/LP tokens between deployment phases.
+ * See boot.ts deployWasm() comment for the devnet-specific manifestation.
+ *
  * Dust UTXOs can contain ANY asset type (inscriptions, runes, alkanes). The old
  * code blindly selected all dust UTXOs without checking what assets they held.
  *

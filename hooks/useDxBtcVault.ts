@@ -3,7 +3,7 @@ import { useWallet } from '@/context/WalletContext';
 import { getConfig, getRpcUrl } from '@/utils/getConfig';
 import { queryKeys } from '@/queries/keys';
 
-async function fetchDxBtcStats(network: string) {
+export async function fetchDxBtcStats(network: string) {
   const config = getConfig(network || 'devnet');
   const vaultId = (config as any).DXBTC_VAULT_ID;
   if (!vaultId) return null;

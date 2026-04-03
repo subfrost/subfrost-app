@@ -169,7 +169,7 @@ import * as ecc from '@bitcoinerlab/secp256k1';
 // NOTE: Only patching INPUTS (witnessUtxo + redeemScript), NOT outputs
 // Output patching was removed - see comment at line 442 for why
 import { patchInputsOnly } from '@/lib/psbt-patching';
-import { buildSwapProtostone, buildSwapInputRequirements } from '@/lib/alkanes/builders';
+import { buildSwapProtostone, buildSwapInputRequirements, buildRouterSwapProtostone } from '@/lib/alkanes/builders';
 import { FACTORY_SWAP_OPCODE } from '@/lib/alkanes/constants';
 import { uint8ArrayToBase64, getBitcoinNetwork, extractPsbtBase64 } from '@/lib/alkanes/helpers';
 
@@ -191,6 +191,8 @@ export type SwapTransactionBaseData = {
   sellSymbol?: string;
   buySymbol?: string;
   skipConfirmation?: boolean; // For browser wallets that handle their own confirmation
+  /** When set to 'clob' or 'router', route through Universal Router instead of AMM factory */
+  routeSource?: 'amm' | 'clob' | 'router';
 };
 
 /**
@@ -327,25 +329,34 @@ export function useSwapMutation() {
       const deadline = await getFutureBlockHeight(deadlineBlocks, provider as any);
       console.log('[useSwapMutation] Deadline:', deadline, `(+${deadlineBlocks} blocks)`);
 
-      console.log('[useSwapMutation] Factory ID:', ALKANE_FACTORY_ID);
-      console.log('[useSwapMutation] Using factory opcode 13 (SwapExactTokensForTokens):');
-      console.log('[useSwapMutation]   p0: SDK auto-edict (from inputRequirements) → sends sell tokens to p1');
-      console.log('[useSwapMutation]   p1: Factory cellpack (our protostone)');
+      // Determine routing: Universal Router (hybrid CLOB+AMM) vs AMM factory direct
+      const useRouter = swapData.routeSource === 'clob' || swapData.routeSource === 'router';
+      const routerId = (getConfig(network) as any).UNIVERSAL_ROUTER_ID as string | undefined;
 
-      // Build protostone for the swap using factory-routed two-protostone pattern
-      const protostoneParams = {
-        factoryId: ALKANE_FACTORY_ID,
-        sellTokenId: sellCurrency,
-        buyTokenId: buyCurrency,
-        sellAmount: new BigNumber(ammSellAmount).toFixed(0),
-        minOutput: new BigNumber(minAmountOut).toFixed(0),
-        deadline: deadline.toString(),
-      };
-
-      console.log('[useSwapMutation] Protostone params:', JSON.stringify(protostoneParams, null, 2));
-
-      const protostone = buildSwapProtostone(protostoneParams);
-      console.log('[useSwapMutation] Built protostone (factory-routed):', protostone);
+      let protostone: string;
+      if (useRouter && routerId) {
+        console.log('[useSwapMutation] Routing via Universal Router:', routerId, '(source:', swapData.routeSource, ')');
+        protostone = buildRouterSwapProtostone({
+          routerId,
+          sellTokenId: sellCurrency,
+          buyTokenId: buyCurrency,
+          sellAmount: new BigNumber(ammSellAmount).toFixed(0),
+          minOutput: new BigNumber(minAmountOut).toFixed(0),
+        });
+        console.log('[useSwapMutation] Built protostone (router-routed):', protostone);
+      } else {
+        console.log('[useSwapMutation] Routing via AMM Factory:', ALKANE_FACTORY_ID);
+        const protostoneParams = {
+          factoryId: ALKANE_FACTORY_ID,
+          sellTokenId: sellCurrency,
+          buyTokenId: buyCurrency,
+          sellAmount: new BigNumber(ammSellAmount).toFixed(0),
+          minOutput: new BigNumber(minAmountOut).toFixed(0),
+          deadline: deadline.toString(),
+        };
+        protostone = buildSwapProtostone(protostoneParams);
+        console.log('[useSwapMutation] Built protostone (factory-routed):', protostone);
+      }
 
       // Build input requirements
       const isBtcSell = swapData.sellCurrency === 'btc';

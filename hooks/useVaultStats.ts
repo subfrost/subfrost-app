@@ -174,7 +174,7 @@ export function useVaultStats(vaultContractId: string, baseTokenId: string, enab
  * Parse u128 from little-endian byte array
  * Same logic as useFrbtcPremium
  */
-function parseU128FromBytes(bytes: number[]): string {
+export function parseU128FromBytes(bytes: number[]): string {
   if (bytes.length < 16) {
     throw new Error(`Insufficient bytes for u128: ${bytes.length} < 16`);
   }
