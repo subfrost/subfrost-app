@@ -1646,9 +1646,43 @@ async function deployFullProtocol(
   // -----------------------------------------------------------------------
   onProgress('Seeding FIRE protocol...', 98);
   try {
-    console.log('[devnet-boot] Phase 10: Seeding FIRE protocol state...');
+    console.log('[devnet-boot] Phase 10b: Seeding FIRE protocol state...');
     const treasuryAuth = contracts.fireTreasury.authTokenId;
     console.log('[devnet-boot] Treasury auth token:', treasuryAuth || 'NOT FOUND');
+
+    // Step 0: Re-mint DIESEL + frBTC + add liquidity to get LP tokens.
+    // Same alkane UTXO destruction issue as Phase 10a — all prior LP tokens
+    // were consumed by deployWasm fee inputs. Must create fresh ones.
+    console.log('[devnet-boot] Minting fresh tokens for FIRE seeding...');
+    for (let i = 0; i < 3; i++) {
+      await executeCall(provider, harness, segwit, taproot,
+        '[2,0,77]:v0:v0', 'B:10000:v0', [taproot]);
+    }
+    await executeCall(provider, harness, segwit, taproot,
+      '[32,0,77]:v1:v1', 'B:500000:v0', [signerAddr, taproot]);
+    harness.mineBlocks(2);
+    await new Promise(r => setTimeout(r, 300));
+
+    // Add liquidity to create LP tokens
+    const freshDiesel = await getAlkaneBalance(provider, taproot, '2:0');
+    const freshFrbtc = await getAlkaneBalance(provider, taproot, '32:0');
+    console.log('[devnet-boot] FIRE pre-seed: DIESEL=', freshDiesel.toString(), 'frBTC=', freshFrbtc.toString());
+    let freshLp = BigInt(0);
+    if (freshDiesel > BigInt(0) && freshFrbtc > BigInt(0) && poolId) {
+      const addDiesel = freshDiesel / BigInt(2);
+      const addFrbtc = freshFrbtc / BigInt(2);
+      const [pB, pT] = poolId.split(':');
+      try {
+        await executeCall(provider, harness, segwit, taproot,
+          `[${pB},${pT},1]:v0:v0`,
+          `2:0:${addDiesel},32:0:${addFrbtc}`, [taproot]);
+        harness.mineBlocks(1);
+        freshLp = await getAlkaneBalance(provider, taproot, poolId);
+        console.log('[devnet-boot] Added liquidity, LP balance:', freshLp.toString());
+      } catch (e: any) {
+        console.warn('[devnet-boot] Add liquidity failed:', e?.message?.slice(0, 80));
+      }
+    }
 
     // Step 1: Authorize bonding, redemption, and distributor on treasury.
     // Treasury opcode 1 (SetAuthorizedContract): [1, type, block, tx]
@@ -1708,6 +1742,21 @@ async function deployFullProtocol(
       }
     }
 
+    // Step 3b: Stake more LP with a 1-week lock (lock_duration=604800)
+    // Gives the staking UI two positions: one unlocked, one locked (1.25x multiplier)
+    const lpForLock = await getAlkaneBalance(provider, taproot, `${poolBlock}:${poolTx}`);
+    if (lpForLock > BigInt(0)) {
+      const lockAmount = lpForLock / BigInt(5);
+      try {
+        await executeCall(provider, harness, segwit, taproot,
+          `[4,${F.STAKING_PROXY},1,604800]:v0:v0`,  // 604800 = 1 week in seconds
+          `${poolBlock}:${poolTx}:${lockAmount}`, [taproot], [taproot]);
+        console.log('[devnet-boot] FIRE staked LP (1-week lock):', lockAmount.toString());
+      } catch (e: any) {
+        console.warn('[devnet-boot] FIRE locked staking failed:', e?.message?.slice(0, 80));
+      }
+    }
+
     // Step 4: Claim FIRE rewards so user has FIRE tokens for bonding/redemption.
     // Staking opcode 3 (ClaimRewards): no token input required
     // Verified in e2e-fire.test.ts: "should claim rewards standalone"
@@ -1758,6 +1807,67 @@ async function deployFullProtocol(
     console.log('[devnet-boot] FIRE protocol seeding complete');
   } catch (e: any) {
     console.warn('[devnet-boot] FIRE seeding failed (non-fatal):', e?.message?.slice(0, 120));
+  }
+
+  // -----------------------------------------------------------------------
+  // Phase 10c: Seed Fujin Difficulty Futures — create a market so the futures
+  // page has data. MasterFujin opcode 1 (CreateMarket) orchestrates everything:
+  // clones factory proxy, vault, zap; initializes factory with templates.
+  //
+  // After CreateMarket, query MasterFujin opcode 90 (GetMarket) to get the
+  // dynamically created factory ID. Then call factory opcode 1 (InitEpoch) to
+  // create the first epoch's pool + LONG/SHORT tokens.
+  //
+  // Source: reference/Fujin-contracts/alkanes/fujin-master/src/lib.rs
+  // Pattern: e2e-futures-protocols.test.ts line 656-688
+  // -----------------------------------------------------------------------
+  onProgress('Seeding Fujin futures...', 99);
+  try {
+    console.log('[devnet-boot] Phase 10c: Seeding Fujin difficulty futures...');
+
+    // CreateMarket: base_token = DIESEL (2:0), duration = 52 epochs (~1 year)
+    // MasterFujin opcode 1: CreateMarket(base_token: AlkaneId, duration: u128)
+    await executeCall(provider, harness, segwit, taproot,
+      `[4,${S.FUJIN_MASTER_PROXY},1,2,0,52]:v0:v0`,
+      'B:100000:v0', [taproot], [taproot]);
+    console.log('[devnet-boot] Fujin CreateMarket(DIESEL, 52) complete');
+
+    // Query MasterFujin to get the created factory/vault/zap IDs
+    // Opcode 90: GetMarket(base_token, duration) → 96 bytes (factory+vault+zap)
+    const marketResult = await simulate(`4:${S.FUJIN_MASTER_PROXY}`, ['90', '2', '0', '52']);
+    const marketHex = marketResult?.result?.execution?.data?.replace('0x', '') || '';
+    const marketErr = marketResult?.result?.execution?.error || '';
+    if (marketHex.length >= 192 && !marketErr) {
+      const factoryBlock = parseLeU128FromHex(marketHex, 0);
+      const factoryTx = parseLeU128FromHex(marketHex, 16);
+      const vaultBlock = parseLeU128FromHex(marketHex, 32);
+      const vaultTx = parseLeU128FromHex(marketHex, 48);
+      const zapBlock = parseLeU128FromHex(marketHex, 64);
+      const zapTx = parseLeU128FromHex(marketHex, 80);
+      console.log('[devnet-boot] Fujin market: factory=%s:%s vault=%s:%s zap=%s:%s',
+        factoryBlock, factoryTx, vaultBlock, vaultTx, zapBlock, zapTx);
+
+      // InitEpoch on the created factory to create the first pool + LONG/SHORT tokens
+      // Factory opcode 1: InitEpoch (no args — uses current block height)
+      try {
+        await executeCall(provider, harness, segwit, taproot,
+          `[${factoryBlock},${factoryTx},1]:v0:v0`,
+          'B:100000:v0', [taproot], [taproot]);
+        console.log('[devnet-boot] Fujin InitEpoch complete — pool + LONG/SHORT tokens created');
+      } catch (e: any) {
+        console.warn('[devnet-boot] Fujin InitEpoch failed:', e?.message?.slice(0, 80));
+      }
+
+      // Query market count to verify
+      const countResult = await simulate(`4:${S.FUJIN_MASTER_PROXY}`, ['91']);
+      const countHex = countResult?.result?.execution?.data?.replace('0x', '') || '';
+      const count = countHex.length >= 32 ? parseLeU128FromHex(countHex, 0) : 0;
+      console.log('[devnet-boot] Fujin market count:', count);
+    } else {
+      console.warn('[devnet-boot] Fujin market query failed: err=', marketErr.slice(0, 80));
+    }
+  } catch (e: any) {
+    console.warn('[devnet-boot] Fujin seeding failed (non-fatal):', e?.message?.slice(0, 120));
   }
 
   return contracts;
