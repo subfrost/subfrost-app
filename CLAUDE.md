@@ -74,12 +74,46 @@ When you see this error, the tokens are NOT in the wallet's UTXOs even though th
 
 All rules below were established 2026-03-31 after 16+ hours debugging. Each one prevented a bug from being re-introduced. Test enforcement exists for all of them.
 
+### ⚠️⚠️⚠️ Address Derivation — coinType MUST Be 0 ⚠️⚠️⚠️
+
+**THIS BUG HAS COST MULTIPLE FULL-DAY DEBUGGING SESSIONS. READ THIS BEFORE TOUCHING ANY DERIVATION CODE.**
+
+The SDK's `createWalletFromMnemonic()` hardcodes `coinType: 0` in its BIP32 derivation paths:
+```
+BIP84 (segwit):  m/84'/0'/0'/0/0
+BIP86 (taproot): m/86'/0'/0'/0/0
+```
+
+This is true **regardless of the `network` parameter** — even on regtest/testnet, the SDK uses coinType=0.
+
+**boot.ts MUST use the same paths.** If boot.ts uses `coinType: 1` (the "correct" testnet convention: `m/84'/1'/0'/0/0`), the derived addresses will be **completely different** from the connected wallet, even though both use the same mnemonic. The result:
+
+- All boot-seeded tokens (DIESEL, frBTC, LP, FIRE, dxBTC) are at the WRONG address
+- All CLOB orders belong to the WRONG address → Open Orders tab is empty
+- All swap/mint/burn transactions are from the WRONG address → My Activity tab is empty
+- All LP positions are at the WRONG address → Positions tab is empty
+- `getAlkaneBalance()` returns 0 for the connected wallet → "Insufficient alkanes" everywhere
+- `alkanes_simulate` still shows correct contract state (reads trie, not address index) → misleading
+
+**The coinType only changes the BIP32 path — both coinType=0 and coinType=1 produce valid regtest addresses.** There is no Bitcoin-level reason to prefer one over the other. The ONLY requirement is that boot.ts and the SDK agree.
+
+**Verification:** After changing derivation paths, the boot wallet's segwit and taproot addresses must match what `createWalletFromMnemonic(mnemonic, 'regtest')` produces. If they don't, all devnet seeding is invisible to the UI.
+
+**Files that MUST stay in sync:**
+- `lib/devnet/boot.ts` lines 185, 273-274 — BIP32 derivation paths
+- `@alkanes/ts-sdk` `DERIVATION_PATHS` constant — hardcoded coinType=0
+- `context/WalletContext.tsx` line 546 — calls `createWalletFromMnemonic(BOOT_MNEMONIC, ...)`
+
+**History:** This bug was introduced at project inception and not caught until 2026-04-03 because:
+1. Boot.ts logs didn't show the derived addresses
+2. `alkanes_simulate` (state trie reads) worked fine, masking the address mismatch
+3. The UI showed empty panels but no error messages — silent failure
+4. The connected wallet auto-connected on devnet, so it appeared to be "working"
+
 ### Address Handling — useActualAddresses is MANDATORY
 Every mutation hook MUST use `useActualAddresses = isBrowserWallet || network === 'devnet'` for address ternaries (fromAddresses, toAddresses, changeAddr, alkanesChangeAddr).
 
 **Why:** On devnet, the SDK provider loads the boot mnemonic via `walletLoadMnemonic()`, but `createWalletFromMnemonic()` in WalletContext derives DIFFERENT addresses from the same mnemonic. Symbolic addresses (`p2tr:0`) resolve to the SDK wallet's derivation, not the connected wallet's — tokens land at wrong addresses → "insufficient balance" errors despite having assets.
-
-**Root cause (2026-04-03):** The SDK's `createWalletFromMnemonic` hardcodes `coinType: 0` (mainnet convention) in its derivation paths (`m/84'/0'/0'/0`, `m/86'/0'/0'/0`) regardless of the network parameter. Boot.ts originally used `coinType: 1` (testnet convention: `m/84'/1'/0'/0/0`, `m/86'/1'/0'/0/0`). Same mnemonic + different coin type = completely different addresses. All boot-seeded tokens, CLOB orders, LP positions, and swap history were at addresses invisible to the connected wallet. **Fix:** boot.ts now uses `coinType: 0` to match the SDK.
 
 **Use `isBrowserWallet` ONLY for:** signing logic (`signTaprootPsbt` vs `signSegwitPsbt`), `patchInputsOnly`, and confirmation flows.
 

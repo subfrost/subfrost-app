@@ -288,6 +288,13 @@ export async function bootDevnetWithWasms(
   const taprootAddress = taprootPayment.address!;
   _bootAddresses = { segwit: segwitAddress, taproot: taprootAddress };
 
+  // Log addresses so any coinType drift is immediately visible in boot logs.
+  // These MUST match what createWalletFromMnemonic() produces in WalletContext.
+  // If they differ, all boot-seeded state is invisible to the UI.
+  // See CLAUDE.md "Address Derivation — coinType MUST Be 0" for full context.
+  console.log('[devnet-boot] Boot wallet segwit:', segwitAddress);
+  console.log('[devnet-boot] Boot wallet taproot:', taprootAddress);
+
   // =========================================================================
   // Full protocol deployment — only on FRESH boot (no saved state).
   // When restoring from saved state, contracts are already deployed.

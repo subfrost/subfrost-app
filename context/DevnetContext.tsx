@@ -417,6 +417,10 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
   useEffect(() => {
     if (isDevnet && state.status === 'idle' && !bootedRef.current) {
       bootedRef.current = true;
+      // ⚠️ This mnemonic MUST match WalletContext.tsx BOOT_MNEMONIC.
+      // boot.ts derives addresses with coinType=0 (m/84'/0'/..., m/86'/0'/...) to
+      // match the SDK's createWalletFromMnemonic. If the mnemonic or derivation
+      // differs, all boot-seeded state is invisible. See CLAUDE.md for details.
       const DEFAULT_MNEMONIC = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
       boot(DEFAULT_MNEMONIC);
     }
