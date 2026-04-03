@@ -79,6 +79,8 @@ Every mutation hook MUST use `useActualAddresses = isBrowserWallet || network ==
 
 **Why:** On devnet, the SDK provider loads the boot mnemonic via `walletLoadMnemonic()`, but `createWalletFromMnemonic()` in WalletContext derives DIFFERENT addresses from the same mnemonic. Symbolic addresses (`p2tr:0`) resolve to the SDK wallet's derivation, not the connected wallet's — tokens land at wrong addresses → "insufficient balance" errors despite having assets.
 
+**Root cause (2026-04-03):** The SDK's `createWalletFromMnemonic` hardcodes `coinType: 0` (mainnet convention) in its derivation paths (`m/84'/0'/0'/0`, `m/86'/0'/0'/0`) regardless of the network parameter. Boot.ts originally used `coinType: 1` (testnet convention: `m/84'/1'/0'/0/0`, `m/86'/1'/0'/0/0`). Same mnemonic + different coin type = completely different addresses. All boot-seeded tokens, CLOB orders, LP positions, and swap history were at addresses invisible to the connected wallet. **Fix:** boot.ts now uses `coinType: 0` to match the SDK.
+
 **Use `isBrowserWallet` ONLY for:** signing logic (`signTaprootPsbt` vs `signSegwitPsbt`), `patchInputsOnly`, and confirmation flows.
 
 **Test enforcement:** `address-handling.test.ts` asserts `useActualAddresses = isBrowserWallet || network === 'devnet'` exists in every hook.

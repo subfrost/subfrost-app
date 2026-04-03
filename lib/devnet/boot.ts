@@ -182,7 +182,8 @@ export async function bootDevnetWithWasms(
   const bip32 = bip32Lib.default(ecc);
   const seed = bip39.mnemonicToSeedSync(mnemonic);
   const root = bip32.fromSeed(seed);
-  const child = root.derivePath("m/84'/1'/0'/0/0");
+  // coinType=0 to match SDK's createWalletFromMnemonic (see address derivation below)
+  const child = root.derivePath("m/84'/0'/0'/0/0");
   const secretKey = new Uint8Array(child.privateKey!);
   console.log('[devnet-boot] Keys derived, creating harness...');
 
@@ -261,8 +262,19 @@ export async function bootDevnetWithWasms(
   const bitcoin = await import('bitcoinjs-lib');
   bitcoin.initEccLib(ecc);
   const network = bitcoin.networks.regtest;
-  const segwitChild = root.derivePath("m/84'/1'/0'/0/0");
-  const taprootChild = root.derivePath("m/86'/1'/0'/0/0");
+  // CRITICAL: Use coinType=0 (NOT coinType=1) to match the SDK's createWalletFromMnemonic.
+  // The SDK hardcodes coinType:0 in DERIVATION_PATHS regardless of network parameter:
+  //   BIP84: "m/84'/0'/0'/0"  (segwit)
+  //   BIP86: "m/86'/0'/0'/0"  (taproot)
+  //
+  // If boot.ts uses coinType=1 (testnet convention), ALL derived addresses differ from
+  // the connected wallet, making boot-seeded tokens/orders/positions invisible to the UI.
+  // This caused empty Open Orders, Positions, and My Activity tabs on devnet (2026-04-03).
+  //
+  // The coinType only affects the BIP32 derivation path, not the actual Bitcoin network.
+  // Both coinType=0 and coinType=1 produce valid regtest addresses.
+  const segwitChild = root.derivePath("m/84'/0'/0'/0/0");
+  const taprootChild = root.derivePath("m/86'/0'/0'/0/0");
   const segwitPayment = bitcoin.payments.p2wpkh({
     pubkey: Buffer.from(segwitChild.publicKey),
     network,
