@@ -1294,18 +1294,32 @@ async function deployFullProtocol(
   //   yv_boost_id   = yv-boost-vault — not deployed on devnet, use self as placeholder
   //   fr_btc_diesel_lp_id = AMM pool LP token [poolBlock:poolTx]
   //   gauge_contract_id   = vxFUEL gauge [4:VX_FUEL_GAUGE] — where staked tokens go
+  // yvfrBTC Vault — deploy ve_token_vault_template (NOT yv_fr_btc_vault).
+  //
+  // ROOT CAUSE ANALYSIS (2026-04-03):
+  // dxBTC's deposit_to_yv_vault() calls opcode 2 ("mint") on the yv vault.
+  // The yv-fr-btc-vault has a CUSTOM interface (deposit=1, withdraw=2, harvest=3)
+  // where opcode 2 = withdraw (expects vault tokens, not frBTC → fails).
+  // The dx-btc source was designed to call a STANDARD PolyVault (swap=1, mint=2,
+  // burn=3) — verified by it also calling opcode 3 ("burn"), 12 (ConvertToShares),
+  // 13 (ConvertToAssets) which match the ve-token-vault-template, not yv-fr-btc-vault.
+  //
+  // Fix: Deploy ve_token_vault_template.wasm which has the standard PolyVault
+  // interface with initialize=0, swap=1, mint=2, burn=3, convert-to-shares=12,
+  // convert-to-assets=13. The init writes asset_id to /asset storage, enabling
+  // mint/burn to work with frBTC.
+  //
+  // Source: reference/subfrost-alkanes/alkanes/ve-token-vault-template/alkanes.toml
   contracts.yvFrbtcVault = contracts.yvFrbtcVault || { proxyId: '', implId: '', authTokenId: '' };
-  // yv-fr-btc-vault does NOT support opcode 50. Use opcode 0 (Initialize) with dummy args.
-  // The init writes to impl storage (not proxy), so it's harmless — the real init
-  // happens through the proxy via initThroughProxy below.
+  // ve-token-vault-template has admin-set-yve-token-nft-id = 50, so [50] init works
   contracts.yvFrbtcVault.authTokenId = await deployWithProxy(
     provider, harness, segwit, taproot, upgradeableWasm,
-    'yv_fr_btc_vault', S.YV_FRBTC_VAULT_IMPL, S.YV_FRBTC_VAULT_PROXY,
-    'yvfrBTC Vault', onProgress, 64,
-    [0, 0, 0, 0, 0, 0, 0, 0, 0]);
+    've_token_vault_template', S.YV_FRBTC_VAULT_IMPL, S.YV_FRBTC_VAULT_PROXY,
+    'yvfrBTC Vault', onProgress, 64);
+  // Initialize: (asset_id=frBTC, yve_token_nft_id=self, vx_token_gauge_id=vxFUEL, fr_sigil_id=self)
   await initThroughProxy(provider, harness, segwit, taproot,
     S.YV_FRBTC_VAULT_PROXY,
-    [0, 32, 0, 4, S.YV_FRBTC_VAULT_PROXY, poolBlock, poolTx, 4, S.VX_FUEL_GAUGE],
+    [0, 32, 0, 4, S.YV_FRBTC_VAULT_PROXY, 4, S.VX_FUEL_GAUGE, 4, S.YV_FRBTC_VAULT_PROXY],
     'yvfrBTC Vault');
 
   // dxBTC Vault — standalone proxy
@@ -1645,30 +1659,30 @@ async function deployFullProtocol(
         'DIESEL=', dieselBefore.toString(), 'frBTC=', frbtcBefore.toString());
     }
 
-    // Vault seeding: deposit frBTC into dxBTC vault (uses fresh frBTC from re-wrap above)
+    // Vault seeding: deposit frBTC into dxBTC vault (opcode 1 = swap).
+    //
+    // The dxBTC vault internally calls yv vault opcode 2 ("mint") on the yvfrBTC
+    // vault at [4:YV_FRBTC_VAULT_PROXY]. Now that we deploy ve_token_vault_template
+    // instead of yv-fr-btc-vault, opcode 2 = mint (standard PolyVault) which
+    // correctly accepts frBTC and mints yvfrBTC shares.
     const frbtcForVault = await getAlkaneBalance(provider, taproot, '32:0');
     if (frbtcForVault > BigInt(0)) {
       const depositAmount = frbtcForVault / BigInt(5);
       if (depositAmount > BigInt(0)) {
-        console.log('[devnet-boot] Depositing', depositAmount.toString(), 'frBTC into dxBTC vault...');
+        console.log('[devnet-boot] Depositing', depositAmount.toString(), 'frBTC into dxBTC vault [4:7020]...');
         try {
           await executeCall(provider, harness, segwit, taproot,
             `[4,${S.DXBTC_VAULT_PROXY},1,0]:v0:v0`,
             `32:0:${depositAmount}`, [taproot], [taproot]);
           console.log('[devnet-boot] dxBTC vault deposit complete');
-          // Verify: check TotalSupply (opcode 101) and TotalAssets (opcode 11)
+          // Verify state
           const supplyCheck = await simulate(`4:${S.DXBTC_VAULT_PROXY}`, ['101']);
-          const assetsCheck = await simulate(`4:${S.DXBTC_VAULT_PROXY}`, ['11']);
           const supply = supplyCheck?.result?.execution?.data
             ? parseLeU128BigInt(supplyCheck.result.execution.data.replace('0x', ''), 0) : BigInt(0);
-          const assets = assetsCheck?.result?.execution?.data
-            ? parseLeU128BigInt(assetsCheck.result.execution.data.replace('0x', ''), 0) : BigInt(0);
           console.log('[devnet-boot] dxBTC vault state: supply=', supply.toString(),
-            'assets=', assets.toString(),
-            'supplyErr=', supplyCheck?.result?.execution?.error || 'none',
-            'assetsErr=', assetsCheck?.result?.execution?.error || 'none');
+            'err=', supplyCheck?.result?.execution?.error || 'none');
         } catch (e: any) {
-          console.warn('[devnet-boot] Vault deposit failed:', e?.message?.slice(0, 80));
+          console.warn('[devnet-boot] dxBTC vault deposit failed:', e?.message?.slice(0, 120));
         }
         // Deposit fees to make share price > 1.0
         const feeAmount = frbtcForVault / BigInt(50);
