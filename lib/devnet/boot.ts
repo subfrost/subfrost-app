@@ -1647,6 +1647,17 @@ async function deployFullProtocol(
             `[4,${S.DXBTC_VAULT_PROXY},1,0]:v0:v0`,
             `32:0:${depositAmount}`, [taproot], [taproot]);
           console.log('[devnet-boot] dxBTC vault deposit complete');
+          // Verify: check TotalSupply (opcode 101) and TotalAssets (opcode 11)
+          const supplyCheck = await simulate(`4:${S.DXBTC_VAULT_PROXY}`, ['101']);
+          const assetsCheck = await simulate(`4:${S.DXBTC_VAULT_PROXY}`, ['11']);
+          const supply = supplyCheck?.result?.execution?.data
+            ? parseLeU128BigInt(supplyCheck.result.execution.data.replace('0x', ''), 0) : BigInt(0);
+          const assets = assetsCheck?.result?.execution?.data
+            ? parseLeU128BigInt(assetsCheck.result.execution.data.replace('0x', ''), 0) : BigInt(0);
+          console.log('[devnet-boot] dxBTC vault state: supply=', supply.toString(),
+            'assets=', assets.toString(),
+            'supplyErr=', supplyCheck?.result?.execution?.error || 'none',
+            'assetsErr=', assetsCheck?.result?.execution?.error || 'none');
         } catch (e: any) {
           console.warn('[devnet-boot] Vault deposit failed:', e?.message?.slice(0, 80));
         }
