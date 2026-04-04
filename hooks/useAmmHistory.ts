@@ -299,11 +299,19 @@ export function useInfiniteAmmTxHistory({
 
       try {
         let raw: any;
-        if (address) {
-          raw = await provider.dataApiGetAllAddressAmmTxHistory(address, BigInt(count), BigInt(offset));
-        } else {
-          raw = await provider.dataApiGetAllAmmTxHistory(BigInt(count), BigInt(offset));
-        }
+
+        // On devnet, the data API calls route to quspo (deprecated) which can hang
+        // for 2+ minutes, freezing the entire UI. Wrap in a 3-second timeout.
+        // If the call times out, return empty — the user can still see trades after
+        // manually executing a swap (which triggers a refetch with fresh data).
+        const dataApiCall = address
+          ? provider.dataApiGetAllAddressAmmTxHistory(address, BigInt(count), BigInt(offset))
+          : provider.dataApiGetAllAmmTxHistory(BigInt(count), BigInt(offset));
+
+        raw = await Promise.race([
+          dataApiCall,
+          new Promise((_, reject) => setTimeout(() => reject(new Error('dataApi timeout (3s)')), 3000)),
+        ]);
 
         const result = mapToObject(raw);
 
