@@ -1328,14 +1328,14 @@ async function deployFullProtocol(
   //   yv_fr_btc_vault_id = yvfrBTC vault [4:YV_FRBTC_VAULT_PROXY] ← was wrong (pointed to FUEL)
   //   escrow_nft_id      = dxBTC vault itself [4:DXBTC_VAULT_PROXY] (placeholder)
   //   vx_fuel_gauge_id   = vxFUEL gauge [4:VX_FUEL_GAUGE]
-  // dx-btc does NOT support opcode 50. Use opcode 99 (get-name) which is a safe
+  // dx-btc does NOT support opcode 50. Use opcode 11 (TotalAssets) which is a safe
   // read-only view that succeeds without state dependencies.
-  // alkanes.toml: get-name = 99 (confirmed in reference/subfrost-alkanes/alkanes/dx-btc/alkanes.toml)
+  // Upstream opcodes (from #[opcode(N)] in src/lib.rs): 0-5, 11-13. No 50, 99, 101.
   contracts.dxBtcVault.authTokenId = await deployWithProxy(
     provider, harness, segwit, taproot, upgradeableWasm,
     'dx_btc', S.DXBTC_VAULT_IMPL, S.DXBTC_VAULT_PROXY,
     'dxBTC Vault', onProgress, 65,
-    [99]);
+    [11]);
   await initThroughProxy(provider, harness, segwit, taproot,
     S.DXBTC_VAULT_PROXY,
     [0, 32, 0, 4, S.YV_FRBTC_VAULT_PROXY, 4, S.DXBTC_VAULT_PROXY, 4, S.VX_FUEL_GAUGE],
@@ -1670,27 +1670,17 @@ async function deployFullProtocol(
             `[4,${S.DXBTC_VAULT_PROXY},1,0]:v0:v0`,
             `32:0:${depositAmount}`, [taproot], [taproot]);
           console.log('[devnet-boot] dxBTC vault deposit complete');
-          // Verify state
-          const supplyCheck = await simulate(`4:${S.DXBTC_VAULT_PROXY}`, ['101']);
-          const supply = supplyCheck?.result?.execution?.data
-            ? parseLeU128BigInt(supplyCheck.result.execution.data.replace('0x', ''), 0) : BigInt(0);
-          console.log('[devnet-boot] dxBTC vault state: supply=', supply.toString(),
-            'err=', supplyCheck?.result?.execution?.error || 'none');
+          // Verify state — use opcode 11 (TotalAssets) which exists in rebuilt WASM
+          const assetsCheck = await simulate(`4:${S.DXBTC_VAULT_PROXY}`, ['11']);
+          const assets = assetsCheck?.result?.execution?.data
+            ? parseLeU128BigInt(assetsCheck.result.execution.data.replace('0x', ''), 0) : BigInt(0);
+          console.log('[devnet-boot] dxBTC vault state: totalAssets=', assets.toString(),
+            'err=', assetsCheck?.result?.execution?.error || 'none');
         } catch (e: any) {
           console.warn('[devnet-boot] dxBTC vault deposit failed:', e?.message?.slice(0, 120));
         }
-        // Deposit fees to make share price > 1.0
-        const feeAmount = frbtcForVault / BigInt(50);
-        if (feeAmount > BigInt(0)) {
-          try {
-            await executeCall(provider, harness, segwit, taproot,
-              `[4,${S.DXBTC_VAULT_PROXY},6]:v0:v0`,
-              `32:0:${feeAmount}`, [taproot], [taproot]);
-            console.log('[devnet-boot] Protocol fee deposit complete');
-          } catch (e: any) {
-            console.warn('[devnet-boot] Fee deposit failed:', e?.message?.slice(0, 80));
-          }
-        }
+        // NOTE: deposit-fees (opcode 6) does NOT exist in the rebuilt dx-btc WASM
+        // (upstream only has opcodes 0-5, 11-13). Skipping fee deposit.
       }
     }
   } catch (e: any) {
