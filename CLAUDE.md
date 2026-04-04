@@ -848,6 +848,54 @@ grep -E "CLOB|seed|spot|reserves|vault|FIRE|failed|error" /tmp/subfrost-boot.log
 
 The interceptor only captures lines containing `[devnet-boot]`. It batches up to 10 lines per POST, flushed every 300ms. Source: `lib/devnet/boot.ts` lines 137-166, API route: `app/api/boot-log/route.ts`.
 
+### Autonomous Boot → Diagnose → Fix Loop (MCP Browser Automation)
+
+When an LLM has MCP browser access (Chrome automation), it can autonomously iterate on boot.ts changes without human intervention:
+
+```
+1. Make code change to boot.ts (or any devnet-affecting file)
+2. Clear IndexedDB via MCP JavaScript execution:
+   (async () => {
+     const dbs = await indexedDB.databases();
+     for (const db of dbs) { if (db.name) indexedDB.deleteDatabase(db.name); }
+   })().then(() => location.reload())
+3. Wait for boot to complete by polling /tmp/subfrost-boot.log:
+   for i in $(seq 1 60); do
+     if grep -q "Activity feeds seeded\|quspo tertiary" /tmp/subfrost-boot.log 2>/dev/null; then
+       break;
+     fi;
+     sleep 5;
+   done
+4. Diagnose results from the log:
+   cat /tmp/subfrost-boot.log | grep -E "vault state|CLOB.*#|FIRE staked|ERROR|WARN|failed"
+5. If issues found → fix code → go to step 1
+6. If boot succeeds → take screenshot → verify UI state visually
+```
+
+**This loop is extremely valuable** because:
+- Boot takes 2-3 minutes — human doesn't need to watch it
+- The log pipe captures ALL `[devnet-boot]` lines to `/tmp/subfrost-boot.log`
+- Diagnostic grep patterns immediately surface failures
+- IndexedDB clear + reload guarantees a fresh boot (no stale state)
+- The LLM can iterate 5-10 times autonomously while the human does other work
+
+**Key grep patterns for diagnosis:**
+```bash
+# Check all seeding steps succeeded:
+grep -E "CLOB.*#|vault state|FIRE staked|Fujin.*complete|Activity.*seeded" /tmp/subfrost-boot.log
+
+# Check for failures:
+grep -E "ERROR|WARN|failed|Insufficient|unexpected end|not found in keystore" /tmp/subfrost-boot.log
+
+# Check address alignment:
+grep "Boot wallet" /tmp/subfrost-boot.log
+
+# Full seeding summary:
+grep -E "Phase 10|CLOB|vault|FIRE|Fujin|Activity|Swap|AddLiquidity" /tmp/subfrost-boot.log
+```
+
+**Prerequisite:** The boot-log pipe must be active (`app/api/boot-log/route.ts` writes to `/tmp/subfrost-boot.log`). The interceptor in `bootDevnetWithWasms()` (boot.ts lines 137-166) captures all `[devnet-boot]` console.log/warn/error lines.
+
 ### Vitest Harness Limitations vs Browser Devnet
 
 The vitest harness and browser devnet share the same WASM contracts but differ in runtime behavior:
