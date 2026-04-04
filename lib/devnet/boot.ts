@@ -828,18 +828,19 @@ async function deployWithProxy(
   upgradeableWasm: string,
   wasmName: string, implSlot: number, proxySlot: number,
   label: string, onProgress: ProgressCallback, pct: number,
+  implInitArgs?: (number | bigint)[],
 ): Promise<string> {
   // Step 1: Deploy implementation WASM to [4:implSlot]
   // WARNING: The init arg [50] is passed as cellpack input during CREATERESERVED.
   // If the contract's opcode dispatcher doesn't handle opcode 50, the deploy
   // reverts and the binary is NOT stored (atomic rollback). Contracts that
   // support opcode 50 as a no-op/forward marker will deploy successfully.
-  // For contracts without opcode 50 support, use a valid opcode instead:
+  // For contracts without opcode 50 support, pass implInitArgs with a valid opcode:
+  //   - A read-only query opcode (e.g., get-name=99 for dx-btc)
   //   - opcode 0 (Initialize) with safe defaults
-  //   - a read-only query opcode that succeeds without state deps
   // See: CREATERESERVED ATOMIC ROLLBACK BEHAVIOR docs on deployWasm()
   await fetchAndDeploy(provider, harness, segwit, taproot,
-    wasmName, implSlot, [50],
+    wasmName, implSlot, implInitArgs ?? [50],
     `${label} Impl`, onProgress, pct);
 
   // Step 2: Deploy upgradeable proxy → impl, mint 1 auth token
@@ -1294,10 +1295,14 @@ async function deployFullProtocol(
   //   fr_btc_diesel_lp_id = AMM pool LP token [poolBlock:poolTx]
   //   gauge_contract_id   = vxFUEL gauge [4:VX_FUEL_GAUGE] — where staked tokens go
   contracts.yvFrbtcVault = contracts.yvFrbtcVault || { proxyId: '', implId: '', authTokenId: '' };
+  // yv-fr-btc-vault does NOT support opcode 50. Use opcode 0 (Initialize) with dummy args.
+  // The init writes to impl storage (not proxy), so it's harmless — the real init
+  // happens through the proxy via initThroughProxy below.
   contracts.yvFrbtcVault.authTokenId = await deployWithProxy(
     provider, harness, segwit, taproot, upgradeableWasm,
     'yv_fr_btc_vault', S.YV_FRBTC_VAULT_IMPL, S.YV_FRBTC_VAULT_PROXY,
-    'yvfrBTC Vault', onProgress, 64);
+    'yvfrBTC Vault', onProgress, 64,
+    [0, 0, 0, 0, 0, 0, 0, 0, 0]);
   await initThroughProxy(provider, harness, segwit, taproot,
     S.YV_FRBTC_VAULT_PROXY,
     [0, 32, 0, 4, S.YV_FRBTC_VAULT_PROXY, poolBlock, poolTx, 4, S.VX_FUEL_GAUGE],
@@ -1314,10 +1319,14 @@ async function deployFullProtocol(
   //   yv_fr_btc_vault_id = yvfrBTC vault [4:YV_FRBTC_VAULT_PROXY] ← was wrong (pointed to FUEL)
   //   escrow_nft_id      = dxBTC vault itself [4:DXBTC_VAULT_PROXY] (placeholder)
   //   vx_fuel_gauge_id   = vxFUEL gauge [4:VX_FUEL_GAUGE]
+  // dx-btc does NOT support opcode 50. Use opcode 99 (get-name) which is a safe
+  // read-only view that succeeds without state dependencies.
+  // alkanes.toml: get-name = 99 (confirmed in reference/subfrost-alkanes/alkanes/dx-btc/alkanes.toml)
   contracts.dxBtcVault.authTokenId = await deployWithProxy(
     provider, harness, segwit, taproot, upgradeableWasm,
     'dx_btc', S.DXBTC_VAULT_IMPL, S.DXBTC_VAULT_PROXY,
-    'dxBTC Vault', onProgress, 65);
+    'dxBTC Vault', onProgress, 65,
+    [99]);
   await initThroughProxy(provider, harness, segwit, taproot,
     S.DXBTC_VAULT_PROXY,
     [0, 32, 0, 4, S.YV_FRBTC_VAULT_PROXY, 4, S.DXBTC_VAULT_PROXY, 4, S.VX_FUEL_GAUGE],
