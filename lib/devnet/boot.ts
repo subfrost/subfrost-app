@@ -1676,11 +1676,27 @@ async function deployFullProtocol(
             ? parseLeU128BigInt(assetsCheck.result.execution.data.replace('0x', ''), 0) : BigInt(0);
           console.log('[devnet-boot] dxBTC vault state: totalAssets=', assets.toString(),
             'err=', assetsCheck?.result?.execution?.error || 'none');
+
+          if (assets === BigInt(0)) {
+            // dxBTC deposit chain (dxBTC proxy→impl→yv-vault proxy→impl→gauge) may have failed.
+            // Try direct deposit to yv-fr-btc-vault as diagnostic.
+            console.log('[devnet-boot] dxBTC totalAssets=0, trying direct yv-vault deposit...');
+            const directAmount = depositAmount / BigInt(2);
+            try {
+              await executeCall(provider, harness, segwit, taproot,
+                `[4,${S.YV_FRBTC_VAULT_PROXY},1,${directAmount}]:v0:v0`,
+                `32:0:${directAmount}`, [taproot], [taproot]);
+              console.log('[devnet-boot] Direct yv-vault deposit complete');
+              // Check yv-vault balance of caller
+              const yvBal = await getAlkaneBalance(provider, taproot, `4:${S.YV_FRBTC_VAULT_PROXY}`);
+              console.log('[devnet-boot] yv-vault token balance at wallet:', yvBal.toString());
+            } catch (e2: any) {
+              console.warn('[devnet-boot] Direct yv-vault deposit failed:', e2?.message?.slice(0, 120));
+            }
+          }
         } catch (e: any) {
           console.warn('[devnet-boot] dxBTC vault deposit failed:', e?.message?.slice(0, 120));
         }
-        // NOTE: deposit-fees (opcode 6) does NOT exist in the rebuilt dx-btc WASM
-        // (upstream only has opcodes 0-5, 11-13). Skipping fee deposit.
       }
     }
   } catch (e: any) {
