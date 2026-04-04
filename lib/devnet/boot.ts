@@ -1294,32 +1294,27 @@ async function deployFullProtocol(
   //   yv_boost_id   = yv-boost-vault — not deployed on devnet, use self as placeholder
   //   fr_btc_diesel_lp_id = AMM pool LP token [poolBlock:poolTx]
   //   gauge_contract_id   = vxFUEL gauge [4:VX_FUEL_GAUGE] — where staked tokens go
-  // yvfrBTC Vault — deploy ve_token_vault_template (NOT yv_fr_btc_vault).
+  // yvfrBTC Vault — deploy yv_fr_btc_vault.wasm
   //
-  // ROOT CAUSE ANALYSIS (2026-04-03):
-  // dxBTC's deposit_to_yv_vault() calls opcode 2 ("mint") on the yv vault.
-  // The yv-fr-btc-vault has a CUSTOM interface (deposit=1, withdraw=2, harvest=3)
-  // where opcode 2 = withdraw (expects vault tokens, not frBTC → fails).
-  // The dx-btc source was designed to call a STANDARD PolyVault (swap=1, mint=2,
-  // burn=3) — verified by it also calling opcode 3 ("burn"), 12 (ConvertToShares),
-  // 13 (ConvertToAssets) which match the ve-token-vault-template, not yv-fr-btc-vault.
+  // The yv-fr-btc-vault has opcodes: 0=Initialize, 1=Deposit, 2=Withdraw, 3=Harvest.
+  // dxBTC's deposit_to_yv_vault() was fixed upstream (2026-04-03) to call opcode 1
+  // (Deposit) instead of the incorrect opcode 2 (which was Withdraw, not Mint).
+  // The rebuilt dx_btc.wasm is in public/wasm/dx_btc.wasm.
   //
-  // Fix: Deploy ve_token_vault_template.wasm which has the standard PolyVault
-  // interface with initialize=0, swap=1, mint=2, burn=3, convert-to-shares=12,
-  // convert-to-assets=13. The init writes asset_id to /asset storage, enabling
-  // mint/burn to work with frBTC.
-  //
-  // Source: reference/subfrost-alkanes/alkanes/ve-token-vault-template/alkanes.toml
+  // Source: subfrost-alkanes/alkanes/yv-fr-btc-vault/src/lib.rs
+  // Source: subfrost-alkanes/alkanes/dx-btc/src/lib.rs (fixed deposit_to_yv_vault)
   contracts.yvFrbtcVault = contracts.yvFrbtcVault || { proxyId: '', implId: '', authTokenId: '' };
-  // ve-token-vault-template has admin-set-yve-token-nft-id = 50, so [50] init works
+  // yv-fr-btc-vault: opcode 0 = Initialize(yv_fr_btc, yv_boost_id, fr_btc_diesel_lp_id, gauge_contract_id)
+  // Use opcode 0 with dummy AlkaneIds for deploy — real init happens through proxy below
   contracts.yvFrbtcVault.authTokenId = await deployWithProxy(
     provider, harness, segwit, taproot, upgradeableWasm,
-    've_token_vault_template', S.YV_FRBTC_VAULT_IMPL, S.YV_FRBTC_VAULT_PROXY,
-    'yvfrBTC Vault', onProgress, 64);
-  // Initialize: (asset_id=frBTC, yve_token_nft_id=self, vx_token_gauge_id=vxFUEL, fr_sigil_id=self)
+    'yv_fr_btc_vault', S.YV_FRBTC_VAULT_IMPL, S.YV_FRBTC_VAULT_PROXY,
+    'yvfrBTC Vault', onProgress, 64,
+    [0, 0, 0, 0, 0, 0, 0, 0, 0]);  // opcode 0 (Initialize) with dummy args
+  // Initialize through proxy: (yv_fr_btc=frBTC, yv_boost_id=self, fr_btc_diesel_lp_id=pool, gauge=vxFUEL)
   await initThroughProxy(provider, harness, segwit, taproot,
     S.YV_FRBTC_VAULT_PROXY,
-    [0, 32, 0, 4, S.YV_FRBTC_VAULT_PROXY, 4, S.VX_FUEL_GAUGE, 4, S.YV_FRBTC_VAULT_PROXY],
+    [0, 32, 0, 4, S.YV_FRBTC_VAULT_PROXY, poolBlock, poolTx, 4, S.VX_FUEL_GAUGE],
     'yvfrBTC Vault');
 
   // dxBTC Vault — standalone proxy
