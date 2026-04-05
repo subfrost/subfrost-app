@@ -1292,43 +1292,42 @@ async function deployFullProtocol(
   //   yv_boost_id   = yv-boost-vault — not deployed on devnet, use self as placeholder
   //   fr_btc_diesel_lp_id = AMM pool LP token [poolBlock:poolTx]
   //   gauge_contract_id   = vxFUEL gauge [4:VX_FUEL_GAUGE] — where staked tokens go
-  // yvfrBTC Vault — deploy yv_fr_btc_vault.wasm
+  // yvfrBTC Vault — deploy yv_fr_btc_vault.wasm (rebuilt with deposit=opcode 2)
   //
-  // The yv-fr-btc-vault has opcodes: 0=Initialize, 1=Deposit, 2=Withdraw, 3=Harvest.
-  // dxBTC's deposit_to_yv_vault() was fixed upstream (2026-04-03) to call opcode 1
-  // (Deposit) instead of the incorrect opcode 2 (which was Withdraw, not Mint).
-  // The rebuilt dx_btc.wasm is in public/wasm/dx_btc.wasm.
+  // VAULT CHAIN: dxBTC → yv-fr-btc-vault → vxFUEL gauge
+  // Token flow: LP token → yv-vault.deposit(opcode 2) → gauge.stake(opcode 1)
+  //
+  // yv-fr-btc-vault opcodes (rebuilt): 0=Initialize, 2=Deposit, 3=Withdraw, 4=Harvest
+  // The yv_fr_btc init param sets the ACCEPTED TOKEN for deposit. We set it to
+  // the DIESEL/frBTC pool LP token (poolBlock:poolTx) so the entire chain uses LP:
+  //   dxBTC(asset_id=LP) → yv-vault(yv_fr_btc=LP) → gauge(lp_token=LP)
   //
   // Source: subfrost-alkanes/alkanes/yv-fr-btc-vault/src/lib.rs
-  // Source: subfrost-alkanes/alkanes/dx-btc/src/lib.rs (fixed deposit_to_yv_vault)
   contracts.yvFrbtcVault = contracts.yvFrbtcVault || { proxyId: '', implId: '', authTokenId: '' };
-  // yv-fr-btc-vault: opcode 0 = Initialize(yv_fr_btc, yv_boost_id, fr_btc_diesel_lp_id, gauge_contract_id)
-  // Use opcode 0 with dummy AlkaneIds for deploy — real init happens through proxy below
   contracts.yvFrbtcVault.authTokenId = await deployWithProxy(
     provider, harness, segwit, taproot, upgradeableWasm,
     'yv_fr_btc_vault', S.YV_FRBTC_VAULT_IMPL, S.YV_FRBTC_VAULT_PROXY,
     'yvfrBTC Vault', onProgress, 64,
-    [0, 0, 0, 0, 0, 0, 0, 0, 0]);  // opcode 0 (Initialize) with dummy args
-  // Initialize through proxy: (yv_fr_btc=frBTC, yv_boost_id=self, fr_btc_diesel_lp_id=pool, gauge=vxFUEL)
+    [0, 0, 0, 0, 0, 0, 0, 0, 0]);  // opcode 0 (Initialize) with dummy args — real init below
+  // Initialize: yv_fr_btc = LP token (not frBTC!), yv_boost_id=self, fr_btc_diesel_lp_id=pool, gauge=vxFUEL
   await initThroughProxy(provider, harness, segwit, taproot,
     S.YV_FRBTC_VAULT_PROXY,
-    [0, 32, 0, 4, S.YV_FRBTC_VAULT_PROXY, poolBlock, poolTx, 4, S.VX_FUEL_GAUGE],
+    [0, poolBlock, poolTx, 4, S.YV_FRBTC_VAULT_PROXY, poolBlock, poolTx, 4, S.VX_FUEL_GAUGE],
     'yvfrBTC Vault');
 
   // dxBTC Vault — standalone proxy
-  // dxBTC deposits frBTC into yv-fr-btc-vault [4:YV_FRBTC_VAULT_PROXY] and issues dxBTC shares.
-  // Source: reference/subfrost-alkanes/alkanes/dx-btc/src/lib.rs
-  // alkanes.toml opcodes: 0=initialize, 1=swap, 2=mint, 3=burn, 6=deposit-fees,
-  //   11=total-assets, 12=convert-to-shares, 13=convert-to-assets, 99=get-name, 101=get-total-supply
   //
-  // Initialize args: (asset_id: AlkaneId, yv_fr_btc_vault_id: AlkaneId, escrow_nft_id: AlkaneId, vx_fuel_gauge_id: AlkaneId)
-  //   asset_id           = frBTC [32:0]
-  //   yv_fr_btc_vault_id = yvfrBTC vault [4:YV_FRBTC_VAULT_PROXY] ← was wrong (pointed to FUEL)
-  //   escrow_nft_id      = dxBTC vault itself [4:DXBTC_VAULT_PROXY] (placeholder)
-  //   vx_fuel_gauge_id   = vxFUEL gauge [4:VX_FUEL_GAUGE]
-  // dx-btc does NOT support opcode 50. Use opcode 11 (TotalAssets) which is a safe
-  // read-only view that succeeds without state dependencies.
-  // Upstream opcodes (from #[opcode(N)] in src/lib.rs): 0-5, 11-13. No 50, 99, 101.
+  // VAULT CHAIN: user deposits LP → dxBTC → yv-fr-btc-vault → gauge
+  // The asset_id MUST be the DIESEL/frBTC pool LP token so the PolyVault's
+  // swap() function can find it in incoming_alkanes. The entire chain uses LP:
+  //   dxBTC(asset_id=LP) → yv-vault(yv_fr_btc=LP) → gauge(lp_token=LP)
+  //
+  // Prod WASM init: (asset_id, yv_fr_btc_vault_id, escrow_nft_id, vx_fuel_gauge_id)
+  // dx-btc impl deploy: use opcode 11 (TotalAssets, read-only, no auth)
+  // The prod dx_btc.wasm uses 4-field AlkaneId (block, block_hi, tx, tx_hi)
+  // because it was built from an alkanes-rs revision with u64 AlkaneId.
+  // Each AlkaneId needs 4 values: [block, 0, tx, 0] (hi fields are 0).
+  // The FIRE contracts use 2-field AlkaneId (u128) — different ABI.
   contracts.dxBtcVault.authTokenId = await deployWithProxy(
     provider, harness, segwit, taproot, upgradeableWasm,
     'dx_btc', S.DXBTC_VAULT_IMPL, S.DXBTC_VAULT_PROXY,
@@ -1336,7 +1335,7 @@ async function deployFullProtocol(
     [11]);
   await initThroughProxy(provider, harness, segwit, taproot,
     S.DXBTC_VAULT_PROXY,
-    [0, 32, 0, 4, S.YV_FRBTC_VAULT_PROXY, 4, S.DXBTC_VAULT_PROXY, 4, S.VX_FUEL_GAUGE],
+    [0, poolBlock, 0, poolTx, 0, 4, 0, S.YV_FRBTC_VAULT_PROXY, 0, 4, 0, S.DXBTC_VAULT_PROXY, 0, 4, 0, S.VX_FUEL_GAUGE, 0],
     'dxBTC Vault');
 
   // vx gauge template — beacon (shared impl for vxFUEL + vxBTCUSD instances)
@@ -1351,25 +1350,11 @@ async function deployFullProtocol(
 
   // vxFUEL gauge — beacon proxy instance
   //
-  // VAULT CHAIN WIRING (2026-04-05 investigation):
-  // The dxBTC vault chain: dxBTC → yv-fr-btc-vault → vxFUEL gauge.
-  // The gauge's stake() checks incoming_alkanes for lp_token (set in init).
-  // Currently lp_token = DIESEL/frBTC pool LP (poolBlock:poolTx = 2:3).
+  // VAULT CHAIN: dxBTC → yv-fr-btc-vault → vxFUEL gauge
+  // All three must accept the SAME token: the DIESEL/frBTC pool LP (poolBlock:poolTx).
+  // The gauge's lp_token init param controls what token stake() accepts.
   //
-  // For the full dxBTC deposit to work, the yv-fr-btc-vault must forward
-  // the CORRECT token type to the gauge. The yv-vault sends whatever it
-  // receives as yv_fr_btc_id (which is frBTC 32:0). But the gauge expects
-  // lp_token (2:3). This mismatch causes "LP token not found in incoming alkanes".
-  //
-  // FIX NEEDED: Either:
-  // (a) Create a dedicated FUEL/frBTC LP pool and use its LP token here, OR
-  // (b) Change the yv-fr-btc-vault to convert frBTC → LP before staking, OR
-  // (c) Initialize the gauge with lp_token = frBTC (32:0) if the vault
-  //     chain is designed to stake frBTC directly (not LP tokens).
-  //
-  // The correct approach depends on the intended vault architecture:
-  // - If vxFUEL gauge is meant to hold LP tokens: option (a) or (b)
-  // - If vxFUEL gauge is meant to hold frBTC: option (c)
+  // Init: (lp_token=poolLP, reward_token=dxBTC, yve_token_nft_id=self, reward_rate=100000, fr_sigil_id=self)
   await deployBeaconInstance(provider, harness, segwit, taproot,
     beaconProxyWasm, S.VX_FUEL_GAUGE, S.VX_GAUGE_BEACON,
     'vxFUEL Gauge', onProgress, 68);
@@ -1676,89 +1661,51 @@ async function deployFullProtocol(
         'DIESEL=', dieselBefore.toString(), 'frBTC=', frbtcBefore.toString());
     }
 
-    // Vault seeding: deposit frBTC into dxBTC vault (opcode 1 = swap).
+    // Add liquidity to get LP tokens for the vault deposit.
+    // The dxBTC vault accepts LP tokens (asset_id = poolLP).
+    const vaultDiesel = await getAlkaneBalance(provider, taproot, '2:0');
+    const vaultFrbtc = await getAlkaneBalance(provider, taproot, '32:0');
+    if (vaultDiesel > BigInt(0) && vaultFrbtc > BigInt(0) && poolId) {
+      const addD = vaultDiesel / BigInt(3);
+      const addF = vaultFrbtc / BigInt(3);
+      const [pB, pT] = poolId.split(':');
+      try {
+        await executeCall(provider, harness, segwit, taproot,
+          `[${pB},${pT},1]:v0:v0`,
+          `2:0:${addD},32:0:${addF}`, [taproot]);
+        const lpBal = await getAlkaneBalance(provider, taproot, poolId);
+        console.log('[devnet-boot] Added liquidity for vault, LP balance:', lpBal.toString());
+      } catch (e: any) {
+        console.warn('[devnet-boot] Add liquidity for vault failed:', e?.message?.slice(0, 80));
+      }
+    }
+
+    // Vault seeding: deposit LP tokens into dxBTC vault (opcode 1 = swap).
     //
-    // The dxBTC vault internally calls yv vault opcode 2 ("mint") on the yvfrBTC
-    // vault at [4:YV_FRBTC_VAULT_PROXY]. Now that we deploy ve_token_vault_template
-    // instead of yv-fr-btc-vault, opcode 2 = mint (standard PolyVault) which
-    // correctly accepts frBTC and mints yvfrBTC shares.
-    const frbtcForVault = await getAlkaneBalance(provider, taproot, '32:0');
-    if (frbtcForVault > BigInt(0)) {
-      const depositAmount = frbtcForVault / BigInt(5);
+    // The entire vault chain uses LP tokens (DIESEL/frBTC pool LP):
+    //   dxBTC(asset_id=LP) → yv-vault(yv_fr_btc=LP) → gauge(lp_token=LP)
+    //
+    // The user deposits LP tokens → dxBTC's PolyVault swap() finds LP in
+    // incoming_alkanes → calls deposit_to_yv_vault() → yv-vault.deposit(opcode 2)
+    // → yv-vault forwards LP to gauge.stake(opcode 1) → gauge accepts LP.
+    const lpForVault = await getAlkaneBalance(provider, taproot, poolId);
+    if (lpForVault > BigInt(0)) {
+      const depositAmount = lpForVault / BigInt(5);
       if (depositAmount > BigInt(0)) {
-        console.log('[devnet-boot] Depositing', depositAmount.toString(), 'frBTC into dxBTC vault [4:7020]...');
-
-        // Simulate first to see the actual error from the contract
-        const simSwap = await rpcCall('alkanes_simulate', [{
-          target: { block: '4', tx: String(S.DXBTC_VAULT_PROXY) },
-          inputs: ['1', '0'],
-          alkanes: [{ id: { block: '32', tx: '0' }, value: String(depositAmount) }],
-          transaction: '0x', block: '0x', height: '999999', txindex: 0, vout: 0,
-        }]);
-        console.log('[devnet-boot] dxBTC swap simulate:',
-          'err=', simSwap?.result?.execution?.error?.slice(0, 200) || 'none',
-          'data=', (simSwap?.result?.execution?.data || '').slice(0, 60));
-
+        const [pB, pT] = poolId.split(':');
+        console.log('[devnet-boot] Depositing', depositAmount.toString(), 'LP into dxBTC vault...');
         try {
-          // Use both addresses for UTXO discovery — frBTC may be on segwit after CLOB seeding
           await executeCall(provider, harness, segwit, taproot,
             `[4,${S.DXBTC_VAULT_PROXY},1,0]:v0:v0`,
-            `32:0:${depositAmount}`, [taproot]);
-          console.log('[devnet-boot] dxBTC vault deposit complete, txid:', _lastTxid.slice(0, 32));
+            `${pB}:${pT}:${depositAmount}`, [taproot]);
+          console.log('[devnet-boot] dxBTC vault LP deposit complete, txid:', _lastTxid.slice(0, 32));
 
-          // Trace the deposit tx — try multiple RPC methods to find trace data
-          if (_lastTxid) {
-            try {
-              // Method 1: alkanes_trace with outpoint
-              const t0 = await rpcCall('alkanes_trace', [`${_lastTxid}:0`]);
-              console.log('[devnet-boot] alkanes_trace result:', JSON.stringify(t0?.result ?? t0?.error ?? 'null').slice(0, 300));
-
-              // Method 2: Check protorune outputs directly
-              const protoResult = await rpcCall('alkanes_protorunesbyoutpoint', [
-                { txid: _lastTxid, vout: 0 },
-              ]);
-              console.log('[devnet-boot] protorunesbyoutpoint vout0:', JSON.stringify(protoResult?.result ?? 'null').slice(0, 300));
-
-              // Check vout 1 too
-              const protoResult1 = await rpcCall('alkanes_protorunesbyoutpoint', [
-                { txid: _lastTxid, vout: 1 },
-              ]);
-              console.log('[devnet-boot] protorunesbyoutpoint vout1:', JSON.stringify(protoResult1?.result ?? 'null').slice(0, 300));
-            } catch (traceErr: any) {
-              console.warn('[devnet-boot] Trace failed:', traceErr?.message?.slice(0, 80));
-            }
-          }
-
-          // Verify state — use opcode 11 (TotalAssets) which exists in rebuilt WASM
+          // Verify state
           const assetsCheck = await simulate(`4:${S.DXBTC_VAULT_PROXY}`, ['11']);
           const assets = assetsCheck?.result?.execution?.data
             ? parseLeU128BigInt(assetsCheck.result.execution.data.replace('0x', ''), 0) : BigInt(0);
           console.log('[devnet-boot] dxBTC vault state: totalAssets=', assets.toString(),
             'err=', assetsCheck?.result?.execution?.error || 'none');
-
-          if (assets === BigInt(0)) {
-            // dxBTC deposit chain (dxBTC proxy→impl→yv-vault proxy→impl→gauge) may have failed.
-            // Try direct deposit to yv-fr-btc-vault as diagnostic.
-            console.log('[devnet-boot] dxBTC totalAssets=0, trying direct yv-vault deposit...');
-            const directAmount = depositAmount / BigInt(2);
-            // Simulate the yv-vault deposit to see the actual error
-            const simResult = await simulate(`4:${S.YV_FRBTC_VAULT_PROXY}`, ['1', String(directAmount)]);
-            console.log('[devnet-boot] yv-vault deposit simulate:',
-              'err=', simResult?.result?.execution?.error?.slice(0, 120) || 'none',
-              'data=', (simResult?.result?.execution?.data || '').slice(0, 40));
-
-            try {
-              await executeCall(provider, harness, segwit, taproot,
-                `[4,${S.YV_FRBTC_VAULT_PROXY},1,${directAmount}]:v0:v0`,
-                `32:0:${directAmount}`, [taproot]);
-              console.log('[devnet-boot] Direct yv-vault deposit complete');
-              // Check yv-vault balance of caller
-              const yvBal = await getAlkaneBalance(provider, taproot, `4:${S.YV_FRBTC_VAULT_PROXY}`);
-              console.log('[devnet-boot] yv-vault token balance at wallet:', yvBal.toString());
-            } catch (e2: any) {
-              console.warn('[devnet-boot] Direct yv-vault deposit failed:', e2?.message?.slice(0, 120));
-            }
-          }
         } catch (e: any) {
           console.warn('[devnet-boot] dxBTC vault deposit failed:', e?.message?.slice(0, 120));
         }
