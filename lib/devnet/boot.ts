@@ -679,7 +679,7 @@ async function executeCall(
     // WASM PSBT builder is O(n²) and blocks the JS thread indefinitely with both addresses.
     // Taproot has ~5 UTXOs (dust from alkane ops), completes in ~200ms.
     const fromAddresses = fromAddressesOverride ?? [segwit, taproot];
-    await provider.alkanesExecuteFull(
+    const result = await provider.alkanesExecuteFull(
       JSON.stringify(toAddresses || [taproot]),
       inputRequirements,
       protostone,
@@ -692,7 +692,8 @@ async function executeCall(
         mine_enabled: true,
       }),
     );
-    console.log(`[devnet-boot] executeCall DONE in ${Date.now() - t0}ms: ${protostone.slice(0, 50)}`);
+    const txid = result?.txid || result?.reveal_txid || result?.revealTxid || '';
+    console.log(`[devnet-boot] executeCall DONE in ${Date.now() - t0}ms: ${protostone.slice(0, 50)}${txid ? ' txid=' + txid.slice(0, 16) : ''}`);
     harness.mineBlocks(1);
     await new Promise(r => setTimeout(r, 200)); // GC yield + let indexer catch up
   } catch (e: any) {
@@ -1671,9 +1672,10 @@ async function deployFullProtocol(
       if (depositAmount > BigInt(0)) {
         console.log('[devnet-boot] Depositing', depositAmount.toString(), 'frBTC into dxBTC vault [4:7020]...');
         try {
+          // Use both addresses for UTXO discovery — frBTC may be on segwit after CLOB seeding
           await executeCall(provider, harness, segwit, taproot,
             `[4,${S.DXBTC_VAULT_PROXY},1,0]:v0:v0`,
-            `32:0:${depositAmount}`, [taproot], [taproot]);
+            `32:0:${depositAmount}`, [taproot]);
           console.log('[devnet-boot] dxBTC vault deposit complete');
           // Verify state — use opcode 11 (TotalAssets) which exists in rebuilt WASM
           const assetsCheck = await simulate(`4:${S.DXBTC_VAULT_PROXY}`, ['11']);
@@ -1696,7 +1698,7 @@ async function deployFullProtocol(
             try {
               await executeCall(provider, harness, segwit, taproot,
                 `[4,${S.YV_FRBTC_VAULT_PROXY},1,${directAmount}]:v0:v0`,
-                `32:0:${directAmount}`, [taproot], [taproot]);
+                `32:0:${directAmount}`, [taproot]);
               console.log('[devnet-boot] Direct yv-vault deposit complete');
               // Check yv-vault balance of caller
               const yvBal = await getAlkaneBalance(provider, taproot, `4:${S.YV_FRBTC_VAULT_PROXY}`);
