@@ -7,6 +7,20 @@
 
 ## Pre-Work
 
+### Rule -1 — Follow Existing Patterns (HIGHEST PRIORITY)
+Before writing ANY new code, SEARCH the codebase for how the same thing is already done. This is not optional — it is the single most important rule. Violations of this rule have cost more debugging time than all other issues combined.
+
+**The process (mandatory, every time):**
+1. Before writing a fetch call → `grep -r "getRpcUrl\|alkanes_protorunesbyaddress\|alkanes_simulate" hooks/ lib/ app/` to find the established pattern
+2. Before writing a balance query → find how `getAlkaneBalance` in boot.ts or `useEnrichedWalletData` works
+3. Before writing a contract call → find how the E2E tests call the same contract
+4. Before adding an import → check if the module is already used elsewhere and how
+5. Before hardcoding a URL, opcode, or constant → search for where it's defined in `getConfig`, `constants/`, or `alkanes.toml`
+
+**Why this exists:** LLMs default to writing code from first principles. This produces code that works in isolation but breaks in context — wrong RPC methods (`dataApiGetAlkanesByAddress` instead of `alkanes_protorunesbyaddress`), hardcoded URLs instead of `getRpcUrl()`, wrong opcode numbers from WIT files instead of `alkanes.toml`, raw `fetch('http://localhost:18888')` instead of the config-driven pattern. Every one of these has happened in this codebase and required the user to catch it.
+
+**The codebase IS the documentation.** If 10 hooks use `getRpcUrl(network)`, the 11th must too. If boot.ts uses `alkanes_protorunesbyaddress` for balance queries, the UI must too. If E2E tests use `[50]` as a deploy init arg and it works, don't change it to `[21]` without understanding why `[50]` was chosen.
+
 ### Rule 0 — Verify Before Asserting Impossibility
 NEVER declare something "impossible" based on code comments alone. Check git history first (`git log --all --grep="keyword"`), then run the code. A deployment bug is not an architectural limitation. Never add environment-specific workarounds — if an SDK method fails, debug WHY and fix the root cause.
 
