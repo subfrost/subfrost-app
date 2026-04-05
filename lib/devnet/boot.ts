@@ -262,6 +262,19 @@ export async function bootDevnetWithWasms(
 
   // Derive addresses using coinType=1 for regtest — matching the WASM provider's
   // walletLoadMnemonic. WalletContext also overrides to coinType=1 on devnet.
+  //
+  // ⚠️ ADDRESS MISMATCH WARNING:
+  // The WASM provider (walletLoadMnemonic) uses coinType=1 for regtest derivation.
+  // The JS SDK (createWalletFromMnemonic in WalletContext) uses coinType=0 always.
+  // These produce DIFFERENT addresses from the same mnemonic.
+  //
+  // Boot.ts MUST use coinType=1 here because the WASM provider's alkanesExecuteFull
+  // resolves from_addresses against its internal keystore (coinType=1). Using coinType=0
+  // causes "Address not found in keystore" errors on every transaction.
+  //
+  // WalletContext overrides to coinType=1 on devnet so UI addresses match boot.
+  // Boot-seeded state (orders, LP, tokens) lives at coinType=1 addresses.
+  // DO NOT change to coinType=0 — breaks WASM keystore resolution.
   const bitcoin = await import('bitcoinjs-lib');
   bitcoin.initEccLib(ecc);
   const network = bitcoin.networks.regtest;
