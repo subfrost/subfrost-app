@@ -260,35 +260,11 @@ export async function bootDevnetWithWasms(
   });
   _provider.walletLoadMnemonic(mnemonic, null);
 
-  // Derive addresses
+  // Derive addresses using coinType=1 for regtest — matching the WASM provider's
+  // walletLoadMnemonic. WalletContext also overrides to coinType=1 on devnet.
   const bitcoin = await import('bitcoinjs-lib');
   bitcoin.initEccLib(ecc);
   const network = bitcoin.networks.regtest;
-  // coinType=1 for regtest — matches the WASM provider's walletLoadMnemonic.
-  //
-  // ⚠️ ADDRESS MISMATCH WARNING:
-  // The WASM provider (walletLoadMnemonic) uses coinType=1 for regtest derivation.
-  // The JS SDK (createWalletFromMnemonic in WalletContext) uses coinType=0 always.
-  // These produce DIFFERENT addresses from the same mnemonic.
-  //
-  // Boot.ts MUST use coinType=1 here because the WASM provider's alkanesExecuteFull
-  // resolves from_addresses against its internal keystore (coinType=1). Using coinType=0
-  // causes "Address not found in keystore" errors on every transaction.
-  //
-  // The connected wallet in WalletContext uses coinType=0 addresses. This means boot-seeded
-  // state (orders, positions, history) belongs to coinType=1 addresses — different from the
-  // UI's connected wallet. For seeded state to appear in the UI, the UI's data queries
-  // (Global Trades, Positions) must query ALL addresses, not just the connected wallet's.
-  //
-  // Open Orders: uses opcode 25 (GetUserOrders) which is caller-based in simulate context.
-  //   The simulate context uses the WASM provider's address (coinType=1), which matches boot.
-  // My Activity: uses dataApiGetAllAddressAmmTxHistory(address) — queries connected wallet
-  //   (coinType=0), so boot-seeded activity WON'T show here. Only user-initiated actions will.
-  // Global Trades: uses dataApiGetAllAmmTxHistory (no address filter) — shows ALL trades
-  //   regardless of which wallet made them. Boot-seeded swaps WILL show here.
-  // Positions: uses dataApiGetAlkanesByAddress — queries connected wallet (coinType=0).
-  //   Boot-seeded LP positions are at coinType=1 addresses, so they WON'T show here
-  //   unless the user adds liquidity themselves.
   const segwitChild = root.derivePath("m/84'/1'/0'/0/0");
   const taprootChild = root.derivePath("m/86'/1'/0'/0/0");
   const segwitPayment = bitcoin.payments.p2wpkh({
@@ -304,12 +280,8 @@ export async function bootDevnetWithWasms(
   const taprootAddress = taprootPayment.address!;
   _bootAddresses = { segwit: segwitAddress, taproot: taprootAddress };
 
-  // Log addresses for debugging. These are coinType=1 (WASM provider) addresses.
-  // The connected wallet in WalletContext uses coinType=0 addresses (different).
-  // Global Trades + Orderbook show boot data. Positions + My Activity don't.
-  // See CLAUDE.md "Address Derivation — Two CoinType Systems" for full context.
-  console.log('[devnet-boot] Boot wallet (coinType=1) segwit:', segwitAddress);
-  console.log('[devnet-boot] Boot wallet (coinType=1) taproot:', taprootAddress);
+  console.log('[devnet-boot] Boot wallet segwit:', segwitAddress);
+  console.log('[devnet-boot] Boot wallet taproot:', taprootAddress);
 
   // =========================================================================
   // Full protocol deployment — only on FRESH boot (no saved state).

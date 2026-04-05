@@ -64,11 +64,12 @@ export default function WalletDashboardPage() {
 
   const walletConnected = typeof connected === 'boolean' ? connected : isConnected;
 
-  // Redirect if not connected
-  if (!walletConnected) {
-    router.push('/');
-    return null;
-  }
+  // Redirect if not connected (must be in useEffect to avoid setState during render)
+  useEffect(() => {
+    if (!walletConnected) router.push('/');
+  }, [walletConnected, router]);
+
+  if (!walletConnected) return null;
 
   // Settings tab is rendered separately for responsive control
   const tabs = [

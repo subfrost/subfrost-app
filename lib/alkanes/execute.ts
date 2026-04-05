@@ -115,11 +115,18 @@ export async function alkanesExecuteTyped(
   // Detect devnet by checking if the fetch interceptor is installed (localhost:18888).
   // NOTE (2026-04-02): "Insufficient alkanes" on devnet is almost always stale IndexedDB
   // cache, NOT a detection bug. Use DevnetControlPanel "Clear & Reload" to reset state.
-  let isDevnet = false;
-  try {
-    const rpcUrl = (provider as any).sandshrew_rpc_url?.();
-    isDevnet = typeof rpcUrl === 'string' && rpcUrl.includes('localhost:18888');
-  } catch { /* not devnet */ }
+  let isDevnet = params.network === 'devnet';
+  if (!isDevnet) {
+    try {
+      const rpcUrl = (provider as any).sandshrew_rpc_url?.();
+      isDevnet = typeof rpcUrl === 'string' && rpcUrl.includes('localhost:18888');
+    } catch { /* not devnet */ }
+  }
+  if (!isDevnet && typeof window !== 'undefined') {
+    try {
+      isDevnet = localStorage.getItem('subfrost_selected_network') === 'devnet';
+    } catch { /* ignore */ }
+  }
 
   if (isDevnet && typeof (provider as any).alkanesExecuteFull === 'function') {
     // Force mine_enabled + auto_confirm for devnet so alkanesExecuteFull
