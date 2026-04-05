@@ -1674,6 +1674,18 @@ async function deployFullProtocol(
       const depositAmount = frbtcForVault / BigInt(5);
       if (depositAmount > BigInt(0)) {
         console.log('[devnet-boot] Depositing', depositAmount.toString(), 'frBTC into dxBTC vault [4:7020]...');
+
+        // Simulate first to see the actual error from the contract
+        const simSwap = await rpcCall('alkanes_simulate', [{
+          target: { block: '4', tx: String(S.DXBTC_VAULT_PROXY) },
+          inputs: ['1', '0'],
+          alkanes: [{ id: { block: '32', tx: '0' }, value: String(depositAmount) }],
+          transaction: '0x', block: '0x', height: '999999', txindex: 0, vout: 0,
+        }]);
+        console.log('[devnet-boot] dxBTC swap simulate:',
+          'err=', simSwap?.result?.execution?.error?.slice(0, 200) || 'none',
+          'data=', (simSwap?.result?.execution?.data || '').slice(0, 60));
+
         try {
           // Use both addresses for UTXO discovery — frBTC may be on segwit after CLOB seeding
           await executeCall(provider, harness, segwit, taproot,
