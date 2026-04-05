@@ -661,6 +661,8 @@ async function deployWasm(
  * invocations, re-mint tokens before the operations that need them.
  * See deployWasm() comment for the full explanation.
  */
+let _lastTxid = '';
+
 async function executeCall(
   provider: any,
   harness: any,
@@ -693,6 +695,7 @@ async function executeCall(
       }),
     );
     const txid = result?.txid || result?.reveal_txid || result?.revealTxid || '';
+    _lastTxid = txid;
     console.log(`[devnet-boot] executeCall DONE in ${Date.now() - t0}ms: ${protostone.slice(0, 50)}${txid ? ' txid=' + txid.slice(0, 16) : ''}`);
     harness.mineBlocks(1);
     await new Promise(r => setTimeout(r, 200)); // GC yield + let indexer catch up
@@ -1676,7 +1679,31 @@ async function deployFullProtocol(
           await executeCall(provider, harness, segwit, taproot,
             `[4,${S.DXBTC_VAULT_PROXY},1,0]:v0:v0`,
             `32:0:${depositAmount}`, [taproot]);
-          console.log('[devnet-boot] dxBTC vault deposit complete');
+          console.log('[devnet-boot] dxBTC vault deposit complete, txid:', _lastTxid.slice(0, 32));
+
+          // Trace the deposit tx — try multiple RPC methods to find trace data
+          if (_lastTxid) {
+            try {
+              // Method 1: alkanes_trace with outpoint
+              const t0 = await rpcCall('alkanes_trace', [`${_lastTxid}:0`]);
+              console.log('[devnet-boot] alkanes_trace result:', JSON.stringify(t0?.result ?? t0?.error ?? 'null').slice(0, 300));
+
+              // Method 2: Check protorune outputs directly
+              const protoResult = await rpcCall('alkanes_protorunesbyoutpoint', [
+                { txid: _lastTxid, vout: 0 },
+              ]);
+              console.log('[devnet-boot] protorunesbyoutpoint vout0:', JSON.stringify(protoResult?.result ?? 'null').slice(0, 300));
+
+              // Check vout 1 too
+              const protoResult1 = await rpcCall('alkanes_protorunesbyoutpoint', [
+                { txid: _lastTxid, vout: 1 },
+              ]);
+              console.log('[devnet-boot] protorunesbyoutpoint vout1:', JSON.stringify(protoResult1?.result ?? 'null').slice(0, 300));
+            } catch (traceErr: any) {
+              console.warn('[devnet-boot] Trace failed:', traceErr?.message?.slice(0, 80));
+            }
+          }
+
           // Verify state — use opcode 11 (TotalAssets) which exists in rebuilt WASM
           const assetsCheck = await simulate(`4:${S.DXBTC_VAULT_PROXY}`, ['11']);
           const assets = assetsCheck?.result?.execution?.data
@@ -1817,7 +1844,14 @@ async function deployFullProtocol(
         await executeCall(provider, harness, segwit, taproot,
           `[4,${F.STAKING_PROXY},1,0]:v0:v0`,
           `${poolBlock}:${poolTx}:${stakeAmount}`, [taproot], [taproot]);
-        console.log('[devnet-boot] FIRE staked LP:', stakeAmount.toString());
+        console.log('[devnet-boot] FIRE staked LP:', stakeAmount.toString(), 'txid:', _lastTxid.slice(0, 32));
+        // Check protorune outputs of the working FIRE staking tx for comparison
+        if (_lastTxid) {
+          try {
+            const fp0 = await rpcCall('alkanes_protorunesbyoutpoint', [{ txid: _lastTxid, vout: 0 }]);
+            console.log('[devnet-boot] FIRE protorunesbyoutpoint vout0:', JSON.stringify(fp0?.result ?? 'null').slice(0, 300));
+          } catch {}
+        }
         // Mine blocks to accrue rewards
         harness.mineBlocks(10);
       } catch (e: any) {
