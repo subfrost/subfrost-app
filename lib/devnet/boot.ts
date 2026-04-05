@@ -857,10 +857,14 @@ async function deployWithBeacon(
   upgradeableBeaconWasm: string,
   wasmName: string, implSlot: number, beaconSlot: number,
   label: string, onProgress: ProgressCallback, pct: number,
+  implInitArgs?: (number | bigint)[],
 ): Promise<string> {
-  // Step 1: Deploy implementation with marker init
+  // Step 1: Deploy implementation
+  // Default [50] works for contracts where opcode 50 is a no-op/admin fn.
+  // For contracts where opcode 50 requires auth (e.g., frSIGIL check) or
+  // params, pass implInitArgs with a safe read-only opcode.
   await fetchAndDeploy(provider, harness, segwit, taproot,
-    wasmName, implSlot, [50],
+    wasmName, implSlot, implInitArgs ?? [50],
     `${label} Impl`, onProgress, pct);
 
   // Step 2: Deploy upgradeable beacon → impl, mint 1 auth token
@@ -1336,12 +1340,36 @@ async function deployFullProtocol(
     'dxBTC Vault');
 
   // vx gauge template — beacon (shared impl for vxFUEL + vxBTCUSD instances)
+  // vx_token_gauge_template: opcode 50 = admin_set_reward_rate which requires
+  // frSIGIL auth token + 1 param → CREATERESERVED reverts → binary not stored.
+  // Use opcode 21 (get_total_staked, read-only, no params, no auth required).
   contracts.vxGaugeTemplate.authTokenId = await deployWithBeacon(
     provider, harness, segwit, taproot, upgradeableBeaconWasm,
     'vx_token_gauge_template', S.VX_GAUGE_IMPL, S.VX_GAUGE_BEACON,
-    'vxGauge Template', onProgress, 67);
+    'vxGauge Template', onProgress, 67,
+    [21]);
 
   // vxFUEL gauge — beacon proxy instance
+  //
+  // VAULT CHAIN WIRING (2026-04-05 investigation):
+  // The dxBTC vault chain: dxBTC → yv-fr-btc-vault → vxFUEL gauge.
+  // The gauge's stake() checks incoming_alkanes for lp_token (set in init).
+  // Currently lp_token = DIESEL/frBTC pool LP (poolBlock:poolTx = 2:3).
+  //
+  // For the full dxBTC deposit to work, the yv-fr-btc-vault must forward
+  // the CORRECT token type to the gauge. The yv-vault sends whatever it
+  // receives as yv_fr_btc_id (which is frBTC 32:0). But the gauge expects
+  // lp_token (2:3). This mismatch causes "LP token not found in incoming alkanes".
+  //
+  // FIX NEEDED: Either:
+  // (a) Create a dedicated FUEL/frBTC LP pool and use its LP token here, OR
+  // (b) Change the yv-fr-btc-vault to convert frBTC → LP before staking, OR
+  // (c) Initialize the gauge with lp_token = frBTC (32:0) if the vault
+  //     chain is designed to stake frBTC directly (not LP tokens).
+  //
+  // The correct approach depends on the intended vault architecture:
+  // - If vxFUEL gauge is meant to hold LP tokens: option (a) or (b)
+  // - If vxFUEL gauge is meant to hold frBTC: option (c)
   await deployBeaconInstance(provider, harness, segwit, taproot,
     beaconProxyWasm, S.VX_FUEL_GAUGE, S.VX_GAUGE_BEACON,
     'vxFUEL Gauge', onProgress, 68);
