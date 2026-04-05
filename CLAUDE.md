@@ -977,6 +977,35 @@ get-total-supply = 101    # NOT 18
 
 **Before writing ANY contract call, read the alkanes.toml** in `reference/subfrost-alkanes/alkanes/{contract}/alkanes.toml`. The WIT file shows the interface but NOT the opcode numbers. This caused incorrect test assertions (2026-04-03) where opcodes 7, 8, 15, 16, 18 were used instead of 11, 12, 31, 99, 101.
 
+### ⚠️ Proxy & Beacon Init Opcodes — DO NOT CHANGE ⚠️
+
+The alkanes standard WASMs use specific init opcodes. **Getting these wrong causes ALL calls through the proxy/beacon to silently fail** — transactions broadcast but protorune execution reverts. No error is shown.
+
+| WASM | Init opcode | Hex | What it does |
+|------|------------|-----|-------------|
+| `alkanes_std_upgradeable.wasm` | `0x7fff` (32767) | Stores implementation pointer |
+| `alkanes_std_upgradeable_beacon.wasm` | `0x7fff` (32767) | Stores implementation pointer + mints auth token |
+| `alkanes_std_beacon_proxy.wasm` | **`0x7fff` (32767)** | Stores beacon pointer |
+
+**`alkanes_std_beacon_proxy.wasm` uses `0x7fff` for init, NOT `0x8fff`.** The beacon proxy ABI:
+```
+initialize = opcode 32767 (0x7fff) — takes beacon AlkaneId, stores it
+forward    = opcode 36863 (0x8fff) — no-op forwarding, does NOT set beacon
+```
+
+Using `0x8fff` for beacon-proxy init means the beacon pointer is NEVER stored. The proxy deploys "successfully" but every delegatecall fails because it can't resolve its implementation. This causes:
+- CLOB orders placed but not stored (orderbook empty)
+- Gauge stake calls fail (vault chain broken)
+- Synth pool operations fail
+- All beacon-proxy instances non-functional
+
+**This bug was introduced and caught 2026-04-05.** The change from `0x7fff` to `0x8fff` was made to "fix" the vxFUEL gauge but actually broke ALL beacon-proxy instances. The vxFUEL gauge issue had a different root cause (impl deploy with wrong init opcode).
+
+**In `boot.ts`:**
+- `deployWithProxy` → proxy uses `0x7fff` ✅
+- `deployWithBeacon` → beacon uses `0x7fff` ✅
+- `deployBeaconInstance` → beacon-proxy uses `0x7fff` ✅ **NEVER change this to `0x8fff`**
+
 ### Auth Token Discovery Pattern
 
 Proxy deployments (`deployWithProxy`) mint an auth token at `[2:N]`. The token ID is discovered via `discoverAuthTokens(address)` which scans `alkanes_protorunesbyaddress` for `block === 2` entries. The last token found belongs to the most recent deployment.

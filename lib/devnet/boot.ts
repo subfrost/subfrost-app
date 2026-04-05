@@ -890,11 +890,11 @@ async function deployBeaconInstance(
   beaconProxyWasm: string, instanceSlot: number, beaconSlot: number,
   label: string, onProgress: ProgressCallback, pct: number,
 ): Promise<void> {
-  // 0x7fff (32767) = beacon proxy initialize — sets the beacon pointer.
-  // The alkanes_std_beacon_proxy.wasm has:
-  //   initialize = opcode 32767 (0x7fff) — takes beacon AlkaneId, stores it
-  //   forward    = opcode 36863 (0x8fff) — no-op forwarding
-  // Previously changed to 0x8fff which is forward (no-op) — beacon was never set.
+  // ⚠️ MUST be 0x7fff (32767). NEVER use 0x8fff.
+  // alkanes_std_beacon_proxy.wasm: initialize=0x7fff (stores beacon), forward=0x8fff (no-op)
+  // Using 0x8fff here means beacon pointer is NEVER set → ALL delegatecalls fail silently
+  // → CLOB orders empty, gauge stakes fail, synth pools broken.
+  // See CLAUDE.md "Proxy & Beacon Init Opcodes" for full documentation.
   await deployWasm(provider, harness, segwit, taproot,
     beaconProxyWasm, instanceSlot,
     [0x7fff, 4, beaconSlot],
