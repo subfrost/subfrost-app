@@ -10,8 +10,8 @@ import { useVaultDeposit } from "@/hooks/useVaultDeposit";
 import { useVaultWithdraw } from "@/hooks/useVaultWithdraw";
 import { useVaultUnits } from "@/hooks/useVaultUnits";
 import { useWallet } from "@/context/WalletContext";
-import { useAlkanesSDK } from "@/context/AlkanesSDKContext";
 import { useQuery } from "@tanstack/react-query";
+import { getRpcUrl } from "@/utils/getConfig";
 import BoostSection from "./BoostSection";
 import { useTranslation } from '@/hooks/useTranslation';
 
@@ -45,36 +45,43 @@ export default function VaultDetail({ vault: initialVault }: Props) {
   const withdrawMutation = useVaultWithdraw();
 
   // Wallet balance of the input token (what user can deposit)
-  const { account } = useWallet();
-  const { provider, isInitialized } = useAlkanesSDK();
+  // Uses alkanes_protorunesbyaddress RPC (NOT dataApiGetAlkanesByAddress which
+  // routes through quspo on devnet and hangs). This is the same method boot.ts
+  // uses for getAlkaneBalance — proven to work on devnet.
+  const { account, network: walletNetwork } = useWallet();
   const taprootAddress = account?.taproot?.address;
-  // tokenId is the vault's associated alkane ID (e.g., "32:0" for frBTC).
-  // Only query if it looks like a valid alkane ID (contains ":" with numeric parts).
   const inputTokenId = currentVault.tokenId?.includes(':') ? currentVault.tokenId : null;
 
   const { data: walletInputBalance } = useQuery({
-    queryKey: ['wallet-input-balance', taprootAddress, inputTokenId],
-    enabled: !!taprootAddress && !!provider && isInitialized && !!inputTokenId,
+    queryKey: ['wallet-input-balance', taprootAddress, inputTokenId, walletNetwork],
+    enabled: !!taprootAddress && !!inputTokenId && !!walletNetwork,
     staleTime: 10_000,
     queryFn: async () => {
-      if (!taprootAddress || !provider || !inputTokenId) return '0';
+      if (!taprootAddress || !inputTokenId) return '0';
+      const [targetBlock, targetTx] = inputTokenId.split(':').map(Number);
       try {
-        // 3s timeout to prevent freeze on devnet (quspo data API can hang)
-        const result = await Promise.race([
-          provider.dataApiGetAlkanesByAddress(taprootAddress),
-          new Promise<null>((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000)),
-        ]);
-        const balances = (result as any)?.data || result || [];
-        const arr = Array.isArray(balances) ? balances : [];
-        const [targetBlock, targetTx] = inputTokenId.split(':').map(Number);
-        for (const entry of arr) {
-          const b = Number(entry?.alkaneId?.block ?? entry?.block ?? 0);
-          const t = Number(entry?.alkaneId?.tx ?? entry?.tx ?? 0);
-          if (b === targetBlock && t === targetTx) {
-            const raw = entry?.balance || entry?.amount || '0';
-            return (Number(raw) / 1e8).toFixed(8);
+        const rpcUrl = getRpcUrl(walletNetwork);
+        const resp = await fetch(rpcUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            method: 'alkanes_protorunesbyaddress',
+            params: [{ address: taprootAddress, protocolTag: '1' }],
+            id: 1,
+          }),
+        });
+        const json = await resp.json();
+        let total = 0;
+        for (const outpoint of json?.result?.outpoints || []) {
+          const balances = outpoint.balance_sheet?.cached?.balances || outpoint.runes || [];
+          for (const entry of balances) {
+            if (parseInt(entry.block ?? '0') === targetBlock && parseInt(entry.tx ?? '0') === targetTx) {
+              total += parseInt(entry.amount || '0');
+            }
           }
         }
+        return (total / 1e8).toFixed(8);
       } catch {}
       return '0';
     },

@@ -3,7 +3,7 @@
 import { useState, useMemo } from 'react';
 import { useFujinMarkets } from '@/hooks/useFujinMarkets';
 import { useWallet } from '@/context/WalletContext';
-import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
+import { getRpcUrl } from '@/utils/getConfig';
 import { useTranslation } from '@/hooks/useTranslation';
 import { Info, Loader2, TrendingUp, TrendingDown } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
@@ -32,34 +32,40 @@ export default function FujinDifficultyPanel() {
   const { t } = useTranslation();
   const { data: fujinData, isLoading: fujinLoading } = useFujinMarkets();
   const { isConnected, network, account } = useWallet();
-  const { provider, isInitialized } = useAlkanesSDK();
   const [swapDirection, setSwapDirection] = useState<'LONG' | 'SHORT'>('LONG');
   const [amount, setAmount] = useState('');
   const taprootAddress = account?.taproot?.address;
 
-  // Fetch DIESEL (2:0) balance from wallet for the "Pay DIESEL" input
+  // Fetch DIESEL (2:0) balance via alkanes_protorunesbyaddress (NOT dataApi which hangs on devnet)
   const { data: dieselBalance } = useQuery({
-    queryKey: ['diesel-balance', taprootAddress],
-    enabled: !!taprootAddress && !!provider && isInitialized,
+    queryKey: ['diesel-balance', taprootAddress, network],
+    enabled: !!taprootAddress && !!network,
     staleTime: 10_000,
     queryFn: async () => {
-      if (!taprootAddress || !provider) return '0';
+      if (!taprootAddress) return '0';
       try {
-        // 3s timeout to prevent freeze on devnet (quspo data API can hang)
-        const result = await Promise.race([
-          provider.dataApiGetAlkanesByAddress(taprootAddress),
-          new Promise<null>((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000)),
-        ]);
-        const balances = (result as any)?.data || result || [];
-        const arr = Array.isArray(balances) ? balances : [];
-        for (const entry of arr) {
-          const b = Number(entry?.alkaneId?.block ?? entry?.block ?? 0);
-          const t = Number(entry?.alkaneId?.tx ?? entry?.tx ?? 0);
-          if (b === 2 && t === 0) {
-            const raw = entry?.balance || entry?.amount || '0';
-            return (Number(raw) / 1e8).toFixed(2);
+        const rpcUrl = getRpcUrl(network);
+        const resp = await fetch(rpcUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            method: 'alkanes_protorunesbyaddress',
+            params: [{ address: taprootAddress, protocolTag: '1' }],
+            id: 1,
+          }),
+        });
+        const json = await resp.json();
+        let total = 0;
+        for (const outpoint of json?.result?.outpoints || []) {
+          const balances = outpoint.balance_sheet?.cached?.balances || outpoint.runes || [];
+          for (const entry of balances) {
+            if (parseInt(entry.block ?? '0') === 2 && parseInt(entry.tx ?? '0') === 0) {
+              total += parseInt(entry.amount || '0');
+            }
           }
         }
+        return (total / 1e8).toFixed(2);
       } catch {}
       return '0';
     },
