@@ -45,8 +45,12 @@ export default function FujinDifficultyPanel() {
     queryFn: async () => {
       if (!taprootAddress || !provider) return '0';
       try {
-        const result = await provider.dataApiGetAlkanesByAddress(taprootAddress);
-        const balances = result?.data || result || [];
+        // 3s timeout to prevent freeze on devnet (quspo data API can hang)
+        const result = await Promise.race([
+          provider.dataApiGetAlkanesByAddress(taprootAddress),
+          new Promise<null>((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000)),
+        ]);
+        const balances = (result as any)?.data || result || [];
         const arr = Array.isArray(balances) ? balances : [];
         for (const entry of arr) {
           const b = Number(entry?.alkaneId?.block ?? entry?.block ?? 0);

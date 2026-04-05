@@ -48,7 +48,9 @@ export default function VaultDetail({ vault: initialVault }: Props) {
   const { account } = useWallet();
   const { provider, isInitialized } = useAlkanesSDK();
   const taprootAddress = account?.taproot?.address;
-  const inputTokenId = currentVault.tokenId; // e.g., "32:0" for frBTC
+  // tokenId is the vault's associated alkane ID (e.g., "32:0" for frBTC).
+  // Only query if it looks like a valid alkane ID (contains ":" with numeric parts).
+  const inputTokenId = currentVault.tokenId?.includes(':') ? currentVault.tokenId : null;
 
   const { data: walletInputBalance } = useQuery({
     queryKey: ['wallet-input-balance', taprootAddress, inputTokenId],
@@ -57,8 +59,12 @@ export default function VaultDetail({ vault: initialVault }: Props) {
     queryFn: async () => {
       if (!taprootAddress || !provider || !inputTokenId) return '0';
       try {
-        const result = await provider.dataApiGetAlkanesByAddress(taprootAddress);
-        const balances = result?.data || result || [];
+        // 3s timeout to prevent freeze on devnet (quspo data API can hang)
+        const result = await Promise.race([
+          provider.dataApiGetAlkanesByAddress(taprootAddress),
+          new Promise<null>((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000)),
+        ]);
+        const balances = (result as any)?.data || result || [];
         const arr = Array.isArray(balances) ? balances : [];
         const [targetBlock, targetTx] = inputTokenId.split(':').map(Number);
         for (const entry of arr) {
