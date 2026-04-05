@@ -890,14 +890,14 @@ async function deployBeaconInstance(
   beaconProxyWasm: string, instanceSlot: number, beaconSlot: number,
   label: string, onProgress: ProgressCallback, pct: number,
 ): Promise<void> {
-  // 0x8fff (36863) = beacon proxy init — sets the beacon pointer.
-  // NOT 0x7fff (32767) which is for upgradeable proxies (sets impl pointer).
-  // Using 0x7fff on beacon-proxy WASM causes silent failure — the proxy
-  // deploys but can't resolve its beacon, so all delegatecall extcalls fail.
-  // This was the root cause of "NOT DEPLOYED" for vxFUEL gauge (2026-04-04).
+  // 0x7fff (32767) = beacon proxy initialize — sets the beacon pointer.
+  // The alkanes_std_beacon_proxy.wasm has:
+  //   initialize = opcode 32767 (0x7fff) — takes beacon AlkaneId, stores it
+  //   forward    = opcode 36863 (0x8fff) — no-op forwarding
+  // Previously changed to 0x8fff which is forward (no-op) — beacon was never set.
   await deployWasm(provider, harness, segwit, taproot,
     beaconProxyWasm, instanceSlot,
-    [0x8fff, 4, beaconSlot],
+    [0x7fff, 4, beaconSlot],
     `${label} (beacon-proxy)`, onProgress, pct);
 }
 
