@@ -465,6 +465,7 @@ export function useAddLiquidityMutation() {
           changeAddress: changeAddr,
           alkanesChangeAddress: alkanesChangeAddr,
           ordinalsStrategy: 'burn',
+          network,
         });
 
         console.log('[AddLiquidity] Called alkanesExecuteTyped (browser:', isBrowserWallet, ')');

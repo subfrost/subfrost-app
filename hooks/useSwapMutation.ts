@@ -440,6 +440,7 @@ export function useSwapMutation() {
           changeAddress: changeAddr,
           alkanesChangeAddress: alkanesChangeAddr,
           ordinalsStrategy: 'burn',
+          network,
         });
 
         console.log('[useSwapMutation] Called alkanesExecuteTyped (browser:', isBrowserWallet, ')');

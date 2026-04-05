@@ -105,11 +105,13 @@ export interface ExtendedWebProvider extends WebProvider {
 }
 
 /**
- * Extend a WebProvider with the alkanesExecuteTyped method
+ * Extend a WebProvider with the alkanesExecuteTyped method.
+ * When network is provided, it's injected into every call so execute.ts
+ * can reliably detect devnet without each hook passing it explicitly.
  */
-export function extendProvider(provider: WebProvider): ExtendedWebProvider {
+export function extendProvider(provider: WebProvider, network?: string): ExtendedWebProvider {
   const extended = provider as ExtendedWebProvider;
   extended.alkanesExecuteTyped = (params: AlkanesExecuteTypedParams) =>
-    alkanesExecuteTyped(provider, params);
+    alkanesExecuteTyped(provider, { ...params, network: params.network ?? network });
   return extended;
 }

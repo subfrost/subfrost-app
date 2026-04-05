@@ -26,4 +26,6 @@ export interface AlkanesExecuteTypedParams {
    *  - 'burn': spend inscribed UTXOs without protection (destroys inscriptions)
    */
   ordinalsStrategy?: 'exclude' | 'preserve' | 'burn';
+  /** Network name — used to reliably detect devnet (instead of URL sniffing). */
+  network?: string;
 }

@@ -375,12 +375,38 @@ export function alkaneBalanceQueryOptions(deps: AlkaneBalanceDeps) {
 
       for (const address of addresses) {
         try {
-          // SDK data API — on mainnet this hits Espo server, on devnet this routes
-          // through the fetch interceptor to the espo tertiary indexer WASM
-          // (subfrost/espo kungfuflex/fujin branch, loaded as quspo.wasm).
-          const result = await (provider as any).dataApiGetAlkanesByAddress(address);
-          const items: any[] = result?.data || [];
-          console.log(`[alkaneBalanceQuery] ${address.slice(0, 12)}...: ${items.length} alkanes (dataApi)`);
+          // On devnet, REST data API returns HTTP 400. Use RPC fallback instead.
+          let items: any[] = [];
+          if (deps.network === 'devnet') {
+            const rpcResp = await fetch('http://localhost:18888', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                jsonrpc: '2.0', id: 1,
+                method: 'alkanes_protorunesbyaddress',
+                params: [{ address, protocolTag: '1' }],
+              }),
+            });
+            const rpcJson = await rpcResp.json();
+            const outpoints = rpcJson?.result?.outpoints || [];
+            for (const outpoint of outpoints) {
+              const balances = outpoint.balance_sheet?.cached?.balances || outpoint.runes || [];
+              for (const entry of balances) {
+                const block = entry.block ?? '0';
+                const tx = entry.tx ?? '0';
+                items.push({
+                  alkaneId: { block: String(block), tx: String(tx) },
+                  name: '', symbol: '',
+                  balance: String(entry.amount || '0'),
+                });
+              }
+            }
+            console.log(`[alkaneBalanceQuery] ${address.slice(0, 12)}...: ${items.length} alkanes (RPC fallback)`);
+          } else {
+            const result = await (provider as any).dataApiGetAlkanesByAddress(address);
+            items = result?.data || [];
+            console.log(`[alkaneBalanceQuery] ${address.slice(0, 12)}...: ${items.length} alkanes (dataApi)`);
+          }
 
           for (const item of items) {
             const block = item.alkaneId?.block;
@@ -499,44 +525,30 @@ export function sellableCurrenciesQueryOptions(deps: SellableCurrenciesDeps) {
             // This powers the 25/50/75/MAX percentage buttons on the swap page.
             let balances: { alkaneId: string; balance: string; name?: string; symbol?: string }[] = [];
 
-            if (deps.network === 'devnet' && deps.provider) {
-              // Same quspo bug as alkaneBalanceQueryOptions — try quspo first,
-              // fall back to enriched balance extraction when quspo returns empty.
-              const result = await (deps.provider as any).dataApiGetAlkanesByAddress(address);
-              const items: any[] = result?.data || [];
-              for (const item of items) {
-                const block = item.alkaneId?.block;
-                const tx = item.alkaneId?.tx;
-                if (block == null || tx == null) continue;
-                balances.push({
-                  alkaneId: `${block}:${tx}`,
-                  balance: String(item.balance || '0'),
-                  name: item.name || undefined,
-                  symbol: item.symbol || undefined,
-                });
-              }
-              // Quspo empty fallback: extract from enriched balances
-              if (balances.length === 0) {
-                try {
-                  const enriched = await deps.provider.getEnrichedBalances(address, '1');
-                  const mapToObj = (v: any): any => {
-                    if (v instanceof Map) { const o: any = {}; for (const [k, val] of v.entries()) o[k] = mapToObj(val); return o; }
-                    if (Array.isArray(v)) return v.map(mapToObj);
-                    return v;
-                  };
-                  const returns = enriched instanceof Map ? mapToObj(enriched.get('returns')) : mapToObj(enriched?.returns || enriched);
-                  for (const asset of (returns?.assets || [])) {
-                    for (const r of (asset?.runes || [])) {
-                      const known = KNOWN_TOKENS_SELL[`${r.block}:${r.tx}`];
-                      balances.push({
-                        alkaneId: `${r.block}:${r.tx}`,
-                        balance: String(r.amount || '0'),
-                        name: known?.name,
-                        symbol: known?.symbol,
-                      });
-                    }
-                  }
-                } catch {}
+            if (deps.network === 'devnet') {
+              // REST data API returns HTTP 400 on devnet. Use RPC directly.
+              const rpcResp = await fetch('http://localhost:18888', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  jsonrpc: '2.0', id: 1,
+                  method: 'alkanes_protorunesbyaddress',
+                  params: [{ address, protocolTag: '1' }],
+                }),
+              });
+              const rpcJson = await rpcResp.json();
+              const outpoints = rpcJson?.result?.outpoints || [];
+              for (const outpoint of outpoints) {
+                const entries = outpoint.balance_sheet?.cached?.balances || outpoint.runes || [];
+                for (const entry of entries) {
+                  const known = KNOWN_TOKENS_SELL[`${entry.block}:${entry.tx}`];
+                  balances.push({
+                    alkaneId: `${entry.block}:${entry.tx}`,
+                    balance: String(entry.amount || '0'),
+                    name: known?.name,
+                    symbol: known?.symbol,
+                  });
+                }
               }
             } else {
               const resp = await fetch(

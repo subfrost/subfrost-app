@@ -394,10 +394,12 @@ function formatCurrency(v?: number, currency: CurrencyDisplay = 'usd', btcPrice?
   return new Intl.NumberFormat(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(v);
 }
 
-function formatPercent(v?: number) {
+function formatPercent(v?: number | string) {
   if (v == null) return "-";
-  const decimals = v > 99.99 ? 0 : v > 9.99 ? 1 : 2;
-  return `${v.toFixed(decimals)}%`;
+  const n = typeof v === 'string' ? parseFloat(v) : v;
+  if (!isFinite(n)) return "-";
+  const decimals = n > 99.99 ? 0 : n > 9.99 ? 1 : 2;
+  return `${n.toFixed(decimals)}%`;
 }
 
 function getToken0Percentage(pool: PoolSummary): number {
