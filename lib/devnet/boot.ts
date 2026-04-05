@@ -897,9 +897,14 @@ async function deployBeaconInstance(
   beaconProxyWasm: string, instanceSlot: number, beaconSlot: number,
   label: string, onProgress: ProgressCallback, pct: number,
 ): Promise<void> {
+  // 0x8fff (36863) = beacon proxy init — sets the beacon pointer.
+  // NOT 0x7fff (32767) which is for upgradeable proxies (sets impl pointer).
+  // Using 0x7fff on beacon-proxy WASM causes silent failure — the proxy
+  // deploys but can't resolve its beacon, so all delegatecall extcalls fail.
+  // This was the root cause of "NOT DEPLOYED" for vxFUEL gauge (2026-04-04).
   await deployWasm(provider, harness, segwit, taproot,
     beaconProxyWasm, instanceSlot,
-    [0x7fff, 4, beaconSlot],
+    [0x8fff, 4, beaconSlot],
     `${label} (beacon-proxy)`, onProgress, pct);
 }
 
@@ -1682,6 +1687,12 @@ async function deployFullProtocol(
             // Try direct deposit to yv-fr-btc-vault as diagnostic.
             console.log('[devnet-boot] dxBTC totalAssets=0, trying direct yv-vault deposit...');
             const directAmount = depositAmount / BigInt(2);
+            // Simulate the yv-vault deposit to see the actual error
+            const simResult = await simulate(`4:${S.YV_FRBTC_VAULT_PROXY}`, ['1', String(directAmount)]);
+            console.log('[devnet-boot] yv-vault deposit simulate:',
+              'err=', simResult?.result?.execution?.error?.slice(0, 120) || 'none',
+              'data=', (simResult?.result?.execution?.data || '').slice(0, 40));
+
             try {
               await executeCall(provider, harness, segwit, taproot,
                 `[4,${S.YV_FRBTC_VAULT_PROXY},1,${directAmount}]:v0:v0`,
