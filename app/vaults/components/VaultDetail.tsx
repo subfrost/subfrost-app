@@ -9,6 +9,9 @@ import { useVaultStats } from "@/hooks/useVaultStats";
 import { useVaultDeposit } from "@/hooks/useVaultDeposit";
 import { useVaultWithdraw } from "@/hooks/useVaultWithdraw";
 import { useVaultUnits } from "@/hooks/useVaultUnits";
+import { useWallet } from "@/context/WalletContext";
+import { useAlkanesSDK } from "@/context/AlkanesSDKContext";
+import { useQuery } from "@tanstack/react-query";
 import BoostSection from "./BoostSection";
 import { useTranslation } from '@/hooks/useTranslation';
 
@@ -41,10 +44,40 @@ export default function VaultDetail({ vault: initialVault }: Props) {
   const depositMutation = useVaultDeposit();
   const withdrawMutation = useVaultWithdraw();
 
+  // Wallet balance of the input token (what user can deposit)
+  const { account } = useWallet();
+  const { provider, isInitialized } = useAlkanesSDK();
+  const taprootAddress = account?.taproot?.address;
+  const inputTokenId = currentVault.tokenId; // e.g., "32:0" for frBTC
+
+  const { data: walletInputBalance } = useQuery({
+    queryKey: ['wallet-input-balance', taprootAddress, inputTokenId],
+    enabled: !!taprootAddress && !!provider && isInitialized && !!inputTokenId,
+    staleTime: 10_000,
+    queryFn: async () => {
+      if (!taprootAddress || !provider || !inputTokenId) return '0';
+      try {
+        const result = await provider.dataApiGetAlkanesByAddress(taprootAddress);
+        const balances = result?.data || result || [];
+        const arr = Array.isArray(balances) ? balances : [];
+        const [targetBlock, targetTx] = inputTokenId.split(':').map(Number);
+        for (const entry of arr) {
+          const b = Number(entry?.alkaneId?.block ?? entry?.block ?? 0);
+          const t = Number(entry?.alkaneId?.tx ?? entry?.tx ?? 0);
+          if (b === targetBlock && t === targetTx) {
+            const raw = entry?.balance || entry?.amount || '0';
+            return (Number(raw) / 1e8).toFixed(8);
+          }
+        }
+      } catch {}
+      return '0';
+    },
+  });
+
   const stats = {
     tvl: vaultStats?.tvlFormatted || "0.00",
     apy: currentVault.estimatedApy || vaultStats?.apy || "0.00",
-    userBalance: vaultStats?.userBalanceFormatted || "0.00",
+    userBalance: walletInputBalance || "0.00",
   };
 
   const handleVaultChange = (newVault: VaultConfig) => {

@@ -52,8 +52,11 @@ export default function FireOverviewPanel() {
             <StakerPieChart data={chartData.stakerDistribution} size={140} />
           </div>
 
-          {/* Temperature bar: staked vs circulating supply */}
-          <StakeTemperatureBar circulatingSupply={2100000} totalStaked={1300000} />
+          {/* Temperature bar: staked vs circulating supply — from on-chain data */}
+          <StakeTemperatureBar
+            circulatingSupply={Number(new BigNumber(tokenStats?.totalSupply || '0').dividedBy(1e8))}
+            totalStaked={Number(new BigNumber(stakingStats?.totalStaked || '0').dividedBy(1e8))}
+          />
         </div>
       </div>
 

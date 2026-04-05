@@ -3,22 +3,57 @@
 import { useState } from "react";
 import VaultActionPanel from "./VaultActionPanel";
 import { useTranslation } from '@/hooks/useTranslation';
+import { useWallet } from '@/context/WalletContext';
+import { getConfig, getRpcUrl } from '@/utils/getConfig';
+import { useQuery } from '@tanstack/react-query';
+
+function parseU128LE(hex: string, offset: number): number {
+  let v = 0;
+  for (let i = 15; i >= 0; i--) {
+    const o = (offset + i) * 2;
+    v = v * 256 + (parseInt(hex.slice(o, o + 2), 16) || 0);
+  }
+  return v;
+}
 
 export default function GaugeVault() {
   const [mode, setMode] = useState<'stake' | 'unstake'>('stake');
   const [amount, setAmount] = useState<string>("");
   const [infoTab, setInfoTab] = useState<'about' | 'boost' | 'info' | 'risk'>('about');
   const { t } = useTranslation();
+  const { network } = useWallet();
+  const config = getConfig(network);
 
-  // Gauge stats: zero until gauge contract is deployed on-chain.
-  // Will be populated via alkanes_simulate opcode queries once live.
+  // Query gauge on-chain stats: opcode 21 = get_total_staked (returns u128)
+  const gaugeId = (config as any).VX_FUEL_GAUGE_ID || '4:7030';
+  const { data: gaugeData } = useQuery({
+    queryKey: ['gauge-stats', gaugeId, network],
+    staleTime: 15_000,
+    queryFn: async () => {
+      const [block, tx] = gaugeId.split(':');
+      try {
+        const r = await fetch(getRpcUrl(network), {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ jsonrpc: '2.0', method: 'alkanes_simulate',
+            params: [{ target: { block, tx }, inputs: ['21'], block_tag: 'latest' }], id: 1 }),
+        });
+        const j = await r.json();
+        const hex = (j?.result?.execution?.data || '').replace('0x', '');
+        if (hex.length >= 32) {
+          return { totalStaked: parseU128LE(hex, 0) / 1e8 };
+        }
+      } catch {}
+      return { totalStaked: 0 };
+    },
+  });
+
   const stats = {
-    tvl: "0.00",
-    baseApy: "0.0",
+    tvl: gaugeData ? gaugeData.totalStaked.toFixed(2) : "0.00",
+    baseApy: "0.0",  // TODO: derive from reward rate
     boostedApy: "0.0",
-    userStaked: "0.00",
+    userStaked: "0.00",  // TODO: query per-user stake with opcode 20
     userBoost: "1.0",
-    pendingRewards: "0.00",
+    pendingRewards: "0.00",  // TODO: query with opcode 22
   };
 
   const handleExecute = () => {

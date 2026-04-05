@@ -3,6 +3,7 @@
 import { useState, useMemo } from 'react';
 import { useFujinMarkets } from '@/hooks/useFujinMarkets';
 import { useWallet } from '@/context/WalletContext';
+import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { useTranslation } from '@/hooks/useTranslation';
 import { Info, Loader2, TrendingUp, TrendingDown } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
@@ -30,9 +31,35 @@ function formatDifficulty(diff: number): string {
 export default function FujinDifficultyPanel() {
   const { t } = useTranslation();
   const { data: fujinData, isLoading: fujinLoading } = useFujinMarkets();
-  const { isConnected, network } = useWallet();
+  const { isConnected, network, account } = useWallet();
+  const { provider, isInitialized } = useAlkanesSDK();
   const [swapDirection, setSwapDirection] = useState<'LONG' | 'SHORT'>('LONG');
   const [amount, setAmount] = useState('');
+  const taprootAddress = account?.taproot?.address;
+
+  // Fetch DIESEL (2:0) balance from wallet for the "Pay DIESEL" input
+  const { data: dieselBalance } = useQuery({
+    queryKey: ['diesel-balance', taprootAddress],
+    enabled: !!taprootAddress && !!provider && isInitialized,
+    staleTime: 10_000,
+    queryFn: async () => {
+      if (!taprootAddress || !provider) return '0';
+      try {
+        const result = await provider.dataApiGetAlkanesByAddress(taprootAddress);
+        const balances = result?.data || result || [];
+        const arr = Array.isArray(balances) ? balances : [];
+        for (const entry of arr) {
+          const b = Number(entry?.alkaneId?.block ?? entry?.block ?? 0);
+          const t = Number(entry?.alkaneId?.tx ?? entry?.tx ?? 0);
+          if (b === 2 && t === 0) {
+            const raw = entry?.balance || entry?.amount || '0';
+            return (Number(raw) / 1e8).toFixed(2);
+          }
+        }
+      } catch {}
+      return '0';
+    },
+  });
 
   // Get current block height from the shared height query
   const { data: blockHeight } = useQuery({
@@ -169,7 +196,7 @@ export default function FujinDifficultyPanel() {
           </div>
           <div className="flex justify-between mt-1.5 px-1">
             <span className="text-xs text-[color:var(--sf-text)]/40">Pay DIESEL</span>
-            <span className="text-xs text-[color:var(--sf-text)]/40">Balance: --</span>
+            <span className="text-xs text-[color:var(--sf-text)]/40">Balance: {dieselBalance || '--'}</span>
           </div>
         </div>
 
