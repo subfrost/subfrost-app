@@ -1221,7 +1221,8 @@ async function deployFullProtocol(
     // Treasury/Redemption read-only opcodes require prior state → use Initialize
     // (opcode 0) with dummy AlkaneId args. Sets /initialized in impl storage only;
     // proxy storage is separate (delegatecall), so initThroughProxy still works.
-    'FIRE Treasury', onProgress, 47, [0, 0, 0, 0, 0, 0, 0, 0, 0]);
+    // Initialize(fire_token={0:0}, frbtc={0:0}, fire_lp={0:0}, diesel_lp={0:0}) — 8 u128s
+    'FIRE Treasury', onProgress, 47, [0, 0, 0, 0, 0, 0, 0, 0]);
   await initThroughProxy(provider, harness, segwit, taproot,
     F.TREASURY_PROXY,
     [0, 4, F.TOKEN_PROXY, 32, 0, poolBlock, poolTx, poolBlock, poolTx],
@@ -1267,7 +1268,8 @@ async function deployFullProtocol(
   contracts.fireRedemption.authTokenId = await deployWithProxy(
     provider, harness, segwit, taproot, upgradeableWasm,
     'fire_redemption', F.REDEMPTION_IMPL, F.REDEMPTION_PROXY,
-    'FIRE Redemption', onProgress, 55, [0, 0, 0, 0, 0]);
+    // Initialize(fire_token={0:0}, treasury={0:0}) — exactly 4 u128s
+    'FIRE Redemption', onProgress, 55, [0, 0, 0, 0]);
   await initThroughProxy(provider, harness, segwit, taproot,
     F.REDEMPTION_PROXY,
     [0, 4, F.TOKEN_PROXY, 4, F.TREASURY_PROXY],
