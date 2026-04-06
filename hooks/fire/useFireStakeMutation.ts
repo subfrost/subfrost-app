@@ -22,7 +22,8 @@ import * as ecc from '@bitcoinerlab/secp256k1';
 bitcoin.initEccLib(ecc);
 
 interface StakeParams {
-  lpAmount: string; // LP token amount in base units
+  lpAmount: string;     // LP token amount in base units
+  lpTokenId: string;    // LP token AlkaneId (e.g. "2:3") — from useLpTokenId
   lockTierIndex: number; // Index into LOCK_TIERS
   feeRate: number;
 }
@@ -36,7 +37,7 @@ export function useFireStakeMutation() {
   const stakingId = (config as any).FIRE_STAKING_ID as string | undefined;
 
   return useMutation({
-    mutationFn: async ({ lpAmount, lockTierIndex, feeRate }: StakeParams) => {
+    mutationFn: async ({ lpAmount, lpTokenId, lockTierIndex, feeRate }: StakeParams) => {
       if (!provider || !isInitialized || !stakingId) {
         throw new Error('Provider or FIRE staking contract not ready');
       }
@@ -57,8 +58,6 @@ export function useFireStakeMutation() {
       const protostonesStr = `[${stakingBlock},${stakingTx},${FIRE_STAKING_OPCODES.Stake},${tier.duration}]:v0:v0`;
 
       // inputRequirements: SDK auto-generates edict from this
-      // Devnet default LP token ID — replace with dynamic pool discovery when available
-      const lpTokenId = '2:6'; // regtest DIESEL/frBTC LP token
       const inputReqStr = `A:${lpTokenId}:${lpAmount}`;
 
       const toAddresses = useActualAddresses ? [taprootAddress] : ['p2tr:0'];

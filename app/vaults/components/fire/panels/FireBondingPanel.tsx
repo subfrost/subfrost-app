@@ -44,7 +44,8 @@ export default function FireBondingPanel({ vaultDetailsSlot }: FireBondingPanelP
   const handleBond = () => {
     if (isDemoGated || parsedAmount <= 0) return;
     const lpAmountBaseUnits = new BigNumber(parsedAmount).multipliedBy(1e8).toFixed(0);
-    bondMutation.mutate({ lpAmount: lpAmountBaseUnits, feeRate: 1 });
+    if (!lpTokenId) return;
+    bondMutation.mutate({ lpAmount: lpAmountBaseUnits, lpTokenId, feeRate: 1 });
   };
 
 

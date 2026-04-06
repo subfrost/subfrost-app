@@ -1,8 +1,12 @@
 /**
  * FIRE Protocol Claim Rewards Mutation Hook
  *
- * Claims pending FIRE rewards from the staking contract [4:257].
- * Simple cellpack, no token input needed.
+ * Claims pending FIRE rewards by sending the position token (POS-{id}) to
+ * the staking contract as incomingAlkanes. The contract calculates rewards,
+ * updates the position's reward checkpoint, mints FIRE, and returns BOTH
+ * the position token + FIRE to the user.
+ *
+ * The position token is RETURNED (not consumed) — the user keeps their NFT.
  *
  * Browser wallet address rules: NEVER use symbolic addresses (p2tr:0) for browser wallets.
  */
@@ -20,6 +24,7 @@ import * as ecc from '@bitcoinerlab/secp256k1';
 bitcoin.initEccLib(ecc);
 
 interface ClaimParams {
+  positionTokenId: string; // Position token AlkaneId (e.g. "2:28") — sent and RETURNED
   feeRate: number;
 }
 
@@ -32,7 +37,7 @@ export function useFireClaimMutation() {
   const stakingId = (config as any).FIRE_STAKING_ID as string | undefined;
 
   return useMutation({
-    mutationFn: async ({ feeRate }: ClaimParams) => {
+    mutationFn: async ({ positionTokenId, feeRate }: ClaimParams) => {
       if (!provider || !isInitialized || !stakingId) {
         throw new Error('Provider or FIRE staking contract not ready');
       }
@@ -52,7 +57,8 @@ export function useFireClaimMutation() {
       const alkanesChangeAddr = useActualAddresses ? taprootAddress : 'p2tr:0';
 
       const result = await (provider as any).alkanesExecuteTyped({
-        inputRequirements: '',
+        // Send position token as incomingAlkanes — it's returned after claim
+        inputRequirements: `${positionTokenId}:1`,
         protostones: protostonesStr,
         feeRate,
         autoConfirm: false,

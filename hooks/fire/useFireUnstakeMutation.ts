@@ -1,8 +1,13 @@
 /**
  * FIRE Protocol Unstake Mutation Hook
  *
- * Unstakes LP tokens from a specific position in the FIRE staking contract [4:257].
- * Simple cellpack (no two-protostone needed since no token input required).
+ * Unstakes LP tokens by sending the position token (POS-{id}) back to the
+ * staking contract as incomingAlkanes. The contract authenticates via
+ * registered child check, reads position data from the token, and returns
+ * LP + FIRE rewards.
+ *
+ * The position token is CONSUMED (not returned) — the user loses their NFT
+ * and gets back their LP deposit + any pending FIRE rewards.
  *
  * Browser wallet address rules: NEVER use symbolic addresses (p2tr:0) for browser wallets.
  */
@@ -20,7 +25,7 @@ import * as ecc from '@bitcoinerlab/secp256k1';
 bitcoin.initEccLib(ecc);
 
 interface UnstakeParams {
-  positionId: number;
+  positionTokenId: string; // Position token AlkaneId (e.g. "2:28") — sent as incomingAlkanes
   feeRate: number;
 }
 
@@ -33,7 +38,7 @@ export function useFireUnstakeMutation() {
   const stakingId = (config as any).FIRE_STAKING_ID as string | undefined;
 
   return useMutation({
-    mutationFn: async ({ positionId, feeRate }: UnstakeParams) => {
+    mutationFn: async ({ positionTokenId, feeRate }: UnstakeParams) => {
       if (!provider || !isInitialized || !stakingId) {
         throw new Error('Provider or FIRE staking contract not ready');
       }
@@ -46,14 +51,16 @@ export function useFireUnstakeMutation() {
       if (!taprootAddress) throw new Error('Taproot address required');
 
       const [stakingBlock, stakingTx] = stakingId.split(':').map(Number);
-      const protostonesStr = `[${stakingBlock},${stakingTx},${FIRE_STAKING_OPCODES.Unstake},${positionId}]:v0:v0`;
+      // New contract: unstake() takes NO params — position token via incomingAlkanes
+      const protostonesStr = `[${stakingBlock},${stakingTx},${FIRE_STAKING_OPCODES.Unstake}]:v0:v0`;
 
       const toAddresses = useActualAddresses ? [taprootAddress] : ['p2tr:0'];
       const changeAddr = useActualAddresses ? (segwitAddress || taprootAddress) : 'p2wpkh:0';
       const alkanesChangeAddr = useActualAddresses ? taprootAddress : 'p2tr:0';
 
       const result = await (provider as any).alkanesExecuteTyped({
-        inputRequirements: '',
+        // Send position token as incomingAlkanes for authentication
+        inputRequirements: `${positionTokenId}:1`,
         protostones: protostonesStr,
         feeRate,
         autoConfirm: false,

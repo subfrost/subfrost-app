@@ -20,7 +20,8 @@ import * as ecc from '@bitcoinerlab/secp256k1';
 bitcoin.initEccLib(ecc);
 
 interface BondParams {
-  lpAmount: string; // LP token amount in base units
+  lpAmount: string;  // LP token amount in base units
+  lpTokenId: string; // LP token AlkaneId — from useLpTokenId
   feeRate: number;
 }
 
@@ -33,7 +34,7 @@ export function useFireBondMutation() {
   const bondingId = (config as any).FIRE_BONDING_ID as string | undefined;
 
   return useMutation({
-    mutationFn: async ({ lpAmount, feeRate }: BondParams) => {
+    mutationFn: async ({ lpAmount, lpTokenId, feeRate }: BondParams) => {
       if (!provider || !isInitialized || !bondingId) {
         throw new Error('Provider or FIRE bonding contract not ready');
       }
@@ -49,8 +50,6 @@ export function useFireBondMutation() {
       const protostonesStr = `[${bondingBlock},${bondingTx},${FIRE_BONDING_OPCODES.Bond}]:v0:v0`;
 
       // LP token input via inputRequirements
-      // Devnet default LP token ID — replace with dynamic pool discovery when available
-      const lpTokenId = '2:6'; // regtest DIESEL/frBTC LP token
       const inputReqStr = `A:${lpTokenId}:${lpAmount}`;
 
       const toAddresses = useActualAddresses ? [taprootAddress] : ['p2tr:0'];

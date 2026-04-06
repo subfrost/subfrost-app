@@ -57,10 +57,11 @@ export default function FireStakingPanel({ vaultDetailsSlot }: FireStakingPanelP
   const parsedAmount = parseFloat(amount) || 0;
 
   const handleStake = () => {
-    if (isDemoGated || parsedAmount <= 0) return;
+    if (isDemoGated || parsedAmount <= 0 || !lpTokenId) return;
     const lpAmountBaseUnits = new BigNumber(parsedAmount).multipliedBy(1e8).toFixed(0);
     stakeMutation.mutate({
       lpAmount: lpAmountBaseUnits,
+      lpTokenId,
       lockTierIndex: lockTier,
       feeRate: Math.round(feeRate),
     });
