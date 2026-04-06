@@ -370,18 +370,26 @@ describe('FIRE Position Token Architecture', () => {
       expect(result?.result?.execution?.error).toBeNull();
       const data = result?.result?.execution?.data || '';
 
-      // 7 × u128 = 112 bytes
-      expect(data.replace('0x', '').length).toBeGreaterThanOrEqual(224); // 112 bytes = 224 hex chars
+      // 9 × u128 = 144 bytes (7 fields + deposit_token block + tx)
+      expect(data.replace('0x', '').length).toBeGreaterThanOrEqual(288); // 144 bytes = 288 hex chars
 
       const posId = parseU128(data, 0);
       const depositAmount = parseU128(data, 16);
       const weightedAmount = parseU128(data, 32);
+      const depositTokenBlock = parseU128(data, 112);
+      const depositTokenTx = parseU128(data, 128);
 
       expect(posId).toBe(0n); // First position
       expect(depositAmount).toBeGreaterThan(0n);
       expect(weightedAmount).toBeGreaterThan(0n);
 
-      console.log('[test] Position: id=%d, deposit=%d, weighted=%d', posId, depositAmount, weightedAmount);
+      // deposit_token should match the LP pool ID used for staking
+      const [expectedBlock, expectedTx] = poolId.split(':').map(Number);
+      expect(depositTokenBlock).toBe(BigInt(expectedBlock));
+      expect(depositTokenTx).toBe(BigInt(expectedTx));
+
+      console.log('[test] Position: id=%d, deposit=%d, weighted=%d, deposit_token=%d:%d',
+        posId, depositAmount, weightedAmount, depositTokenBlock, depositTokenTx);
     }, 60_000);
 
     it('should claim rewards with position token', async () => {
