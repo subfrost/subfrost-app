@@ -70,10 +70,10 @@ export default function BottomPanels({ baseToken, quoteToken }: Props) {
   const config = getConfig(network || 'mainnet');
   const controllerId = (config as any).CARBINE_CONTROLLER_ID as string | undefined;
 
-  const handleCancelOrder = async (orderId: number) => {
+  const handleCancelOrder = async (orderTokenId: string) => {
     if (!controllerId) return;
     try {
-      await cancelMutation.mutateAsync({ controllerId, orderId, feeRate: 1 });
+      await cancelMutation.mutateAsync({ controllerId, orderTokenId, feeRate: 1 });
       // On devnet: mine 1 block so metashrew indexes the cancel tx before the
       // next useUserOrders refetch. Without this, the order still appears for ~5s.
       if (network === 'devnet') {
@@ -143,12 +143,12 @@ export default function BottomPanels({ baseToken, quoteToken }: Props) {
                   // Raw u128 values are in 1e8 units — convert for display
                   const price  = (Number(order.price)  / 1e8).toFixed(8).replace(/0+$/, '').replace(/\.$/, '.0');
                   const amount = (Number(order.amount) / 1e8).toFixed(8).replace(/0+$/, '').replace(/\.$/, '.0');
-                  const filled = (Number(order.filled) / 1e8).toFixed(8).replace(/0+$/, '').replace(/\.$/, '.0');
+                  const filled = '—'; // Order receipt tokens don't track fill state
                   const isSell = order.side === 1;
-                  const isCancelling = cancelMutation.isPending && cancelMutation.variables?.orderId === order.orderId;
+                  const isCancelling = cancelMutation.isPending && cancelMutation.variables?.orderTokenId === order.tokenId;
                   return (
                     <div
-                      key={order.orderId}
+                      key={order.tokenId}
                       className="sf-row grid grid-cols-[auto_1fr_1fr_1fr_auto] gap-3 px-3 py-2 items-center"
                     >
                       {/* Side badge: green for BUY, red for SELL */}
@@ -172,7 +172,7 @@ export default function BottomPanels({ baseToken, quoteToken }: Props) {
                       </span>
                       {/* Cancel button — triggers opcode 21 (CancelOrder) */}
                       <button
-                        onClick={() => handleCancelOrder(order.orderId)}
+                        onClick={() => handleCancelOrder(order.tokenId)}
                         disabled={isCancelling || cancelMutation.isPending}
                         title="Cancel order"
                         className={`p-1 rounded hover:bg-red-500/20 transition-colors ${

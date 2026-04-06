@@ -380,6 +380,7 @@ const FIRE_SLOTS = {
   BONDING_PROXY:     259,   BONDING_IMPL:     10259,
   REDEMPTION_PROXY:  260,   REDEMPTION_IMPL:  10260,
   DISTRIBUTOR_PROXY: 261,   DISTRIBUTOR_IMPL: 10261,
+  POSITION_TOKEN:    262,   // standalone template for POS-{id} receipt tokens
 };
 
 // Core protocol + Fujin slots
@@ -400,6 +401,7 @@ const PROTOCOL_SLOTS = {
   VX_BTCUSD_GAUGE:     7031,  // beacon proxy instance
   CARBINE_TMPL_IMPL:   80001, CARBINE_TMPL_BEACON: 90001,
   CARBINE_TEMPLATE:    70001, // beacon proxy instance
+  CARBINE_ORDER_TOKEN: 80003, // standalone template for ORD-{id} receipt tokens
   SYNTH_POOL_IMPL:     66576, SYNTH_POOL_BEACON:  76576,  // impl/beacon for all synth pools
   SYNTH_FRBTC_FRZEC:   0xDD00, // 56576 — beacon proxy instance, A=100
   SYNTH_FRBTC_FRETH:   0xDD01, // 56577 — A=15
@@ -1107,9 +1109,9 @@ async function deployFullProtocol(
   onProgress('Deploying Carbine CLOB...', 40);
   console.log('[devnet-boot] Phase 3a: Carbine CLOB (proxied)...');
   try {
-    // 1. Controller impl [4:80000] — opcode 0 = Initialize(template_block=0, template_tx=0)
+    // 1. Controller impl [4:80000] — opcode 0 = Initialize(template_block=0, template_tx=0, order_token_template=0)
     await fetchAndDeploy(provider, harness, segwit, taproot,
-      'carbine_controller', S.CARBINE_CTRL_IMPL, [0, 0, 0],
+      'carbine_controller', S.CARBINE_CTRL_IMPL, [0, 0, 0, 0],
       'Carbine Controller Impl', onProgress, 40);
     // 2. Controller proxy [4:70000]
     await deployWasm(provider, harness, segwit, taproot,
@@ -1145,10 +1147,15 @@ async function deployFullProtocol(
       'Universal Router Proxy', onProgress, 44);
     contracts.universalRouter.authTokenId = await discoverLastAuthToken(taproot);
 
-    // Initialize controller through proxy with real template reference.
-    // Opcode 0 = Initialize, args = [4, CARBINE_TEMPLATE] = template at [4:70001]
+    // 8. Order token template [4:80003] — standalone, for ORD-{id} receipt tokens
+    await fetchAndDeploy(provider, harness, segwit, taproot,
+      'carbine_order_token', S.CARBINE_ORDER_TOKEN, [0, 0, 0, 0, 0, 0, 0, 0, 0],
+      'Carbine Order Token Template', onProgress, 44);
+
+    // Initialize controller through proxy with real template + order token template reference.
+    // Opcode 0 = Initialize(template_block, template_tx, order_token_template)
     await initThroughProxy(provider, harness, segwit, taproot,
-      S.CARBINE_CTRL_PROXY, [0, 4, S.CARBINE_TEMPLATE],
+      S.CARBINE_CTRL_PROXY, [0, 4, S.CARBINE_TEMPLATE, S.CARBINE_ORDER_TOKEN],
       'Carbine Controller');
 
     // Initialize Universal Router through proxy.
@@ -1224,13 +1231,20 @@ async function deployFullProtocol(
     [0, 4, F.STAKING_PROXY],
     'FIRE Token');
 
+  // Deploy position token template (standalone, not proxied)
+  // Init with dummy values — template gets cloned via factory cellpack on each stake()
+  await fetchAndDeploy(provider, harness, segwit, taproot,
+    'fire_position_token', F.POSITION_TOKEN, [0, 0, 0, 0, 0, 0, 0, 0, 0],
+    'FIRE Position Token Template', onProgress, 50);
+
   contracts.fireStaking.authTokenId = await deployWithProxy(
     provider, harness, segwit, taproot, upgradeableWasm,
     'fire_staking', F.STAKING_IMPL, F.STAKING_PROXY,
     'FIRE Staking', onProgress, 51);
+  // Init: lp_token (AlkaneId), fire_token (AlkaneId), position_template (u128)
   await initThroughProxy(provider, harness, segwit, taproot,
     F.STAKING_PROXY,
-    [0, poolBlock, poolTx, 4, F.TOKEN_PROXY],
+    [0, poolBlock, poolTx, 4, F.TOKEN_PROXY, F.POSITION_TOKEN],
     'FIRE Staking');
 
   contracts.fireBonding.authTokenId = await deployWithProxy(
@@ -1789,8 +1803,8 @@ async function deployFullProtocol(
     }
 
     // Step 3: Stake LP in FIRE staking (no lock) to start emission.
+    // New architecture: stake() returns a POS-{id} position token to user's wallet.
     // Staking opcode 1 (Stake): [1, lock_duration=0] + LP as incomingAlkanes
-    // Verified in e2e-fire.test.ts: "should stake LP tokens with no lock"
     const lpForStaking = await getAlkaneBalance(provider, taproot, `${poolBlock}:${poolTx}`);
     if (lpForStaking > BigInt(0)) {
       const stakeAmount = lpForStaking / BigInt(5); // 20% of remaining LP
@@ -1798,14 +1812,7 @@ async function deployFullProtocol(
         await executeCall(provider, harness, segwit, taproot,
           `[4,${F.STAKING_PROXY},1,0]:v0:v0`,
           `${poolBlock}:${poolTx}:${stakeAmount}`, [taproot], [taproot]);
-        console.log('[devnet-boot] FIRE staked LP:', stakeAmount.toString(), 'txid:', _lastTxid.slice(0, 32));
-        // Check protorune outputs of the working FIRE staking tx for comparison
-        if (_lastTxid) {
-          try {
-            const fp0 = await rpcCall('alkanes_protorunesbyoutpoint', [{ txid: _lastTxid, vout: 0 }]);
-            console.log('[devnet-boot] FIRE protorunesbyoutpoint vout0:', JSON.stringify(fp0?.result ?? 'null').slice(0, 300));
-          } catch {}
-        }
+        console.log('[devnet-boot] FIRE staked LP:', stakeAmount.toString());
         // Mine blocks to accrue rewards
         harness.mineBlocks(10);
       } catch (e: any) {
@@ -1814,13 +1821,13 @@ async function deployFullProtocol(
     }
 
     // Step 3b: Stake more LP with a 1-week lock (lock_duration=604800)
-    // Gives the staking UI two positions: one unlocked, one locked (1.25x multiplier)
+    // Returns a second POS token with 1.25x multiplier
     const lpForLock = await getAlkaneBalance(provider, taproot, `${poolBlock}:${poolTx}`);
     if (lpForLock > BigInt(0)) {
       const lockAmount = lpForLock / BigInt(5);
       try {
         await executeCall(provider, harness, segwit, taproot,
-          `[4,${F.STAKING_PROXY},1,604800]:v0:v0`,  // 604800 = 1 week in seconds
+          `[4,${F.STAKING_PROXY},1,604800]:v0:v0`,
           `${poolBlock}:${poolTx}:${lockAmount}`, [taproot], [taproot]);
         console.log('[devnet-boot] FIRE staked LP (1-week lock):', lockAmount.toString());
       } catch (e: any) {
@@ -1828,13 +1835,43 @@ async function deployFullProtocol(
       }
     }
 
-    // Step 4: Claim FIRE rewards so user has FIRE tokens for bonding/redemption.
-    // Staking opcode 3 (ClaimRewards): no token input required
-    // Verified in e2e-fire.test.ts: "should claim rewards standalone"
+    // Step 4: Claim FIRE rewards via position token.
+    // New architecture: claim_rewards() requires position token as incomingAlkanes.
+    // Discover the first POS token (unlocked position) and send it for claiming.
+    // The token is returned after claim (not consumed).
+    let firstPosToken = '';
     try {
-      await executeCall(provider, harness, segwit, taproot,
-        `[4,${F.STAKING_PROXY},3]:v0:v0`,
-        'B:10000:v0', [taproot], [taproot]);
+      // Find POS tokens at taproot address (block=2, amount=1)
+      const allTokens = await rpcCall('alkanes_protorunesbyaddress', [
+        { address: taproot, protocolTag: '1' },
+      ]);
+      for (const outpoint of allTokens?.result?.outpoints || []) {
+        const balances = outpoint.balance_sheet?.cached?.balances || outpoint.runes || [];
+        for (const entry of balances) {
+          const block = parseInt(entry.block ?? '0', 10);
+          const amount = parseInt(entry.amount || '0', 10);
+          if (block === 2 && amount === 1 && !firstPosToken) {
+            firstPosToken = `${entry.block}:${entry.tx}`;
+          }
+        }
+      }
+    } catch {}
+
+    if (firstPosToken) {
+      console.log('[devnet-boot] Found POS token for claim:', firstPosToken);
+      try {
+        // Claim: opcode 3, send position token as incomingAlkanes
+        await executeCall(provider, harness, segwit, taproot,
+          `[4,${F.STAKING_PROXY},3]:v0:v0`,
+          `${firstPosToken}:1`, [taproot], [taproot]);
+      } catch (e: any) {
+        console.warn('[devnet-boot] FIRE claim failed:', e?.message?.slice(0, 80));
+      }
+    } else {
+      console.log('[devnet-boot] No POS token found — skipping claim');
+    }
+
+    try {
       const fireBalance = await getAlkaneBalance(provider, taproot, `4:${F.TOKEN_PROXY}`);
       console.log('[devnet-boot] FIRE claimed, balance:', fireBalance.toString());
     } catch (e: any) {

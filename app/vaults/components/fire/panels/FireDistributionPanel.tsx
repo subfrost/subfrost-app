@@ -2,6 +2,7 @@
 
 import { useState, useRef } from 'react';
 import { useFireDistributor } from '@/hooks/fire/useFireDistributor';
+import { useAlkaneBalance } from '@/hooks/useAlkaneBalance';
 import { useWallet } from '@/context/WalletContext';
 import TokenIcon from '@/app/components/TokenIcon';
 import { useDemoGate } from '@/hooks/useDemoGate';
@@ -20,6 +21,11 @@ export default function FireDistributionPanel() {
   const { isConnected, network } = useWallet();
   const isDemoGated = useDemoGate();
   const { data: distributor } = useFireDistributor();
+
+  const frBtcTokenId = '32:0';
+  const { data: frBtcBalance } = useAlkaneBalance(frBtcTokenId);
+  const frBtcBalanceNum = parseFloat(frBtcBalance || '0');
+  const frBtcBalanceDisplay = frBtcBalanceNum > 0 ? new BigNumber(frBtcBalance || '0').toFixed(4) : '0.00';
 
   const contributeRef = useRef<HTMLInputElement>(null);
   const [contributeAmount, setContributeAmount] = useState('');
@@ -61,33 +67,33 @@ export default function FireDistributionPanel() {
               </div>
               <div className="flex flex-col items-end gap-1">
                 <div className="text-xs font-medium text-[color:var(--sf-text)]/60">
-                  {t('boost.balance', { amount: '0.00' })}
+                  {t('boost.balance', { amount: frBtcBalanceDisplay })}
                 </div>
                 <div className={`flex items-center gap-1.5 transition-opacity duration-300 ${inputFocused ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`} onClick={(e) => e.stopPropagation()}>
                   <button
                     type="button"
-                    onClick={() => setContributeAmount((parseFloat('0.00') * 0.25).toString())}
+                    onClick={() => setContributeAmount((frBtcBalanceNum * 0.25).toString())}
                     className="sf-percent-btn-pill"
                   >
                     25%
                   </button>
                   <button
                     type="button"
-                    onClick={() => setContributeAmount((parseFloat('0.00') * 0.5).toString())}
+                    onClick={() => setContributeAmount((frBtcBalanceNum * 0.5).toString())}
                     className="sf-percent-btn-pill"
                   >
                     50%
                   </button>
                   <button
                     type="button"
-                    onClick={() => setContributeAmount((parseFloat('0.00') * 0.75).toString())}
+                    onClick={() => setContributeAmount((frBtcBalanceNum * 0.75).toString())}
                     className="sf-percent-btn-pill"
                   >
                     75%
                   </button>
                   <button
                     type="button"
-                    onClick={() => setContributeAmount('0.00')}
+                    onClick={() => setContributeAmount(frBtcBalance || '0')}
                     className="sf-percent-btn-pill"
                   >
                     {t('boost.max')}

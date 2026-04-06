@@ -29,8 +29,8 @@ import * as ecc from '@bitcoinerlab/secp256k1';
 bitcoin.initEccLib(ecc);
 
 export interface CancelOrderParams {
-  controllerId: string; // Carbine controller alkane ID e.g. "4:70000"
-  orderId: number;      // Order ID to cancel
+  controllerId: string;  // Carbine controller alkane ID e.g. "4:70000"
+  orderTokenId: string;  // Order receipt token AlkaneId e.g. "2:8"
   feeRate: number;
 }
 
@@ -64,12 +64,12 @@ export function useCancelOrderMutation() {
       // Parse controller ID
       const [cBlock, cTx] = params.controllerId.split(':');
 
-      // Build protostone: CancelOrder opcode 21 with orderId
-      // No inputRequirements needed -- no tokens are sent for cancellation
-      const protostone = `[${cBlock},${cTx},21,${params.orderId}]:v0:v0`;
+      // Build protostone: CancelOrder opcode 21 — NO params.
+      // The order receipt token is sent as incomingAlkanes for authentication.
+      const protostone = `[${cBlock},${cTx},21]:v0:v0`;
 
-      // No input requirements for cancel -- no tokens sent
-      const inputRequirements = '';
+      // Send the order receipt token (1 unit) as input for cancel authentication
+      const inputRequirements = `${params.orderTokenId}:1`;
 
       console.log('[CancelOrder] Protostone:', protostone);
       console.log('[CancelOrder] Input requirements: (none)');

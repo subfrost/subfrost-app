@@ -5,6 +5,10 @@ import { ChevronDown } from 'lucide-react';
 import LockTierSelector from '../widgets/LockTierSelector';
 import RewardsProjector from '../widgets/RewardsProjector';
 import { useFireStakingStats } from '@/hooks/fire/useFireStakingStats';
+import { useFireUserPositions } from '@/hooks/fire/useFireUserPositions';
+import { useAlkaneBalance } from '@/hooks/useAlkaneBalance';
+import { useLpTokenId } from '@/hooks/useLpTokenId';
+import { useFireStakeMutation } from '@/hooks/fire/useFireStakeMutation';
 import { useWallet } from '@/context/WalletContext';
 import { useDemoGate } from '@/hooks/useDemoGate';
 import { useTranslation } from '@/hooks/useTranslation';
@@ -12,6 +16,7 @@ import { useFeeRate } from '@/hooks/useFeeRate';
 import type { FeeSelection } from '@/hooks/useFeeRate';
 import { useGlobalStore } from '@/stores/global';
 import type { SlippageSelection } from '@/stores/global';
+import BigNumber from 'bignumber.js';
 const SLIPPAGE_PRESETS: Record<Exclude<SlippageSelection, 'custom'>, string> = {
   low: '1',
   medium: '5',
@@ -27,7 +32,14 @@ export default function FireStakingPanel({ vaultDetailsSlot }: FireStakingPanelP
   const { isConnected } = useWallet();
   const isDemoGated = useDemoGate();
   const { data: stakingStats } = useFireStakingStats();
+  const { data: userPositions } = useFireUserPositions();
+  const stakeMutation = useFireStakeMutation();
 
+  // LP token ID discovered from AMM factory (varies per boot sequence)
+  const { data: lpTokenId } = useLpTokenId();
+  const { data: lpBalance } = useAlkaneBalance(lpTokenId ?? undefined);
+  const lpBalanceNum = parseFloat(lpBalance || '0');
+  const lpBalanceDisplay = lpBalanceNum > 0 ? new BigNumber(lpBalance || '0').toFixed(4) : '0.00';
 
   const { selection: feeSelection, setSelection: setFeeSelection, custom: customFee, setCustom: setCustomFee, feeRate, presets: feePresets } = useFeeRate({ storageKey: 'subfrost-fire-stake-fee-rate' });
   const { maxSlippage, setMaxSlippage, slippageSelection, setSlippageSelection } = useGlobalStore();
@@ -45,8 +57,13 @@ export default function FireStakingPanel({ vaultDetailsSlot }: FireStakingPanelP
   const parsedAmount = parseFloat(amount) || 0;
 
   const handleStake = () => {
-    if (isDemoGated) return;
-    console.log('[FireStakingPanel] Stake:', { amount, lockTier });
+    if (isDemoGated || parsedAmount <= 0) return;
+    const lpAmountBaseUnits = new BigNumber(parsedAmount).multipliedBy(1e8).toFixed(0);
+    stakeMutation.mutate({
+      lpAmount: lpAmountBaseUnits,
+      lockTierIndex: lockTier,
+      feeRate: Math.round(feeRate),
+    });
   };
 
 
@@ -82,33 +99,33 @@ export default function FireStakingPanel({ vaultDetailsSlot }: FireStakingPanelP
             </div>
             <div className="flex flex-col items-end gap-1">
               <div className="text-xs font-medium text-[color:var(--sf-text)]/60">
-                {t('boost.balance', { amount: '0.00' })}
+                {t('boost.balance', { amount: lpBalanceDisplay })}
               </div>
               <div className={`flex items-center gap-1.5 transition-opacity duration-300 ${inputFocused ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`} onClick={(e) => e.stopPropagation()}>
                 <button
                   type="button"
-                  onClick={() => setAmount((parseFloat('0.00') * 0.25).toString())}
+                  onClick={() => setAmount((lpBalanceNum * 0.25).toString())}
                   className="sf-percent-btn-pill"
                 >
                   25%
                 </button>
                 <button
                   type="button"
-                  onClick={() => setAmount((parseFloat('0.00') * 0.5).toString())}
+                  onClick={() => setAmount((lpBalanceNum * 0.5).toString())}
                   className="sf-percent-btn-pill"
                 >
                   50%
                 </button>
                 <button
                   type="button"
-                  onClick={() => setAmount((parseFloat('0.00') * 0.75).toString())}
+                  onClick={() => setAmount((lpBalanceNum * 0.75).toString())}
                   className="sf-percent-btn-pill"
                 >
                   75%
                 </button>
                 <button
                   type="button"
-                  onClick={() => setAmount('0.00')}
+                  onClick={() => setAmount(lpBalance || '0')}
                   className="sf-percent-btn-pill"
                 >
                   {t('boost.max')}
@@ -276,34 +293,44 @@ export default function FireStakingPanel({ vaultDetailsSlot }: FireStakingPanelP
 
       {vaultDetailsSlot}
 
-      {/* Positions */}
-      <div className="sf-card overflow-hidden flex flex-col opacity-50 pointer-events-none">
+      {/* Positions — discovered via POS-{id} receipt tokens */}
+      <div className="sf-card overflow-hidden flex flex-col">
         <div className="sf-card-header">
-          <h3 className="text-base font-bold text-[color:var(--sf-text)]">{t('fire.stakePositions')} (demo)</h3>
+          <h3 className="text-base font-bold text-[color:var(--sf-text)]">{t('fire.stakePositions')}</h3>
         </div>
 
         {!isConnected ? (
           <div className="px-6 py-12 text-center text-sm text-[color:var(--sf-text)]/60">
             {t('fire.connectToViewPositions')}
           </div>
+        ) : !userPositions?.positions?.length ? (
+          <div className="px-6 py-12 text-center text-sm text-[color:var(--sf-text)]/60">
+            {t('fire.noPositions')}
+          </div>
         ) : (
           <>
             <div className="sf-table-header grid grid-cols-4 gap-2 px-6">
               <div>{t('fire.lpStaked')}</div>
-              <div>{t('fire.fireEarned')}</div>
-              <div>{t('fire.remaining')}</div>
-              <div className="text-right">{t('fire.lockDate')}</div>
+              <div>{t('fire.lockTier')}</div>
+              <div>{t('fire.multiplier')}</div>
+              <div className="text-right">{t('fire.tokenId')}</div>
             </div>
 
             <div className="overflow-auto no-scrollbar" style={{ maxHeight: 'calc(5 * 85px)' }}>
-              {[
-                { lpStaked: '5', fireEarned: '25', lockDate: '03/16/2026', remaining: '3d 21h 59m' },
-              ].map((row, i) => (
-                <div key={i} className="sf-row grid grid-cols-4 items-center gap-2 px-6 py-4">
-                  <div className="text-sm font-bold text-[color:var(--sf-primary)]">{row.lpStaked}</div>
-                  <div className="text-sm font-bold text-orange-500">{row.fireEarned}</div>
-                  <div className="text-sm font-bold text-[color:var(--sf-primary)]">{row.remaining}</div>
-                  <div className="text-sm text-[color:var(--sf-primary)] text-right">{row.lockDate}</div>
+              {userPositions.positions.map((pos) => (
+                <div key={pos.tokenId} className="sf-row grid grid-cols-4 items-center gap-2 px-6 py-4">
+                  <div className="text-sm font-bold text-[color:var(--sf-primary)]">
+                    {new BigNumber(pos.depositAmount).dividedBy(1e8).toFixed(4)}
+                  </div>
+                  <div className="text-sm font-bold text-orange-500">
+                    {pos.lockDuration === 0 ? 'None' : `${Math.round(pos.lockDuration / 86400)}d`}
+                  </div>
+                  <div className="text-sm font-bold text-[color:var(--sf-primary)]">
+                    {(pos.multiplier / 100).toFixed(2)}x
+                  </div>
+                  <div className="text-[10px] text-[color:var(--sf-primary)] text-right font-mono">
+                    {pos.tokenId}
+                  </div>
                 </div>
               ))}
             </div>

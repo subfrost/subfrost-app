@@ -2,6 +2,10 @@
 
 import { useState, useRef } from 'react';
 import { useFireBondingStats } from '@/hooks/fire/useFireBondingStats';
+import { useFireUserBonds } from '@/hooks/fire/useFireUserBonds';
+import { useAlkaneBalance } from '@/hooks/useAlkaneBalance';
+import { useLpTokenId } from '@/hooks/useLpTokenId';
+import { useFireBondMutation } from '@/hooks/fire/useFireBondMutation';
 import { useWallet } from '@/context/WalletContext';
 import { useDemoGate } from '@/hooks/useDemoGate';
 import { useTranslation } from '@/hooks/useTranslation';
@@ -16,7 +20,13 @@ export default function FireBondingPanel({ vaultDetailsSlot }: FireBondingPanelP
   const { isConnected } = useWallet();
   const isDemoGated = useDemoGate();
   const { data: bondingStats } = useFireBondingStats();
+  const { data: userBonds } = useFireUserBonds();
+  const bondMutation = useFireBondMutation();
 
+  const { data: lpTokenId } = useLpTokenId();
+  const { data: lpBalance } = useAlkaneBalance(lpTokenId ?? undefined);
+  const lpBalanceNum = parseFloat(lpBalance || '0');
+  const lpBalanceDisplay = lpBalanceNum > 0 ? new BigNumber(lpBalance || '0').toFixed(4) : '0.00';
 
   const amountRef = useRef<HTMLInputElement>(null);
   const [amount, setAmount] = useState('');
@@ -32,8 +42,9 @@ export default function FireBondingPanel({ vaultDetailsSlot }: FireBondingPanelP
     : '0';
 
   const handleBond = () => {
-    if (isDemoGated) return;
-    console.log('[FireBondingPanel] Bond:', { amount });
+    if (isDemoGated || parsedAmount <= 0) return;
+    const lpAmountBaseUnits = new BigNumber(parsedAmount).multipliedBy(1e8).toFixed(0);
+    bondMutation.mutate({ lpAmount: lpAmountBaseUnits, feeRate: 1 });
   };
 
 
@@ -70,33 +81,33 @@ export default function FireBondingPanel({ vaultDetailsSlot }: FireBondingPanelP
               </div>
               <div className="flex flex-col items-end gap-1">
                 <div className="text-xs font-medium text-[color:var(--sf-text)]/60">
-                  {t('boost.balance', { amount: '0.00' })}
+                  {t('boost.balance', { amount: lpBalanceDisplay })}
                 </div>
                 <div className={`flex items-center gap-1.5 transition-opacity duration-300 ${inputFocused ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`} onClick={(e) => e.stopPropagation()}>
                   <button
                     type="button"
-                    onClick={() => setAmount((parseFloat('0.00') * 0.25).toString())}
+                    onClick={() => setAmount((lpBalanceNum * 0.25).toString())}
                     className="sf-percent-btn-pill"
                   >
                     25%
                   </button>
                   <button
                     type="button"
-                    onClick={() => setAmount((parseFloat('0.00') * 0.5).toString())}
+                    onClick={() => setAmount((lpBalanceNum * 0.5).toString())}
                     className="sf-percent-btn-pill"
                   >
                     50%
                   </button>
                   <button
                     type="button"
-                    onClick={() => setAmount((parseFloat('0.00') * 0.75).toString())}
+                    onClick={() => setAmount((lpBalanceNum * 0.75).toString())}
                     className="sf-percent-btn-pill"
                   >
                     75%
                   </button>
                   <button
                     type="button"
-                    onClick={() => setAmount('0.00')}
+                    onClick={() => setAmount(lpBalance || '0')}
                     className="sf-percent-btn-pill"
                   >
                     {t('boost.max')}
@@ -130,44 +141,53 @@ export default function FireBondingPanel({ vaultDetailsSlot }: FireBondingPanelP
 
           <button
             onClick={handleBond}
-            disabled={!isConnected || parsedAmount <= 0 || isDemoGated}
+            disabled={!isConnected || parsedAmount <= 0 || isDemoGated || bondMutation.isPending}
             className="w-full rounded-xl py-3.5 text-sm font-bold text-white transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] disabled:opacity-30 disabled:cursor-not-allowed disabled:shadow-none bg-gradient-to-r from-orange-500 to-orange-600 hover:shadow-[0_4px_16px_rgba(249,115,22,0.3)]"
           >
-            {isDemoGated ? t('common.comingSoon') : !isConnected ? t('fire.connectWallet') : t('fire.bondLp')}
+            {isDemoGated ? t('common.comingSoon') : bondMutation.isPending ? t('fire.bonding') : !isConnected ? t('fire.connectWallet') : t('fire.bondLp')}
           </button>
+          {bondMutation.isError && (
+            <div className="text-xs text-red-400 mt-2 text-center">{(bondMutation.error as Error)?.message}</div>
+          )}
         </div>
       </div>
 
       {vaultDetailsSlot}
 
-      {/* Active bonds */}
-      <div className="sf-card overflow-hidden flex flex-col opacity-50 pointer-events-none">
+      {/* Active bonds — pending receipt token migration for bonding contract */}
+      <div className="sf-card overflow-hidden flex flex-col">
         <div className="sf-card-header">
-          <h3 className="text-base font-bold text-[color:var(--sf-text)]">{t('fire.activeBonds')} (demo)</h3>
+          <h3 className="text-base font-bold text-[color:var(--sf-text)]">{t('fire.activeBonds')}</h3>
         </div>
 
         {!isConnected ? (
           <div className="px-6 py-12 text-center text-sm text-[color:var(--sf-text)]/60">
             {t('fire.connectToViewBonds')}
           </div>
+        ) : !userBonds?.bonds?.length ? (
+          <div className="px-6 py-12 text-center text-sm text-[color:var(--sf-text)]/60">
+            {t('fire.noBonds')}
+          </div>
         ) : (
           <>
-            <div className="sf-table-header grid grid-cols-4 gap-2 px-6">
+            <div className="sf-table-header grid grid-cols-3 gap-2 px-6">
               <div>{t('fire.lpBonded')}</div>
               <div>{t('fire.fireVesting')}</div>
-              <div>{t('fire.remaining')}</div>
-              <div className="text-right">{t('fire.bondDate')}</div>
+              <div className="text-right">{t('fire.claimed')}</div>
             </div>
 
             <div className="overflow-auto no-scrollbar" style={{ maxHeight: 'calc(5 * 85px)' }}>
-              {[
-                { lpBonded: '5', fireVesting: '25', bondDate: '03/16/2026', remaining: '3d 21h 59m' },
-              ].map((row, i) => (
-                <div key={i} className="sf-row grid grid-cols-4 items-center gap-2 px-6 py-4">
-                  <div className="text-sm font-bold text-[color:var(--sf-primary)]">{row.lpBonded}</div>
-                  <div className="text-sm font-bold text-orange-500">{row.fireVesting}</div>
-                  <div className="text-sm font-bold text-[color:var(--sf-primary)]">{row.remaining}</div>
-                  <div className="text-sm text-[color:var(--sf-primary)] text-right">{row.bondDate}</div>
+              {userBonds.bonds.map((bond) => (
+                <div key={bond.bondId} className="sf-row grid grid-cols-3 items-center gap-2 px-6 py-4">
+                  <div className="text-sm font-bold text-[color:var(--sf-primary)]">
+                    {new BigNumber(bond.lpAmount).dividedBy(1e8).toFixed(4)}
+                  </div>
+                  <div className="text-sm font-bold text-orange-500">
+                    {new BigNumber(bond.fireAmount).dividedBy(1e8).toFixed(4)}
+                  </div>
+                  <div className="text-sm text-[color:var(--sf-primary)] text-right">
+                    {new BigNumber(bond.claimed).dividedBy(1e8).toFixed(4)}
+                  </div>
                 </div>
               ))}
             </div>
