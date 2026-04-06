@@ -820,6 +820,7 @@ async function deployWithProxy(
   wasmName: string, implSlot: number, proxySlot: number,
   label: string, onProgress: ProgressCallback, pct: number,
   implInitArgs?: (number | bigint)[],
+  proxyAuthUnits: number = 1,
 ): Promise<string> {
   // Step 1: Deploy implementation WASM to [4:implSlot]
   // WARNING: The init arg [50] is passed as cellpack input during CREATERESERVED.
@@ -834,10 +835,13 @@ async function deployWithProxy(
     wasmName, implSlot, implInitArgs ?? [50],
     `${label} Impl`, onProgress, pct);
 
-  // Step 2: Deploy upgradeable proxy → impl, mint 1 auth token
+  // Step 2: Deploy upgradeable proxy → impl
+  // proxyAuthUnits: set to 0 for contracts using AuthenticatedResponder whose
+  // Initialize calls deploy_auth_token() — the proxy's [0x7fff, ..., 1] sets
+  // /auth in proxy storage, blocking the contract's own auth token deployment.
   await deployWasm(provider, harness, segwit, taproot,
     upgradeableWasm, proxySlot,
-    [0x7fff, 4, implSlot, 1],
+    [0x7fff, 4, implSlot, proxyAuthUnits],
     `${label} Proxy`, onProgress, pct);
 
   // Step 3: Discover auth token
@@ -1218,11 +1222,11 @@ async function deployFullProtocol(
   contracts.fireTreasury.authTokenId = await deployWithProxy(
     provider, harness, segwit, taproot, upgradeableWasm,
     'fire_treasury', F.TREASURY_IMPL, F.TREASURY_PROXY,
-    // Treasury uses AuthenticatedResponder — Initialize (opcode 0) calls
-    // deploy_auth_token() which sets global auth state. Using opcode 0 for
-    // CREATERESERVED then makes initThroughProxy fail with "auth token already set".
-    // Fix: use opcode 10 (Deposit) — a no-op that accepts tokens without state deps.
-    'FIRE Treasury', onProgress, 47, [10]);
+    // Treasury uses AuthenticatedResponder — Initialize calls deploy_auth_token()
+    // which writes to /auth in proxy storage. If the proxy already set /auth via
+    // [0x7fff, ..., 1], Initialize fails with "auth token already set".
+    // Fix: proxyAuthUnits=0 so proxy doesn't pre-set /auth, letting Initialize handle it.
+    'FIRE Treasury', onProgress, 47, [10], 0);
   await initThroughProxy(provider, harness, segwit, taproot,
     F.TREASURY_PROXY,
     [0, 4, F.TOKEN_PROXY, 32, 0, poolBlock, poolTx, poolBlock, poolTx],
@@ -1268,10 +1272,9 @@ async function deployFullProtocol(
   contracts.fireRedemption.authTokenId = await deployWithProxy(
     provider, harness, segwit, taproot, upgradeableWasm,
     'fire_redemption', F.REDEMPTION_IMPL, F.REDEMPTION_PROXY,
-    // Redemption uses AuthenticatedResponder — opcode 0 deploys auth token globally,
-    // making initThroughProxy fail with "auth token already set" (same as treasury).
-    // Use GetTotalRedeemed (opcode 24) — reads a counter, no state deps.
-    'FIRE Redemption', onProgress, 55, [24]);
+    // Same AuthenticatedResponder issue as treasury — proxyAuthUnits=0.
+    // GetTotalRedeemed (opcode 24) as CREATERESERVED init — reads counter, no deps.
+    'FIRE Redemption', onProgress, 55, [24], 0);
   await initThroughProxy(provider, harness, segwit, taproot,
     F.REDEMPTION_PROXY,
     [0, 4, F.TOKEN_PROXY, 4, F.TREASURY_PROXY],
