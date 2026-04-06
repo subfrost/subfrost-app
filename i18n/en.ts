@@ -1002,6 +1002,11 @@ const en: Record<string, string> = {
   'fire.distributionComplete': 'Distribution Complete',
   'fire.distributionCompleteDesc': 'All FIRE has been distributed successfully.',
   'fire.connectWallet': 'Connect Wallet',
+  'fire.multiplier': 'Multiplier',
+  'fire.tokenId': 'Token ID',
+  'fire.staking': 'Staking...',
+  'fire.bonding': 'Bonding...',
+  'fire.redeeming': 'Redeeming...',
 
   // FIRE Charts
   'fire.emissionSchedule': 'Emission Schedule',
