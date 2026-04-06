@@ -295,8 +295,8 @@ export function useInfiniteAmmTxHistory({
     enabled: enabled && isInitialized && !!network && !!provider,
     queryFn: async ({ pageParam }) => {
       if (!provider) return { items: [], nextPage: undefined, total: 0 };
-      // On devnet, the REST data API returns HTTP 400 — skip entirely
-      if (network === 'devnet') return { items: [], nextPage: undefined, total: 0 };
+      // Devnet early return REMOVED — the SDK's devnet server routes dataApi
+      // to quspo get_activity. The 3-second timeout below provides hang protection.
       const offset = pageParam * count;
 
       try {

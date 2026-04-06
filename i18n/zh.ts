@@ -994,6 +994,9 @@ const zh: Record<string, string> = {
   'fire.distributionComplete': '分配完成',
   'fire.distributionCompleteDesc': '所有 FIRE 已成功分配。',
   'fire.connectWallet': '连接钱包',
+  'fire.multiplier': '倍数',
+  'fire.tokenId': '代币ID',
+  'fire.staking': '质押中...',
 
   // FIRE Charts
   'fire.emissionSchedule': '排放计划',
