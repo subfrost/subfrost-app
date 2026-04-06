@@ -1218,11 +1218,11 @@ async function deployFullProtocol(
   contracts.fireTreasury.authTokenId = await deployWithProxy(
     provider, harness, segwit, taproot, upgradeableWasm,
     'fire_treasury', F.TREASURY_IMPL, F.TREASURY_PROXY,
-    // Treasury/Redemption read-only opcodes require prior state → use Initialize
-    // (opcode 0) with dummy AlkaneId args. Sets /initialized in impl storage only;
-    // proxy storage is separate (delegatecall), so initThroughProxy still works.
-    // Initialize(fire_token={0:0}, frbtc={0:0}, fire_lp={0:0}, diesel_lp={0:0}) — 8 u128s
-    'FIRE Treasury', onProgress, 47, [0, 0, 0, 0, 0, 0, 0, 0]);
+    // Treasury uses AuthenticatedResponder — Initialize (opcode 0) calls
+    // deploy_auth_token() which sets global auth state. Using opcode 0 for
+    // CREATERESERVED then makes initThroughProxy fail with "auth token already set".
+    // Fix: use opcode 10 (Deposit) — a no-op that accepts tokens without state deps.
+    'FIRE Treasury', onProgress, 47, [10]);
   await initThroughProxy(provider, harness, segwit, taproot,
     F.TREASURY_PROXY,
     [0, 4, F.TOKEN_PROXY, 32, 0, poolBlock, poolTx, poolBlock, poolTx],
@@ -1268,9 +1268,10 @@ async function deployFullProtocol(
   contracts.fireRedemption.authTokenId = await deployWithProxy(
     provider, harness, segwit, taproot, upgradeableWasm,
     'fire_redemption', F.REDEMPTION_IMPL, F.REDEMPTION_PROXY,
-    // SetPaused(0) = opcode 4 — simple write, no state deps.
-    // Initialize with opcode 0 fails in CREATERESERVED for unknown reason.
-    'FIRE Redemption', onProgress, 55, [4, 0]);
+    // Redemption uses AuthenticatedResponder — opcode 0 deploys auth token globally,
+    // making initThroughProxy fail with "auth token already set" (same as treasury).
+    // Use GetTotalRedeemed (opcode 24) — reads a counter, no state deps.
+    'FIRE Redemption', onProgress, 55, [24]);
   await initThroughProxy(provider, harness, segwit, taproot,
     F.REDEMPTION_PROXY,
     [0, 4, F.TOKEN_PROXY, 4, F.TREASURY_PROXY],
