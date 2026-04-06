@@ -5,18 +5,28 @@ import FloorPriceIndicator from '../widgets/FloorPriceIndicator';
 import { useFireRedemption } from '@/hooks/fire/useFireRedemption';
 import { useFireTokenStats } from '@/hooks/fire/useFireTokenStats';
 import { useFireTreasury } from '@/hooks/fire/useFireTreasury';
+import { useAlkaneBalance } from '@/hooks/useAlkaneBalance';
+import { useFireRedeemMutation } from '@/hooks/fire/useFireRedeemMutation';
 import { useWallet } from '@/context/WalletContext';
+import { getConfig } from '@/utils/getConfig';
 import { useDemoGate } from '@/hooks/useDemoGate';
 import { useTranslation } from '@/hooks/useTranslation';
 import BigNumber from 'bignumber.js';
 
 export default function FireRedemptionPanel() {
   const { t } = useTranslation();
-  const { isConnected } = useWallet();
+  const { isConnected, network } = useWallet();
   const isDemoGated = useDemoGate();
   const { data: redemption } = useFireRedemption();
   const { data: tokenStats } = useFireTokenStats();
   const { data: treasury } = useFireTreasury();
+  const redeemMutation = useFireRedeemMutation();
+
+  const config = getConfig(network || 'mainnet');
+  const fireTokenId = (config as any).FIRE_TOKEN_ID as string | undefined;
+  const { data: fireBalance } = useAlkaneBalance(fireTokenId);
+  const fireBalanceNum = parseFloat(fireBalance || '0');
+  const fireBalanceDisplay = fireBalanceNum > 0 ? new BigNumber(fireBalance || '0').toFixed(4) : '0.00';
 
   const amountRef = useRef<HTMLInputElement>(null);
   const [amount, setAmount] = useState('');
@@ -42,8 +52,9 @@ export default function FireRedemptionPanel() {
   }, [parsedAmount, treasury, tokenStats, feePct]);
 
   const handleRedeem = () => {
-    if (isDemoGated) return;
-    console.log('[FireRedemptionPanel] Redeem:', { amount });
+    if (isDemoGated || parsedAmount <= 0) return;
+    const fireAmountBaseUnits = new BigNumber(parsedAmount).multipliedBy(1e8).toFixed(0);
+    redeemMutation.mutate({ fireAmount: fireAmountBaseUnits, feeRate: 1 });
   };
 
   return (
@@ -89,33 +100,33 @@ export default function FireRedemptionPanel() {
           </div>
           <div className="flex flex-col items-end gap-1">
             <div className="text-xs font-medium text-[color:var(--sf-text)]/60">
-              {t('boost.balance', { amount: '0.00' })}
+              {t('boost.balance', { amount: fireBalanceDisplay })}
             </div>
             <div className={`flex items-center gap-1.5 transition-opacity duration-300 ${inputFocused ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`} onClick={(e) => e.stopPropagation()}>
               <button
                 type="button"
-                onClick={() => setAmount((parseFloat('0.00') * 0.25).toString())}
+                onClick={() => setAmount((fireBalanceNum * 0.25).toString())}
                 className="sf-percent-btn-pill"
               >
                 25%
               </button>
               <button
                 type="button"
-                onClick={() => setAmount((parseFloat('0.00') * 0.5).toString())}
+                onClick={() => setAmount((fireBalanceNum * 0.5).toString())}
                 className="sf-percent-btn-pill"
               >
                 50%
               </button>
               <button
                 type="button"
-                onClick={() => setAmount((parseFloat('0.00') * 0.75).toString())}
+                onClick={() => setAmount((fireBalanceNum * 0.75).toString())}
                 className="sf-percent-btn-pill"
               >
                 75%
               </button>
               <button
                 type="button"
-                onClick={() => setAmount('0.00')}
+                onClick={() => setAmount(fireBalance || '0')}
                 className="sf-percent-btn-pill"
               >
                 {t('boost.max')}
@@ -142,11 +153,14 @@ export default function FireRedemptionPanel() {
 
         <button
           onClick={handleRedeem}
-          disabled={!isConnected || parsedAmount <= 0 || cooldownBlocks > 0 || isDemoGated}
+          disabled={!isConnected || parsedAmount <= 0 || cooldownBlocks > 0 || isDemoGated || redeemMutation.isPending}
           className="w-full rounded-xl py-3.5 text-sm font-bold text-white transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] disabled:opacity-30 disabled:cursor-not-allowed disabled:shadow-none bg-gradient-to-r from-red-500 to-red-600 hover:shadow-[0_4px_16px_rgba(239,68,68,0.3)]"
         >
-          {isDemoGated ? t('common.comingSoon') : cooldownBlocks > 0 ? t('fire.cooldownActive') : !isConnected ? t('fire.connectWallet') : t('fire.redeemFire')}
+          {isDemoGated ? t('common.comingSoon') : redeemMutation.isPending ? t('fire.redeeming') : cooldownBlocks > 0 ? t('fire.cooldownActive') : !isConnected ? t('fire.connectWallet') : t('fire.redeemFire')}
         </button>
+        {redeemMutation.isError && (
+          <div className="text-xs text-red-400 mt-2 text-center">{(redeemMutation.error as Error)?.message}</div>
+        )}
       </div>
     </div>
   );

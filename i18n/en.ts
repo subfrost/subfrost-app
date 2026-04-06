@@ -1005,6 +1005,8 @@ const en: Record<string, string> = {
   'fire.multiplier': 'Multiplier',
   'fire.tokenId': 'Token ID',
   'fire.staking': 'Staking...',
+  'fire.bonding': 'Bonding...',
+  'fire.redeeming': 'Redeeming...',
 
   // FIRE Charts
   'fire.emissionSchedule': 'Emission Schedule',

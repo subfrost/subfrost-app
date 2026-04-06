@@ -997,6 +997,8 @@ const zh: Record<string, string> = {
   'fire.multiplier': '倍数',
   'fire.tokenId': '代币ID',
   'fire.staking': '质押中...',
+  'fire.bonding': '绑定中...',
+  'fire.redeeming': '赎回中...',
 
   // FIRE Charts
   'fire.emissionSchedule': '排放计划',
