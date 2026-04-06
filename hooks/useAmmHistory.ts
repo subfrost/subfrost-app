@@ -295,8 +295,29 @@ export function useInfiniteAmmTxHistory({
     enabled: enabled && isInitialized && !!network && !!provider,
     queryFn: async ({ pageParam }) => {
       if (!provider) return { items: [], nextPage: undefined, total: 0 };
-      // Devnet early return REMOVED — the SDK's devnet server routes dataApi
-      // to quspo get_activity. The 3-second timeout below provides hang protection.
+      // On devnet, the SDK's dataApi path hangs the main thread before the timeout
+      // race can fire, freezing the loading screen at 95-99%. Use a direct quspo
+      // call instead — fast, non-blocking, and returns real activity data.
+      if (network === 'devnet') {
+        try {
+          const { quspoView } = await import('@/lib/devnet/quspoQuery');
+          const activity = await quspoView<{ items: any[]; count: number }>(
+            'get_activity', { limit: count }, 'devnet',
+          );
+          const items = (activity?.items || []).map((item: any, idx: number) => ({
+            id: `${item.txid || idx}-${idx}`,
+            txid: item.txid || '',
+            blockHeight: item.height || 0,
+            soldAmount: '0', boughtAmount: '0',
+            soldTokenBlockId: '', soldTokenTxId: '',
+            boughtTokenBlockId: '', boughtTokenTxId: '',
+            timestamp: 0,
+          }));
+          return { items, nextPage: undefined, total: activity?.count || 0 };
+        } catch {
+          return { items: [], nextPage: undefined, total: 0 };
+        }
+      }
       const offset = pageParam * count;
 
       try {
