@@ -1213,10 +1213,12 @@ async function deployFullProtocol(
   const F = FIRE_SLOTS;
 
   // Deploy all 6 FIRE impls + proxies
+  // implInitArgs: FIRE contracts use MessageDispatch (no opcode 50).
+  // Each needs a read-only opcode that succeeds without state for CREATERESERVED.
   contracts.fireTreasury.authTokenId = await deployWithProxy(
     provider, harness, segwit, taproot, upgradeableWasm,
     'fire_treasury', F.TREASURY_IMPL, F.TREASURY_PROXY,
-    'FIRE Treasury', onProgress, 47);
+    'FIRE Treasury', onProgress, 47, [22]);
   await initThroughProxy(provider, harness, segwit, taproot,
     F.TREASURY_PROXY,
     [0, 4, F.TOKEN_PROXY, 32, 0, poolBlock, poolTx, poolBlock, poolTx],
@@ -1225,7 +1227,7 @@ async function deployFullProtocol(
   contracts.fireToken.authTokenId = await deployWithProxy(
     provider, harness, segwit, taproot, upgradeableWasm,
     'fire_token', F.TOKEN_IMPL, F.TOKEN_PROXY,
-    'FIRE Token', onProgress, 49);
+    'FIRE Token', onProgress, 49, [99]);
   await initThroughProxy(provider, harness, segwit, taproot,
     F.TOKEN_PROXY,
     [0, 4, F.STAKING_PROXY],
@@ -1237,10 +1239,13 @@ async function deployFullProtocol(
     'fire_position_token', F.POSITION_TOKEN, [0, 0, 0, 0, 0, 0, 0, 0, 0],
     'FIRE Position Token Template', onProgress, 50);
 
+  // implInitArgs=[12] = GetTotalStaked (read-only, succeeds without state).
+  // The new fire_staking WASM removed opcode 50 — default [50] causes
+  // CREATERESERVED atomic rollback (binary not stored, all simulate fails).
   contracts.fireStaking.authTokenId = await deployWithProxy(
     provider, harness, segwit, taproot, upgradeableWasm,
     'fire_staking', F.STAKING_IMPL, F.STAKING_PROXY,
-    'FIRE Staking', onProgress, 51);
+    'FIRE Staking', onProgress, 51, [12]);
   // Init: lp_token (AlkaneId), fire_token (AlkaneId), position_template (u128)
   await initThroughProxy(provider, harness, segwit, taproot,
     F.STAKING_PROXY,
@@ -1250,7 +1255,7 @@ async function deployFullProtocol(
   contracts.fireBonding.authTokenId = await deployWithProxy(
     provider, harness, segwit, taproot, upgradeableWasm,
     'fire_bonding', F.BONDING_IMPL, F.BONDING_PROXY,
-    'FIRE Bonding', onProgress, 53);
+    'FIRE Bonding', onProgress, 53, [23]);
   await initThroughProxy(provider, harness, segwit, taproot,
     F.BONDING_PROXY,
     [0, 4, F.TOKEN_PROXY, poolBlock, poolTx, 4, F.TREASURY_PROXY, 4, F.TOKEN_PROXY],
@@ -1259,7 +1264,7 @@ async function deployFullProtocol(
   contracts.fireRedemption.authTokenId = await deployWithProxy(
     provider, harness, segwit, taproot, upgradeableWasm,
     'fire_redemption', F.REDEMPTION_IMPL, F.REDEMPTION_PROXY,
-    'FIRE Redemption', onProgress, 55);
+    'FIRE Redemption', onProgress, 55, [20]);
   await initThroughProxy(provider, harness, segwit, taproot,
     F.REDEMPTION_PROXY,
     [0, 4, F.TOKEN_PROXY, 4, F.TREASURY_PROXY],
@@ -1268,7 +1273,7 @@ async function deployFullProtocol(
   contracts.fireDistributor.authTokenId = await deployWithProxy(
     provider, harness, segwit, taproot, upgradeableWasm,
     'fire_distributor', F.DISTRIBUTOR_IMPL, F.DISTRIBUTOR_PROXY,
-    'FIRE Distributor', onProgress, 57);
+    'FIRE Distributor', onProgress, 57, [20]);
   await initThroughProxy(provider, harness, segwit, taproot,
     F.DISTRIBUTOR_PROXY,
     [0, 4, F.TOKEN_PROXY, 32, 0, 4, F.TREASURY_PROXY],
