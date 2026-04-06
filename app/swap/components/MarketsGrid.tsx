@@ -260,9 +260,11 @@ export default function MarketsGrid({ pools, onSelect, volumePeriod: externalVol
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
           </svg>
           <h3 className="text-lg font-bold text-[color:var(--sf-text)] mb-2">No pools found</h3>
-          <p className="text-sm text-[color:var(--sf-text)]/60">
-            {searchQuery ? `No pools match "${searchQuery}"` : 'No pools available'}
-          </p>
+          {searchQuery && (
+            <p className="text-sm text-[color:var(--sf-text)]/60">
+              No pools match &ldquo;{searchQuery}&rdquo;
+            </p>
+          )}
           {searchQuery && (
             <button
               onClick={() => setSearchQuery('')}

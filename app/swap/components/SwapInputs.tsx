@@ -7,10 +7,10 @@ import type { TokenMeta } from "../types";
 import { useWallet } from "@/context/WalletContext";
 import { useTheme } from "@/context/ThemeContext";
 import { useModalStore } from "@/stores/modals";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, QrCode, Wallet } from "lucide-react";
 import ActivateBridge from "./ActivateBridge";
 import BridgeDepositFlow from "./BridgeDepositFlow";
-import type { BridgeDirection } from "./BridgeDepositFlow";
+import type { BridgeDirection, BridgeMode } from "./BridgeDepositFlow";
 import { useTranslation } from "@/hooks/useTranslation";
 import { useDemoGate } from "@/hooks/useDemoGate";
 
@@ -88,6 +88,7 @@ export default function SwapInputs({
   const [bridgeActive, setBridgeActive] = useState(false);
   const [bridgeStep, setBridgeStep] = useState<BridgeStep>(1);
   const [completedSteps, setCompletedSteps] = useState<BridgeStep[]>([]);
+  const [bridgeMode, setBridgeMode] = useState<BridgeMode>("qr");
 
   // Bridge tokens don't have on-chain balances
   const BRIDGE_TOKEN_IDS = ["eth", "zec", "usdt", "usdc"];
@@ -269,14 +270,34 @@ export default function SwapInputs({
     setShowBridgeFlow(false);
   }, [from?.id, to?.id]);
 
-  if (isCrossChainPair && bridgeDirection && showBridgeFlow && fromAmount) {
+  if (isCrossChainPair && bridgeDirection && showBridgeFlow) {
     return (
       <div className="relative flex flex-col gap-3">
+        {/* QR / MetaMask mode toggle */}
+        <div className="flex items-center justify-end">
+          <div className="sf-tab-group">
+            <button
+              onClick={() => setBridgeMode("qr")}
+              className={`sf-tab-btn text-[10px] px-2.5 py-1 ${bridgeMode === "qr" ? "sf-tab-btn--active" : ""}`}
+            >
+              <QrCode size={12} className="inline mr-1" />
+              QR
+            </button>
+            <button
+              onClick={() => setBridgeMode("metamask")}
+              className={`sf-tab-btn text-[10px] px-2.5 py-1 ${bridgeMode === "metamask" ? "sf-tab-btn--active" : ""}`}
+            >
+              <Wallet size={12} className="inline mr-1" />
+              MetaMask
+            </button>
+          </div>
+        </div>
+
         <BridgeDepositFlow
           fromToken={from?.symbol ?? (isFromBridgeToken ? "USDT" : "BTC")}
           toToken={to?.symbol ?? (isToBridgeToken ? "USDT" : "BTC")}
           amount={fromAmount}
-          onAmountChange={onChangeFromAmount}
+          mode={bridgeMode}
         />
         <button
           onClick={() => setShowBridgeFlow(false)}
@@ -657,7 +678,7 @@ export default function SwapInputs({
           ) : !isConnected ? (
             t("swap.connectWallet")
           ) : isCrossChainPair ? (
-            `Bridge ${from?.symbol || ''} → ${to?.symbol || ''}`
+            `Swap ${from?.symbol || ''} → ${to?.symbol || ''}`
           ) : (
             t("swap.confirmSwap")
           )}
