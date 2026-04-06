@@ -1684,9 +1684,10 @@ export default function SwapShell() {
       if (result?.success && result.transactionId) {
         console.log('[handleRemoveLiquidity] Success! txid:', result.transactionId);
         showNotification(result.transactionId, 'removeLiquidity');
-        // Clear state after success
+        // Clear state and close modal after success
         setRemoveAmount('');
         setSelectedLPPosition(null);
+        setIsLiquidityModalOpen(false);
       }
     } catch (e: any) {
       console.error('[handleRemoveLiquidity] Error:', e);
@@ -2290,6 +2291,11 @@ export default function SwapShell() {
       <BottomPanels
         baseToken={fromToken?.symbol || 'DIESEL'}
         quoteToken={toToken?.symbol || 'frBTC'}
+        onRemovePosition={(pos) => {
+          setSelectedLPPosition(pos);
+          setLiquidityMode('remove');
+          setIsLiquidityModalOpen(true);
+        }}
       />
 
       {/* Liquidity Modal */}
