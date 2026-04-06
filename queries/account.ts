@@ -62,7 +62,7 @@ function pbField(data: Uint8Array, pos: number): [number, number, Uint8Array | n
  * Parse protorunesbyaddress protobuf response.
  * Uses recursive scan to handle varying nesting depths across Docker/devnet.
  */
-function parseProtorunesResponse(hex: string): Map<string, bigint> {
+export function parseProtorunesResponse(hex: string): Map<string, bigint> {
   const clean = hex.startsWith('0x') ? hex.slice(2) : hex;
   if (!clean || clean === '') return new Map();
   const data = new Uint8Array(clean.match(/.{2}/g)!.map(h => parseInt(h, 16)));

@@ -137,17 +137,22 @@ export function getConfig(network: string) {
     case 'regtest-local':
       return {
         ALKANE_FACTORY_ID: '4:65522',
-        BUSD_ALKANE_ID: '2:0', // NOTE: This is DIESEL (2:0 is always DIESEL). No bUSD on regtest.
+        BUSD_ALKANE_ID: '2:0',
         DIESEL_CLAIM_MERKLE_DISTRIBUTOR_ID: '',
         FRBTC_ALKANE_ID: '32:0',
-        FRZEC_ALKANE_ID: '', // Deployed frZEC contract [4:n] — set after deployment
-        FRETH_ALKANE_ID: '', // Deployed frETH contract [4:n] — set after deployment // frBTC (hardcoded in indexer)
+        FRZEC_ALKANE_ID: '',
+        FRETH_ALKANE_ID: '',
         FIRE_TOKEN_ID: '4:256',
         FIRE_STAKING_ID: '4:257',
         FIRE_TREASURY_ID: '4:258',
         FIRE_BONDING_ID: '4:259',
         FIRE_REDEMPTION_ID: '4:260',
         FIRE_DISTRIBUTOR_ID: '4:261',
+        // Fujin difficulty futures (DIESEL market)
+        FUJIN_FACTORY_ID: '2:165',
+        FUJIN_VAULT_ID: '2:167',
+        FUJIN_ZAP_ID: '2:168',
+        FUJIN_ESPO_URL: 'http://localhost:8082/rpc',
         API_URL: apiUrl,
         BLOCK_EXPLORER_URL_BTC: blockExplorerUrl,
         BLOCK_EXPLORER_URL_ETH: '',

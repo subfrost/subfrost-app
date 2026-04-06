@@ -113,7 +113,7 @@ const DIRECT_NETWORK_CONFIG: Record<Network, Record<string, string> | undefined>
   },
   'regtest-local': {
     jsonrpc_url: 'http://localhost:18888',
-    data_api_url: 'http://localhost:4000',
+    data_api_url: 'http://localhost:18888',
   },
   oylnet: {
     jsonrpc_url: 'https://regtest.subfrost.io/v4/subfrost',
@@ -227,13 +227,15 @@ export function AlkanesSDKProvider({ children, network }: AlkanesSDKProviderProp
         // RESOLVED (2026-03-31): Passing actual addresses via useActualAddresses pattern
         // in all mutation hooks fixes the address resolution issue. See CLAUDE.md Rule 0b.
         try {
-          if (network === 'devnet') {
-            // On devnet, load the boot mnemonic so the SDK provider can find
-            // UTXOs minted by faucets and boot deploys. A dummy wallet would
-            // resolve p2tr:0/p2wpkh:0 to unrelated addresses with no balance.
-            const BOOT_MNEMONIC = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
-            providerInstance.walletLoadMnemonic(BOOT_MNEMONIC, null);
-            console.log('[AlkanesSDK] Boot mnemonic loaded for devnet');
+          if (network === 'devnet' || network === 'regtest-local') {
+            // On local networks, load the session mnemonic so the SDK provider
+            // can find UTXOs for signing. A dummy wallet resolves p2tr:0/p2wpkh:0
+            // to unrelated addresses with no balance.
+            const sessionMnemonic = typeof sessionStorage !== 'undefined'
+              ? sessionStorage.getItem('subfrost_session_mnemonic') : null;
+            const mnemonic = sessionMnemonic || 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
+            providerInstance.walletLoadMnemonic(mnemonic, null);
+            console.log('[AlkanesSDK] Mnemonic loaded for', network);
           } else {
             providerInstance.walletCreate();
             console.log('[AlkanesSDK] Dummy wallet loaded (required by SDK)');

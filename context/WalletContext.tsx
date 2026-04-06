@@ -48,6 +48,8 @@ import {
   AddressType,
   createWallet,
   createWalletFromMnemonic,
+  AlkanesClient,
+  KeystoreSigner,
   KeystoreManager,
   createKeystore,
   unlockKeystore,
@@ -702,7 +704,8 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
     // addresses, all boot-seeded state (tokens, orders, positions) is invisible.
     //
     // Fix: On devnet, re-derive addresses with coinType=1 to match boot.ts + WASM provider.
-    // This ensures the UI's "connected wallet" addresses match where boot.ts sent tokens.
+    // regtest-local stays coinType=0 (from createWalletFromMnemonic) — handleBuy uses
+    // 'mainnet' preset to match. TODO: migrate to AlkanesClient.withMnemonic.
     if (network === 'devnet') {
       try {
         const bip39Mod = require('bip39');
