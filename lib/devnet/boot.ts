@@ -1867,6 +1867,9 @@ async function deployFullProtocol(
 
     if (firstPosToken) {
       console.log('[devnet-boot] Found POS token for claim:', firstPosToken);
+      // Mine blocks so block_header.time advances — FIRE uses time-based rewards.
+      // Without time passing, earned_for_position returns 0 and no FIRE is minted.
+      harness.mineBlocks(50);
       try {
         // Claim: opcode 3, send position token as incomingAlkanes
         await executeCall(provider, harness, segwit, taproot,
