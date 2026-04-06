@@ -44,11 +44,8 @@ export default function Brc20BalancesCard() {
     return (
       <div className="text-center py-2 text-[color:var(--sf-text)]/60">
         <span className="text-sm font-medium">
-          No BRC2.0 tokens found
+          BRC20 tokens coming soon
         </span>
-        <p className="text-xs mt-1 text-[color:var(--sf-text)]/40">
-          Wrap BTC to frBTC or deposit BRC-20 tokens to see balances
-        </p>
       </div>
     );
   }

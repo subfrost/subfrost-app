@@ -83,7 +83,7 @@ export default function MarketsSidepanel({
         {/* Header */}
         <div className="sf-popup-header flex-shrink-0 flex items-center justify-between px-4 py-3">
           <h2 className="text-sm font-bold text-[color:var(--sf-text)] uppercase tracking-wide">
-            Markets
+            Pools
           </h2>
           <div className="flex items-center gap-4">
             {/* Currency toggle */}
