@@ -11,17 +11,8 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { useWallet } from '@/context/WalletContext';
-import { getRpcUrl, getConfig } from '@/utils/getConfig';
-
-function readU64LE(hex: string, byteOffset: number): number {
-  let val = 0n;
-  for (let i = 0; i < 8; i++) {
-    const pos = (byteOffset + i) * 2;
-    const byte = parseInt(hex.substring(pos, pos + 2), 16);
-    val |= BigInt(byte) << BigInt(i * 8);
-  }
-  return Number(val);
-}
+import { getConfig } from '@/utils/getConfig';
+import { simulateCall, parseU128FromHex } from '@/utils/alkaneRpc';
 
 export function useLpTokenId() {
   const { network } = useWallet();
@@ -32,38 +23,16 @@ export function useLpTokenId() {
     queryKey: ['lp-token-id', factoryId, network],
     enabled: !!factoryId && !!network,
     staleTime: 60_000, // Pool ID doesn't change after boot
-    queryFn: async (): Promise<string | null> => {
+    queryFn: async ({ signal }): Promise<string | null> => {
       if (!factoryId) return null;
 
       const [fBlock, fTx] = factoryId.split(':');
-      const rpcUrl = getRpcUrl(network);
+      // FindExistingPoolId: opcode 2, args: DIESEL(2,0), frBTC(32,0)
+      const result = await simulateCall(network, fBlock, fTx, ['2', '2', '0', '32', '0'], signal);
+      if (result.error || result.data.length < 64) return null;
 
-      const resp = await fetch(rpcUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          method: 'alkanes_simulate',
-          params: [{
-            target: { block: fBlock, tx: fTx },
-            // FindExistingPoolId: opcode 2, args: DIESEL(2,0), frBTC(32,0)
-            inputs: ['2', '2', '0', '32', '0'],
-            alkanes: [],
-            transaction: '0x',
-            block: '0x',
-            height: '999',
-            txindex: 0,
-            vout: 0,
-          }],
-          id: 1,
-        }),
-      });
-      const json = await resp.json();
-      const data = json?.result?.execution?.data?.replace('0x', '') || '';
-      if (data.length < 64 || json?.result?.execution?.error) return null;
-
-      const poolBlock = readU64LE(data, 0);
-      const poolTx = readU64LE(data, 16);
+      const poolBlock = Number(parseU128FromHex(result.data, 0));
+      const poolTx = Number(parseU128FromHex(result.data, 16));
       if (poolBlock === 0 && poolTx === 0) return null;
 
       return `${poolBlock}:${poolTx}`;

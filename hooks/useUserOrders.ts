@@ -13,7 +13,13 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { useWallet } from '@/context/WalletContext';
-import { getRpcUrl, getConfig } from '@/utils/getConfig';
+import { getConfig } from '@/utils/getConfig';
+import {
+  parseU128FromHex,
+  simulateCall,
+  queryAlkanesAtAddress,
+  ALKANE_FACTORY_BLOCK,
+} from '@/utils/alkaneRpc';
 
 export interface UserOrder {
   /** The order token's AlkaneId (e.g. "2:8") — needed for cancel */
@@ -28,20 +34,6 @@ export interface UserOrder {
   quoteTx: number;
 }
 
-function parseU128FromHex(hex: string, byteOffset: number): bigint {
-  if (!hex || hex.length < (byteOffset + 16) * 2) return 0n;
-  const bytes: number[] = [];
-  for (let i = 0; i < 16; i++) {
-    const pos = (byteOffset + i) * 2;
-    bytes.push(parseInt(hex.substring(pos, pos + 2), 16));
-  }
-  let value = 0n;
-  for (let i = 0; i < 16; i++) {
-    value |= BigInt(bytes[i]) << BigInt(i * 8);
-  }
-  return value;
-}
-
 export function useUserOrders(enabled: boolean = true) {
   const { network, account, isConnected } = useWallet();
   const taprootAddress = account?.taproot?.address;
@@ -52,107 +44,59 @@ export function useUserOrders(enabled: boolean = true) {
     queryKey: ['user-orders', taprootAddress, controllerId, network],
     enabled: enabled && !!taprootAddress && !!controllerId && !!network && isConnected,
     staleTime: 15_000,
-    queryFn: async (): Promise<UserOrder[]> => {
+    queryFn: async ({ signal }): Promise<UserOrder[]> => {
       if (!taprootAddress || !controllerId) return [];
 
-      const rpcUrl = getRpcUrl(network);
-
       // Step 1: Find all alkane tokens at user's taproot address
-      const resp = await fetch(rpcUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          method: 'alkanes_protorunesbyaddress',
-          params: [{ address: taprootAddress, protocolTag: '1' }],
-          id: 1,
-        }),
-      });
-      const json = await resp.json();
+      const tokens = await queryAlkanesAtAddress(network, taprootAddress, signal);
 
       // Step 2: Filter for order token candidates (block=2, amount=1)
-      const candidates: Array<{ block: number; tx: number }> = [];
-      for (const outpoint of json?.result?.outpoints || []) {
-        const balances = outpoint.balance_sheet?.cached?.balances || outpoint.runes || [];
-        for (const entry of balances) {
-          const block = parseInt(entry.block ?? '0', 10);
-          const tx = parseInt(entry.tx ?? '0', 10);
-          const amount = parseInt(entry.amount || '0', 10);
-          if (block === 2 && amount === 1) {
-            candidates.push({ block, tx });
-          }
-        }
-      }
-
+      const candidates = tokens.filter(
+        (t) => t.block === ALKANE_FACTORY_BLOCK && t.amount === 1n,
+      );
       if (candidates.length === 0) return [];
 
-      // Step 3: For each candidate, check if it's a registered order with the controller
-      // and query GetAllDetails (opcode 23)
+      // Step 3: Batch-check registration + details for all candidates in parallel
       const [ctrlBlock, ctrlTx] = controllerId.split(':');
-      const orders: UserOrder[] = [];
 
-      for (const cand of candidates) {
-        try {
-          // Check IsRegisteredOrder (opcode 26) on the controller
-          const regResp = await fetch(rpcUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              jsonrpc: '2.0',
-              method: 'alkanes_simulate',
-              params: [{
-                target: { block: ctrlBlock, tx: ctrlTx },
-                inputs: ['26', String(cand.block), String(cand.tx)],
-                alkanes: [], transaction: '0x', block: '0x',
-                height: '999', txindex: 0, vout: 0,
-              }],
-              id: 2,
-            }),
-          });
-          const regJson = await regResp.json();
-          const regData = regJson?.result?.execution?.data?.replace('0x', '') || '';
-          if (!regData || regData.length < 32) continue;
-          const isRegistered = parseU128FromHex(regData, 0);
-          if (isRegistered !== 1n) continue;
+      const results = await Promise.all(
+        candidates.map(async (cand): Promise<UserOrder | null> => {
+          try {
+            // IsRegisteredOrder (opcode 26) on the controller
+            const reg = await simulateCall(
+              network, ctrlBlock, ctrlTx,
+              ['26', String(cand.block), String(cand.tx)],
+              signal,
+            );
+            if (reg.error || reg.data.length < 32) return null;
+            if (parseU128FromHex(reg.data, 0) !== 1n) return null;
 
-          // Query GetAllDetails (opcode 23) on the order token
-          const detailsResp = await fetch(rpcUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              jsonrpc: '2.0',
-              method: 'alkanes_simulate',
-              params: [{
-                target: { block: String(cand.block), tx: String(cand.tx) },
-                inputs: ['23'],
-                alkanes: [], transaction: '0x', block: '0x',
-                height: '999', txindex: 0, vout: 0,
-              }],
-              id: 3,
-            }),
-          });
-          const detailsJson = await detailsResp.json();
-          const data = detailsJson?.result?.execution?.data?.replace('0x', '') || '';
-          // 8 × u128 = 128 bytes = 256 hex chars
-          if (data.length < 256) continue;
+            // GetAllDetails (opcode 23) on the order token
+            const details = await simulateCall(
+              network, String(cand.block), String(cand.tx),
+              ['23'], signal,
+            );
+            if (details.error || details.data.length < 256) return null;
 
-          orders.push({
-            tokenId: `${cand.block}:${cand.tx}`,
-            orderId: Number(parseU128FromHex(data, 0)),
-            side: Number(parseU128FromHex(data, 16)),
-            price: parseU128FromHex(data, 32).toString(),
-            amount: parseU128FromHex(data, 48).toString(),
-            baseBlock: Number(parseU128FromHex(data, 64)),
-            baseTx: Number(parseU128FromHex(data, 80)),
-            quoteBlock: Number(parseU128FromHex(data, 96)),
-            quoteTx: Number(parseU128FromHex(data, 112)),
-          });
-        } catch {
-          continue;
-        }
-      }
+            const d = details.data;
+            return {
+              tokenId: `${cand.block}:${cand.tx}`,
+              orderId: Number(parseU128FromHex(d, 0)),
+              side: Number(parseU128FromHex(d, 16)),
+              price: parseU128FromHex(d, 32).toString(),
+              amount: parseU128FromHex(d, 48).toString(),
+              baseBlock: Number(parseU128FromHex(d, 64)),
+              baseTx: Number(parseU128FromHex(d, 80)),
+              quoteBlock: Number(parseU128FromHex(d, 96)),
+              quoteTx: Number(parseU128FromHex(d, 112)),
+            };
+          } catch {
+            return null;
+          }
+        }),
+      );
 
-      return orders;
+      return results.filter((o): o is UserOrder => o !== null);
     },
     retry: 2,
   });

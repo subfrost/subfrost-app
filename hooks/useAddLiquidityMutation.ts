@@ -124,7 +124,6 @@ async function findPoolId(
 
     // Case 1: Structured response (non-devnet)
     if (result?.execution?.error) {
-      console.log('[AddLiquidity] Pool does not exist:', result.execution.error);
       return null;
     }
     if (result?.status === 0 && result?.execution?.data) {
@@ -133,7 +132,6 @@ async function findPoolId(
         const buf = Buffer.from(hexData, 'hex');
         const block = Number(buf.readBigUInt64LE(0));
         const tx = Number(buf.readBigUInt64LE(16));
-        console.log('[AddLiquidity] Pool found (structured):', `${block}:${tx}`);
         return { block, tx };
       }
     }
@@ -154,18 +152,15 @@ async function findPoolId(
             const block = Number(buf.readBigUInt64LE(dataStart));
             const tx = Number(buf.readBigUInt64LE(dataStart + 16));
             if (block > 0 && block < 100000 && tx >= 0 && tx < 100000) {
-              console.log('[AddLiquidity] Pool found (protobuf):', `${block}:${tx}`);
               return { block, tx };
             }
           }
         }
       }
-      console.log('[AddLiquidity] Could not find pool ID in protobuf response');
     }
 
     return null;
   } catch (error) {
-    console.warn('[AddLiquidity] Pool existence check failed:', error);
     return null;
   }
 }
@@ -181,8 +176,6 @@ async function discoverAlkaneUtxos(
   taprootAddress: string,
   rpcUrl: string = '/api/rpc',
 ): Promise<{ txid: string; vout: number; value: number; alkanes: { block: number; tx: number; amount: number }[] }[]> {
-  console.log('[AddLiquidity] Discovering alkane UTXOs at', taprootAddress);
-
   // 1. Fetch all UTXOs at the taproot address
   const utxoResp = await fetch(rpcUrl, {
     method: 'POST',
@@ -203,10 +196,7 @@ async function discoverAlkaneUtxos(
 
   // 2. Filter for dust UTXOs (<=1000 sats) - alkane tokens live on dust outputs
   const dustUtxos = utxos.filter((u: any) => u.value <= 1000);
-  console.log(`[AddLiquidity] Found ${utxos.length} UTXOs, ${dustUtxos.length} dust UTXOs to check`);
-
   if (dustUtxos.length === 0) {
-    console.log('[AddLiquidity] No dust UTXOs found - no alkane tokens available');
     return [];
   }
 
@@ -233,17 +223,14 @@ async function discoverAlkaneUtxos(
           alkanes: balances.map((b: any) => ({ block: Number(b.block), tx: Number(b.tx), amount: Number(b.amount) })),
         };
       }
-    } catch (e) {
-      console.warn(`[AddLiquidity] Failed to check outpoint ${utxo.txid}:${utxo.vout}:`, e);
+    } catch {
+      // Silently skip UTXOs that fail the outpoint check
     }
     return null;
   });
 
   const results = await Promise.all(checks);
   const alkaneUtxos = results.filter((r): r is NonNullable<typeof r> => r !== null);
-
-  console.log(`[AddLiquidity] Found ${alkaneUtxos.length} alkane-bearing UTXOs:`,
-    alkaneUtxos.map(u => `${u.txid.slice(0, 8)}:${u.vout} -> ${u.alkanes.map((a: { block: number; tx: number; amount: number }) => `[${a.block}:${a.tx}]=${a.amount}`).join(', ')}`));
 
   return alkaneUtxos;
 }
@@ -284,7 +271,6 @@ function injectAlkaneInputs(
   for (const utxo of alkaneUtxos) {
     const key = `${utxo.txid}:${utxo.vout}`;
     if (existingInputs.has(key)) {
-      console.log(`[AddLiquidity] Alkane UTXO ${key} already in PSBT, skipping`);
       continue;
     }
 
@@ -303,12 +289,6 @@ function injectAlkaneInputs(
 
     psbt.addInput(inputData);
     injectedCount++;
-    console.log(`[AddLiquidity] Injected alkane UTXO ${key} (${utxo.value} sats)`);
-  }
-
-  if (injectedCount > 0) {
-    console.log(`[AddLiquidity] Injected ${injectedCount} alkane input(s) into PSBT`);
-    console.log(`[AddLiquidity] PSBT now has ${psbt.txInputs.length} total inputs`);
   }
 
   return psbt.toBase64();
@@ -325,10 +305,6 @@ export function useAddLiquidityMutation() {
 
   return useMutation({
     mutationFn: async (data: AddLiquidityTransactionData) => {
-      console.log('[AddLiquidity] ═══════════════════════════════════════════');
-      console.log('[AddLiquidity] Starting add liquidity transaction');
-      console.log('[AddLiquidity] Input data:', JSON.stringify(data, null, 2));
-
       // Validation
       if (!isConnected) throw new Error('Wallet not connected');
       if (!provider) throw new Error('Provider not available');
@@ -349,19 +325,15 @@ export function useAddLiquidityMutation() {
       }
       // For alkane operations, prefer taproot if available (alkanes use P2TR)
       const primaryAddress = taprootAddress || segwitAddress;
-      console.log('[AddLiquidity] Using addresses:', { taprootAddress, segwitAddress, primaryAddress });
 
       // Convert display amounts to alks
       const amount0Alks = toAlks(data.token0Amount, data.token0Decimals ?? 8);
       const amount1Alks = toAlks(data.token1Amount, data.token1Decimals ?? 8);
 
-      console.log('[AddLiquidity] Amounts in alks:', { amount0Alks, amount1Alks });
-
       // Determine pool ID: use provided poolId, discover via factory, or use default
       let resolvedPoolId = data.poolId || null;
 
       if (!resolvedPoolId) {
-        console.log('[AddLiquidity] No poolId provided, checking factory for existing pool...');
         resolvedPoolId = await findPoolId(
           provider,
           ALKANE_FACTORY_ID,
@@ -374,7 +346,6 @@ export function useAddLiquidityMutation() {
       // This handles pools created outside the factory (e.g., via direct beacon proxy instantiation)
       if (!resolvedPoolId && defaultPoolId) {
         const [block, tx] = defaultPoolId.split(':').map(Number);
-        console.log('[AddLiquidity] Factory returned no pool, using default pool:', defaultPoolId);
         resolvedPoolId = { block, tx };
       }
 
@@ -390,7 +361,6 @@ export function useAddLiquidityMutation() {
           amount0: amount0Alks,
           amount1: amount1Alks,
         });
-        console.log('[AddLiquidity] Pool found at', `${resolvedPoolId.block}:${resolvedPoolId.tx}`, '- calling pool directly with opcode 1');
       } else {
         // Pool doesn't exist: use factory opcode 1 (CreateNewPool)
         protostone = buildCreateNewPoolProtostone({
@@ -400,10 +370,7 @@ export function useAddLiquidityMutation() {
           amount0: amount0Alks,
           amount1: amount1Alks,
         });
-        console.log('[AddLiquidity] Pool does NOT exist, using factory opcode 1 (CreateNewPool)');
       }
-
-      console.log('[AddLiquidity] Protostone:', protostone);
 
       // Build input requirements
       const inputRequirements = buildAddLiquidityInputRequirements({
@@ -412,14 +379,6 @@ export function useAddLiquidityMutation() {
         amount0: amount0Alks,
         amount1: amount1Alks,
       });
-
-      console.log('[AddLiquidity] Input requirements:', inputRequirements);
-
-      console.log('[AddLiquidity] ═══════════════════════════════════════════');
-      console.log('[AddLiquidity] Executing...');
-      console.log('[AddLiquidity] inputRequirements:', inputRequirements);
-      console.log('[AddLiquidity] protostone:', protostone);
-      console.log('[AddLiquidity] feeRate:', data.feeRate);
 
       const btcNetwork = getBitcoinNetwork(network);
 
@@ -450,10 +409,6 @@ export function useAddLiquidityMutation() {
         ? primaryAddress
         : 'p2tr:0';
 
-      console.log('[AddLiquidity] From addresses:', fromAddresses, '(browser:', isBrowserWallet, ')');
-      console.log('[AddLiquidity] To addresses:', toAddresses);
-      console.log('[AddLiquidity] Change address:', changeAddr);
-
       try {
         const result = await provider.alkanesExecuteTyped({
           inputRequirements,
@@ -468,20 +423,14 @@ export function useAddLiquidityMutation() {
           network,
         });
 
-        console.log('[AddLiquidity] Called alkanesExecuteTyped (browser:', isBrowserWallet, ')');
-
-        console.log('[AddLiquidity] Execute result:', JSON.stringify(result, null, 2));
-
         // Handle auto-completed transaction
         if (result?.txid || result?.reveal_txid) {
           const txId = result.txid || result.reveal_txid;
-          console.log('[AddLiquidity] Transaction auto-completed, txid:', txId);
           return { success: true, transactionId: txId };
         }
 
         // Handle readyToSign state (need to sign PSBT manually)
         if (result?.readyToSign) {
-          console.log('[AddLiquidity] Got readyToSign, signing PSBT...');
           const readyToSign = result.readyToSign;
 
           // Convert PSBT to base64
@@ -491,7 +440,6 @@ export function useAddLiquidityMutation() {
           // The SDK's internal protorunesbyaddress is broken (returns 0x on regtest),
           // so the PSBT is built WITHOUT alkane-bearing inputs. We manually discover
           // alkane UTXOs and inject them into the PSBT before signing.
-          console.log('[AddLiquidity] Discovering alkane UTXOs for injection...');
           const alkaneUtxos = await discoverAlkaneUtxos(taprootAddress!, '/api/rpc');
 
           if (alkaneUtxos.length > 0) {
@@ -503,8 +451,6 @@ export function useAddLiquidityMutation() {
               btcNetwork,
               tapInternalKeyHex,
             );
-          } else {
-            console.warn('[AddLiquidity] No alkane UTXOs found - protostone edicts will have no tokens to transfer');
           }
 
           // ============================================================================
@@ -516,8 +462,6 @@ export function useAddLiquidityMutation() {
           // alkanes-rs SDK creates PSBTs with correct real addresses for browser wallets.
           // patchPsbtForBrowserWallet was CORRUPTING these addresses.
           // ============================================================================
-
-          console.log('[AddLiquidity] Using PSBT from SDK (addresses already correct, no patching needed)');
 
           // ============================================================================
           // Input patching for ALL browser wallet types
@@ -539,14 +483,10 @@ export function useAddLiquidityMutation() {
               paymentPubkeyHex: account?.nativeSegwit?.pubkey,
             });
             psbtBase64 = result.psbtBase64;
-            if (result.inputsPatched > 0) {
-              console.log(`[AddLiquidity] Patched ${result.inputsPatched} input(s) for browser wallet compatibility`);
-            }
           }
 
           // For keystore wallets, request user confirmation before signing
           if (walletType === 'keystore') {
-            console.log('[AddLiquidity] Keystore wallet - requesting user confirmation...');
             const approved = await requestConfirmation({
               type: 'addLiquidity',
               title: 'Confirm Add Liquidity',
@@ -560,20 +500,16 @@ export function useAddLiquidityMutation() {
             });
 
             if (!approved) {
-              console.log('[AddLiquidity] User rejected transaction');
               throw new Error('Transaction rejected by user');
             }
-            console.log('[AddLiquidity] User approved transaction');
           }
 
           // Sign PSBT — browser wallets sign all input types in a single call,
           // so we must NOT call signPsbt twice (causes "inputType: sh without redeemScript").
           let signedPsbtBase64: string;
           if (isBrowserWallet) {
-            console.log('[AddLiquidity] Browser wallet: signing PSBT once (all input types)...');
             signedPsbtBase64 = await signTaprootPsbt(psbtBase64);
           } else {
-            console.log('[AddLiquidity] Keystore: signing PSBT with SegWit, then Taproot...');
             signedPsbtBase64 = await signSegwitPsbt(psbtBase64);
             signedPsbtBase64 = await signTaprootPsbt(signedPsbtBase64);
           }
@@ -586,26 +522,8 @@ export function useAddLiquidityMutation() {
           const txHex = tx.toHex();
           const txid = tx.getId();
 
-          console.log('[AddLiquidity] Transaction built:', txid);
-          console.log('[AddLiquidity] Inputs:', tx.ins.length);
-          console.log('[AddLiquidity] Outputs:');
-          tx.outs.forEach((output, idx) => {
-            const script = Buffer.from(output.script).toString('hex');
-            if (script.startsWith('6a')) {
-              console.log(`  [${idx}] OP_RETURN (protostone) ${script.length / 2} bytes`);
-            } else {
-              try {
-                const addr = bitcoin.address.fromOutputScript(output.script, btcNetwork);
-                console.log(`  [${idx}] ${output.value} sats -> ${addr}`);
-              } catch {
-                console.log(`  [${idx}] ${output.value} sats -> unknown script`);
-              }
-            }
-          });
-
           // Broadcast
           const broadcastTxid = await provider.broadcastTransaction(txHex);
-          console.log('[AddLiquidity] Broadcast successful:', broadcastTxid);
 
           return {
             success: true,
@@ -616,13 +534,11 @@ export function useAddLiquidityMutation() {
         // Handle complete state
         if (result?.complete) {
           const txId = result.complete?.reveal_txid || result.complete?.commit_txid;
-          console.log('[AddLiquidity] Complete, txid:', txId);
           return { success: true, transactionId: txId };
         }
 
         // Fallback
         const txId = result?.txid || result?.reveal_txid;
-        console.log('[AddLiquidity] Transaction ID:', txId);
         return { success: true, transactionId: txId };
 
       } catch (error) {
@@ -630,9 +546,7 @@ export function useAddLiquidityMutation() {
         throw error;
       }
     },
-    onSuccess: (data) => {
-      console.log('[AddLiquidity] Success! txid:', data.transactionId);
-
+    onSuccess: () => {
       // Invalidate balance queries
       queryClient.invalidateQueries({ queryKey: ['sellable-currencies'] });
       queryClient.invalidateQueries({ queryKey: ['btc-balance'] });

@@ -127,10 +127,6 @@ export function useRemoveLiquidityMutation() {
 
   return useMutation({
     mutationFn: async (data: RemoveLiquidityTransactionData) => {
-      console.log('[RemoveLiquidity] ═══════════════════════════════════════════');
-      console.log('[RemoveLiquidity] Starting remove liquidity transaction');
-      console.log('[RemoveLiquidity] Input data:', JSON.stringify(data, null, 2));
-
       // Validation
       if (!isConnected) throw new Error('Wallet not connected');
       if (!provider) throw new Error('Provider not available');
@@ -151,14 +147,10 @@ export function useRemoveLiquidityMutation() {
       }
       // For alkane operations, prefer taproot if available (alkanes use P2TR)
       const primaryAddress = taprootAddress || segwitAddress;
-      console.log('[RemoveLiquidity] Using addresses:', { taprootAddress, segwitAddress, primaryAddress });
-
       // Convert display amounts to alks
       const lpAmountAlks = toAlks(data.lpAmount, data.lpDecimals ?? 8);
       const minAmount0Alks = data.minAmount0 ? toAlks(data.minAmount0, data.token0Decimals ?? 8) : '0';
       const minAmount1Alks = data.minAmount1 ? toAlks(data.minAmount1, data.token1Decimals ?? 8) : '0';
-
-      console.log('[RemoveLiquidity] Amounts in alks:', { lpAmountAlks, minAmount0Alks, minAmount1Alks });
 
       // Get block height for deadline (regtest uses large offset so deadline never expires)
       const isRegtest = network === 'regtest' || network === 'subfrost-regtest' || network === 'regtest-local';
@@ -166,8 +158,6 @@ export function useRemoveLiquidityMutation() {
         isRegtest ? 1000 : (data.deadlineBlocks || 3),
         provider as any
       );
-
-      console.log('[RemoveLiquidity] Deadline block:', deadline);
 
       // Build protostone - calls pool directly with opcode 2
       // Uses two-protostone pattern: p0 transfers LP tokens to p1 (pool call)
@@ -179,23 +169,11 @@ export function useRemoveLiquidityMutation() {
         deadline: deadline.toString(),
       });
 
-      console.log('[RemoveLiquidity] Protostone (two-protostone pattern):', protostone);
-      console.log('[RemoveLiquidity] p0: edict transfers LP to p1');
-      console.log('[RemoveLiquidity] p1: pool call with opcode 2 (RemoveLiquidity)');
-
       // Build input requirements
       const inputRequirements = buildRemoveLiquidityInputRequirements({
         lpTokenId: data.lpTokenId,
         lpAmount: lpAmountAlks,
       });
-
-      console.log('[RemoveLiquidity] Input requirements:', inputRequirements);
-
-      console.log('[RemoveLiquidity] ═══════════════════════════════════════════');
-      console.log('[RemoveLiquidity] Executing...');
-      console.log('[RemoveLiquidity] inputRequirements:', inputRequirements);
-      console.log('[RemoveLiquidity] protostone:', protostone);
-      console.log('[RemoveLiquidity] feeRate:', data.feeRate);
 
       const btcNetwork = getBitcoinNetwork(network);
 
@@ -226,10 +204,6 @@ export function useRemoveLiquidityMutation() {
         ? primaryAddress
         : 'p2tr:0';
 
-      console.log('[RemoveLiquidity] From addresses:', fromAddresses, '(browser:', isBrowserWallet, ')');
-      console.log('[RemoveLiquidity] To addresses:', toAddresses);
-      console.log('[RemoveLiquidity] Change address:', changeAddr);
-
       try {
         const result = await provider.alkanesExecuteTyped({
           inputRequirements,
@@ -243,20 +217,14 @@ export function useRemoveLiquidityMutation() {
           ordinalsStrategy: 'burn',
         });
 
-        console.log('[RemoveLiquidity] Called alkanesExecuteTyped (browser:', isBrowserWallet, ')');
-
-        console.log('[RemoveLiquidity] Execute result:', JSON.stringify(result, null, 2));
-
         // Handle auto-completed transaction
         if (result?.txid || result?.reveal_txid) {
           const txId = result.txid || result.reveal_txid;
-          console.log('[RemoveLiquidity] Transaction auto-completed, txid:', txId);
           return { success: true, transactionId: txId };
         }
 
         // Handle readyToSign state (need to sign PSBT manually)
         if (result?.readyToSign) {
-          console.log('[RemoveLiquidity] Got readyToSign, signing PSBT...');
           const readyToSign = result.readyToSign;
 
           // Convert PSBT to base64
@@ -271,8 +239,6 @@ export function useRemoveLiquidityMutation() {
           // alkanes-rs SDK creates PSBTs with correct real addresses for browser wallets.
           // patchPsbtForBrowserWallet was CORRUPTING these addresses.
           // ============================================================================
-
-          console.log('[RemoveLiquidity] Using PSBT from SDK (addresses already correct, no patching needed)');
 
           // ============================================================================
           // Input patching for ALL browser wallet types
@@ -295,14 +261,11 @@ export function useRemoveLiquidityMutation() {
               paymentPubkeyHex: account?.nativeSegwit?.pubkey,
             });
             finalPsbtBase64 = result.psbtBase64;
-            if (result.inputsPatched > 0) {
-              console.log(`[RemoveLiquidity] Patched ${result.inputsPatched} input(s) for browser wallet compatibility`);
-            }
+            // inputsPatched count available in result.inputsPatched if needed
           }
 
           // For keystore wallets, request user confirmation before signing
           if (walletType === 'keystore') {
-            console.log('[RemoveLiquidity] Keystore wallet - requesting user confirmation...');
             const token0Sym = getTokenSymbol(data.token0Id, data.token0Symbol);
             const token1Sym = getTokenSymbol(data.token1Id, data.token1Symbol);
 
@@ -321,20 +284,16 @@ export function useRemoveLiquidityMutation() {
             });
 
             if (!approved) {
-              console.log('[RemoveLiquidity] User rejected transaction');
               throw new Error('Transaction rejected by user');
             }
-            console.log('[RemoveLiquidity] User approved transaction');
           }
 
           // Sign PSBT — browser wallets sign all input types in a single call,
           // so we must NOT call signPsbt twice (causes "inputType: sh without redeemScript").
           let signedPsbtBase64: string;
           if (isBrowserWallet) {
-            console.log('[RemoveLiquidity] Browser wallet: signing PSBT once (all input types)...');
             signedPsbtBase64 = await signTaprootPsbt(finalPsbtBase64);
           } else {
-            console.log('[RemoveLiquidity] Keystore: signing PSBT with SegWit, then Taproot...');
             signedPsbtBase64 = await signSegwitPsbt(finalPsbtBase64);
             signedPsbtBase64 = await signTaprootPsbt(signedPsbtBase64);
           }
@@ -347,11 +306,8 @@ export function useRemoveLiquidityMutation() {
           const txHex = tx.toHex();
           const txid = tx.getId();
 
-          console.log('[RemoveLiquidity] Transaction built:', txid);
-
           // Broadcast
           const broadcastTxid = await provider.broadcastTransaction(txHex);
-          console.log('[RemoveLiquidity] Broadcast successful:', broadcastTxid);
 
           return {
             success: true,
@@ -362,13 +318,11 @@ export function useRemoveLiquidityMutation() {
         // Handle complete state
         if (result?.complete) {
           const txId = result.complete?.reveal_txid || result.complete?.commit_txid;
-          console.log('[RemoveLiquidity] Complete, txid:', txId);
           return { success: true, transactionId: txId };
         }
 
         // Fallback
         const txId = result?.txid || result?.reveal_txid;
-        console.log('[RemoveLiquidity] Transaction ID:', txId);
         return { success: true, transactionId: txId };
 
       } catch (error) {
@@ -377,8 +331,6 @@ export function useRemoveLiquidityMutation() {
       }
     },
     onSuccess: (data) => {
-      console.log('[RemoveLiquidity] Success! txid:', data.transactionId);
-
       // Invalidate balance queries
       queryClient.invalidateQueries({ queryKey: ['sellable-currencies'] });
       queryClient.invalidateQueries({ queryKey: ['btc-balance'] });
