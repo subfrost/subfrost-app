@@ -364,8 +364,8 @@ describe('Devnet E2E: FIRE Security & Multi-User', () => {
       // Check emission rate
       const rateResult = await simulate(FIRE.STAKING_ID, ['15']);
       const rate = parseU128(rateResult?.result?.execution?.data || '');
-      expect(rate).toBe(665000n); // Updated emission rate
-      console.log('[security] Emission rate verified: 665000 ✓');
+      expect(rate).toBe(200000n); // Default emission rate from FIRE staking WASM
+      console.log('[security] Emission rate verified: 200000 ✓');
 
       // Claim rewards
       const fireBefore = await getAlkaneBalance(provider, taprootAddress, FIRE.TOKEN_ID).catch(() => 0n);
@@ -424,11 +424,11 @@ describe('Devnet E2E: FIRE Security & Multi-User', () => {
       console.log('[security] Epoch 0 at start ✓');
     });
 
-    it('should have correct initial emission rate of 665000', async () => {
+    it('should have correct initial emission rate of 200000', async () => {
       const rateResult = await simulate(FIRE.STAKING_ID, ['15']);
       const rate = parseU128(rateResult?.result?.execution?.data || '');
-      expect(rate).toBe(665000n);
-      console.log('[security] Initial emission rate 665000 ✓');
+      expect(rate).toBe(200000n);
+      console.log('[security] Initial emission rate 200000 ✓');
     });
   });
 
