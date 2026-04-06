@@ -1007,6 +1007,14 @@ const en: Record<string, string> = {
   'fire.staking': 'Staking...',
   'fire.bonding': 'Bonding...',
   'fire.redeeming': 'Redeeming...',
+  'fire.claiming': 'Claiming...',
+  'fire.unstaking': 'Unstaking...',
+  'fire.week': 'week',
+  'fire.month': 'month',
+  'fire.months': 'months',
+  'fire.year': 'year',
+  'fire.claimVested': 'Claim Vested',
+  'fire.contributing': 'Contributing...',
 
   // FIRE Charts
   'fire.emissionSchedule': 'Emission Schedule',

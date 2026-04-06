@@ -6,6 +6,7 @@ import { useFireUserBonds } from '@/hooks/fire/useFireUserBonds';
 import { useAlkaneBalance } from '@/hooks/useAlkaneBalance';
 import { useLpTokenId } from '@/hooks/useLpTokenId';
 import { useFireBondMutation } from '@/hooks/fire/useFireBondMutation';
+import { useFireBondClaimMutation } from '@/hooks/fire/useFireBondClaimMutation';
 import { useWallet } from '@/context/WalletContext';
 import { useDemoGate } from '@/hooks/useDemoGate';
 import { useTranslation } from '@/hooks/useTranslation';
@@ -22,6 +23,11 @@ export default function FireBondingPanel({ vaultDetailsSlot }: FireBondingPanelP
   const { data: bondingStats } = useFireBondingStats();
   const { data: userBonds } = useFireUserBonds();
   const bondMutation = useFireBondMutation();
+  const bondClaimMutation = useFireBondClaimMutation();
+
+  const handleClaimVested = (bondId: number) => {
+    bondClaimMutation.mutate({ bondId, feeRate: 1 });
+  };
 
   const { data: lpTokenId } = useLpTokenId();
   const { data: lpBalance } = useAlkaneBalance(lpTokenId ?? undefined);
@@ -171,28 +177,41 @@ export default function FireBondingPanel({ vaultDetailsSlot }: FireBondingPanelP
           </div>
         ) : (
           <>
-            <div className="sf-table-header grid grid-cols-3 gap-2 px-6">
+            <div className="sf-table-header grid grid-cols-4 gap-2 px-6">
               <div>{t('fire.lpBonded')}</div>
               <div>{t('fire.fireVesting')}</div>
-              <div className="text-right">{t('fire.claimed')}</div>
+              <div>{t('fire.claimed')}</div>
+              <div className="text-right"></div>
             </div>
 
             <div className="overflow-auto no-scrollbar" style={{ maxHeight: 'calc(5 * 85px)' }}>
               {userBonds.bonds.map((bond) => (
-                <div key={bond.bondId} className="sf-row grid grid-cols-3 items-center gap-2 px-6 py-4">
+                <div key={bond.bondId} className="sf-row grid grid-cols-4 items-center gap-2 px-6 py-4">
                   <div className="text-sm font-bold text-[color:var(--sf-primary)]">
                     {new BigNumber(bond.lpAmount).dividedBy(1e8).toFixed(4)}
                   </div>
                   <div className="text-sm font-bold text-orange-500">
                     {new BigNumber(bond.fireAmount).dividedBy(1e8).toFixed(4)}
                   </div>
-                  <div className="text-sm text-[color:var(--sf-primary)] text-right">
+                  <div className="text-sm text-[color:var(--sf-primary)]">
                     {new BigNumber(bond.claimed).dividedBy(1e8).toFixed(4)}
+                  </div>
+                  <div className="text-right">
+                    <button
+                      onClick={() => handleClaimVested(bond.bondId)}
+                      disabled={bondClaimMutation.isPending}
+                      className="rounded-lg bg-orange-500/10 px-3 py-1.5 text-[10px] font-bold text-orange-400 hover:bg-orange-500/20 transition-colors disabled:opacity-30"
+                    >
+                      {bondClaimMutation.isPending ? t('fire.claiming') : t('fire.claimVested')}
+                    </button>
                   </div>
                 </div>
               ))}
             </div>
           </>
+        )}
+        {bondClaimMutation.isError && (
+          <div className="text-xs text-red-400 text-center px-6 pb-4">{(bondClaimMutation.error as Error)?.message}</div>
         )}
       </div>
     </div>

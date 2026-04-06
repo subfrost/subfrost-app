@@ -999,6 +999,14 @@ const zh: Record<string, string> = {
   'fire.staking': '质押中...',
   'fire.bonding': '绑定中...',
   'fire.redeeming': '赎回中...',
+  'fire.claiming': '领取中...',
+  'fire.unstaking': '解除质押中...',
+  'fire.week': '周',
+  'fire.month': '月',
+  'fire.months': '月',
+  'fire.year': '年',
+  'fire.claimVested': '领取已归属',
+  'fire.contributing': '贡献中...',
 
   // FIRE Charts
   'fire.emissionSchedule': '排放计划',

@@ -3,6 +3,7 @@
 import { useState, useRef } from 'react';
 import { useFireDistributor } from '@/hooks/fire/useFireDistributor';
 import { useAlkaneBalance } from '@/hooks/useAlkaneBalance';
+import { useFireContributeMutation } from '@/hooks/fire/useFireContributeMutation';
 import { useWallet } from '@/context/WalletContext';
 import TokenIcon from '@/app/components/TokenIcon';
 import { useDemoGate } from '@/hooks/useDemoGate';
@@ -21,6 +22,7 @@ export default function FireDistributionPanel() {
   const { isConnected, network } = useWallet();
   const isDemoGated = useDemoGate();
   const { data: distributor } = useFireDistributor();
+  const contributeMutation = useFireContributeMutation();
 
   const frBtcTokenId = '32:0';
   const { data: frBtcBalance } = useAlkaneBalance(frBtcTokenId);
@@ -102,11 +104,21 @@ export default function FireDistributionPanel() {
               </div>
             </div>
             <button
-              disabled={!isConnected || isDemoGated}
+              onClick={() => {
+                const amt = parseFloat(contributeAmount);
+                if (amt > 0) {
+                  const baseUnits = new BigNumber(amt).multipliedBy(1e8).toFixed(0);
+                  contributeMutation.mutate({ frBtcAmount: baseUnits, feeRate: 1 });
+                }
+              }}
+              disabled={!isConnected || isDemoGated || !contributeAmount || parseFloat(contributeAmount) <= 0 || contributeMutation.isPending}
               className="w-full rounded-xl py-3.5 text-sm font-bold text-white transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] disabled:opacity-30 disabled:cursor-not-allowed disabled:shadow-none bg-gradient-to-r from-orange-500 to-orange-600 hover:shadow-[0_4px_16px_rgba(249,115,22,0.3)]"
             >
-              {isDemoGated ? t('common.comingSoon') : !isConnected ? t('fire.connectWallet') : t('fire.contribute')}
+              {isDemoGated ? t('common.comingSoon') : contributeMutation.isPending ? t('fire.contributing') : !isConnected ? t('fire.connectWallet') : t('fire.contribute')}
             </button>
+            {contributeMutation.isError && (
+              <div className="text-xs text-red-400 mt-2 text-center">{(contributeMutation.error as Error)?.message}</div>
+            )}
           </div>
         )}
 

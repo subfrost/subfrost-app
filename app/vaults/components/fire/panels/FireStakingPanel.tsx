@@ -9,6 +9,9 @@ import { useFireUserPositions } from '@/hooks/fire/useFireUserPositions';
 import { useAlkaneBalance } from '@/hooks/useAlkaneBalance';
 import { useLpTokenId } from '@/hooks/useLpTokenId';
 import { useFireStakeMutation } from '@/hooks/fire/useFireStakeMutation';
+import { useFireUnstakeMutation } from '@/hooks/fire/useFireUnstakeMutation';
+import { useFireClaimMutation } from '@/hooks/fire/useFireClaimMutation';
+import StakingPositionCard from '../widgets/StakingPositionCard';
 import { useWallet } from '@/context/WalletContext';
 import { useDemoGate } from '@/hooks/useDemoGate';
 import { useTranslation } from '@/hooks/useTranslation';
@@ -34,6 +37,15 @@ export default function FireStakingPanel({ vaultDetailsSlot }: FireStakingPanelP
   const { data: stakingStats } = useFireStakingStats();
   const { data: userPositions } = useFireUserPositions();
   const stakeMutation = useFireStakeMutation();
+  const unstakeMutation = useFireUnstakeMutation();
+  const claimMutation = useFireClaimMutation();
+
+  const handleUnstake = (tokenId: string) => {
+    unstakeMutation.mutate({ positionTokenId: tokenId, feeRate: 1 });
+  };
+  const handleClaim = (tokenId: string) => {
+    claimMutation.mutate({ positionTokenId: tokenId, feeRate: 1 });
+  };
 
   // LP token ID discovered from AMM factory (varies per boot sequence)
   const { data: lpTokenId } = useLpTokenId();
@@ -295,47 +307,41 @@ export default function FireStakingPanel({ vaultDetailsSlot }: FireStakingPanelP
       {vaultDetailsSlot}
 
       {/* Positions — discovered via POS-{id} receipt tokens */}
-      <div className="sf-card overflow-hidden flex flex-col">
-        <div className="sf-card-header">
-          <h3 className="text-base font-bold text-[color:var(--sf-text)]">{t('fire.stakePositions')}</h3>
+      <div className="flex flex-col gap-3">
+        <div className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-muted)]">
+          {t('fire.stakePositions')}
         </div>
 
         {!isConnected ? (
-          <div className="px-6 py-12 text-center text-sm text-[color:var(--sf-text)]/60">
+          <div className="sf-card px-6 py-12 text-center text-sm text-[color:var(--sf-text)]/60">
             {t('fire.connectToViewPositions')}
           </div>
         ) : !userPositions?.positions?.length ? (
-          <div className="px-6 py-12 text-center text-sm text-[color:var(--sf-text)]/60">
+          <div className="sf-card px-6 py-12 text-center text-sm text-[color:var(--sf-text)]/60">
             {t('fire.noPositions')}
           </div>
         ) : (
-          <>
-            <div className="sf-table-header grid grid-cols-4 gap-2 px-6">
-              <div>{t('fire.lpStaked')}</div>
-              <div>{t('fire.lockTier')}</div>
-              <div>{t('fire.multiplier')}</div>
-              <div className="text-right">{t('fire.tokenId')}</div>
-            </div>
-
-            <div className="overflow-auto no-scrollbar" style={{ maxHeight: 'calc(5 * 85px)' }}>
-              {userPositions.positions.map((pos) => (
-                <div key={pos.tokenId} className="sf-row grid grid-cols-4 items-center gap-2 px-6 py-4">
-                  <div className="text-sm font-bold text-[color:var(--sf-primary)]">
-                    {new BigNumber(pos.depositAmount).dividedBy(1e8).toFixed(4)}
-                  </div>
-                  <div className="text-sm font-bold text-orange-500">
-                    {pos.lockDuration === 0 ? 'None' : `${Math.round(pos.lockDuration / 86400)}d`}
-                  </div>
-                  <div className="text-sm font-bold text-[color:var(--sf-primary)]">
-                    {(pos.multiplier / 100).toFixed(2)}x
-                  </div>
-                  <div className="text-[10px] text-[color:var(--sf-primary)] text-right font-mono">
-                    {pos.tokenId}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </>
+          <div className="flex flex-col gap-3">
+            {userPositions.positions.map((pos) => (
+              <StakingPositionCard
+                key={pos.tokenId}
+                tokenId={pos.tokenId}
+                depositAmount={pos.depositAmount}
+                multiplier={pos.multiplier}
+                lockDuration={pos.lockDuration}
+                lockEnd={pos.lockEnd}
+                onClaim={handleClaim}
+                onUnstake={handleUnstake}
+                isClaiming={claimMutation.isPending && claimMutation.variables?.positionTokenId === pos.tokenId}
+                isUnstaking={unstakeMutation.isPending && unstakeMutation.variables?.positionTokenId === pos.tokenId}
+              />
+            ))}
+          </div>
+        )}
+        {(unstakeMutation.isError || claimMutation.isError) && (
+          <div className="text-xs text-red-400 text-center">
+            {(unstakeMutation.error as Error)?.message || (claimMutation.error as Error)?.message}
+          </div>
         )}
       </div>
     </div>
