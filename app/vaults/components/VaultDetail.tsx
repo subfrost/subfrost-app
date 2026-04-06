@@ -13,6 +13,7 @@ import { useWallet } from "@/context/WalletContext";
 import { useQuery } from "@tanstack/react-query";
 import { getRpcUrl } from "@/utils/getConfig";
 import BoostSection from "./BoostSection";
+import { useNotification } from '@/context/NotificationContext';
 import { useTranslation } from '@/hooks/useTranslation';
 
 type Props = {
@@ -24,7 +25,9 @@ export default function VaultDetail({ vault: initialVault }: Props) {
   const [infoTab, setInfoTab] = useState<'about' | 'strategies' | 'info' | 'risk'>('about');
   const [selectedUnitId, setSelectedUnitId] = useState<string>('');
   const [currentVault, setCurrentVault] = useState<VaultConfig>(initialVault);
+  const [txError, setTxError] = useState<string | null>(null);
   const { t } = useTranslation();
+  const { showNotification } = useNotification();
 
   // Update current vault when initial vault changes (from parent)
   useEffect(() => {
@@ -110,20 +113,18 @@ export default function VaultDetail({ vault: initialVault }: Props) {
           amount,
           feeRate,
         });
-        console.log('Deposit successful:', result.transactionId);
-        // TODO: Show success toast
-      } catch (error) {
-        console.error('Deposit failed:', error);
-        // TODO: Show error toast
+        setTxError(null);
+        showNotification(result.transactionId, 'swap', 'Deposit');
+      } catch (error: any) {
+        setTxError(error?.message || 'Deposit failed');
       }
     } else {
       // Withdraw mode
       if (!selectedUnitId) {
-        console.error('No vault unit selected');
-        // TODO: Show error toast
+        setTxError('No vault unit selected');
         return;
       }
-      
+
       try {
         const result = await withdrawMutation.mutateAsync({
           vaultContractId: currentVault.contractAddress,
@@ -131,12 +132,11 @@ export default function VaultDetail({ vault: initialVault }: Props) {
           amount: '1', // Vault units are typically 1 per deposit
           feeRate,
         });
-        console.log('Withdraw successful:', result.transactionId);
-        // TODO: Show success toast
+        setTxError(null);
+        showNotification(result.transactionId, 'swap', 'Withdraw');
         setSelectedUnitId(''); // Reset selection
-      } catch (error) {
-        console.error('Withdraw failed:', error);
-        // TODO: Show error toast
+      } catch (error: any) {
+        setTxError(error?.message || 'Withdraw failed');
       }
     }
   };
@@ -321,19 +321,27 @@ export default function VaultDetail({ vault: initialVault }: Props) {
               <BoostSection vault={currentVault} showPositions />
             </div>
           ) : (
-            <VaultDepositInterface
-              mode={mode === 'boost' ? 'deposit' : mode}
-              onModeChange={setMode}
-              vault={currentVault}
-              onVaultChange={handleVaultChange}
-              userBalance={stats.userBalance}
-              apy={stats.apy}
-              onExecute={handleExecute}
-              vaultUnits={vaultUnits || []}
-              selectedUnitId={selectedUnitId}
-              onUnitSelect={setSelectedUnitId}
-              hideTabs={isDxBtc}
-            />
+            <>
+              <VaultDepositInterface
+                mode={mode === 'boost' ? 'deposit' : mode}
+                onModeChange={setMode}
+                vault={currentVault}
+                onVaultChange={handleVaultChange}
+                userBalance={stats.userBalance}
+                apy={stats.apy}
+                onExecute={handleExecute}
+                vaultUnits={vaultUnits || []}
+                selectedUnitId={selectedUnitId}
+                onUnitSelect={setSelectedUnitId}
+                hideTabs={isDxBtc}
+              />
+              {txError && (
+                <div className="sf-alert sf-alert-red mt-3 px-4 py-3 text-sm">
+                  {txError}
+                  <button onClick={() => setTxError(null)} className="ml-2 text-xs opacity-60 hover:opacity-100">&times;</button>
+                </div>
+              )}
+            </>
           )}
         </div>
 
