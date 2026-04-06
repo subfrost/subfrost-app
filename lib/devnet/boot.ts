@@ -1268,8 +1268,9 @@ async function deployFullProtocol(
   contracts.fireRedemption.authTokenId = await deployWithProxy(
     provider, harness, segwit, taproot, upgradeableWasm,
     'fire_redemption', F.REDEMPTION_IMPL, F.REDEMPTION_PROXY,
-    // Initialize(fire_token={0:0}, treasury={0:0}) — exactly 4 u128s
-    'FIRE Redemption', onProgress, 55, [0, 0, 0, 0]);
+    // SetPaused(0) = opcode 4 — simple write, no state deps.
+    // Initialize with opcode 0 fails in CREATERESERVED for unknown reason.
+    'FIRE Redemption', onProgress, 55, [4, 0]);
   await initThroughProxy(provider, harness, segwit, taproot,
     F.REDEMPTION_PROXY,
     [0, 4, F.TOKEN_PROXY, 4, F.TREASURY_PROXY],
