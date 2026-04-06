@@ -1218,7 +1218,7 @@ async function deployFullProtocol(
   contracts.fireTreasury.authTokenId = await deployWithProxy(
     provider, harness, segwit, taproot, upgradeableWasm,
     'fire_treasury', F.TREASURY_IMPL, F.TREASURY_PROXY,
-    'FIRE Treasury', onProgress, 47, [22]);
+    'FIRE Treasury', onProgress, 47, [23]);
   await initThroughProxy(provider, harness, segwit, taproot,
     F.TREASURY_PROXY,
     [0, 4, F.TOKEN_PROXY, 32, 0, poolBlock, poolTx, poolBlock, poolTx],
