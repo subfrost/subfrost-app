@@ -7,6 +7,7 @@ import RewardsProjector from '../widgets/RewardsProjector';
 import { useFireStakingStats } from '@/hooks/fire/useFireStakingStats';
 import { useFireUserPositions } from '@/hooks/fire/useFireUserPositions';
 import { useAlkaneBalance } from '@/hooks/useAlkaneBalance';
+import { useLpTokenId } from '@/hooks/useLpTokenId';
 import { useFireStakeMutation } from '@/hooks/fire/useFireStakeMutation';
 import { useWallet } from '@/context/WalletContext';
 import { useDemoGate } from '@/hooks/useDemoGate';
@@ -34,9 +35,9 @@ export default function FireStakingPanel({ vaultDetailsSlot }: FireStakingPanelP
   const { data: userPositions } = useFireUserPositions();
   const stakeMutation = useFireStakeMutation();
 
-  // LP token balance — devnet LP token is 2:6 (matches mutation hooks pattern)
-  const lpTokenId = '2:6';
-  const { data: lpBalance } = useAlkaneBalance(lpTokenId);
+  // LP token ID discovered from AMM factory (varies per boot sequence)
+  const { data: lpTokenId } = useLpTokenId();
+  const { data: lpBalance } = useAlkaneBalance(lpTokenId ?? undefined);
   const lpBalanceNum = parseFloat(lpBalance || '0');
   const lpBalanceDisplay = lpBalanceNum > 0 ? new BigNumber(lpBalance || '0').toFixed(4) : '0.00';
 

@@ -4,6 +4,7 @@ import { useState, useRef } from 'react';
 import { useFireBondingStats } from '@/hooks/fire/useFireBondingStats';
 import { useFireUserBonds } from '@/hooks/fire/useFireUserBonds';
 import { useAlkaneBalance } from '@/hooks/useAlkaneBalance';
+import { useLpTokenId } from '@/hooks/useLpTokenId';
 import { useFireBondMutation } from '@/hooks/fire/useFireBondMutation';
 import { useWallet } from '@/context/WalletContext';
 import { useDemoGate } from '@/hooks/useDemoGate';
@@ -22,8 +23,8 @@ export default function FireBondingPanel({ vaultDetailsSlot }: FireBondingPanelP
   const { data: userBonds } = useFireUserBonds();
   const bondMutation = useFireBondMutation();
 
-  const lpTokenId = '2:6';
-  const { data: lpBalance } = useAlkaneBalance(lpTokenId);
+  const { data: lpTokenId } = useLpTokenId();
+  const { data: lpBalance } = useAlkaneBalance(lpTokenId ?? undefined);
   const lpBalanceNum = parseFloat(lpBalance || '0');
   const lpBalanceDisplay = lpBalanceNum > 0 ? new BigNumber(lpBalance || '0').toFixed(4) : '0.00';
 
