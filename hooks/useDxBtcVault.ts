@@ -8,17 +8,7 @@ export async function fetchDxBtcStats(network: string) {
   const vaultId = (config as any).DXBTC_VAULT_ID;
   if (!vaultId) return null;
 
-  // On devnet, try quspo first for enriched data
-  if (network === 'devnet') {
-    try {
-      const { quspoGetDxBtcStats } = await import('@/lib/devnet/quspoQuery');
-      const stats = await quspoGetDxBtcStats(vaultId, network);
-      if (stats) return { totalSupply: stats.totalSupply, feesDeposited: stats.feesDeposited, vaultId };
-    } catch (e) {
-      console.warn('[useDxBtcVault] quspo failed, falling back to RPC:', e);
-    }
-  }
-
+  // Query contract directly via alkanes_simulate (no deprecated quspo dependency)
   const [block, tx] = vaultId.split(':');
   const rpcUrl = getRpcUrl(network);
 

@@ -3,15 +3,7 @@ import { useWallet } from '@/context/WalletContext';
 import { getRpcUrl } from '@/utils/getConfig';
 
 async function fetchGaugeStats(gaugeId: string, network: string) {
-  // On devnet, try quspo first
-  if (network === 'devnet') {
-    try {
-      const { quspoGetGaugeStats } = await import('@/lib/devnet/quspoQuery');
-      const stats = await quspoGetGaugeStats(gaugeId, network);
-      if (stats) return { gaugeId, totalStaked: stats.totalStaked, gaugeType: stats.gaugeType, error: null };
-    } catch { /* fall through */ }
-  }
-
+  // Query contract directly via alkanes_simulate (no deprecated quspo dependency)
   const [block, tx] = gaugeId.split(':');
   const resp = await fetch(getRpcUrl(network), {
     method: 'POST',

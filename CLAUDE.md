@@ -21,6 +21,10 @@ Before writing ANY new code, SEARCH the codebase for how the same thing is alrea
 
 **The codebase IS the documentation.** If 10 hooks use `getRpcUrl(network)`, the 11th must too. If boot.ts uses `alkanes_protorunesbyaddress` for balance queries, the UI must too. If E2E tests use `[50]` as a deploy init arg and it works, don't change it to `[21]` without understanding why `[50]` was chosen.
 
+**All data must come from contracts, never localStorage.** Frontend hooks must query on-chain state via `alkanes_simulate` or `alkanes_protorunesbyaddress`. Never use localStorage, sessionStorage, or client-side caches as a source of truth for contract state.
+
+**quspo is deprecated — do NOT use it in hooks.** The `lib/devnet/quspoQuery.ts` helper and any direct `quspoView`/`quspoGet*` imports must NOT be used in hooks or components. The quspo WASM tertiary indexer is loaded by boot.ts as infrastructure for the devnet server's fetch interceptor — that's fine. But hooks must use the SDK's standard API (`provider.dataApi*`, `alkanes_simulate`, `alkanes_protorunesbyaddress`) which routes through the interceptor. On devnet where the SDK dataApi hangs, return empty gracefully instead of calling quspo directly.
+
 ### Rule 0 — Verify Before Asserting Impossibility
 NEVER declare something "impossible" based on code comments alone. Check git history first (`git log --all --grep="keyword"`), then run the code. A deployment bug is not an architectural limitation. Never add environment-specific workarounds — if an SDK method fails, debug WHY and fix the root cause.
 
