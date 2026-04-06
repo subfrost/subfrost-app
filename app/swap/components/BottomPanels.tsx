@@ -38,6 +38,7 @@ type PanelTab = 'orders' | 'positions' | 'trades' | 'activity';
 interface Props {
   baseToken: string;
   quoteToken: string;
+  onRemovePosition?: (position: any) => void;
 }
 
 function EmptyState({ icon: Icon, message }: { icon: any; message: string }) {
@@ -49,7 +50,7 @@ function EmptyState({ icon: Icon, message }: { icon: any; message: string }) {
   );
 }
 
-export default function BottomPanels({ baseToken, quoteToken }: Props) {
+export default function BottomPanels({ baseToken, quoteToken, onRemovePosition }: Props) {
   const [activeTab, setActiveTab] = useState<PanelTab>('trades');
   const { isConnected, network } = useWallet() as any;
   const { positions: allPositions, isLoading: isLoadingPositions } = useLPPositions();
@@ -199,13 +200,14 @@ export default function BottomPanels({ baseToken, quoteToken }: Props) {
             ) : (
               <div>
                 {/* Header */}
-                <div className="sf-table-header grid grid-cols-[1fr_auto_auto] gap-4 px-3 py-2">
+                <div className="sf-table-header grid grid-cols-[1fr_auto_auto_auto] gap-4 px-3 py-2">
                   <span>Pool</span>
                   <span className="text-right">Amount</span>
                   <span className="text-right w-[72px]">ID</span>
+                  <span className="w-[60px]" />
                 </div>
                 {lpPositions.map((pos) => (
-                  <div key={pos.id} className="sf-row grid grid-cols-[1fr_auto_auto] gap-4 px-3 py-2.5 items-center">
+                  <div key={pos.id} className="sf-row grid grid-cols-[1fr_auto_auto_auto] gap-4 px-3 py-2.5 items-center">
                     <div className="flex items-center gap-2 min-w-0">
                       <div className="flex -space-x-2 shrink-0">
                         <div className="relative z-10">
@@ -225,6 +227,12 @@ export default function BottomPanels({ baseToken, quoteToken }: Props) {
                     <span className="text-[10px] text-right tabular-nums text-[color:var(--sf-text)]/40 w-[72px] truncate">
                       {pos.id}
                     </span>
+                    <button
+                      onClick={() => onRemovePosition?.(pos)}
+                      className="sf-btn-ghost text-[10px] px-2 py-1 w-[60px] text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg"
+                    >
+                      Remove
+                    </button>
                   </div>
                 ))}
               </div>
