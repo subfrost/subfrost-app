@@ -1216,21 +1216,20 @@ async function deployFullProtocol(
   console.log('[devnet-boot] Phase 3: FIRE protocol (impl+proxy for each)...');
   const F = FIRE_SLOTS;
 
-  // Deploy all 6 FIRE impls + proxies
-  // implInitArgs: FIRE contracts use MessageDispatch (no opcode 50).
-  // Each needs a read-only opcode that succeeds without state for CREATERESERVED.
-  // Treasury uses AuthenticatedResponder — its Initialize calls deploy_auth_token()
-  // which writes to /auth. The upgradeable proxy ALSO writes /auth during its own
-  // [0x7fff] init, making them conflict. Even authUnits=0 still calls deploy_auth_token.
-  //
-  // Fix: deploy treasury DIRECTLY (no proxy) using CREATERESERVED with opcode 0
-  // (Initialize) + real init args. This is a single-shot deploy+init — no upgrade
-  // capability, but correct auth token behavior.
-  await fetchAndDeploy(provider, harness, segwit, taproot,
-    'fire_treasury', F.TREASURY_PROXY,
+  // Deploy all 6 FIRE impls + proxies.
+  // FIRE contracts use MessageDispatch (no opcode 50) — each needs a valid
+  // CREATERESERVED init opcode. Contracts with AuthenticatedResponder now use
+  // deploy_self_auth_token (context.myself as auth) instead of deploy_auth_token
+  // (factory-based). This avoids the /auth storage conflict with the upgradeable
+  // proxy which also writes /auth during [0x7fff] init.
+  contracts.fireTreasury.authTokenId = await deployWithProxy(
+    provider, harness, segwit, taproot, upgradeableWasm,
+    'fire_treasury', F.TREASURY_IMPL, F.TREASURY_PROXY,
+    'FIRE Treasury', onProgress, 47, [10]);
+  await initThroughProxy(provider, harness, segwit, taproot,
+    F.TREASURY_PROXY,
     [0, 4, F.TOKEN_PROXY, 32, 0, poolBlock, poolTx, poolBlock, poolTx],
-    'FIRE Treasury (direct)', onProgress, 47);
-  contracts.fireTreasury.authTokenId = await discoverLastAuthToken(taproot);
+    'FIRE Treasury');
 
   contracts.fireToken.authTokenId = await deployWithProxy(
     provider, harness, segwit, taproot, upgradeableWasm,
@@ -1260,26 +1259,32 @@ async function deployFullProtocol(
     [0, poolBlock, poolTx, 4, F.TOKEN_PROXY, F.POSITION_TOKEN],
     'FIRE Staking');
 
-  // Bonding also uses AuthenticatedResponder — deploy directly (no proxy).
-  await fetchAndDeploy(provider, harness, segwit, taproot,
-    'fire_bonding', F.BONDING_PROXY,
+  contracts.fireBonding.authTokenId = await deployWithProxy(
+    provider, harness, segwit, taproot, upgradeableWasm,
+    'fire_bonding', F.BONDING_IMPL, F.BONDING_PROXY,
+    'FIRE Bonding', onProgress, 53, [23]);
+  await initThroughProxy(provider, harness, segwit, taproot,
+    F.BONDING_PROXY,
     [0, 4, F.TOKEN_PROXY, poolBlock, poolTx, 4, F.TREASURY_PROXY, 4, F.TOKEN_PROXY],
-    'FIRE Bonding (direct)', onProgress, 53);
-  contracts.fireBonding.authTokenId = await discoverLastAuthToken(taproot);
+    'FIRE Bonding');
 
-  // Same AuthenticatedResponder /auth conflict — deploy directly (no proxy).
-  await fetchAndDeploy(provider, harness, segwit, taproot,
-    'fire_redemption', F.REDEMPTION_PROXY,
+  contracts.fireRedemption.authTokenId = await deployWithProxy(
+    provider, harness, segwit, taproot, upgradeableWasm,
+    'fire_redemption', F.REDEMPTION_IMPL, F.REDEMPTION_PROXY,
+    'FIRE Redemption', onProgress, 55, [24]);
+  await initThroughProxy(provider, harness, segwit, taproot,
+    F.REDEMPTION_PROXY,
     [0, 4, F.TOKEN_PROXY, 4, F.TREASURY_PROXY],
-    'FIRE Redemption (direct)', onProgress, 55);
-  contracts.fireRedemption.authTokenId = await discoverLastAuthToken(taproot);
+    'FIRE Redemption');
 
-  // Distributor also uses AuthenticatedResponder — deploy directly.
-  await fetchAndDeploy(provider, harness, segwit, taproot,
-    'fire_distributor', F.DISTRIBUTOR_PROXY,
+  contracts.fireDistributor.authTokenId = await deployWithProxy(
+    provider, harness, segwit, taproot, upgradeableWasm,
+    'fire_distributor', F.DISTRIBUTOR_IMPL, F.DISTRIBUTOR_PROXY,
+    'FIRE Distributor', onProgress, 57, [20]);
+  await initThroughProxy(provider, harness, segwit, taproot,
+    F.DISTRIBUTOR_PROXY,
     [0, 4, F.TOKEN_PROXY, 32, 0, 4, F.TREASURY_PROXY],
-    'FIRE Distributor (direct)', onProgress, 57);
-  contracts.fireDistributor.authTokenId = await discoverLastAuthToken(taproot);
+    'FIRE Distributor');
 
   // -----------------------------------------------------------------------
   // Phase 4: Core Protocol — standalone proxies + template beacons
