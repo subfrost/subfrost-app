@@ -23,6 +23,168 @@ import type { CurrencyPriceInfoResponse } from '@/types/alkanes';
 type WebProvider = import('@alkanes/ts-sdk/wasm').WebProvider;
 
 // ---------------------------------------------------------------------------
+// Protobuf-based alkane balance fetching (ported from fuboku-app)
+// Works directly with metashrew_view RPC — no REST layer needed.
+// ---------------------------------------------------------------------------
+
+function buildProtorunesPayload(address: string): string {
+  const addrBuf = new TextEncoder().encode(address);
+  const parts = [0x0a, addrBuf.length, ...addrBuf, 0x12, 0x02, 0x08, 0x01];
+  return '0x' + Array.from(parts, b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function pbVarint(data: Uint8Array, pos: number): [number, number] {
+  let val = 0, shift = 0;
+  while (pos < data.length) {
+    const b = data[pos++];
+    val |= (b & 0x7f) << shift;
+    if (!(b & 0x80)) break;
+    shift += 7;
+  }
+  return [val, pos];
+}
+
+function pbField(data: Uint8Array, pos: number): [number, number, Uint8Array | number, number] | null {
+  if (pos >= data.length) return null;
+  const [tag, p1] = pbVarint(data, pos);
+  const fieldNum = tag >> 3, wireType = tag & 7;
+  if (wireType === 0) {
+    const [val, p2] = pbVarint(data, p1);
+    return [fieldNum, wireType, val, p2];
+  } else if (wireType === 2) {
+    const [len, p2] = pbVarint(data, p1);
+    return [fieldNum, wireType, data.subarray(p2, p2 + len), p2 + len];
+  }
+  return [fieldNum, wireType, 0, p1 + 1];
+}
+
+/**
+ * Parse protorunesbyaddress protobuf response.
+ * Uses recursive scan to handle varying nesting depths across Docker/devnet.
+ */
+function parseProtorunesResponse(hex: string): Map<string, bigint> {
+  const clean = hex.startsWith('0x') ? hex.slice(2) : hex;
+  if (!clean || clean === '') return new Map();
+  const data = new Uint8Array(clean.match(/.{2}/g)!.map(h => parseInt(h, 16)));
+  const balanceMap = new Map<string, bigint>();
+
+  interface Found { block: number; tx: number; amount: bigint }
+
+  function digForBlockTx(buf: Uint8Array, depth: number): { block: number; tx: number } {
+    if (depth > 6) return { block: -1, tx: 0 };
+    let pos = 0, block = -1, tx = 0;
+    while (pos < buf.length) {
+      const f = pbField(buf, pos);
+      if (!f) break;
+      const [fn, wt, val, np] = f;
+      pos = np;
+      // block/tx are small numbers (alkane IDs); filter out large varints (amounts)
+      if (fn === 1 && wt === 0 && (val as number) <= 1000) block = val as number;
+      if (fn === 2 && wt === 0) tx = val as number;
+      if (wt === 2) {
+        const inner = digForBlockTx(val as Uint8Array, depth + 1);
+        if (inner.block >= 0) { block = inner.block; tx = inner.tx; }
+      }
+    }
+    return { block, tx };
+  }
+
+  function parseBalanceEntry(buf: Uint8Array): Found | null {
+    let pos = 0, block = -1, tx = 0, amount = 0n;
+    while (pos < buf.length) {
+      const f = pbField(buf, pos);
+      if (!f) break;
+      const [fn, wt, val, np] = f;
+      pos = np;
+      if (fn === 1 && wt === 2) {
+        const id = digForBlockTx(val as Uint8Array, 0);
+        if (id.block >= 0) { block = id.block; tx = id.tx; }
+      }
+      if (fn === 2 && wt === 2) {
+        const amtBuf = val as Uint8Array;
+        if (amtBuf.length > 0 && amtBuf[0] === 0x08) {
+          const [v] = pbVarint(amtBuf, 1);
+          amount = BigInt(v);
+        } else {
+          for (let i = 0; i < amtBuf.length; i++) amount |= BigInt(amtBuf[i]) << (BigInt(i) * 8n);
+        }
+      }
+      if (fn === 2 && wt === 0) amount = BigInt(val as number);
+    }
+    return block >= 0 ? { block, tx, amount } : null;
+  }
+
+  function parseBalanceSheet(buf: Uint8Array): Found[] {
+    const results: Found[] = [];
+    let pos = 0;
+    while (pos < buf.length) {
+      const f = pbField(buf, pos);
+      if (!f) break;
+      const [fn, wt, val, np] = f;
+      pos = np;
+      if (fn === 1 && wt === 2) {
+        const e = parseBalanceEntry(val as Uint8Array);
+        if (e) results.push(e);
+      }
+    }
+    return results;
+  }
+
+  // Top level: repeated outpoints → f1 = balance_sheet
+  let pos = 0;
+  while (pos < data.length) {
+    const f = pbField(data, pos);
+    if (!f) break;
+    const [fn, wt, val, np] = f;
+    pos = np;
+    if (fn !== 1 || wt !== 2) continue;
+    // Inside outpoint: f1 = balance_sheet
+    const outpoint = val as Uint8Array;
+    let opos = 0;
+    while (opos < outpoint.length) {
+      const of_ = pbField(outpoint, opos);
+      if (!of_) break;
+      const [ofn, owt, oval, onp] = of_;
+      opos = onp;
+      if (ofn === 1 && owt === 2) {
+        for (const e of parseBalanceSheet(oval as Uint8Array)) {
+          if (e.block > 0 || e.tx > 0) {
+            const key = `${e.block}:${e.tx}`;
+            balanceMap.set(key, (balanceMap.get(key) || 0n) + e.amount);
+          }
+        }
+      }
+    }
+  }
+
+  return balanceMap;
+}
+
+async function fetchAlkaneBalancesViaProtobuf(
+  rpcUrl: string,
+  address: string,
+): Promise<{ alkaneId: { block: string; tx: string }; balance: string }[]> {
+  const payload = buildProtorunesPayload(address);
+  const res = await fetch(rpcUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    signal: AbortSignal.timeout(20000),
+    body: JSON.stringify({
+      jsonrpc: '2.0', id: 1,
+      method: 'metashrew_view',
+      params: ['protorunesbyaddress', payload, 'latest'],
+    }),
+  });
+  const data = await res.json();
+  if (data.error || !data.result) return [];
+  const balanceMap = parseProtorunesResponse(data.result);
+  return Array.from(balanceMap, ([id, bal]) => {
+    const [block, tx] = id.split(':');
+    return { alkaneId: { block, tx }, balance: bal.toString() };
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Enriched wallet data
 // ---------------------------------------------------------------------------
 
@@ -375,33 +537,12 @@ export function alkaneBalanceQueryOptions(deps: AlkaneBalanceDeps) {
 
       for (const address of addresses) {
         try {
-          // On devnet, REST data API returns HTTP 400. Use RPC fallback instead.
           let items: any[] = [];
-          if (deps.network === 'devnet') {
-            const rpcResp = await fetch('http://localhost:18888', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                jsonrpc: '2.0', id: 1,
-                method: 'alkanes_protorunesbyaddress',
-                params: [{ address, protocolTag: '1' }],
-              }),
-            });
-            const rpcJson = await rpcResp.json();
-            const outpoints = rpcJson?.result?.outpoints || [];
-            for (const outpoint of outpoints) {
-              const balances = outpoint.balance_sheet?.cached?.balances || outpoint.runes || [];
-              for (const entry of balances) {
-                const block = entry.block ?? '0';
-                const tx = entry.tx ?? '0';
-                items.push({
-                  alkaneId: { block: String(block), tx: String(tx) },
-                  name: '', symbol: '',
-                  balance: String(entry.amount || '0'),
-                });
-              }
-            }
-            console.log(`[alkaneBalanceQuery] ${address.slice(0, 12)}...: ${items.length} alkanes (RPC fallback)`);
+          if (deps.network === 'regtest-local') {
+            // Local Docker regtest: REST API doesn't exist. Use protobuf metashrew_view RPC.
+            items = await fetchAlkaneBalancesViaProtobuf('http://localhost:18888', address);
+          } else if (deps.network === 'devnet') {
+            items = await fetchAlkaneBalancesViaProtobuf('http://localhost:18888', address);
           } else {
             const result = await (provider as any).dataApiGetAlkanesByAddress(address);
             items = result?.data || [];
@@ -525,30 +666,18 @@ export function sellableCurrenciesQueryOptions(deps: SellableCurrenciesDeps) {
             // This powers the 25/50/75/MAX percentage buttons on the swap page.
             let balances: { alkaneId: string; balance: string; name?: string; symbol?: string }[] = [];
 
-            if (deps.network === 'devnet') {
-              // REST data API returns HTTP 400 on devnet. Use RPC directly.
-              const rpcResp = await fetch('http://localhost:18888', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  jsonrpc: '2.0', id: 1,
-                  method: 'alkanes_protorunesbyaddress',
-                  params: [{ address, protocolTag: '1' }],
-                }),
-              });
-              const rpcJson = await rpcResp.json();
-              const outpoints = rpcJson?.result?.outpoints || [];
-              for (const outpoint of outpoints) {
-                const entries = outpoint.balance_sheet?.cached?.balances || outpoint.runes || [];
-                for (const entry of entries) {
-                  const known = KNOWN_TOKENS_SELL[`${entry.block}:${entry.tx}`];
-                  balances.push({
-                    alkaneId: `${entry.block}:${entry.tx}`,
-                    balance: String(entry.amount || '0'),
-                    name: known?.name,
-                    symbol: known?.symbol,
-                  });
-                }
+            if (deps.network === 'devnet' || deps.network === 'regtest-local') {
+              // REST data API returns HTTP 400/404 on devnet/regtest-local. Use protobuf RPC.
+              const rawItems = await fetchAlkaneBalancesViaProtobuf('http://localhost:18888', address);
+              for (const item of rawItems) {
+                const id = `${item.alkaneId.block}:${item.alkaneId.tx}`;
+                const known = KNOWN_TOKENS_SELL[id];
+                balances.push({
+                  alkaneId: id,
+                  balance: item.balance,
+                  name: known?.name,
+                  symbol: known?.symbol,
+                });
               }
             } else {
               const resp = await fetch(

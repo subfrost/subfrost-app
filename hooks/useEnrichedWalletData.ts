@@ -171,13 +171,18 @@ export function useEnrichedWalletData(): EnrichedWalletData {
     await Promise.all([btcQuery.refetch(), alkaneQuery.refetch()]);
   }, [btcQuery.refetch, alkaneQuery.refetch]);
 
-  // Merge BTC data + alkane data into the unified WalletBalances shape
+  // Merge BTC data + alkane data into the unified WalletBalances shape.
+  // Show alkanes even if btcQuery hasn't resolved yet (e.g. regtest-local
+  // where enrichedBalances may fail but protobuf alkane query succeeds).
   const balances: WalletBalances = btcQuery.data
     ? {
         ...btcQuery.data.balances,
         alkanes: alkaneQuery.data ?? [],
       }
-    : EMPTY_BALANCES;
+    : {
+        ...EMPTY_BALANCES,
+        alkanes: alkaneQuery.data ?? [],
+      };
 
   return {
     balances,

@@ -6,24 +6,10 @@ import { useWallet } from '@/context/WalletContext';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { useSandshrewProvider } from '@/hooks/useSandshrewProvider';
 import { Pickaxe, Clock, Zap, Fuel } from 'lucide-react';
-import * as bitcoin from 'bitcoinjs-lib';
 import { useTranslation } from '@/hooks/useTranslation';
 
-// DIESEL token ID (2:0) - the free-mint alkane token
-const DIESEL_ID = '2:0';
-const DIESEL_MINT_OPCODE = 77;
-
-// Helper to convert Uint8Array to base64
-function uint8ArrayToBase64(bytes: Uint8Array): string {
-  let binary = '';
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return btoa(binary);
-}
-
 export default function RegtestControls() {
-  const { network, account, signTaprootPsbt } = useWallet();
+  const { network, account } = useWallet();
   const { provider, isWalletLoaded } = useAlkanesSDK();
   const extendedProvider = useSandshrewProvider();
   const queryClient = useQueryClient();
@@ -67,7 +53,7 @@ export default function RegtestControls() {
         const response = await fetch('/api/regtest/mine', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ blocks: remaining, address }),
+          body: JSON.stringify({ blocks: remaining, address, network }),
         });
 
         const result = await response.json();
@@ -146,98 +132,30 @@ export default function RegtestControls() {
   const mineDiesel = async () => {
     setMining(true);
     try {
-      if (!provider) {
-        throw new Error('Provider not initialized');
-      }
-      if (!isWalletLoaded) {
-        throw new Error('Wallet not loaded into provider. Please reconnect.');
-      }
+      if (!extendedProvider) throw new Error('Provider not initialized');
 
       const taprootAddress = account?.taproot?.address;
-      if (!taprootAddress) {
-        throw new Error('No taproot address available');
-      }
+      const segwitAddress = account?.nativeSegwit?.address;
+      if (!taprootAddress) throw new Error('No taproot address available');
 
-      console.log('[DIESEL] Starting DIESEL mint for:', taprootAddress);
-
-      // Build protostone: [2,0,77]:v0:v0
-      // - [2,0,77]: call DIESEL contract (2:0) with opcode 77 (mint)
-      // - v0: pointer - minted tokens go to output 0 (user)
-      // - v0: refund - any refunds go to output 0 (user)
-      const [dieselBlock, dieselTx] = DIESEL_ID.split(':');
-      const protostone = `[${dieselBlock},${dieselTx},${DIESEL_MINT_OPCODE}]:v0:v0`;
-
-      console.log('[DIESEL] Protostone:', protostone);
-
-      if (!extendedProvider) {
-        throw new Error('Extended provider not initialized');
-      }
-
-      // Execute the DIESEL mint using alkanesExecuteTyped
+      // execute.ts routes regtest-local through alkanesExecuteFull
+      // which handles signing, broadcasting, and mining automatically
       const result = await extendedProvider.alkanesExecuteTyped({
         inputRequirements: '',
-        protostones: protostone,
-        feeRate: 10,
+        protostones: '[2,0,77]:v0:v0',
+        feeRate: 1,
         toAddresses: [taprootAddress],
-        fromAddresses: [taprootAddress],
-        changeAddress: taprootAddress,
+        fromAddresses: [segwitAddress, taprootAddress].filter(Boolean) as string[],
+        changeAddress: segwitAddress || taprootAddress,
         alkanesChangeAddress: taprootAddress,
-        autoConfirm: false, // We'll handle signing ourselves
       });
 
-      console.log('[DIESEL] Execution result:', result);
+      const txId = result?.txid || result?.reveal_txid || '';
+      showMessage(txId ? `✅ DIESEL minted! TX: ${txId.slice(0, 16)}...` : '✅ DIESEL minted!');
 
-      // Handle readyToSign response
-      if (result?.readyToSign) {
-        const readyToSign = result.readyToSign;
-
-        // The PSBT comes as Uint8Array from serde_wasm_bindgen
-        let psbtBase64: string;
-        if (readyToSign.psbt instanceof Uint8Array) {
-          psbtBase64 = uint8ArrayToBase64(readyToSign.psbt);
-        } else if (typeof readyToSign.psbt === 'string') {
-          psbtBase64 = readyToSign.psbt;
-        } else {
-          throw new Error('Unexpected PSBT format');
-        }
-
-        console.log('[DIESEL] Signing PSBT...');
-
-        // Sign with taproot key
-        const signedPsbtBase64 = await signTaprootPsbt(psbtBase64);
-
-        // Parse the signed PSBT, finalize, and extract the raw transaction
-        const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtBase64, { network: bitcoin.networks.regtest });
-        signedPsbt.finalizeAllInputs();
-
-        // Extract the raw transaction
-        const tx = signedPsbt.extractTransaction();
-        const txHex = tx.toHex();
-        const txid = tx.getId();
-
-        console.log('[DIESEL] Transaction built:', txid);
-
-        // Broadcast the transaction
-        const broadcastTxid = await provider.broadcastTransaction(txHex);
-        console.log('[DIESEL] Broadcast successful:', broadcastTxid);
-
-        showMessage(`✅ DIESEL minted! TX: ${(broadcastTxid || txid).slice(0, 16)}... Mine a block to confirm.`);
-
-      } else if (result?.complete) {
-        const txId = result.complete?.reveal_txid || result.complete?.commit_txid;
-        console.log('[DIESEL] Complete, txid:', txId);
-        showMessage(`✅ DIESEL minted! TX: ${txId?.slice(0, 16)}...`);
-      } else {
-        throw new Error('Unexpected result format');
-      }
-
-      // Refresh balances (fire and forget to prevent hanging)
-      queryClient.invalidateQueries().catch((err) => {
-        console.warn('[DIESEL] Query invalidation error (non-fatal):', err);
-      });
-
+      queryClient.invalidateQueries().catch(() => {});
     } catch (error) {
-      console.error('[DIESEL] Mining error:', error);
+      console.error('[DIESEL] Error:', error);
       showMessage(`❌ Failed to mint DIESEL: ${error instanceof Error ? error.message : 'Unknown error'}`, 5000);
     } finally {
       setMining(false);
