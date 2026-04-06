@@ -19,9 +19,9 @@ describe('getConfig', () => {
     expect(config.ALKANE_FACTORY_ID).toBe('4:65522');
   });
 
-  it('devnet returns factory ID 4:65522', () => {
+  it('devnet returns factory ID 4:65498', () => {
     const config = getConfig('devnet');
-    expect(config.ALKANE_FACTORY_ID).toBe('4:65522');
+    expect(config.ALKANE_FACTORY_ID).toBe('4:65498');
   });
 
   it('signet returns factory ID 4:65522', () => {
