@@ -126,7 +126,7 @@ export function useBridgeToEvm() {
       console.log('[useBridgeToEvm] Input requirements:', inputRequirements);
 
       const isBrowserWallet = walletType === 'browser';
-      const useActualAddresses = isBrowserWallet || network === 'devnet';
+      const useActualAddresses = isBrowserWallet || network === 'devnet' || network === 'regtest-local';
       const btcNetwork = getBitcoinNetwork(network);
 
       const fromAddresses = useActualAddresses
@@ -244,7 +244,7 @@ export function useBridgeFromEvm() {
       // This mutation is primarily for testing — in production the mint is coordinator-mediated.
       const inputRequirements = 'B:10000:v0'; // Minimal BTC for tx fee
       const isBrowserWallet = walletType === 'browser';
-      const useActualAddresses = isBrowserWallet || network === 'devnet';
+      const useActualAddresses = isBrowserWallet || network === 'devnet' || network === 'regtest-local';
       const btcNetwork = getBitcoinNetwork(network);
 
       const fromAddresses = useActualAddresses

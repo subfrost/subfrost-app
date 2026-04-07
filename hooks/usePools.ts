@@ -10,6 +10,7 @@ import { useWallet } from '@/context/WalletContext';
 import { getConfig, getRpcUrl } from '@/utils/getConfig';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { KNOWN_TOKENS } from '@/lib/alkanes-client';
+import { simulateContract, extractField3Data, parseU128LE } from '@/lib/fujin/rpc';
 import { queryKeys } from '@/queries/keys';
 
 export type UsePoolsParams = {
@@ -530,6 +531,111 @@ async function fetchPoolsFromTokenPairsApi(
 }
 
 // ============================================================================
+// Direct metashrew_view simulate fallback (regtest-local)
+// ============================================================================
+
+async function fetchPoolsFromDirectSimulate(
+  factoryId: string,
+  network: string,
+): Promise<PoolsListItem[]> {
+  const rpcUrl = 'http://localhost:18888';
+
+  // Factory opcode 3: GetAllPools — returns list of pool AlkaneIds
+  const allPoolsHex = await simulateContract(rpcUrl, factoryId, 3);
+  const allPoolsData = extractField3Data(allPoolsHex, 32);
+  if (!allPoolsData) {
+    console.log('[usePools] Direct simulate: GetAllPools returned no data');
+    return [];
+  }
+
+  // First u128 = pool count, then pairs of u128 (block, tx)
+  const numPools = Number(parseU128LE(allPoolsData, 0));
+  const pools: { block: number; tx: number }[] = [];
+  for (let i = 0; i < numPools; i++) {
+    const offset = 32 + i * 64; // skip count (32 hex chars), each pool = 64 hex chars
+    if (offset + 64 > allPoolsData.length) break;
+    const block = Number(parseU128LE(allPoolsData, offset));
+    const tx = Number(parseU128LE(allPoolsData, offset + 32));
+    pools.push({ block, tx });
+  }
+  console.log('[usePools] Direct simulate: found', pools.length, 'pools');
+
+  const items: PoolsListItem[] = [];
+  for (const pool of pools) {
+    const poolId = `${pool.block}:${pool.tx}`;
+    try {
+      // Pool opcode 999: PoolDetails
+      const detailsHex = await simulateContract(rpcUrl, poolId, 999);
+      const detailsData = extractField3Data(detailsHex, 32);
+
+      // Pool opcode 99: GetName
+      const nameHex = await simulateContract(rpcUrl, poolId, 99);
+      const nameData = extractField3Data(nameHex, 1);
+      let poolName = '';
+      if (nameData) {
+        for (let i = 0; i < nameData.length; i += 2) {
+          const byte = parseInt(nameData.slice(i, i + 2), 16);
+          if (byte === 0) break;
+          poolName += String.fromCharCode(byte);
+        }
+      }
+
+      // Pool opcode 97: GetReserves
+      const reservesHex = await simulateContract(rpcUrl, poolId, 97);
+      const reservesData = extractField3Data(reservesHex, 32);
+
+      let token0Id = '', token1Id = '', token0Symbol = '', token1Symbol = '';
+      let token0Amount: string | undefined, token1Amount: string | undefined;
+
+      // Parse pool name "TOKEN0 / TOKEN1 LP" → symbols
+      const nameMatch = poolName.match(/^(.+?)\s*\/\s*(.+?)(?:\s*LP)?$/);
+      if (nameMatch) {
+        token0Symbol = nameMatch[1].trim();
+        token1Symbol = nameMatch[2].trim();
+      }
+
+      // Parse details for token IDs (PoolDetails format: various u128 fields)
+      if (detailsData && detailsData.length >= 128) {
+        const t0Block = Number(parseU128LE(detailsData, 0));
+        const t0Tx = Number(parseU128LE(detailsData, 32));
+        const t1Block = Number(parseU128LE(detailsData, 64));
+        const t1Tx = Number(parseU128LE(detailsData, 96));
+        token0Id = `${t0Block}:${t0Tx}`;
+        token1Id = `${t1Block}:${t1Tx}`;
+      }
+
+      // Parse reserves
+      if (reservesData && reservesData.length >= 64) {
+        token0Amount = parseU128LE(reservesData, 0).toString();
+        token1Amount = parseU128LE(reservesData, 32).toString();
+      }
+
+      // Resolve known token symbols
+      if (token0Id && (!token0Symbol || /^\d+$/.test(token0Symbol))) {
+        token0Symbol = KNOWN_TOKENS[token0Id]?.symbol || token0Symbol || token0Id;
+      }
+      if (token1Id && (!token1Symbol || /^\d+$/.test(token1Symbol))) {
+        token1Symbol = KNOWN_TOKENS[token1Id]?.symbol || token1Symbol || token1Id;
+      }
+
+      items.push({
+        id: poolId,
+        pairLabel: `${token0Symbol}/${token1Symbol}`,
+        token0: { id: token0Id, symbol: token0Symbol, name: token0Symbol },
+        token1: { id: token1Id, symbol: token1Symbol, name: token1Symbol },
+        token0Amount,
+        token1Amount,
+      });
+      console.log('[usePools] Direct simulate: pool', poolId, '=', token0Symbol, '/', token1Symbol);
+    } catch (e) {
+      console.warn('[usePools] Direct simulate: failed to query pool', poolId, e);
+    }
+  }
+
+  return items;
+}
+
+// ============================================================================
 // SDK RPC fallback (N+1 calls via alkanesGetAllPoolsWithDetails)
 // ============================================================================
 
@@ -625,6 +731,19 @@ export function usePools(params: UsePoolsParams = {}) {
 
       let items: PoolsListItem[] = [];
       let tokenMetaMap: Map<string, { name: string; symbol: string }> = new Map();
+
+      // regtest-local: skip REST/SDK fallbacks (all return 503 or hang 30s).
+      // Go directly to metashrew_view simulate which is the only working path.
+      if (network === 'regtest-local') {
+        try { tokenMetaMap = await tokenMetaPromise; } catch { /* ignore */ }
+        try {
+          items = await fetchPoolsFromDirectSimulate(ALKANE_FACTORY_ID, network);
+          console.log('[usePools] regtest-local: Direct simulate returned', items.length, 'pools');
+        } catch (e) {
+          console.warn('[usePools] regtest-local: Direct simulate failed:', e);
+        }
+        return { items, total: items.length };
+      }
 
       // Primary: Direct REST call to get-all-pools-details (preserves ALL API fields
       // including poolApr, poolVolume30dInUsd, etc. which the SDK WASM deserializer drops).

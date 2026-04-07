@@ -39,7 +39,7 @@ export function useFireBondMutation() {
       }
 
       const isBrowserWallet = walletType === 'browser';
-      const useActualAddresses = isBrowserWallet || network === 'devnet';
+      const useActualAddresses = isBrowserWallet || network === 'devnet' || network === 'regtest-local';
       const taprootAddress = account?.taproot?.address;
       const segwitAddress = account?.nativeSegwit?.address;
 

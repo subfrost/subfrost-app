@@ -387,7 +387,7 @@ export function useSwapMutation() {
       const btcNetwork = getBitcoinNetwork(network);
 
       const isBrowserWallet = walletType === 'browser';
-      const useActualAddresses = isBrowserWallet || network === 'devnet';
+      const useActualAddresses = isBrowserWallet || network === 'devnet' || network === 'regtest-local';
 
       // ============================================================================
       // ⚠️ CRITICAL: Browser wallets need ACTUAL addresses, not symbolic ⚠️

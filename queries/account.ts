@@ -83,7 +83,15 @@ export function parseProtorunesResponse(hex: string): Map<string, bigint> {
       if (fn === 2 && wt === 0) tx = val as number;
       if (wt === 2) {
         const inner = digForBlockTx(val as Uint8Array, depth + 1);
-        if (inner.block >= 0) { block = inner.block; tx = inner.tx; }
+        if (inner.block >= 0) {
+          if (fn === 2) {
+            // field 2 = txindex — inner Uint128's "block" value is actually the tx
+            tx = inner.block;
+          } else {
+            block = inner.block;
+            tx = inner.tx;
+          }
+        }
       }
     }
     return { block, tx };
@@ -241,9 +249,9 @@ export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
       !!deps.account &&
       deps.isConnected &&
       addresses.length > 0,
-    // On devnet, short staleTime + polling for fast balance updates after faucets/swaps.
-    staleTime: deps.network === 'devnet' ? 2_000 : 30_000,
-    refetchInterval: deps.network === 'devnet' ? 5_000 : undefined,
+    // On local networks, short staleTime + polling for fast balance updates after operations.
+    staleTime: (deps.network === 'devnet' || deps.network === 'regtest-local') ? 2_000 : 30_000,
+    refetchInterval: (deps.network === 'devnet' || deps.network === 'regtest-local') ? 5_000 : undefined,
     // Always refetch when the dashboard mounts (navigating back to wallet page)
     refetchOnMount: 'always',
     // Refetch when user returns to the tab
@@ -304,6 +312,7 @@ export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
               id: 1,
             }),
           });
+          if (!response.ok) return 0;
           const json = await response.json();
           const txs = json.result;
           if (!Array.isArray(txs)) return 0;
@@ -525,10 +534,10 @@ export function alkaneBalanceQueryOptions(deps: AlkaneBalanceDeps) {
     // within seconds. DO NOT increase devnet staleTime or remove polling.
     // See faucet-e2e.test.ts which proves the queryFn itself works correctly —
     // the issue was purely React Query caching, not the data fetching logic.
-    staleTime: deps.network === 'devnet' ? 2_000 : 30_000,
+    staleTime: (deps.network === 'devnet' || deps.network === 'regtest-local') ? 2_000 : 30_000,
     refetchOnMount: 'always' as const,
     refetchOnWindowFocus: true,
-    refetchInterval: deps.network === 'devnet' ? 5_000 : undefined,
+    refetchInterval: (deps.network === 'devnet' || deps.network === 'regtest-local') ? 5_000 : undefined,
     retry: 3,
     retryDelay: (attempt: number) => Math.min(1000 * 2 ** attempt, 10000),
     queryFn: async () => {

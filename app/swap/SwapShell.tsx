@@ -774,8 +774,8 @@ export default function SwapShell() {
       const wholeStr = whole.toString();
       const remainderStr = remainder.toString().padStart(8, '0');
 
-      // Show 2 decimals for large values (100+), 4 decimals for smaller values
-      const decimalPlaces = wholeStr.length >= 3 ? 2 : 4;
+      // Show 2 decimals for large values (100+), 8 decimals for smaller values
+      const decimalPlaces = wholeStr.length >= 3 ? 2 : 8;
       const truncatedRemainder = remainderStr.slice(0, decimalPlaces);
 
       // Remove trailing zeros
@@ -790,7 +790,7 @@ export default function SwapShell() {
       // Fallback for non-BigInt compatible values
       const rawBalance = Number(balance);
       const displayBalance = rawBalance / 1e8;
-      return `${t('swap.balanceColon')} ${displayBalance.toFixed(4)}`;
+      return `${t('swap.balanceColon')} ${displayBalance.toFixed(8)}`;
     }
   };
 

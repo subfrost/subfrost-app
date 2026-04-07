@@ -143,11 +143,12 @@ export function getConfig(network: string) {
         FRZEC_ALKANE_ID: '',
         FRETH_ALKANE_ID: '',
         FIRE_TOKEN_ID: '4:256',
-        FIRE_STAKING_ID: '4:257',
+        FIRE_STAKING_ID: '4:272',
         FIRE_TREASURY_ID: '4:258',
         FIRE_BONDING_ID: '4:259',
         FIRE_REDEMPTION_ID: '4:260',
         FIRE_DISTRIBUTOR_ID: '4:261',
+        FIRE_LP_TOKEN_ID: '2:3',
         // Fujin difficulty futures (DIESEL market)
         FUJIN_FACTORY_ID: '2:165',
         FUJIN_VAULT_ID: '2:167',

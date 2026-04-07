@@ -5,7 +5,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useWallet } from '@/context/WalletContext';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { useSandshrewProvider } from '@/hooks/useSandshrewProvider';
-import { Pickaxe, Clock, Zap, Fuel } from 'lucide-react';
+import { Pickaxe, Clock, Zap, Fuel, Snowflake } from 'lucide-react';
 import { useTranslation } from '@/hooks/useTranslation';
 
 export default function RegtestControls() {
@@ -162,6 +162,52 @@ export default function RegtestControls() {
     }
   };
 
+  const mintFrBtc = async () => {
+    setMining(true);
+    try {
+      const taprootAddress = account?.taproot?.address;
+      const segwitAddress = account?.nativeSegwit?.address;
+      if (!taprootAddress) throw new Error('No taproot address available');
+
+      const wasm = await import('@alkanes/ts-sdk/wasm');
+      const providerName = network === 'subfrost-regtest' ? 'subfrost-regtest' : 'regtest';
+      const isLocalNetwork = network === 'regtest-local' || network === 'devnet';
+      const configOverrides = isLocalNetwork
+        ? { jsonrpc_url: 'http://localhost:18888', data_api_url: 'http://localhost:18888' }
+        : { jsonrpc_url: 'https://regtest.subfrost.io/v4/subfrost', data_api_url: 'https://regtest.subfrost.io/v4/subfrost' };
+      const execProvider = new wasm.WebProvider(providerName, configOverrides);
+
+      const sessionMnemonic = sessionStorage.getItem('subfrost_session_mnemonic')
+        || 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
+      execProvider.walletLoadMnemonic(sessionMnemonic, null);
+
+      // Use SDK's alkanesWrapBtc which handles the special frBTC wrap flow:
+      // sends BTC to the frBTC signer address, calls opcode 77 (exchange)
+      const result = await execProvider.alkanesWrapBtc(JSON.stringify({
+        amount: 10_000_000, // 0.1 BTC in sats
+        to_address: taprootAddress,
+        from_addresses: [segwitAddress, taprootAddress].filter(Boolean),
+        change_address: segwitAddress || taprootAddress,
+        fee_rate: 1,
+        mine_enabled: true,
+        auto_confirm: true,
+        raw_output: false,
+        trace_enabled: false,
+      }));
+
+      const parsed = typeof result === 'string' ? JSON.parse(result) : result;
+      const txId = parsed?.txid || '';
+      showMessage(txId ? `✅ frBTC minted (0.1 BTC)! TX: ${txId.slice(0, 16)}...` : '✅ frBTC minted!');
+
+      queryClient.invalidateQueries().catch(() => {});
+    } catch (error) {
+      console.error('[frBTC] Error:', error);
+      showMessage(`❌ Failed to mint frBTC: ${error instanceof Error ? error.message : 'Unknown error'}`, 5000);
+    } finally {
+      setMining(false);
+    }
+  };
+
   const networkLabel = network === 'subfrost-regtest' ? 'Subfrost Regtest' :
                        network === 'regtest' ? 'Local Regtest' :
                        network === 'regtest-local' ? 'Local Docker' :
@@ -181,7 +227,7 @@ export default function RegtestControls() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
         {/* Mine 200 Blocks */}
         <button
           onClick={() => mineBlocks(200)}
@@ -213,6 +259,17 @@ export default function RegtestControls() {
           <Fuel size={32} className="text-green-500" />
           <span className="font-semibold">{t('regtest.mintDiesel')}</span>
           <span className="text-sm text-[color:var(--sf-text)]/60">{t('regtest.freeMintDiesel')}</span>
+        </button>
+
+        {/* Mint frBTC */}
+        <button
+          onClick={mintFrBtc}
+          disabled={mining}
+          className="flex flex-col items-center gap-2 p-4 rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 border border-[color:var(--sf-outline)] hover:border-blue-500/50 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none disabled:opacity-50 disabled:cursor-not-allowed text-[color:var(--sf-text)]"
+        >
+          <Snowflake size={32} className="text-blue-400" />
+          <span className="font-semibold">Mint frBTC</span>
+          <span className="text-sm text-[color:var(--sf-text)]/60">Wrap 0.1 BTC</span>
         </button>
 
         {/* Generate Future */}

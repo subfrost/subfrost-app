@@ -75,6 +75,33 @@ let oylConnectionCallCount = 0;
 // Session storage key for mnemonic
 const SESSION_MNEMONIC_KEY = 'subfrost_session_mnemonic';
 
+/**
+ * Create a wallet via AlkanesClient.withMnemonic (correct coinType derivation)
+ * and wrap it in a legacy-compatible object that supports .deriveAddress/.signPsbt/.signMessage
+ * This replaces createWalletFromMnemonic which always uses coinType=0.
+ */
+function createWalletViaClient(mnemonic: string, sdkNetwork: string) {
+  const client = AlkanesClient.withMnemonic(mnemonic, sdkNetwork, { addressType: 'p2tr' });
+  const signer = client.signer as any;
+
+  // Build legacy wallet shim that matches what the rest of the app expects
+  return {
+    // Address derivation — used by addresses memo
+    deriveAddress: (type: any, account: number, index: number) => {
+      const addrType = typeof type === 'string' ? type : (type === 1 ? 'p2wpkh' : 'p2tr');
+      return signer.getAddressInfo?.(addrType, index) || signer.deriveAddress?.(addrType, index) || { address: '', publicKey: '' };
+    },
+    // Signing
+    signPsbt: (psbtBase64: string) => client.signPsbt(psbtBase64).then((r: any) => r.psbtHex || r),
+    signMessage: (message: string, index?: number) => client.signMessage(message),
+    // Mnemonic access
+    exportMnemonic: () => mnemonic,
+    // Keep reference to client for SDK operations
+    _client: client,
+    _signer: signer,
+  };
+}
+
 // Network storage key — must match the key in providers.tsx
 const NETWORK_STORAGE_KEY = 'subfrost_selected_network';
 
@@ -442,7 +469,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       if (sessionMnemonic && stored && storedWalletType === 'keystore') {
         try {
           // Restore wallet from session mnemonic
-          const restoredWallet = createWalletFromMnemonic(sessionMnemonic, toSdkNetwork(network));
+          const restoredWallet = createWalletViaClient(sessionMnemonic, toSdkNetwork(network));
           setWallet(restoredWallet);
           setWalletType('keystore');
 
@@ -556,7 +583,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
     if (network === 'devnet' && !wallet) {
       const BOOT_MNEMONIC = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
       try {
-        const bootWallet = createWalletFromMnemonic(BOOT_MNEMONIC, toSdkNetwork(network));
+        const bootWallet = createWalletViaClient(BOOT_MNEMONIC, toSdkNetwork(network));
         setWallet(bootWallet);
         setWalletType('keystore');
         loadWallet(BOOT_MNEMONIC);
@@ -596,7 +623,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
     if (sessionMnemonic && storedWalletType === 'keystore' && wallet) {
       console.log('[WalletContext] Network changed to', network, '- recreating wallet with new network');
       try {
-        const newWallet = createWalletFromMnemonic(sessionMnemonic, toSdkNetwork(network));
+        const newWallet = createWalletViaClient(sessionMnemonic, toSdkNetwork(network));
         setWallet(newWallet);
 
         // Also reload into SDK provider
@@ -698,60 +725,8 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
     let segwitInfo = wallet.deriveAddress(AddressType.P2WPKH, 0, 0);
     let taprootInfo = wallet.deriveAddress(AddressType.P2TR, 0, 0);
 
-    // ⚠️ DEVNET OVERRIDE: The SDK's createWalletFromMnemonic uses coinType=0 for
-    // derivation, but the WASM provider's walletLoadMnemonic uses coinType=1 for regtest.
-    // boot.ts uses coinType=1 to match the WASM provider. If we display coinType=0
-    // addresses, all boot-seeded state (tokens, orders, positions) is invisible.
-    //
-    // Fix: On devnet, re-derive addresses with coinType=1 to match boot.ts + WASM provider.
-    // regtest-local stays coinType=0 (from createWalletFromMnemonic) — handleBuy uses
-    // 'mainnet' preset to match. TODO: migrate to AlkanesClient.withMnemonic.
-    if (network === 'devnet') {
-      try {
-        const bip39Mod = require('bip39');
-        const bip32Mod = require('bip32');
-        const eccMod = require('@bitcoinerlab/secp256k1');
-        const bitcoinMod = require('bitcoinjs-lib');
-        const bip32Factory = bip32Mod.default || bip32Mod;
-        const bip32 = bip32Factory(eccMod);
-        try { bitcoinMod.initEccLib(eccMod); } catch {}
-
-        const sessionMnemonic = typeof sessionStorage !== 'undefined'
-          ? sessionStorage.getItem(SESSION_MNEMONIC_KEY) : null;
-        if (sessionMnemonic) {
-          const seed = bip39Mod.mnemonicToSeedSync(sessionMnemonic);
-          const root = bip32.fromSeed(seed);
-          // coinType=1 paths — matching boot.ts and the WASM provider
-          const segChild = root.derivePath("m/84'/1'/0'/0/0");
-          const tapChild = root.derivePath("m/86'/1'/0'/0/0");
-          const regNetwork = bitcoinMod.networks.regtest;
-
-          const segPayment = bitcoinMod.payments.p2wpkh({
-            pubkey: Buffer.from(segChild.publicKey), network: regNetwork });
-          const xOnly = Buffer.from(tapChild.publicKey).slice(1);
-          const tapPayment = bitcoinMod.payments.p2tr({
-            internalPubkey: xOnly, network: regNetwork });
-
-          if (segPayment.address && tapPayment.address) {
-            segwitInfo = {
-              address: segPayment.address,
-              publicKey: segChild.publicKey.toString('hex'),
-              path: "m/84'/1'/0'/0/0",
-            };
-            taprootInfo = {
-              address: tapPayment.address,
-              publicKey: tapChild.publicKey.toString('hex'),
-              path: "m/86'/1'/0'/0/0",
-            };
-            console.log('[WalletContext] Devnet: using coinType=1 addresses (matches boot.ts + WASM provider)');
-            console.log('[WalletContext]   segwit:', segPayment.address);
-            console.log('[WalletContext]   taproot:', tapPayment.address);
-          }
-        }
-      } catch (e) {
-        console.warn('[WalletContext] Devnet coinType=1 override failed, using coinType=0:', e);
-      }
-    }
+    // No coinType override needed — createWalletViaClient uses AlkanesClient.withMnemonic
+    // which correctly derives coinType=1 for regtest/devnet, coinType=0 for mainnet.
 
     // Derive Zcash address from the same mnemonic (BIP44 m/44'/133'/0'/0/0)
     // On mainnet, show the real ZEC address alongside BTC addresses
@@ -814,7 +789,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
     const { keystore: encrypted, mnemonic } = await createKeystore(password, { network: sdkNetwork });
 
     // Create wallet from mnemonic
-    const newWallet = createWalletFromMnemonic(mnemonic, sdkNetwork);
+    const newWallet = createWalletViaClient(mnemonic, sdkNetwork);
 
     // Store encrypted keystore
     localStorage.setItem(STORAGE_KEYS.ENCRYPTED_KEYSTORE, encrypted);
@@ -851,7 +826,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
     }
 
     const keystore = await unlockKeystore(encrypted, password);
-    const unlockedWallet = createWalletFromMnemonic(keystore.mnemonic, toSdkNetwork(network));
+    const unlockedWallet = createWalletViaClient(keystore.mnemonic, toSdkNetwork(network));
 
     // Store mnemonic in session for page navigation persistence
     sessionStorage.setItem(STORAGE_KEYS.SESSION_MNEMONIC, keystore.mnemonic);
@@ -887,7 +862,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
 
     // Create wallet
     const sdkNetwork = toSdkNetwork(network);
-    const restoredWallet = createWalletFromMnemonic(trimmedMnemonic, sdkNetwork);
+    const restoredWallet = createWalletViaClient(trimmedMnemonic, sdkNetwork);
 
     // Create keystore and encrypt
     const keystore = manager.createKeystore(trimmedMnemonic, { network: sdkNetwork });

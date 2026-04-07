@@ -57,7 +57,7 @@
  *   dummy wallet derivation, NOT the connected wallet. Tokens land at the wrong
  *   address → "insufficient balance" even with real balance.
  *   Pattern enforced here:
- *     const useActualAddresses = isBrowserWallet || network === 'devnet';
+ *     const useActualAddresses = isBrowserWallet || network === 'devnet' || network === 'regtest-local';
  *   See CLAUDE.md "Address Handling" section for full explanation.
  *
  * ## "Insufficient alkanes" vs stale devnet state
@@ -169,7 +169,7 @@ export function useLimitOrderMutation() {
 
       const btcNetwork = getBitcoinNetwork(network);
       const isBrowserWallet = walletType === 'browser';
-      const useActualAddresses = isBrowserWallet || network === 'devnet';
+      const useActualAddresses = isBrowserWallet || network === 'devnet' || network === 'regtest-local';
 
       // Browser wallets need ACTUAL addresses, not symbolic
       const fromAddresses = useActualAddresses

@@ -143,7 +143,7 @@ export function useWrapMutation() {
         : getSignerAddress(network);
 
       const isBrowserWallet = walletType === 'browser';
-      const useActualAddresses = isBrowserWallet || network === 'devnet';
+      const useActualAddresses = isBrowserWallet || network === 'devnet' || network === 'regtest-local';
 
       // For browser wallets, use actual addresses for UTXO discovery (passed as
       // opaque strings to esplora — no Address parsing, no LegacyAddressTooLong).

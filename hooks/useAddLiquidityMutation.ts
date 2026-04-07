@@ -151,8 +151,11 @@ async function findPoolId(
         if (buf[i] === 0x1a && buf[i + 1] === 0x20) {
           const dataStart = i + 2;
           if (dataStart + 32 <= buf.length) {
-            const block = Number(buf.readBigUInt64LE(dataStart));
-            const tx = Number(buf.readBigUInt64LE(dataStart + 16));
+            // Browser-safe LE u128 parse (readBigUInt64LE not available in browser Buffer polyfill)
+            let block = 0;
+            for (let b = 0; b < 8; b++) block += buf[dataStart + b] * (256 ** b);
+            let tx = 0;
+            for (let b = 0; b < 8; b++) tx += buf[dataStart + 16 + b] * (256 ** b);
             if (block > 0 && block < 100000 && tx >= 0 && tx < 100000) {
               console.log('[AddLiquidity] Pool found (protobuf):', `${block}:${tx}`);
               return { block, tx };
@@ -424,7 +427,7 @@ export function useAddLiquidityMutation() {
       const btcNetwork = getBitcoinNetwork(network);
 
       const isBrowserWallet = walletType === 'browser';
-      const useActualAddresses = isBrowserWallet || network === 'devnet';
+      const useActualAddresses = isBrowserWallet || network === 'devnet' || network === 'regtest-local';
 
       // ============================================================================
       // ⚠️ CRITICAL: Browser wallets need ACTUAL addresses, not symbolic ⚠️

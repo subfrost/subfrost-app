@@ -173,7 +173,7 @@ export function useWrapSwapMutation() {
       console.log('[WrapSwap] Deadline:', deadline, `(+${deadlineBlocks} blocks)`);
 
       const isBrowserWallet = walletType === 'browser';
-      const useActualAddresses = isBrowserWallet || network === 'devnet';
+      const useActualAddresses = isBrowserWallet || network === 'devnet' || network === 'regtest-local';
 
       // ========================================================================
       // Step 3: Fetch all available UTXOs BEFORE building wrap
