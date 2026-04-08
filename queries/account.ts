@@ -250,8 +250,8 @@ export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
       deps.isConnected &&
       addresses.length > 0,
     // On local networks, short staleTime + polling for fast balance updates after operations.
-    staleTime: (deps.network === 'devnet' || deps.network === 'regtest-local') ? 2_000 : 30_000,
-    refetchInterval: (deps.network === 'devnet' || deps.network === 'regtest-local') ? 5_000 : undefined,
+    staleTime: (deps.network === 'devnet' || deps.network === 'regtest-local' || deps.network === 'qubitcoin-regtest') ? 2_000 : 30_000,
+    refetchInterval: (deps.network === 'devnet' || deps.network === 'regtest-local' || deps.network === 'qubitcoin-regtest') ? 5_000 : undefined,
     // Always refetch when the dashboard mounts (navigating back to wallet page)
     refetchOnMount: 'always',
     // Refetch when user returns to the tab
@@ -276,7 +276,8 @@ export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
 
       const fetchUtxosViaEsplora = async (address: string) => {
         try {
-          const response = await fetch('/api/rpc', {
+          const rpcPath = deps.network ? `/api/rpc/${deps.network}` : '/api/rpc';
+          const response = await fetch(rpcPath, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -302,7 +303,8 @@ export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
 
       const fetchMempoolSpent = async (address: string): Promise<number> => {
         try {
-          const response = await fetch('/api/rpc', {
+          const rpcPath = deps.network ? `/api/rpc/${deps.network}` : '/api/rpc';
+          const response = await fetch(rpcPath, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -342,6 +344,9 @@ export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
       // (enriched balances, mempool spent, alkane balances)
       const enrichedDataPromises = addresses.map(async (address) => {
         try {
+          // qubitcoin-regtest: skip getEnrichedBalances (not supported), go straight to esplora
+          if (deps.network === 'qubitcoin-regtest') throw new Error('Skip to esplora for qubitcoin-regtest');
+
           const rawResult = await withTimeout(provider.getEnrichedBalances(address), 15000, null);
           if (!rawResult) throw new Error('getEnrichedBalances returned null/timeout');
 
@@ -534,10 +539,10 @@ export function alkaneBalanceQueryOptions(deps: AlkaneBalanceDeps) {
     // within seconds. DO NOT increase devnet staleTime or remove polling.
     // See faucet-e2e.test.ts which proves the queryFn itself works correctly —
     // the issue was purely React Query caching, not the data fetching logic.
-    staleTime: (deps.network === 'devnet' || deps.network === 'regtest-local') ? 2_000 : 30_000,
+    staleTime: (deps.network === 'devnet' || deps.network === 'regtest-local' || deps.network === 'qubitcoin-regtest') ? 2_000 : 30_000,
     refetchOnMount: 'always' as const,
     refetchOnWindowFocus: true,
-    refetchInterval: (deps.network === 'devnet' || deps.network === 'regtest-local') ? 5_000 : undefined,
+    refetchInterval: (deps.network === 'devnet' || deps.network === 'regtest-local' || deps.network === 'qubitcoin-regtest') ? 5_000 : undefined,
     retry: 3,
     retryDelay: (attempt: number) => Math.min(1000 * 2 ** attempt, 10000),
     queryFn: async () => {
@@ -547,11 +552,10 @@ export function alkaneBalanceQueryOptions(deps: AlkaneBalanceDeps) {
       for (const address of addresses) {
         try {
           let items: any[] = [];
-          if (deps.network === 'regtest-local') {
-            // Local Docker regtest: REST API doesn't exist. Use protobuf metashrew_view RPC.
+          if (deps.network === 'regtest-local' || deps.network === 'devnet') {
             items = await fetchAlkaneBalancesViaProtobuf('http://localhost:18888', address);
-          } else if (deps.network === 'devnet') {
-            items = await fetchAlkaneBalancesViaProtobuf('http://localhost:18888', address);
+          } else if (deps.network === 'qubitcoin-regtest') {
+            items = await fetchAlkaneBalancesViaProtobuf(`${window.location.origin}/api/rpc/qubitcoin-regtest`, address);
           } else {
             const result = await (provider as any).dataApiGetAlkanesByAddress(address);
             items = result?.data || [];
@@ -675,9 +679,12 @@ export function sellableCurrenciesQueryOptions(deps: SellableCurrenciesDeps) {
             // This powers the 25/50/75/MAX percentage buttons on the swap page.
             let balances: { alkaneId: string; balance: string; name?: string; symbol?: string }[] = [];
 
-            if (deps.network === 'devnet' || deps.network === 'regtest-local') {
-              // REST data API returns HTTP 400/404 on devnet/regtest-local. Use protobuf RPC.
-              const rawItems = await fetchAlkaneBalancesViaProtobuf('http://localhost:18888', address);
+            if (deps.network === 'devnet' || deps.network === 'regtest-local' || deps.network === 'qubitcoin-regtest') {
+              // REST data API returns HTTP 400/404 on local networks. Use protobuf RPC.
+              const protobufRpcUrl = deps.network === 'qubitcoin-regtest'
+                ? `${typeof window !== 'undefined' ? window.location.origin : ''}/api/rpc/qubitcoin-regtest`
+                : 'http://localhost:18888';
+              const rawItems = await fetchAlkaneBalancesViaProtobuf(protobufRpcUrl, address);
               for (const item of rawItems) {
                 const id = `${item.alkaneId.block}:${item.alkaneId.tx}`;
                 const known = KNOWN_TOKENS_SELL[id];

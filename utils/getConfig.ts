@@ -13,6 +13,7 @@ export const SUBFROST_API_URLS: Record<string, string> = {
   signet: 'https://signet.subfrost.io/v4/subfrost',
   regtest: 'https://regtest.subfrost.io/v4/subfrost',
   'regtest-local': 'http://localhost:18888',
+  'qubitcoin-regtest': 'https://meta.lake.direct',
   'subfrost-regtest': 'https://regtest.subfrost.io/v4/subfrost',
   oylnet: 'https://regtest.subfrost.io/v4/subfrost',
   devnet: 'http://localhost:18888', // Intercepted by DevnetProvider fetch interceptor
@@ -25,6 +26,7 @@ export const BLOCK_EXPLORER_URLS: Record<string, string> = {
   signet: 'https://espo.subfrost.io/signet',
   regtest: 'https://espo.subfrost.io/regtest',
   'regtest-local': 'http://localhost:50010',
+  'qubitcoin-regtest': '', // No separate esplora — qubitcoin has it built-in
   'subfrost-regtest': 'https://espo.subfrost.io/regtest',
   oylnet: 'https://espo.subfrost.io/mainnet',
   devnet: '', // No external block explorer for devnet
@@ -143,7 +145,7 @@ export function getConfig(network: string) {
         FRZEC_ALKANE_ID: '',
         FRETH_ALKANE_ID: '',
         FIRE_TOKEN_ID: '4:256',
-        FIRE_STAKING_ID: '4:272',
+        FIRE_STAKING_ID: '4:257',
         FIRE_TREASURY_ID: '4:258',
         FIRE_BONDING_ID: '4:259',
         FIRE_REDEMPTION_ID: '4:260',
@@ -154,6 +156,24 @@ export function getConfig(network: string) {
         FUJIN_VAULT_ID: '2:167',
         FUJIN_ZAP_ID: '2:168',
         FUJIN_ESPO_URL: 'http://localhost:8082/rpc',
+        API_URL: apiUrl,
+        BLOCK_EXPLORER_URL_BTC: blockExplorerUrl,
+        BLOCK_EXPLORER_URL_ETH: '',
+      } as const;
+    case 'qubitcoin-regtest':
+      return {
+        ALKANE_FACTORY_ID: '4:65522',
+        BUSD_ALKANE_ID: '2:0',
+        DIESEL_CLAIM_MERKLE_DISTRIBUTOR_ID: '',
+        FRBTC_ALKANE_ID: '32:0',
+        FRZEC_ALKANE_ID: '',
+        FRETH_ALKANE_ID: '',
+        FIRE_TOKEN_ID: '4:256',
+        FIRE_STAKING_ID: '4:257',
+        FIRE_TREASURY_ID: '4:258',
+        FIRE_BONDING_ID: '4:259',
+        FIRE_REDEMPTION_ID: '4:260',
+        FIRE_DISTRIBUTOR_ID: '4:261',
         API_URL: apiUrl,
         BLOCK_EXPLORER_URL_BTC: blockExplorerUrl,
         BLOCK_EXPLORER_URL_ETH: '',

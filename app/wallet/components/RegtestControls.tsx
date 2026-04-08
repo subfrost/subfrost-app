@@ -21,7 +21,7 @@ export default function RegtestControls() {
   // JOURNAL (2026-03-31): Added 'devnet' to the allowlist — devnet is an in-process
   // qubitcoin node accessible via the fetch interceptor at localhost:18888. It was
   // missing from this guard so the controls never rendered when devnet was selected.
-  const REGTEST_NETWORKS = ['regtest', 'subfrost-regtest', 'oylnet', 'regtest-local', 'devnet'] as const;
+  const REGTEST_NETWORKS = ['regtest', 'subfrost-regtest', 'oylnet', 'regtest-local', 'qubitcoin-regtest', 'devnet'] as const;
   if (!REGTEST_NETWORKS.includes(network as typeof REGTEST_NETWORKS[number])) {
     return null;
   }
@@ -140,10 +140,12 @@ export default function RegtestControls() {
 
       // execute.ts routes regtest-local through alkanesExecuteFull
       // which handles signing, broadcasting, and mining automatically
+      // qubitcoin requires higher min relay fee than standard regtest
+      const isQubitcoin = network === 'qubitcoin-regtest';
       const result = await extendedProvider.alkanesExecuteTyped({
         inputRequirements: '',
         protostones: '[2,0,77]:v0:v0',
-        feeRate: 1,
+        feeRate: isQubitcoin ? 5 : 1,
         toAddresses: [taprootAddress],
         fromAddresses: [segwitAddress, taprootAddress].filter(Boolean) as string[],
         changeAddress: segwitAddress || taprootAddress,
@@ -172,9 +174,13 @@ export default function RegtestControls() {
       const wasm = await import('@alkanes/ts-sdk/wasm');
       const providerName = network === 'subfrost-regtest' ? 'subfrost-regtest' : 'regtest';
       const isLocalNetwork = network === 'regtest-local' || network === 'devnet';
-      const configOverrides = isLocalNetwork
-        ? { jsonrpc_url: 'http://localhost:18888', data_api_url: 'http://localhost:18888' }
-        : { jsonrpc_url: 'https://regtest.subfrost.io/v4/subfrost', data_api_url: 'https://regtest.subfrost.io/v4/subfrost' };
+      const isQubitcoin = network === 'qubitcoin-regtest';
+      const rpcUrl = isLocalNetwork
+        ? 'http://localhost:18888'
+        : isQubitcoin
+          ? `${window.location.origin}/api/rpc/qubitcoin-regtest`
+          : 'https://regtest.subfrost.io/v4/subfrost';
+      const configOverrides = { jsonrpc_url: rpcUrl, data_api_url: rpcUrl };
       const execProvider = new wasm.WebProvider(providerName, configOverrides);
 
       const sessionMnemonic = sessionStorage.getItem('subfrost_session_mnemonic')
@@ -188,7 +194,8 @@ export default function RegtestControls() {
         to_address: taprootAddress,
         from_addresses: [segwitAddress, taprootAddress].filter(Boolean),
         change_address: segwitAddress || taprootAddress,
-        fee_rate: 1,
+        fee_rate: isQubitcoin ? 5 : 1,
+        lock_alkanes: true,
         mine_enabled: true,
         auto_confirm: true,
         raw_output: false,
@@ -211,6 +218,7 @@ export default function RegtestControls() {
   const networkLabel = network === 'subfrost-regtest' ? 'Subfrost Regtest' :
                        network === 'regtest' ? 'Local Regtest' :
                        network === 'regtest-local' ? 'Local Docker' :
+                       network === 'qubitcoin-regtest' ? 'Qubitcoin Regtest' :
                        network === 'devnet' ? 'Devnet' : 'Oylnet';
 
   return (
@@ -228,14 +236,14 @@ export default function RegtestControls() {
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-        {/* Mine 200 Blocks */}
+        {/* Mine 101 Blocks (coinbase maturity) */}
         <button
-          onClick={() => mineBlocks(200)}
+          onClick={() => mineBlocks(101)}
           disabled={mining}
           className="flex flex-col items-center gap-2 p-4 rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 border border-[color:var(--sf-outline)] hover:border-orange-500/50 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none disabled:opacity-50 disabled:cursor-not-allowed text-[color:var(--sf-text)]"
         >
           <Pickaxe size={32} className="text-orange-400" />
-          <span className="font-semibold">{t('regtest.mine200Blocks')}</span>
+          <span className="font-semibold">Mine 101 Blocks</span>
           <span className="text-sm text-[color:var(--sf-text)]/60">{t('regtest.generateBulk')}</span>
         </button>
 

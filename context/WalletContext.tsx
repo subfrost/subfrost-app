@@ -149,6 +149,7 @@ function toSdkNetwork(network: Network): 'mainnet' | 'testnet' | 'regtest' {
       return 'testnet';
     case 'regtest':
     case 'regtest-local':
+    case 'qubitcoin-regtest':
     case 'subfrost-regtest':
     case 'oylnet':
     case 'devnet':

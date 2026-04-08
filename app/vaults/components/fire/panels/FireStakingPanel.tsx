@@ -1,11 +1,13 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, LogOut, Gift } from 'lucide-react';
 import LockTierSelector from '../widgets/LockTierSelector';
 import RewardsProjector from '../widgets/RewardsProjector';
 import { useFireStakingStats } from '@/hooks/fire/useFireStakingStats';
 import { useFireStakeMutation } from '@/hooks/fire/useFireStakeMutation';
+import { useFireUnstakeMutation } from '@/hooks/fire/useFireUnstakeMutation';
+import { useFireClaimMutation } from '@/hooks/fire/useFireClaimMutation';
 import { useFireUserPositions } from '@/hooks/fire/useFireUserPositions';
 import { useWallet } from '@/context/WalletContext';
 import { useEnrichedWalletData } from '@/hooks/useEnrichedWalletData';
@@ -32,6 +34,8 @@ export default function FireStakingPanel({ vaultDetailsSlot }: FireStakingPanelP
   const isDemoGated = useDemoGate();
   const { data: stakingStats } = useFireStakingStats();
   const stakeMutation = useFireStakeMutation();
+  const unstakeMutation = useFireUnstakeMutation();
+  const claimMutation = useFireClaimMutation();
   const { data: positionsData, isLoading: isLoadingPositions } = useFireUserPositions();
   const { balances } = useEnrichedWalletData();
   const config = getConfig(network || 'mainnet');
@@ -50,6 +54,31 @@ export default function FireStakingPanel({ vaultDetailsSlot }: FireStakingPanelP
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [deadlineLocal, setDeadlineLocal] = useState('3');
   const [focusedField, setFocusedField] = useState<string | null>(null);
+
+  const actionPending = unstakeMutation.isPending || claimMutation.isPending;
+  const [actionTokenId, setActionTokenId] = useState<string | null>(null);
+
+  const handleClaim = (tokenId: string) => {
+    setActionTokenId(tokenId);
+    claimMutation.mutate(
+      { positionTokenId: tokenId, feeRate },
+      {
+        onSuccess: (data) => { console.log('[FireStaking] Claim success:', data); setActionTokenId(null); },
+        onError: (err) => { console.error('[FireStaking] Claim error:', err); window.alert(`Claim failed: ${err instanceof Error ? err.message : 'See console'}`); setActionTokenId(null); },
+      },
+    );
+  };
+
+  const handleUnstake = (tokenId: string) => {
+    setActionTokenId(tokenId);
+    unstakeMutation.mutate(
+      { positionTokenId: tokenId, feeRate },
+      {
+        onSuccess: (data) => { console.log('[FireStaking] Unstake success:', data); setActionTokenId(null); },
+        onError: (err) => { console.error('[FireStaking] Unstake error:', err); window.alert(`Unstake failed: ${err instanceof Error ? err.message : 'See console'}`); setActionTokenId(null); },
+      },
+    );
+  };
 
   const emissionRate = Number(stakingStats?.emissionRate || '0') / 1e8;
   const totalWeightedStake = Number(stakingStats?.totalStaked || '0') / 1e8;
@@ -323,27 +352,46 @@ export default function FireStakingPanel({ vaultDetailsSlot }: FireStakingPanelP
           </div>
         ) : (
           <>
-            <div className="sf-table-header grid grid-cols-4 gap-2 px-6">
+            <div className="sf-table-header grid grid-cols-5 gap-2 px-6">
               <div>{t('fire.lpStaked')}</div>
               <div>{t('fire.fireEarned')}</div>
-              <div>Multiplier</div>
-              <div className="text-right">Token</div>
+              <div>Mult.</div>
+              <div>ID</div>
+              <div className="text-right">Actions</div>
             </div>
 
             <div className="overflow-auto no-scrollbar" style={{ maxHeight: 'calc(5 * 85px)' }}>
               {positionsData.positions.map((pos) => (
-                <div key={pos.tokenId} className="sf-row grid grid-cols-4 items-center gap-2 px-6 py-4">
+                <div key={pos.tokenId} className="sf-row grid grid-cols-5 items-center gap-2 px-6 py-3">
                   <div className="text-sm font-bold text-[color:var(--sf-primary)]">
-                    {(Number(pos.depositAmount) / 1e8).toFixed(4)}
+                    {(Number(pos.depositAmount) / 1e8).toFixed(8)}
                   </div>
                   <div className="text-sm font-bold text-orange-500">
-                    {(Number(pos.pendingRewards) / 1e8).toFixed(4)}
+                    {(Number(pos.pendingRewards) / 1e8).toFixed(8)}
                   </div>
-                  <div className="text-sm font-bold text-[color:var(--sf-primary)]">
-                    {pos.multiplier.toFixed(2)}x
+                  <div className="text-xs font-bold text-[color:var(--sf-primary)]">
+                    {pos.multiplier.toFixed(1)}x
                   </div>
-                  <div className="text-xs text-[color:var(--sf-muted)] text-right font-mono">
+                  <div className="text-[10px] text-[color:var(--sf-muted)] font-mono">
                     {pos.tokenId}
+                  </div>
+                  <div className="flex gap-1 justify-end">
+                    <button
+                      onClick={() => handleClaim(pos.tokenId)}
+                      disabled={actionPending}
+                      className="sf-btn-ghost text-[10px] px-1.5 py-0.5 text-orange-400 hover:text-orange-300 disabled:opacity-50"
+                      title="Claim FIRE rewards"
+                    >
+                      {actionTokenId === pos.tokenId && claimMutation.isPending ? '...' : <><Gift size={10} className="inline mr-0.5" />Claim</>}
+                    </button>
+                    <button
+                      onClick={() => handleUnstake(pos.tokenId)}
+                      disabled={actionPending}
+                      className="sf-btn-ghost text-[10px] px-1.5 py-0.5 text-red-400 hover:text-red-300 disabled:opacity-50"
+                      title="Unstake LP + claim rewards"
+                    >
+                      {actionTokenId === pos.tokenId && unstakeMutation.isPending ? '...' : <><LogOut size={10} className="inline mr-0.5" />Unstake</>}
+                    </button>
                   </div>
                 </div>
               ))}

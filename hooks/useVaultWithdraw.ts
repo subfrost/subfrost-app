@@ -60,7 +60,7 @@ export function useVaultWithdraw() {
   const { isConnected, walletType, account, signTaprootPsbt, signSegwitPsbt, network } = useWallet();
   const provider = useSandshrewProvider();
   const isBrowserWallet = walletType === 'browser';
-  const useActualAddresses = isBrowserWallet || network === 'devnet' || network === 'regtest-local';
+  const useActualAddresses = isBrowserWallet || network === 'devnet' || network === 'regtest-local' || network === 'qubitcoin-regtest';
 
   return useMutation({
     mutationFn: async (withdrawData: VaultWithdrawData) => {

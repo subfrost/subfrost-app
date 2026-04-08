@@ -88,6 +88,7 @@ const NETWORK_TO_PROVIDER: Record<Network, string> = {
   signet: 'signet',
   regtest: 'regtest',
   'regtest-local': 'regtest',
+  'qubitcoin-regtest': 'regtest',
   oylnet: 'regtest',
   'subfrost-regtest': 'subfrost-regtest',
   devnet: 'subfrost-regtest', // Devnet uses regtest params, fetch interceptor routes to in-process
@@ -115,6 +116,10 @@ const DIRECT_NETWORK_CONFIG: Record<Network, Record<string, string> | undefined>
     jsonrpc_url: 'http://localhost:18888',
     data_api_url: 'http://localhost:18888',
   },
+  'qubitcoin-regtest': {
+    jsonrpc_url: 'https://meta.lake.direct',
+    data_api_url: 'https://meta.lake.direct',
+  },
   oylnet: {
     jsonrpc_url: 'https://regtest.subfrost.io/v4/subfrost',
     data_api_url: 'https://regtest.subfrost.io/v4/subfrost',
@@ -134,7 +139,7 @@ const DIRECT_NETWORK_CONFIG: Record<Network, Record<string, string> | undefined>
  * These are remote networks whose endpoints may not return proper CORS headers.
  * regtest-local uses local Docker (localhost) which doesn't need a proxy.
  */
-const NETWORKS_NEEDING_PROXY: Network[] = ['regtest', 'oylnet', 'subfrost-regtest', 'mainnet', 'testnet', 'signet'];
+const NETWORKS_NEEDING_PROXY: Network[] = ['regtest', 'oylnet', 'subfrost-regtest', 'qubitcoin-regtest', 'mainnet', 'testnet', 'signet'];
 
 /**
  * Get network configuration, using proxy URL when in browser localhost context
@@ -227,7 +232,7 @@ export function AlkanesSDKProvider({ children, network }: AlkanesSDKProviderProp
         // RESOLVED (2026-03-31): Passing actual addresses via useActualAddresses pattern
         // in all mutation hooks fixes the address resolution issue. See CLAUDE.md Rule 0b.
         try {
-          if (network === 'devnet' || network === 'regtest-local') {
+          if (network === 'devnet' || network === 'regtest-local' || network === 'qubitcoin-regtest') {
             // On local networks, load the session mnemonic so the SDK provider
             // can find UTXOs for signing. A dummy wallet resolves p2tr:0/p2wpkh:0
             // to unrelated addresses with no balance.

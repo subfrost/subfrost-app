@@ -130,8 +130,7 @@ function toPoolRow(p: any): any {
   };
 }
 
-async function fetchTokenPairsFromDirectSimulate(factoryId: string): Promise<AlkanesTokenPair[]> {
-  const rpcUrl = 'http://localhost:18888';
+async function fetchTokenPairsFromDirectSimulate(factoryId: string, rpcUrl: string = 'http://localhost:18888'): Promise<AlkanesTokenPair[]> {
 
   // Factory opcode 3: GetAllPools
   const allPoolsHex = await simulateContract(rpcUrl, factoryId, 3);
@@ -213,8 +212,16 @@ async function fetchPoolsFromSDK(
   console.log('[fetchPoolsFromSDK] ENTRY - factoryId:', factoryId, 'network:', network);
 
   // regtest-local: skip REST/SDK (503 or 30s timeout). Use direct metashrew_view simulate.
-  if (network === 'regtest-local') {
-    return fetchTokenPairsFromDirectSimulate(factoryId);
+  if (network === 'regtest-local' || network === 'qubitcoin-regtest') {
+    try {
+      const simRpcUrl = network === 'qubitcoin-regtest'
+        ? `${typeof window !== 'undefined' ? window.location.origin : ''}/api/rpc/qubitcoin-regtest`
+        : 'http://localhost:18888';
+      return await fetchTokenPairsFromDirectSimulate(factoryId, simRpcUrl);
+    } catch (e) {
+      console.warn('[useAlkanesTokenPairs] Direct simulate failed (factory not deployed?):', (e as Error)?.message?.slice(0, 80));
+      return [];
+    }
   }
 
   console.log('[fetchPoolsFromSDK] provider available:', !!provider);

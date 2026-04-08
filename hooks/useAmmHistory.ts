@@ -296,7 +296,7 @@ export function useInfiniteAmmTxHistory({
     queryFn: async ({ pageParam }) => {
       if (!provider) return { items: [], nextPage: undefined, total: 0 };
       // On devnet, the REST data API returns HTTP 400 — skip entirely
-      if (network === 'devnet' || network === 'regtest-local') return { items: [], nextPage: undefined, total: 0 };
+      if (network === 'devnet' || network === 'regtest-local' || network === 'qubitcoin-regtest') return { items: [], nextPage: undefined, total: 0 };
       const offset = pageParam * count;
 
       try {

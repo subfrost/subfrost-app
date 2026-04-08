@@ -538,7 +538,9 @@ async function fetchPoolsFromDirectSimulate(
   factoryId: string,
   network: string,
 ): Promise<PoolsListItem[]> {
-  const rpcUrl = 'http://localhost:18888';
+  const rpcUrl = network === 'qubitcoin-regtest'
+    ? `${typeof window !== 'undefined' ? window.location.origin : ''}/api/rpc/qubitcoin-regtest`
+    : 'http://localhost:18888';
 
   // Factory opcode 3: GetAllPools — returns list of pool AlkaneIds
   const allPoolsHex = await simulateContract(rpcUrl, factoryId, 3);
@@ -734,7 +736,7 @@ export function usePools(params: UsePoolsParams = {}) {
 
       // regtest-local: skip REST/SDK fallbacks (all return 503 or hang 30s).
       // Go directly to metashrew_view simulate which is the only working path.
-      if (network === 'regtest-local') {
+      if (network === 'regtest-local' || network === 'qubitcoin-regtest') {
         try { tokenMetaMap = await tokenMetaPromise; } catch { /* ignore */ }
         try {
           items = await fetchPoolsFromDirectSimulate(ALKANE_FACTORY_ID, network);

@@ -20,7 +20,7 @@ import * as ecc from '@bitcoinerlab/secp256k1';
 bitcoin.initEccLib(ecc);
 
 interface UnstakeParams {
-  positionId: number;
+  positionTokenId: string; // alkane ID of the position NFT (e.g. "2:7")
   feeRate: number;
 }
 
@@ -33,27 +33,28 @@ export function useFireUnstakeMutation() {
   const stakingId = (config as any).FIRE_STAKING_ID as string | undefined;
 
   return useMutation({
-    mutationFn: async ({ positionId, feeRate }: UnstakeParams) => {
+    mutationFn: async ({ positionTokenId, feeRate }: UnstakeParams) => {
       if (!provider || !isInitialized || !stakingId) {
         throw new Error('Provider or FIRE staking contract not ready');
       }
 
       const isBrowserWallet = walletType === 'browser';
-      const useActualAddresses = isBrowserWallet || network === 'devnet' || network === 'regtest-local';
+      const useActualAddresses = isBrowserWallet || network === 'devnet' || network === 'regtest-local' || network === 'qubitcoin-regtest';
       const taprootAddress = account?.taproot?.address;
       const segwitAddress = account?.nativeSegwit?.address;
 
       if (!taprootAddress) throw new Error('Taproot address required');
 
       const [stakingBlock, stakingTx] = stakingId.split(':').map(Number);
-      const protostonesStr = `[${stakingBlock},${stakingTx},${FIRE_STAKING_OPCODES.Unstake},${positionId}]:v0:v0`;
+      const protostonesStr = `[${stakingBlock},${stakingTx},${FIRE_STAKING_OPCODES.Unstake}]:v0:v0`;
 
       const toAddresses = useActualAddresses ? [taprootAddress] : ['p2tr:0'];
       const changeAddr = useActualAddresses ? (segwitAddress || taprootAddress) : 'p2wpkh:0';
       const alkanesChangeAddr = useActualAddresses ? taprootAddress : 'p2tr:0';
 
+      // Position NFT must be sent as incomingAlkanes for Unstake
       const result = await (provider as any).alkanesExecuteTyped({
-        inputRequirements: '',
+        inputRequirements: `${positionTokenId}:1`,
         protostones: protostonesStr,
         feeRate,
         autoConfirm: false,

@@ -126,7 +126,7 @@ export function useBridgeToEvm() {
       console.log('[useBridgeToEvm] Input requirements:', inputRequirements);
 
       const isBrowserWallet = walletType === 'browser';
-      const useActualAddresses = isBrowserWallet || network === 'devnet' || network === 'regtest-local';
+      const useActualAddresses = isBrowserWallet || network === 'devnet' || network === 'regtest-local' || network === 'qubitcoin-regtest';
       const btcNetwork = getBitcoinNetwork(network);
 
       const fromAddresses = useActualAddresses
@@ -145,7 +145,7 @@ export function useBridgeToEvm() {
         ? primaryAddress
         : 'p2tr:0';
 
-      const isRegtest = network === 'regtest' || network === 'subfrost-regtest' || network === 'regtest-local' || network === 'devnet';
+      const isRegtest = network === 'regtest' || network === 'subfrost-regtest' || network === 'regtest-local' || network === 'qubitcoin-regtest' || network === 'devnet';
 
       const result = await provider.alkanesExecuteTyped({
         inputRequirements,
@@ -244,7 +244,7 @@ export function useBridgeFromEvm() {
       // This mutation is primarily for testing — in production the mint is coordinator-mediated.
       const inputRequirements = 'B:10000:v0'; // Minimal BTC for tx fee
       const isBrowserWallet = walletType === 'browser';
-      const useActualAddresses = isBrowserWallet || network === 'devnet' || network === 'regtest-local';
+      const useActualAddresses = isBrowserWallet || network === 'devnet' || network === 'regtest-local' || network === 'qubitcoin-regtest';
       const btcNetwork = getBitcoinNetwork(network);
 
       const fromAddresses = useActualAddresses

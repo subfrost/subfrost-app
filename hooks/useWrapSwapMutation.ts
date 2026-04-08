@@ -167,13 +167,13 @@ export function useWrapSwapMutation() {
       console.log('[WrapSwap] Min output (after slippage):', minAmountOut);
 
       // Get deadline block height
-      const isRegtest = network === 'regtest' || network === 'subfrost-regtest' || network === 'regtest-local';
+      const isRegtest = network === 'regtest' || network === 'subfrost-regtest' || network === 'regtest-local' || network === 'qubitcoin-regtest';
       const deadlineBlocks = isRegtest ? 1000 : (data.deadlineBlocks || 3);
       const deadline = await getFutureBlockHeight(deadlineBlocks, provider as any);
       console.log('[WrapSwap] Deadline:', deadline, `(+${deadlineBlocks} blocks)`);
 
       const isBrowserWallet = walletType === 'browser';
-      const useActualAddresses = isBrowserWallet || network === 'devnet' || network === 'regtest-local';
+      const useActualAddresses = isBrowserWallet || network === 'devnet' || network === 'regtest-local' || network === 'qubitcoin-regtest';
 
       // ========================================================================
       // Step 3: Fetch all available UTXOs BEFORE building wrap

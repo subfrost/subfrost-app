@@ -114,7 +114,7 @@ export function useUnwrapMutation() {
       });
 
       const isBrowserWallet = walletType === 'browser';
-      const useActualAddresses = isBrowserWallet || network === 'devnet' || network === 'regtest-local';
+      const useActualAddresses = isBrowserWallet || network === 'devnet' || network === 'regtest-local' || network === 'qubitcoin-regtest';
 
       // ============================================================================
       // ⚠️ CRITICAL: Browser wallets need ACTUAL addresses, not symbolic ⚠️

@@ -107,6 +107,7 @@ export default function BottomPanels({ baseToken, quoteToken }: Props) {
           from: fromAddrs,
           change_address: segwitAddress || taprootAddress,
           alkanes_change_address: taprootAddress,
+          lock_alkanes: true,
           mine_enabled: true,
           auto_confirm: true,
         }),

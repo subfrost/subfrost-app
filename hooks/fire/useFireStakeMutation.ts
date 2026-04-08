@@ -71,6 +71,7 @@ export function useFireStakeMutation() {
           from: fromAddrs,
           change_address: segwitAddress || taprootAddress,
           alkanes_change_address: taprootAddress,
+          lock_alkanes: true,
           mine_enabled: isLocal,
           auto_confirm: true,
         }),

@@ -23,9 +23,16 @@ export async function POST(request: NextRequest) {
     // Client passes network from localStorage selection (regtest-local, devnet, etc.)
     const network = clientNetwork || process.env.NEXT_PUBLIC_NETWORK;
     const LOCAL_NETWORKS = ['regtest-local', 'devnet'];
-    const rpcUrl = LOCAL_NETWORKS.includes(network ?? '')
+    const isLocal = LOCAL_NETWORKS.includes(network ?? '');
+    const isQubitcoin = network === 'qubitcoin-regtest';
+    const rpcUrl = isLocal
       ? 'http://localhost:18888'
-      : 'https://regtest.subfrost.io/v4/subfrost';
+      : isQubitcoin
+        ? 'https://meta.lake.direct'
+        : 'https://regtest.subfrost.io/v4/subfrost';
+
+    // qubitcoin uses native bitcoin RPC method names (no bitcoind_ prefix)
+    const mineMethod = isQubitcoin ? 'generatetoaddress' : 'bitcoind_generatetoaddress';
 
     // Mine all requested blocks in a single RPC call (cap at 500 for safety)
     const blocksToMine = Math.min(blocks, 500);
@@ -35,7 +42,7 @@ export async function POST(request: NextRequest) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         jsonrpc: '2.0',
-        method: 'bitcoind_generatetoaddress',
+        method: mineMethod,
         params: [blocksToMine, address],
         id: 1,
       }),

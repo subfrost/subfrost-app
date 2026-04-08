@@ -200,7 +200,7 @@ describe('Swap wrap fee adjustment', () => {
 
 describe('Regtest deadline override', () => {
   function isRegtestNetwork(network: string): boolean {
-    return network === 'regtest' || network === 'subfrost-regtest' || network === 'regtest-local';
+    return network === 'regtest' || network === 'subfrost-regtest' || network === 'regtest-local' || network === 'qubitcoin-regtest';
   }
 
   it('should use 1000 blocks on regtest', () => {

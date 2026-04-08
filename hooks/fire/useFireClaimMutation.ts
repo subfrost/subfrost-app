@@ -20,6 +20,7 @@ import * as ecc from '@bitcoinerlab/secp256k1';
 bitcoin.initEccLib(ecc);
 
 interface ClaimParams {
+  positionTokenId: string; // alkane ID of the position NFT (e.g. "2:7")
   feeRate: number;
 }
 
@@ -32,13 +33,13 @@ export function useFireClaimMutation() {
   const stakingId = (config as any).FIRE_STAKING_ID as string | undefined;
 
   return useMutation({
-    mutationFn: async ({ feeRate }: ClaimParams) => {
+    mutationFn: async ({ positionTokenId, feeRate }: ClaimParams) => {
       if (!provider || !isInitialized || !stakingId) {
         throw new Error('Provider or FIRE staking contract not ready');
       }
 
       const isBrowserWallet = walletType === 'browser';
-      const useActualAddresses = isBrowserWallet || network === 'devnet' || network === 'regtest-local';
+      const useActualAddresses = isBrowserWallet || network === 'devnet' || network === 'regtest-local' || network === 'qubitcoin-regtest';
       const taprootAddress = account?.taproot?.address;
       const segwitAddress = account?.nativeSegwit?.address;
 
@@ -51,8 +52,9 @@ export function useFireClaimMutation() {
       const changeAddr = useActualAddresses ? (segwitAddress || taprootAddress) : 'p2wpkh:0';
       const alkanesChangeAddr = useActualAddresses ? taprootAddress : 'p2tr:0';
 
+      // Position NFT must be sent as incomingAlkanes for ClaimRewards
       const result = await (provider as any).alkanesExecuteTyped({
-        inputRequirements: '',
+        inputRequirements: `${positionTokenId}:1`,
         protostones: protostonesStr,
         feeRate,
         autoConfirm: false,

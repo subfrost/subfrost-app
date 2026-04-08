@@ -76,7 +76,7 @@ export function useCancelOrderMutation() {
 
       const btcNetwork = getBitcoinNetwork(network);
       const isBrowserWallet = walletType === 'browser';
-      const useActualAddresses = isBrowserWallet || network === 'devnet' || network === 'regtest-local';
+      const useActualAddresses = isBrowserWallet || network === 'devnet' || network === 'regtest-local' || network === 'qubitcoin-regtest';
 
       // Browser wallets need ACTUAL addresses, not symbolic
       const fromAddresses = useActualAddresses

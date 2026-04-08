@@ -34,7 +34,7 @@ function detectNetwork(): Network {
   // selecting devnet in the balances page would be saved to localStorage but
   // detectNetwork() would ignore it, reverting to mainnet on next load.
   const stored = localStorage.getItem(NETWORK_STORAGE_KEY);
-  if (stored && ['mainnet', 'testnet', 'signet', 'regtest', 'regtest-local', 'subfrost-regtest', 'oylnet', 'devnet'].includes(stored)) {
+  if (stored && ['mainnet', 'testnet', 'signet', 'regtest', 'regtest-local', 'qubitcoin-regtest', 'subfrost-regtest', 'oylnet', 'devnet'].includes(stored)) {
     return stored as Network;
   }
 

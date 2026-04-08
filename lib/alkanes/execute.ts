@@ -115,7 +115,7 @@ export async function alkanesExecuteTyped(
   // Detect devnet by checking if the fetch interceptor is installed (localhost:18888).
   // NOTE (2026-04-02): "Insufficient alkanes" on devnet is almost always stale IndexedDB
   // cache, NOT a detection bug. Use DevnetControlPanel "Clear & Reload" to reset state.
-  const LOCAL_NETWORKS = ['devnet', 'regtest-local'];
+  const LOCAL_NETWORKS = ['devnet', 'regtest-local', 'qubitcoin-regtest'];
   let isLocalNetwork = LOCAL_NETWORKS.includes(params.network ?? '');
   if (!isLocalNetwork) {
     try {

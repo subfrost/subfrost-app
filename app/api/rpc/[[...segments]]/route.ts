@@ -28,6 +28,7 @@ const RPC_ENDPOINTS: Record<string, string> = {
   signet: 'https://signet.subfrost.io/v4/subfrost',
   regtest: 'https://regtest.subfrost.io/v4/subfrost',
   'regtest-local': 'http://localhost:18888',
+  'qubitcoin-regtest': 'https://meta.lake.direct',
   'subfrost-regtest': 'https://regtest.subfrost.io/v4/subfrost',
   oylnet: 'https://regtest.subfrost.io/v4/subfrost',
 };
@@ -39,6 +40,7 @@ const BATCH_RPC_ENDPOINTS: Record<string, string> = {
   signet: 'https://signet.subfrost.io/v4/jsonrpc',
   regtest: 'https://regtest.subfrost.io/v4/jsonrpc',
   'regtest-local': 'http://localhost:18888',
+  'qubitcoin-regtest': 'https://meta.lake.direct',
   'subfrost-regtest': 'https://regtest.subfrost.io/v4/jsonrpc',
   oylnet: 'https://regtest.subfrost.io/v4/jsonrpc',
 };
@@ -67,6 +69,11 @@ export async function POST(
       network = networkSegment;
 
       if (restPath.length > 0) {
+        // qubitcoin-regtest has no REST data API — return empty for SDK fallback
+        if (networkSegment === 'qubitcoin-regtest') {
+          console.log(`[RPC Proxy] qubitcoin-regtest REST /${restPath.join('/')} → empty (no data API)`);
+          return NextResponse.json({ statusCode: 200, data: [] });
+        }
         // REST sub-path: forward to backend base URL + rest path
         const baseUrl = (RPC_ENDPOINTS[network] || RPC_ENDPOINTS.regtest).replace(/\/$/, '');
         targetUrl = `${baseUrl}/${restPath.join('/')}`;
@@ -90,7 +97,74 @@ export async function POST(
       }, { status: 503 });
     }
 
-    // Log for debugging UTXO fetches
+    // Qubitcoin-regtest: route methods to the correct service on the remote server.
+    // Services available via VPN at 192.168.10.140:
+    //   :31944 — qubitcoin-jsonrpc (bitcoin RPC + secondaryview/secondaryheight)
+    //   :31080 — metashrew/rockshrew (metashrew_view, metashrew_height)
+    //   :31050 — esplora (REST block explorer)
+    //   :31443 — bitcoind (raw bitcoin RPC)
+    if (network === 'qubitcoin-regtest' && !Array.isArray(body)) {
+      const m = body.method || '';
+
+      // Esplora methods → esplora REST service
+      if (m.startsWith('esplora_')) {
+        // Convert esplora_address::utxo → /address/{addr}/utxo REST call
+        const esploraBase = 'http://192.168.10.140:31050';
+        const params = body.params || [];
+
+        let esploraPath = '';
+        if (m === 'esplora_address::utxo' && params[0]) {
+          esploraPath = `/address/${params[0]}/utxo`;
+        } else if (m === 'esplora_address::txs:mempool' && params[0]) {
+          esploraPath = `/address/${params[0]}/txs/mempool`;
+        } else if (m === 'esplora_tx' && params[0]) {
+          esploraPath = `/tx/${params[0]}`;
+        }
+
+        if (esploraPath) {
+          console.log(`[RPC Proxy] ${m} -> ${esploraBase}${esploraPath}`);
+          try {
+            const esploraResp = await fetch(`${esploraBase}${esploraPath}`);
+            const esploraData = await esploraResp.json();
+            return NextResponse.json({ jsonrpc: '2.0', result: esploraData, id: body.id ?? 1 });
+          } catch (e) {
+            return NextResponse.json({ jsonrpc: '2.0', result: [], id: body.id ?? 1 });
+          }
+        }
+      }
+
+      // metashrew methods → metashrew service directly (supports all view functions)
+      if (m === 'metashrew_view' || m === 'metashrew_height') {
+        targetUrl = 'http://192.168.10.140:31080';
+      }
+      // Lua methods → metashrew (it handles lua_evalscript/lua_evalsaved)
+      else if (m.startsWith('lua_')) {
+        targetUrl = 'http://192.168.10.140:31080';
+      }
+      // Bitcoin RPC methods → qubitcoin-jsonrpc
+      else if (['getblockcount', 'getblockhash', 'getblock', 'getrawtransaction',
+                 'sendrawtransaction', 'generatetoaddress', 'getrawmempool',
+                 'gettxout', 'getmempoolinfo'].includes(m)) {
+        targetUrl = 'http://192.168.10.140:31944';
+      }
+      // ord methods → not available, return empty
+      else if (m.startsWith('ord_')) {
+        return NextResponse.json({ jsonrpc: '2.0', result: { indexed: false, inscriptions: [], runes: {} }, id: body.id ?? 1 });
+      }
+      // alkanes_ prefixed → translate to secondaryview on qubitcoin
+      else if (m.startsWith('alkanes_')) {
+        const viewName = m.replace('alkanes_', '');
+        body.method = 'secondaryview';
+        body.params = ['alkanes', viewName, ...(body.params || [])];
+        targetUrl = 'http://192.168.10.140:31944';
+      }
+      // Default → qubitcoin-jsonrpc
+      else {
+        targetUrl = 'http://192.168.10.140:31944';
+      }
+    }
+
+    // Log for debugging
     const method = Array.isArray(body) ? 'batch' : body?.method;
     console.log(`[RPC Proxy] ${method} -> ${targetUrl}`);
 

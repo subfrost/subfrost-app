@@ -141,14 +141,21 @@ export function useFujinMarkets() {
       const LOCAL_NETWORKS = ['regtest-local', 'devnet'];
       const rpcUrl = LOCAL_NETWORKS.includes(network || '')
         ? 'http://localhost:18888'
-        : getRpcUrl(network);
+        : network === 'qubitcoin-regtest'
+          ? `${typeof window !== 'undefined' ? window.location.origin : ''}/api/rpc/qubitcoin-regtest`
+          : getRpcUrl(network);
 
       // regtest-local: use factory contract via metashrew_view simulate
       const fujinFactoryId = (config as any).FUJIN_FACTORY_ID;
       const espoUrl = (config as any).FUJIN_ESPO_URL;
 
-      if (fujinFactoryId && network === 'regtest-local') {
-        return await fetchViaFactory(rpcUrl, fujinFactoryId, espoUrl);
+      if (fujinFactoryId && (network === 'regtest-local' || network === 'qubitcoin-regtest')) {
+        try {
+          return await fetchViaFactory(rpcUrl, fujinFactoryId, espoUrl);
+        } catch (e) {
+          console.warn('[useFujinMarkets] Factory not available:', (e as Error)?.message?.slice(0, 80));
+          return { factoryId: fujinFactoryId, markets: [], numMarkets: 0, currentEpoch: 0, error: null };
+        }
       }
 
       // devnet: use MasterFujin via alkanes_simulate (existing path)
