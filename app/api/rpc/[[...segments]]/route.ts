@@ -145,6 +145,11 @@ export async function POST(
       else if (['getblockcount', 'getblockhash', 'getblock', 'getrawtransaction',
                  'sendrawtransaction', 'generatetoaddress', 'getrawmempool',
                  'gettxout', 'getmempoolinfo'].includes(m)) {
+        // Log sendrawtransaction for debugging
+        if (m === 'sendrawtransaction') {
+          const txHex = body.params?.[0] || '';
+          console.log(`[RPC Proxy] sendrawtransaction: ${txHex.length} hex chars, params count: ${body.params?.length}`);
+        }
         targetUrl = 'http://192.168.10.140:31944';
       }
       // ord methods → not available, return empty
