@@ -208,10 +208,10 @@ SDK / Frontend               Proxy rewrites to                Target
 metashrew_view(fn,hex,tag) → secondaryview("alkanes",fn,hex,tag)  → meta.lake.direct
 metashrew_height()         → secondaryheight("alkanes")            → meta.lake.direct
 alkanes_simulate(params)   → secondaryview("alkanes","simulate",...) → meta.lake.direct
-esplora_address::utxo      → REST /address/{addr}/utxo            → 192.168.10.140:31050
-esplora_address::txs:mem.. → REST /address/{addr}/txs/mempool     → 192.168.10.140:31050
-esplora_tx                 → REST /tx/{txid}                       → 192.168.10.140:31050
-lua_*                      → direct                                → 192.168.10.140:31080
+esplora_address::utxo      → REST /address/{addr}/utxo            → $QUBITCOIN_REGTEST_HOST:31050
+esplora_address::txs:mem.. → REST /address/{addr}/txs/mempool     → $QUBITCOIN_REGTEST_HOST:31050
+esplora_tx                 → REST /tx/{txid}                       → $QUBITCOIN_REGTEST_HOST:31050
+lua_*                      → direct                                → $QUBITCOIN_REGTEST_HOST:31080
 ord_*                      → stub (empty)                          → N/A
 REST sub-paths             → empty (no data API)                   → N/A
 bitcoin RPC                → passthrough                           → meta.lake.direct
@@ -219,7 +219,7 @@ bitcoin RPC                → passthrough                           → meta.la
 
 ---
 
-## K3s Services (192.168.10.140)
+## K3s Services ($QUBITCOIN_REGTEST_HOST)
 
 | Service | NodePort | Internal | Contains |
 |---------|----------|----------|----------|

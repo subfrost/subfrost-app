@@ -63,6 +63,13 @@ export async function POST(
     let network: string;
     let targetUrl: string;
 
+    // Qubitcoin-regtest service URLs (VPN-only, from env)
+    const QBC_HOST = process.env.QUBITCOIN_REGTEST_HOST || '127.0.0.1';
+    const QBC_METASHREW = `http://${QBC_HOST}:31080`;
+    const QBC_ESPLORA = `http://${QBC_HOST}:31050`;
+    const QBC_JSONRPC = `http://${QBC_HOST}:31944`;
+    const QBC_ESPO = `http://${QBC_HOST}:31578`;
+
     if (segments && segments.length > 0) {
       // Path-based: /api/rpc/mainnet  or  /api/rpc/mainnet/get-alkanes-by-address
       const [networkSegment, ...restPath] = segments;
@@ -72,7 +79,7 @@ export async function POST(
         if (networkSegment === 'qubitcoin-regtest') {
           // Route /espo sub-path to espo JSON-RPC on server
           if (restPath[0] === 'espo') {
-            const espoUrl = 'http://192.168.10.140:31578/rpc';
+            const espoUrl = QBC_ESPO + '/rpc';
             console.log(`[RPC Proxy] qubitcoin-regtest /espo → ${espoUrl}`);
             try {
               const espoBody = await request.clone().json().catch(() => ({}));
@@ -91,7 +98,7 @@ export async function POST(
           // /get-block-height → fetch from metashrew
           if (restPath[0] === 'get-block-height') {
             try {
-              const hResp = await fetch('http://192.168.10.140:31080', {
+              const hResp = await fetch(QBC_METASHREW, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ jsonrpc: '2.0', method: 'metashrew_height', params: [], id: 1 }),
@@ -132,7 +139,6 @@ export async function POST(
     }
 
     // Qubitcoin-regtest: route methods to the correct service on the remote server.
-    // Services available via VPN at 192.168.10.140:
     //   :31944 — qubitcoin-jsonrpc (bitcoin RPC + secondaryview/secondaryheight)
     //   :31080 — metashrew/rockshrew (metashrew_view, metashrew_height)
     //   :31050 — esplora (REST block explorer)
@@ -143,7 +149,7 @@ export async function POST(
       // Esplora methods → esplora REST service
       if (m.startsWith('esplora_')) {
         // Convert esplora_address::utxo → /address/{addr}/utxo REST call
-        const esploraBase = 'http://192.168.10.140:31050';
+        const esploraBase = QBC_ESPLORA;
         const params = body.params || [];
 
         let esploraPath = '';
@@ -169,11 +175,11 @@ export async function POST(
 
       // metashrew methods → metashrew service directly (supports all view functions)
       if (m === 'metashrew_view' || m === 'metashrew_height') {
-        targetUrl = 'http://192.168.10.140:31080';
+        targetUrl = QBC_METASHREW;
       }
       // Lua methods → metashrew (it handles lua_evalscript/lua_evalsaved)
       else if (m.startsWith('lua_')) {
-        targetUrl = 'http://192.168.10.140:31080';
+        targetUrl = QBC_METASHREW;
       }
       // Bitcoin RPC methods → qubitcoin-jsonrpc
       else if (['getblockcount', 'getblockhash', 'getblock', 'getrawtransaction',
@@ -182,7 +188,7 @@ export async function POST(
         if (m === 'sendrawtransaction') {
           console.log(`[RPC Proxy] sendrawtransaction: ${body.params?.[0]?.length || 0} hex chars, params: ${body.params?.length}`);
         }
-        targetUrl = 'http://192.168.10.140:31944';
+        targetUrl = QBC_JSONRPC;
       }
       // ord methods → not available, return empty
       else if (m.startsWith('ord_')) {
@@ -193,11 +199,11 @@ export async function POST(
         const viewName = m.replace('alkanes_', '');
         body.method = 'secondaryview';
         body.params = ['alkanes', viewName, ...(body.params || [])];
-        targetUrl = 'http://192.168.10.140:31944';
+        targetUrl = QBC_JSONRPC;
       }
       // Default → qubitcoin-jsonrpc
       else {
-        targetUrl = 'http://192.168.10.140:31944';
+        targetUrl = QBC_JSONRPC;
       }
     }
 
