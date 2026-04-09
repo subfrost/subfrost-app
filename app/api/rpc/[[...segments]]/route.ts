@@ -69,8 +69,42 @@ export async function POST(
       network = networkSegment;
 
       if (restPath.length > 0) {
-        // qubitcoin-regtest has no REST data API — return empty for SDK fallback
         if (networkSegment === 'qubitcoin-regtest') {
+          // Route /espo sub-path to espo JSON-RPC on server
+          if (restPath[0] === 'espo') {
+            const espoUrl = 'http://192.168.10.140:31578/rpc';
+            console.log(`[RPC Proxy] qubitcoin-regtest /espo → ${espoUrl}`);
+            try {
+              const espoBody = await request.clone().json().catch(() => ({}));
+              const espoResp = await fetch(espoUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(espoBody),
+              });
+              const espoData = await espoResp.json();
+              return NextResponse.json(espoData);
+            } catch (e) {
+              console.log(`[RPC Proxy] qubitcoin-regtest /espo failed:`, e);
+              return NextResponse.json({ jsonrpc: '2.0', error: { code: -32603, message: 'espo unavailable' }, id: null });
+            }
+          }
+          // /get-block-height → fetch from metashrew
+          if (restPath[0] === 'get-block-height') {
+            try {
+              const hResp = await fetch('http://192.168.10.140:31080', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ jsonrpc: '2.0', method: 'metashrew_height', params: [], id: 1 }),
+              });
+              const hData = await hResp.json();
+              const height = parseInt(hData.result, 10) || 0;
+              console.log(`[RPC Proxy] qubitcoin-regtest /get-block-height → ${height}`);
+              return NextResponse.json({ height });
+            } catch {
+              return NextResponse.json({ height: 0 });
+            }
+          }
+          // Other REST sub-paths — return empty for SDK fallback
           console.log(`[RPC Proxy] qubitcoin-regtest REST /${restPath.join('/')} → empty (no data API)`);
           return NextResponse.json({ statusCode: 200, data: [] });
         }
@@ -145,10 +179,8 @@ export async function POST(
       else if (['getblockcount', 'getblockhash', 'getblock', 'getrawtransaction',
                  'sendrawtransaction', 'generatetoaddress', 'getrawmempool',
                  'gettxout', 'getmempoolinfo'].includes(m)) {
-        // Log sendrawtransaction for debugging
         if (m === 'sendrawtransaction') {
-          const txHex = body.params?.[0] || '';
-          console.log(`[RPC Proxy] sendrawtransaction: ${txHex.length} hex chars, params count: ${body.params?.length}`);
+          console.log(`[RPC Proxy] sendrawtransaction: ${body.params?.[0]?.length || 0} hex chars, params: ${body.params?.length}`);
         }
         targetUrl = 'http://192.168.10.140:31944';
       }

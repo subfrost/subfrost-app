@@ -70,23 +70,22 @@ export async function alkanesExecuteTyped(
     }
   }
 
+  const methodLabel = `alkanesExecuteTyped[network=${params.network ?? 'unknown'}]`;
   const startTime = Date.now();
-  logWasmCall('alkanesExecuteWithStrings', [
+  logWasmCall(methodLabel, [
     toAddressesJson,
     params.inputRequirements,
     params.protostones,
     params.feeRate ?? null,
-    params.envelopeHex ?? null,
     optionsJson,
   ]);
 
   try {
-    // Delegate to the core execute function (shared with tests)
     const parsed = await executeTypedCore(provider, params);
-    logWasmResult('alkanesExecuteWithStrings', parsed, Date.now() - startTime);
+    logWasmResult(methodLabel, parsed, Date.now() - startTime);
     return parsed;
   } catch (error) {
-    logWasmError('alkanesExecuteWithStrings', error, [
+    logWasmError(methodLabel, error, [
       toAddressesJson,
       params.inputRequirements,
       params.protostones,

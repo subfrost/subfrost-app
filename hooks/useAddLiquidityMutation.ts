@@ -495,7 +495,8 @@ export function useAddLiquidityMutation() {
           // so the PSBT is built WITHOUT alkane-bearing inputs. We manually discover
           // alkane UTXOs and inject them into the PSBT before signing.
           console.log('[AddLiquidity] Discovering alkane UTXOs for injection...');
-          const alkaneUtxos = await discoverAlkaneUtxos(taprootAddress!, '/api/rpc');
+          const rpcPath = network ? `/api/rpc/${network}` : '/api/rpc';
+          const alkaneUtxos = await discoverAlkaneUtxos(taprootAddress!, rpcPath);
 
           if (alkaneUtxos.length > 0) {
             const tapInternalKeyHex = account?.taproot?.pubKeyXOnly;

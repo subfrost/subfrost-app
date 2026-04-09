@@ -137,11 +137,14 @@ export async function alkanesExecuteTyped(
     options.auto_confirm = true;
     const devnetOptionsJson = JSON.stringify(options);
     console.log('[alkanesExecuteTyped] Devnet: using alkanesExecuteFull (auto_confirm + mine_enabled)');
+    // qubitcoin-regtest has higher min relay fee than standard regtest
+    const minFeeRate = params.network === 'qubitcoin-regtest' ? 5 : (params.feeRate ?? null);
+    const feeRate = params.feeRate && params.feeRate >= (minFeeRate || 0) ? params.feeRate : minFeeRate;
     const result = await (provider as any).alkanesExecuteFull(
       toAddressesJson,
       params.inputRequirements,
       params.protostones,
-      params.feeRate ?? null,
+      feeRate,
       params.envelopeHex ?? null,
       devnetOptionsJson
     );

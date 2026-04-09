@@ -194,7 +194,7 @@ params: standard bitcoin params
 | `getblockcount` | ✅ | |
 | `generatetoaddress` | ✅ | regtest only |
 | `getrawtransaction` | ✅ | |
-| `sendrawtransaction` | ⚠️ | `maxburnamount` default=0, rejects OP_RETURN. Needs param override. |
+| `sendrawtransaction` | ⚠️ | **CONFIRMED:** bitcoind (31443) rejects OP_RETURN > 83 bytes with `scriptpubkey`. Tested via `createrawtransaction` + `testmempoolaccept` on both qubitcoin-jsonrpc and bitcoind directly — same rejection. Needs `-datacarriersize=10000` on bitcoind pod args. |
 | `testmempoolaccept` | ✅ | detailed reject-reason |
 | `validateaddress` | ✅ | |
 
