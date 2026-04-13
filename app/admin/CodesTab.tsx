@@ -67,6 +67,35 @@ export default function CodesTab() {
   const [editingCode, setEditingCode] = useState<Code | null>(null);
   const [sortField, setSortField] = useState<SortField | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>('asc');
+  const [exporting, setExporting] = useState(false);
+
+  const handleExportCsv = async () => {
+    try {
+      setExporting(true);
+      const res = await adminFetch('/api/admin/codes?limit=0&status=all');
+      if (!res.ok) throw new Error('Failed to fetch codes');
+      const data = await res.json();
+      const allCodes: Code[] = data.codes;
+
+      const csvRows = ['Code,Parent,Number of Redemptions'];
+      for (const c of allCodes) {
+        const parent = c.parentCode?.code || '';
+        csvRows.push(`${c.code},${parent},${c._count.redemptions}`);
+      }
+
+      const blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `codes-export-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      alert('Failed to export codes');
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const toggleSort = (field: SortField) => {
     if (sortField === field) {
@@ -160,6 +189,13 @@ export default function CodesTab() {
           className="rounded-lg bg-[color:var(--sf-primary)] px-4 py-2 text-sm text-white hover:opacity-90"
         >
           Create Code
+        </button>
+        <button
+          onClick={handleExportCsv}
+          disabled={exporting}
+          className="rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-surface)]/90 px-4 py-2 text-sm text-[color:var(--sf-text)] hover:opacity-90 disabled:opacity-50"
+        >
+          {exporting ? 'Exporting...' : 'Export CSV'}
         </button>
       </div>
 
