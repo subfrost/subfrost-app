@@ -32,7 +32,7 @@ const nextConfig = {
     return [
       {
         source: '/api/regtest/:path*',
-        destination: 'https://regtest.subfrost.io/v4/subfrost/:path*',
+        destination: `${process.env.NEXT_PUBLIC_API_URL || 'https://regtest.subfrost.io/v4/subfrost'}/:path*`,
       },
     ];
   },
