@@ -272,7 +272,7 @@ function usePoolsMetadata(network: string, poolIds: string[]) {
 
 export function useInfiniteAmmTxHistory({
   address,
-  count = 50,
+  count = 10,
   enabled = true,
   transactionType,
 }: {
@@ -312,7 +312,7 @@ export function useInfiniteAmmTxHistory({
 
         raw = await Promise.race([
           dataApiCall,
-          new Promise((_, reject) => setTimeout(() => reject(new Error('dataApi timeout (3s)')), 3000)),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('dataApi timeout (10s)')), 10000)),
         ]);
 
         const result = mapToObject(raw);

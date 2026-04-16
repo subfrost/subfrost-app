@@ -238,16 +238,6 @@ export function useSwapMutation() {
 
   return useMutation({
     mutationFn: async (swapData: SwapTransactionBaseData) => {
-      console.log('═══════════════════════════════════════════════════════════════');
-      console.log('[useSwapMutation] ████ MUTATION STARTED ████');
-      console.log('═══════════════════════════════════════════════════════════════');
-      console.log('[useSwapMutation] Input swapData:', JSON.stringify(swapData, null, 2));
-      console.log('[useSwapMutation] Network:', network);
-      console.log('[useSwapMutation] FRBTC_ALKANE_ID:', FRBTC_ALKANE_ID);
-      console.log('[useSwapMutation] wrapFee:', wrapFee);
-      console.log('[useSwapMutation] isConnected:', isConnected);
-      console.log('[useSwapMutation] hasProvider:', !!provider);
-      console.log('───────────────────────────────────────────────────────────────');
 
       if (!isConnected) {
         console.error('[useSwapMutation] ❌ Wallet not connected');
@@ -271,7 +261,6 @@ export function useSwapMutation() {
       }
       // For alkane operations, prefer taproot if available (alkanes use P2TR)
       const primaryAddress = taprootAddress || segwitAddress;
-      console.log('[useSwapMutation] Using addresses:', { taprootAddress, segwitAddress, primaryAddress });
 
       // NOTE: BTC → token swaps (other than frBTC) should be handled in SwapShell.tsx
       // by first wrapping BTC to frBTC, then calling swapMutation with frBTC.
@@ -289,9 +278,6 @@ export function useSwapMutation() {
       const sellCurrency = swapData.sellCurrency === 'btc' ? FRBTC_ALKANE_ID : swapData.sellCurrency;
       const buyCurrency = swapData.buyCurrency === 'btc' ? FRBTC_ALKANE_ID : swapData.buyCurrency;
 
-      console.log('[useSwapMutation] Resolved currencies:');
-      console.log('[useSwapMutation]   sellCurrency:', swapData.sellCurrency, '→', sellCurrency);
-      console.log('[useSwapMutation]   buyCurrency:', swapData.buyCurrency, '→', buyCurrency);
 
       // Adjust amounts for wrap fee when selling BTC
       const ammSellAmount =
@@ -311,23 +297,15 @@ export function useSwapMutation() {
               .toString()
           : swapData.buyAmount;
 
-      console.log('[useSwapMutation] AMM amounts (after wrap fee adjustment):');
-      console.log('[useSwapMutation]   ammSellAmount:', ammSellAmount);
-      console.log('[useSwapMutation]   ammBuyAmount:', ammBuyAmount);
 
       // Calculate slippage limits
       const minAmountOut = calculateMinimumFromSlippage({ amount: ammBuyAmount, maxSlippage: swapData.maxSlippage });
 
-      console.log('[useSwapMutation] Slippage calculations:');
-      console.log('[useSwapMutation]   maxSlippage:', swapData.maxSlippage);
-      console.log('[useSwapMutation]   minAmountOut:', minAmountOut);
 
       // Get deadline block height (regtest uses large offset so deadline never expires)
       const isRegtest = network === 'regtest' || network === 'subfrost-regtest' || network === 'regtest-local' || network === 'qubitcoin-regtest';
       const deadlineBlocks = isRegtest ? 1000 : (swapData.deadlineBlocks || 3);
-      console.log('[useSwapMutation] Fetching deadline block height...');
       const deadline = await getFutureBlockHeight(deadlineBlocks, provider as any);
-      console.log('[useSwapMutation] Deadline:', deadline, `(+${deadlineBlocks} blocks)`);
 
       // Determine routing: Universal Router (hybrid CLOB+AMM) vs AMM factory direct
       const useRouter = swapData.routeSource === 'clob' || swapData.routeSource === 'router';
@@ -335,7 +313,6 @@ export function useSwapMutation() {
 
       let protostone: string;
       if (useRouter && routerId) {
-        console.log('[useSwapMutation] Routing via Universal Router:', routerId, '(source:', swapData.routeSource, ')');
         protostone = buildRouterSwapProtostone({
           routerId,
           sellTokenId: sellCurrency,
@@ -343,9 +320,7 @@ export function useSwapMutation() {
           sellAmount: new BigNumber(ammSellAmount).toFixed(0),
           minOutput: new BigNumber(minAmountOut).toFixed(0),
         });
-        console.log('[useSwapMutation] Built protostone (router-routed):', protostone);
       } else {
-        console.log('[useSwapMutation] Routing via AMM Factory:', ALKANE_FACTORY_ID);
         const protostoneParams = {
           factoryId: ALKANE_FACTORY_ID,
           sellTokenId: sellCurrency,
@@ -355,12 +330,10 @@ export function useSwapMutation() {
           deadline: deadline.toString(),
         };
         protostone = buildSwapProtostone(protostoneParams);
-        console.log('[useSwapMutation] Built protostone (factory-routed):', protostone);
       }
 
       // Build input requirements
       const isBtcSell = swapData.sellCurrency === 'btc';
-      console.log('[useSwapMutation] isBtcSell:', isBtcSell);
 
       const inputReqParams = {
         bitcoinAmount: isBtcSell ? new BigNumber(swapData.sellAmount).toFixed(0) : undefined,
@@ -370,19 +343,9 @@ export function useSwapMutation() {
         }] : undefined,
       };
 
-      console.log('[useSwapMutation] Input requirements params:', JSON.stringify(inputReqParams, null, 2));
 
       const inputRequirements = buildSwapInputRequirements(inputReqParams);
-      console.log('[useSwapMutation] Built inputRequirements:', inputRequirements);
 
-      console.log('═══════════════════════════════════════════════════════════════');
-      console.log('[useSwapMutation] ████ EXECUTING SWAP ████');
-      console.log('═══════════════════════════════════════════════════════════════');
-      console.log('[useSwapMutation] alkanesExecuteTyped params:');
-      console.log('[useSwapMutation]   inputRequirements:', inputRequirements);
-      console.log('[useSwapMutation]   protostone:', protostone);
-      console.log('[useSwapMutation]   feeRate:', swapData.feeRate);
-      console.log('═══════════════════════════════════════════════════════════════');
 
       const btcNetwork = getBitcoinNetwork(network);
 
@@ -423,13 +386,14 @@ export function useSwapMutation() {
         ? primaryAddress
         : 'p2tr:0';
 
-      console.log('[useSwapMutation] Address configuration:');
-      console.log('[useSwapMutation]   isBrowserWallet:', isBrowserWallet);
-      console.log('[useSwapMutation]   toAddresses:', toAddresses);
-      console.log('[useSwapMutation]   changeAddress:', changeAddr);
-      console.log('[useSwapMutation]   alkanesChangeAddress:', alkanesChangeAddr);
 
       try {
+        // UniSat: use getBitcoinUtxos to get inscription-filtered UTXOs
+
+        // Dual-address wallets (Xverse, Leather) have both segwit + taproot.
+        // protect_taproot=true prevents taproot UTXOs from being spent for BTC fees.
+        // Single-address wallets (UniSat, OKX) only have taproot — must set false.
+        const isDualAddress = Boolean(segwitAddress && taprootAddress);
         const result = await provider.alkanesExecuteTyped({
           inputRequirements,
           protostones: protostone,
@@ -439,18 +403,16 @@ export function useSwapMutation() {
           toAddresses,
           changeAddress: changeAddr,
           alkanesChangeAddress: alkanesChangeAddr,
-          ordinalsStrategy: 'burn',
+          ordinalsStrategy: 'exclude',
+          protectTaproot: isDualAddress,
           network,
         });
 
-        console.log('[useSwapMutation] Called alkanesExecuteTyped (browser:', isBrowserWallet, ')');
 
-        console.log('[useSwapMutation] ✓ Execute result:', JSON.stringify(result, null, 2));
 
         // Check if SDK auto-completed the transaction
         if (result?.txid || result?.reveal_txid) {
           const txId = result.txid || result.reveal_txid;
-          console.log('[useSwapMutation] Transaction auto-completed, txid:', txId);
           return {
             success: true,
             transactionId: txId,
@@ -464,12 +426,10 @@ export function useSwapMutation() {
 
         // Check if we got a readyToSign state (need to sign PSBT manually)
         if (result?.readyToSign) {
-          console.log('[useSwapMutation] Got readyToSign state, signing transaction...');
           const readyToSign = result.readyToSign;
 
           // The PSBT comes as Uint8Array from serde_wasm_bindgen (or as object with indices)
           const psbtBase64 = extractPsbtBase64(readyToSign.psbt);
-          console.log('[useSwapMutation] PSBT base64 length:', psbtBase64.length);
 
           // Helper to classify script type from raw bytes
           const classifyScript = (script: Uint8Array | Buffer): string => {
@@ -482,19 +442,15 @@ export function useSwapMutation() {
           };
 
           const logSwapInputDetails = (psbt: bitcoin.Psbt, label: string) => {
-            console.log(`[SWAP-DIAG] === ${label} — ${psbt.data.inputs.length} inputs, ${psbt.txOutputs.length} outputs ===`);
             psbt.data.inputs.forEach((input, idx) => {
               const ws = input.witnessUtxo?.script;
               const scriptHex = ws ? Buffer.from(ws).toString('hex') : 'NONE';
               const scriptType = ws ? classifyScript(ws) : 'NO_WITNESS_UTXO';
-              console.log(`  Input ${idx}: type=${scriptType} script=${scriptHex} nonWitnessUtxo=${!!input.nonWitnessUtxo} redeemScript=${!!input.redeemScript} tapInternalKey=${input.tapInternalKey ? Buffer.from(input.tapInternalKey).toString('hex') : 'NONE'}`);
             });
             psbt.txOutputs.forEach((out, idx) => {
               try {
                 const addr = bitcoin.address.fromOutputScript(out.script, btcNetwork);
-                console.log(`  Output ${idx}: ${out.value} sats -> ${addr}`);
               } catch {
-                console.log(`  Output ${idx}: ${out.value} sats -> [OP_RETURN or non-standard]`);
               }
             });
           };
@@ -527,13 +483,11 @@ export function useSwapMutation() {
             });
             finalPsbtBase64 = result.psbtBase64;
             if (result.inputsPatched > 0) {
-              console.log(`[SWAP] Patched ${result.inputsPatched} input(s) for browser wallet compatibility`);
             }
           }
 
           {
             const tempPsbt = bitcoin.Psbt.fromBase64(finalPsbtBase64, { network: btcNetwork });
-            console.log('[SWAP] PSBT inputs:');
             tempPsbt.data.inputs.forEach((inp, idx) => {
               if (inp.witnessUtxo) {
                 try {
@@ -542,21 +496,15 @@ export function useSwapMutation() {
                     btcNetwork
                   );
                   const hasRedeemScript = inp.redeemScript ? ' [has redeemScript]' : '';
-                  console.log(`  Input ${idx}: ${inp.witnessUtxo.value} sats from ${addr}${hasRedeemScript}`);
                 } catch (e) {
-                  console.log(`  Input ${idx}: ${inp.witnessUtxo.value} sats from [unknown script]`);
                 }
               } else {
-                console.log(`  Input ${idx}: [no witnessUtxo]`);
               }
             });
-            console.log('[SWAP] PSBT outputs:');
             tempPsbt.txOutputs.forEach((out, idx) => {
               try {
                 const addr = bitcoin.address.fromOutputScript(out.script, btcNetwork);
-                console.log(`  Output ${idx}: ${out.value} sats -> ${addr}`);
               } catch (e) {
-                console.log(`  Output ${idx}: ${out.value} sats -> [OP_RETURN or invalid]`);
               }
             });
           }
@@ -570,7 +518,6 @@ export function useSwapMutation() {
           // For keystore wallets, request user confirmation before signing
           // Browser wallets handle confirmation via their own popup
           if (walletType === 'keystore' && !swapData.skipConfirmation) {
-            console.log('[useSwapMutation] Keystore wallet - requesting user confirmation...');
             const approved = await requestConfirmation({
               type: 'swap',
               title: 'Confirm Swap',
@@ -584,10 +531,8 @@ export function useSwapMutation() {
             });
 
             if (!approved) {
-              console.log('[useSwapMutation] User rejected transaction');
               throw new Error('Transaction rejected by user');
             }
-            console.log('[useSwapMutation] User approved transaction');
           }
 
           // ============================================================================
@@ -621,16 +566,10 @@ export function useSwapMutation() {
           // ============================================================================
           let signedPsbtBase64: string;
           if (isBrowserWallet) {
-            console.log('[useSwapMutation][OYL-DEBUG] ===== BROWSER WALLET SIGN START =====');
-            console.log('[useSwapMutation][OYL-DEBUG] walletType:', walletType);
-            console.log('[useSwapMutation][OYL-DEBUG] browserWallet?.info?.id:', browserWallet?.info?.id);
-            console.log('[useSwapMutation][OYL-DEBUG] PSBT base64 length:', finalPsbtBase64.length);
-            console.log('[useSwapMutation][OYL-DEBUG] About to call signTaprootPsbt()...');
 
             const signStartTime = Date.now();
             try {
               signedPsbtBase64 = await signTaprootPsbt(finalPsbtBase64);
-              console.log(`[useSwapMutation][OYL-DEBUG] signTaprootPsbt SUCCESS in ${Date.now() - signStartTime}ms`);
             } catch (signErr: any) {
               console.error('[useSwapMutation][OYL-DEBUG] ===== signTaprootPsbt FAILED =====');
               console.error('[useSwapMutation][OYL-DEBUG] Error:', signErr?.message || signErr);
@@ -638,31 +577,19 @@ export function useSwapMutation() {
               console.error('[useSwapMutation][OYL-DEBUG] Full error:', signErr);
               throw signErr;
             }
-            console.log('[useSwapMutation][OYL-DEBUG] ===== BROWSER WALLET SIGN END =====');
           } else {
-            console.log('[useSwapMutation] Keystore: signing PSBT with SegWit, then Taproot...');
             signedPsbtBase64 = await signSegwitPsbt(finalPsbtBase64);
             signedPsbtBase64 = await signTaprootPsbt(signedPsbtBase64);
           }
-          console.log('[useSwapMutation] PSBT signed');
 
           // Parse the signed PSBT, finalize, and extract the raw transaction
           const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtBase64, { network: btcNetwork });
 
           // DIAGNOSTIC: Log per-input state after signing
-          console.log(`[SWAP-DIAG] === AFTER SIGNING — ${signedPsbt.data.inputs.length} inputs ===`);
           signedPsbt.data.inputs.forEach((inp, idx) => {
             const ws = inp.witnessUtxo?.script;
             const scriptType = ws ? classifyScript(ws) : 'NO_WITNESS_UTXO';
             const scriptHex = ws ? Buffer.from(ws).toString('hex') : 'NONE';
-            console.log(`  Input ${idx}: type=${scriptType} script=${scriptHex}`, {
-              tapKeySig: inp.tapKeySig ? `${Buffer.from(inp.tapKeySig).length}B` : undefined,
-              partialSig: inp.partialSig?.length || undefined,
-              finalScriptWitness: inp.finalScriptWitness ? `${Buffer.from(inp.finalScriptWitness).length}B` : undefined,
-              finalScriptSig: inp.finalScriptSig ? `${Buffer.from(inp.finalScriptSig).length}B` : undefined,
-              redeemScript: inp.redeemScript ? `${Buffer.from(inp.redeemScript).length}B` : undefined,
-              tapInternalKey: inp.tapInternalKey ? Buffer.from(inp.tapInternalKey).toString('hex') : undefined,
-            });
           });
 
           // Check if already finalized by the wallet
@@ -672,9 +599,7 @@ export function useSwapMutation() {
 
           // Finalize all inputs
           if (alreadyFinalized) {
-            console.log('[useSwapMutation] PSBT already finalized by wallet, skipping finalization');
           } else {
-            console.log('[useSwapMutation] Finalizing PSBT...');
             try {
               signedPsbt.finalizeAllInputs();
             } catch (e: any) {
@@ -696,14 +621,9 @@ export function useSwapMutation() {
           const txHex = tx.toHex();
           const txid = tx.getId();
 
-          console.log('[useSwapMutation] Transaction ID:', txid);
-          console.log('[useSwapMutation] Transaction hex length:', txHex.length);
 
           // Broadcast the transaction
-          console.log('[useSwapMutation] Broadcasting transaction...');
           const broadcastTxid = await provider.broadcastTransaction(txHex);
-          console.log('[useSwapMutation] Transaction broadcast successful');
-          console.log('[useSwapMutation] Broadcast returned txid:', broadcastTxid);
 
           if (txid !== broadcastTxid) {
             console.warn('[useSwapMutation] WARNING: Computed txid !== broadcast txid!');
@@ -725,7 +645,6 @@ export function useSwapMutation() {
         // Check if execution completed directly
         if (result?.complete) {
           const txId = result.complete?.reveal_txid || result.complete?.commit_txid;
-          console.log('[useSwapMutation] Execution complete, txid:', txId);
           return {
             success: true,
             transactionId: txId,
@@ -753,8 +672,6 @@ export function useSwapMutation() {
       }
     },
     onSuccess: (data) => {
-      console.log('[useSwapMutation] Swap successful, txid:', data.transactionId);
-      console.log('[useSwapMutation] Invalidating balance queries...');
 
       // Invalidate all balance-related queries to refresh UI
       queryClient.invalidateQueries({ queryKey: ['sellable-currencies'] });
@@ -768,7 +685,6 @@ export function useSwapMutation() {
       // Invalidate activity feed so it shows the new swap transaction
       queryClient.invalidateQueries({ queryKey: ['ammTxHistory'] });
 
-      console.log('[useSwapMutation] Balance queries invalidated - UI should refresh when indexer processes block');
     },
   });
 }

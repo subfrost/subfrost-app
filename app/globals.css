@@ -651,6 +651,11 @@ textarea:focus-visible,
   animation: fade-in-out 1.5s ease-in-out forwards;
 }
 
+@keyframes slideDown {
+  from { opacity: 0; transform: translate(-50%, -100%); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+
 /* Smooth scroll */
 @media (prefers-reduced-motion: no-preference) {
   html {

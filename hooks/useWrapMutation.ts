@@ -94,7 +94,7 @@ export type WrapTransactionBaseData = {
 };
 
 export function useWrapMutation() {
-  const { account, network, isConnected, signTaprootPsbt, signSegwitPsbt, walletType } = useWallet();
+  const { account, network, isConnected, signTaprootPsbt, signSegwitPsbt, walletType, browserWallet } = useWallet();
   const provider = useSandshrewProvider();
   const queryClient = useQueryClient();
   const { requestConfirmation } = useTransactionConfirm();
@@ -186,6 +186,7 @@ export function useWrapMutation() {
       console.log('[WRAP] ===================================================');
 
       try {
+
         const result = await provider.alkanesExecuteTyped({
           toAddresses,
           inputRequirements,
@@ -200,8 +201,10 @@ export function useWrapMutation() {
           changeAddress: useActualAddresses ? (userSegwitAddress || userTaprootAddress) : 'p2wpkh:0',
           alkanesChangeAddress: useActualAddresses ? userTaprootAddress : 'p2tr:0',
           autoConfirm: false,
-          traceEnabled: true, // DIAGNOSTIC: Enable to trace address resolution flow
+          traceEnabled: true,
           mineEnabled: false,
+          ordinalsStrategy: 'exclude' as const,
+          protectTaproot: Boolean(userSegwitAddress && userTaprootAddress),
         });
 
         console.log('[WRAP] Execute result:', result);

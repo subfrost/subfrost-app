@@ -177,8 +177,8 @@ function withTimeout<T>(promise: Promise<T>, ms: number, errorMsg: string): Prom
   ]);
 }
 
-/** Default timeout for block height fetch (10 seconds) */
-const BLOCK_HEIGHT_TIMEOUT_MS = 10000;
+/** Default timeout for block height fetch (20 seconds — mainnet RPC can be slow) */
+const BLOCK_HEIGHT_TIMEOUT_MS = 20000;
 
 export const getFutureBlockHeight = async (blocks = 0, provider: Provider) => {
   // Try WASM provider first (metashrewHeight), then sandshrew, then bitcoin

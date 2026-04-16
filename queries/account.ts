@@ -230,16 +230,6 @@ export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
   const addressKey = addresses.sort().join(',');
 
   // Debug: log wallet state for balance queries
-  console.log('[enrichedWalletQueryOptions] Wallet state:', {
-    isConnected: deps.isConnected,
-    isInitialized: deps.isInitialized,
-    hasProvider: !!deps.provider,
-    hasAccount: !!deps.account,
-    addresses,
-    nativeSegwit: deps.account?.nativeSegwit?.address || '(none)',
-    taproot: deps.account?.taproot?.address || '(none)',
-    queryEnabled: deps.isInitialized && !!deps.provider && !!deps.account && deps.isConnected && addresses.length > 0,
-  });
 
   return queryOptions({
     queryKey: queryKeys.account.enrichedWallet(deps.network, addressKey),
@@ -268,7 +258,6 @@ export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
           promise,
           new Promise<T>((resolve) =>
             setTimeout(() => {
-              console.log(`[BALANCE] Request timed out after ${timeoutMs}ms, using fallback`);
               resolve(fallback);
             }, timeoutMs),
           ),
@@ -347,7 +336,10 @@ export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
           // qubitcoin-regtest: skip getEnrichedBalances (not supported), go straight to esplora
           if (deps.network === 'qubitcoin-regtest') throw new Error('Skip to esplora for qubitcoin-regtest');
 
-          const rawResult = await withTimeout(provider.getEnrichedBalances(address), 15000, null);
+          // Lua balances script takes ~19s for wallets with many UTXOs (160+).
+          // Timeout must be longer than the script runtime — otherwise fallback triggers
+          // sequential getrawtransaction per UTXO which takes 48+ seconds.
+          const rawResult = await withTimeout(provider.getEnrichedBalances(address), 25_000, null);
           if (!rawResult) throw new Error('getEnrichedBalances returned null/timeout');
 
           let enrichedData: any;
@@ -559,7 +551,6 @@ export function alkaneBalanceQueryOptions(deps: AlkaneBalanceDeps) {
           } else {
             const result = await (provider as any).dataApiGetAlkanesByAddress(address);
             items = result?.data || [];
-            console.log(`[alkaneBalanceQuery] ${address.slice(0, 12)}...: ${items.length} alkanes (dataApi)`);
           }
 
           for (const item of items) {
@@ -597,7 +588,6 @@ export function alkaneBalanceQueryOptions(deps: AlkaneBalanceDeps) {
         }
       }
 
-      console.log(`[alkaneBalanceQuery] Final alkanes: ${alkaneMap.size}`, Array.from(alkaneMap.values()).map(a => `${a.name}(${a.alkaneId})=${a.balance}`).join(', '));
       return Array.from(alkaneMap.values());
     },
   });

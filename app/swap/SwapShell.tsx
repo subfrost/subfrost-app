@@ -120,7 +120,7 @@ export default function SwapShell() {
   const { t } = useTranslation();
 
   // Markets from API: all pools sorted by TVL desc
-  const { data: poolsData, isLoading: isLoadingPools } = usePools({ sortBy: 'tvl', order: 'desc', limit: 200 });
+  const { data: poolsData, isLoading: isLoadingPools } = usePools({ sortBy: 'tvl', order: 'desc', limit: 20 });
 
   // Enhanced pool stats from our local API (TVL, Volume, APR)
   const { data: poolStats, isLoading: isLoadingPoolStats } = useAllPoolStats();
@@ -197,7 +197,7 @@ export default function SwapShell() {
   const { maxSlippage, deadlineBlocks } = useGlobalStore();
   const fee = useFeeRate();
   const { isTokenSelectorOpen, tokenSelectorMode, closeTokenSelector } = useModalStore();
-  const { showNotification } = useNotification();
+  const { showNotification, showError } = useNotification();
   const { data: btcPrice } = useBtcPrice();
 
   const sellId = fromToken?.id ?? '';
@@ -342,7 +342,6 @@ export default function SwapShell() {
           (p.token0.id === saved.to.id && p.token1.id === saved.from.id)
       );
       if (matchingPool) {
-        console.log('[SwapShell] Restoring saved pair from session:', saved.from.symbol, '→', saved.to.symbol);
         setFromToken(saved.from);
         setToToken(saved.to);
         setSelectedPool(matchingPool);
@@ -353,7 +352,6 @@ export default function SwapShell() {
       // Saved pair no longer in markets — also check for wrap pairs (BTC/frBTC)
       const isSavedWrapPair = (saved.from.id === 'btc' || saved.to.id === 'btc');
       if (isSavedWrapPair) {
-        console.log('[SwapShell] Restoring saved wrap pair from session:', saved.from.symbol, '→', saved.to.symbol);
         setFromToken(saved.from);
         setToToken(saved.to);
         trendingPoolInitializedRef.current = true;
@@ -365,11 +363,6 @@ export default function SwapShell() {
 
     // First visit: use trending (highest volume) pool — or first pool by TVL if no volume data yet
     if (topVolumePool) {
-      console.log('[SwapShell] Initializing trending pool:', topVolumePool.pairLabel, {
-        vol24h: topVolumePool.vol24hUsd,
-        vol30d: topVolumePool.vol30dUsd,
-        tvl: topVolumePool.tvlUsd,
-      });
       setFromToken(topVolumePool.token0);
       setToToken(topVolumePool.token1);
       setSelectedPool(topVolumePool);
@@ -387,10 +380,6 @@ export default function SwapShell() {
 
     // Check if trending pool changed now that volume data is available
     if (topVolumePool.id !== selectedPool?.id) {
-      console.log('[SwapShell] Refining to volume-based trending pool:', topVolumePool.pairLabel, {
-        vol24h: topVolumePool.vol24hUsd,
-        vol30d: topVolumePool.vol30dUsd,
-      });
       setFromToken(topVolumePool.token0);
       setToToken(topVolumePool.token1);
       setSelectedPool(topVolumePool);
@@ -973,23 +962,52 @@ export default function SwapShell() {
     return { stepperSteps: [], currentStepIndex: 0, showStepper: false };
   }, [swapFlowStep, isBtcToTokenSwap, isTokenToBtcSwap, fromToken?.symbol, toToken?.symbol, t]);
 
+  // Extract error message from any error type (Error object, string, JsValue)
+  const extractErrorMessage = (e: any): string => {
+    if (typeof e === 'string') return e;
+    if (e?.message) return e.message;
+    if (e?.toString && e.toString() !== '[object Object]') return e.toString();
+    return String(e);
+  };
+
+  // Convert raw SDK error string to user-readable message
+  const humanizeError = (raw: string): string => {
+    if (raw.includes('User rejected') || raw.includes('User denied') || raw.includes('cancelled')) {
+      return 'Transaction was cancelled.';
+    } else if (raw.includes('Insufficient alkanes')) {
+      const match = raw.match(/need (\d+) of ([\d:]+), have (\d+)/);
+      if (match) {
+        const [, needed, tokenId, available] = match;
+        return `Insufficient spendable balance for ${tokenId}. Need ${(Number(needed) / 1e8).toFixed(4)}, have ${(Number(available) / 1e8).toFixed(4)}. Some tokens may be on UTXOs with inscriptions and are excluded for safety.`;
+      }
+    } else if (raw.includes('Insufficient funds')) {
+      const fundsMatch = raw.match(/need (\d+) sats/);
+      const needed = fundsMatch ? (Number(fundsMatch[1]) / 1e8).toFixed(6) : null;
+      return needed
+        ? `Insufficient BTC balance. Need ${needed} BTC for this transaction. Please add funds to your payment address.`
+        : 'Insufficient BTC for transaction fees. Please add funds to your payment address.';
+    } else if (raw.includes('Pool not found') || raw.includes('Unable to find pool')) {
+      return 'Pool not found for this pair. Please try again.';
+    } else if (raw.includes('dust limit')) {
+      return 'Transaction amount too small. Try a larger amount.';
+    } else if (raw.includes('EXPIRED')) {
+      return 'Transaction deadline expired. Please try again.';
+    } else if (raw.includes('timeout') || raw.includes('Timeout')) {
+      return 'Request timed out. Please try again.';
+    }
+    return raw;
+  };
+
+  const showSwapError = (raw: string) => {
+    showError(humanizeError(raw));
+  };
+
   const handleSwap = async () => {
-    console.log('[handleSwap] Called with:', {
-      fromToken: fromToken?.id,
-      toToken: toToken?.id,
-      FRBTC_ALKANE_ID,
-      isWrapPair,
-      isUnwrapPair,
-      fromAmount,
-      toAmount,
-      direction,
-    });
 
     if (!fromToken || !toToken) return;
 
     // Wrap/Unwrap direct pairs
     if (isWrapPair) {
-      console.log('[handleSwap] isWrapPair=true, calling wrapMutation...');
       try {
         const amountDisplay = direction === 'sell' ? fromAmount : toAmount;
         const res = await wrapMutation.mutateAsync({ amount: amountDisplay, feeRate: fee.feeRate });
@@ -999,7 +1017,7 @@ export default function SwapShell() {
         }
       } catch (e: any) {
         console.error('[SWAP] Wrap error:', e);
-        window.alert('Wrap failed. See console for details.');
+        showSwapError(extractErrorMessage(e));
       }
       return;
     }
@@ -1014,14 +1032,13 @@ export default function SwapShell() {
         }
       } catch (e: any) {
         console.error('[SWAP] Unwrap error:', e);
-        window.alert('Unwrap failed. See console for details.');
+        showSwapError(extractErrorMessage(e));
       }
       return;
     }
 
     // frZEC wrap (BTC → frZEC) — CGGMP21 wrapped Zcash
     if (isWrapZecPair) {
-      console.log('[handleSwap] isWrapZecPair=true, calling wrapZecMutation...');
       try {
         const amountDisplay = direction === 'sell' ? fromAmount : toAmount;
         const res = await wrapZecMutation.mutateAsync({ amount: amountDisplay, feeRate: fee.feeRate });
@@ -1031,7 +1048,7 @@ export default function SwapShell() {
         }
       } catch (e: any) {
         console.error('[SWAP] Wrap ZEC error:', e);
-        window.alert('Wrap ZEC failed. See console for details.');
+        showSwapError(extractErrorMessage(e));
       }
       return;
     }
@@ -1047,7 +1064,7 @@ export default function SwapShell() {
         }
       } catch (e: any) {
         console.error('[SWAP] Unwrap ZEC error:', e);
-        window.alert('Unwrap ZEC failed. See console for details.');
+        showSwapError(extractErrorMessage(e));
       }
       return;
     }
@@ -1063,7 +1080,7 @@ export default function SwapShell() {
         }
       } catch (e: any) {
         console.error('[SWAP] Wrap ETH error:', e);
-        window.alert('Wrap ETH failed. See console for details.');
+        showSwapError(extractErrorMessage(e));
       }
       return;
     }
@@ -1079,7 +1096,7 @@ export default function SwapShell() {
         }
       } catch (e: any) {
         console.error('[SWAP] Unwrap ETH error:', e);
-        window.alert('Unwrap ETH failed. See console for details.');
+        showSwapError(extractErrorMessage(e));
       }
       return;
     }
@@ -1096,12 +1113,11 @@ export default function SwapShell() {
     //   ZEC→ETH: deposit ZEC → frZEC → frBTC → frETH → BurnAndBridge → ETH
     if (isCrossChainSwap && crossChainDirection) {
       const { from: srcChain, to: dstChain } = crossChainDirection;
-      console.log(`[handleSwap] Cross-chain: ${srcChain} → ${dstChain}`);
 
       // For now, show a message that cross-chain bridge UI is coming
       // The full flow will use CrossChainBridgePanel component
       // which handles the multi-step deposit → swap → withdraw pipeline
-      window.alert(
+      showSwapError(
         `Cross-chain swap: ${srcChain.toUpperCase()} → ${dstChain.toUpperCase()}\n\n` +
         `This will route through: ${getBridgeRoute(srcChain, dstChain)}\n\n` +
         `Bridge UI coming soon — use the bridge panel for full cross-chain operations.`
@@ -1125,12 +1141,11 @@ export default function SwapShell() {
     if (isBtcToTokenSwap) {
       if (!quote || !quote.poolId) {
         console.error('[SWAP] BTC → Token swap requires quote with poolId');
-        window.alert('Unable to find pool for this swap. Please try again.');
+        showSwapError('Unable to find pool for this swap. Please try again.');
         return;
       }
 
       try {
-        console.log('[SWAP] BTC →', toToken.symbol, ': Step 1/2 — Wrapping BTC to frBTC');
         const btcAmount = fromAmount;
 
         // Update state: wrapping
@@ -1147,7 +1162,6 @@ export default function SwapShell() {
           throw new Error('Wrap step failed — no transaction ID returned');
         }
         const wrapTxId = wrapRes.transactionId;
-        console.log('[SWAP] Step 1 broadcast — wrap txid:', wrapTxId);
 
         // ⚠️ JOURNAL (2026-03-26): On devnet, the in-process indexer processes
         // blocks synchronously — no esplora polling needed. On regtest, mine a
@@ -1156,7 +1170,6 @@ export default function SwapShell() {
         const isRegtest = ['regtest', 'subfrost-regtest', 'oylnet', 'regtest-local', 'devnet'].includes(network);
 
         if (isRegtest && address) {
-          console.log('[SWAP] Mining block to confirm wrap transaction...');
           try {
             if (network === 'devnet') {
               await fetch(getRpcUrl(network), {
@@ -1177,7 +1190,6 @@ export default function SwapShell() {
         }
 
         if (network !== 'devnet') {
-          console.log('[SWAP] Waiting for wrap tx confirmation before swap step...');
           showNotification(wrapTxId, 'wrap', 'Step 1/2');
 
           const pollInterval = isRegtest ? 1500 : 15000;
@@ -1195,7 +1207,6 @@ export default function SwapShell() {
               });
               const txData = await txResp.json();
               if (txData?.result?.status?.confirmed) {
-                console.log(`[SWAP] Wrap tx confirmed after ${Math.round((attempt + 1) * pollInterval / 1000)}s`);
                 await new Promise(resolve => setTimeout(resolve, 2000));
                 wrapConfirmed = true;
                 break;
@@ -1208,13 +1219,11 @@ export default function SwapShell() {
             throw new Error(`Wrap tx did not confirm — swap frBTC → ${toToken.symbol} manually.`);
           }
         } else {
-          console.log('[SWAP] Devnet: skipping esplora polling — tx confirmed synchronously');
           showNotification(wrapTxId, 'wrap', 'Step 1/2');
           await new Promise(resolve => setTimeout(resolve, 500));
         }
 
         // Step 2: Swap frBTC → Target token
-        console.log('[SWAP] Step 2/2 — Swapping frBTC →', toToken.symbol);
         setSwapFlowStep({ type: 'swapping' });
 
         // Calculate frBTC amount after wrap fee (same logic as useWrapSwapMutation)
@@ -1236,7 +1245,6 @@ export default function SwapShell() {
         });
 
         if (swapRes?.success && swapRes.transactionId) {
-          console.log('[SWAP] Step 2 complete — swap txid:', swapRes.transactionId);
 
           // On devnet, mine a block to confirm the swap tx so balances update
           if (network === 'devnet' && address) {
@@ -1259,7 +1267,7 @@ export default function SwapShell() {
         }
       } catch (e: any) {
         console.error('[SWAP] BTC → Token swap failed:', e);
-        const msg = e?.message || 'See console for details.';
+        const msg = humanizeError(extractErrorMessage(e));
         // Only update state if not already in error state (wrap error)
         if (swapFlowStep.type !== 'error') {
           setSwapFlowStep({ type: 'error', step: 'swap', message: msg });
@@ -1270,17 +1278,17 @@ export default function SwapShell() {
             const [, needed, tokenId, available] = match;
             const neededDisplay = (Number(needed) / 1e8).toFixed(4);
             const availableDisplay = (Number(available) / 1e8).toFixed(4);
-            window.alert(
+            showSwapError(
               `Insufficient spendable balance for ${tokenId}.\n\n` +
               `Requested: ${neededDisplay}\nSpendable: ${availableDisplay}\n\n` +
               `Some tokens may be on UTXOs with inscriptions/other assets and are excluded from swaps. ` +
               `Try a smaller amount (up to ${availableDisplay}).`
             );
           } else {
-            window.alert(`Swap failed: ${msg}`);
+            showSwapError(`Swap failed: ${msg}`);
           }
         } else {
-          window.alert(`Swap failed: ${msg}`);
+          showSwapError(`Swap failed: ${msg}`);
         }
       }
       return;
@@ -1295,13 +1303,12 @@ export default function SwapShell() {
     if (isTokenToBtcSwap) {
       if (!quote || !quote.poolId) {
         console.error('[SWAP] Token → BTC swap requires quote with poolId');
-        window.alert('Unable to find pool for this swap. Please try again.');
+        showSwapError('Unable to find pool for this swap. Please try again.');
         return;
       }
 
       try {
         // Step 1: Swap Token → frBTC
-        console.log('[SWAP]', fromToken.symbol, '→ BTC : Step 1/2 — Swapping', fromToken.symbol, '→ frBTC');
         setSwapFlowStep({ type: 'swapping' });
 
         const sellAmount = quote.sellAmount;
@@ -1323,13 +1330,11 @@ export default function SwapShell() {
           throw new Error('Swap step failed — no transaction ID returned');
         }
         const swapTxId = swapRes.transactionId;
-        console.log('[SWAP] Step 1 broadcast — swap txid:', swapTxId);
 
         // ⚠️ JOURNAL (2026-03-26): Same devnet handling as BTC→Token flow above.
         const isRegtest = ['regtest', 'subfrost-regtest', 'oylnet', 'regtest-local', 'devnet'].includes(network);
 
         if (isRegtest && address) {
-          console.log('[SWAP] Mining block to confirm swap transaction...');
           try {
             if (network === 'devnet') {
               await fetch(getRpcUrl(network), {
@@ -1350,7 +1355,6 @@ export default function SwapShell() {
         }
 
         if (network !== 'devnet') {
-        console.log('[SWAP] Waiting for swap tx confirmation before unwrap step...');
         showNotification(swapTxId, 'swap', 'Step 1/2');
 
         const pollInterval = isRegtest ? 1500 : 15000;
@@ -1369,13 +1373,11 @@ export default function SwapShell() {
             const txData = await txResp.json();
             if (txData?.result?.status?.confirmed) {
               const elapsedSec = Math.round((attempt + 1) * pollInterval / 1000);
-              console.log(`[SWAP] Swap tx confirmed after ${elapsedSec}s`);
               await new Promise(resolve => setTimeout(resolve, 2000));
               swapConfirmed = true;
               break;
             }
             const elapsed = Math.round((attempt + 1) * pollInterval / 1000);
-            console.log(`[SWAP] Polling swap tx... attempt ${attempt + 1}/${maxPollAttempts} (${elapsed}s elapsed)`);
           } catch {
             // Polling error — keep retrying
           }
@@ -1386,13 +1388,11 @@ export default function SwapShell() {
           throw new Error(`Swap tx did not confirm — unwrap frBTC → BTC manually.`);
         }
         } else {
-          console.log('[SWAP] Devnet: skipping esplora polling — tx confirmed synchronously');
           showNotification(swapTxId, 'swap', 'Step 1/2');
           await new Promise(resolve => setTimeout(resolve, 500));
         }
 
         // Step 2: Unwrap frBTC → BTC
-        console.log('[SWAP] Step 2/2 — Unwrapping frBTC → BTC');
         setSwapFlowStep({ type: 'unwrapping' });
 
         // ⚠️ JOURNAL (2026-03-26): On devnet, quote.buyAmount can be wildly wrong
@@ -1427,7 +1427,6 @@ export default function SwapShell() {
               // Convert from raw alkane units to display units (÷ 1e8).
               // unwrapMutation.amount expects display units — toAlks(amount) converts back.
               frbtcAmount = (Number(totalFrbtc) / 1e8).toFixed(8);
-              console.log('[SWAP] Devnet: using actual frBTC balance for unwrap:', frbtcAmount, '(raw:', totalFrbtc.toString(), ')');
             }
           } catch (err) {
             console.warn('[SWAP] Devnet: could not query frBTC balance, using quote:', err);
@@ -1440,7 +1439,6 @@ export default function SwapShell() {
         });
 
         if (unwrapRes?.success && unwrapRes.transactionId) {
-          console.log('[SWAP] Step 2 complete — unwrap txid:', unwrapRes.transactionId);
 
           // On devnet, mine a block to confirm the unwrap tx so BTC balance updates
           if (network === 'devnet' && address) {
@@ -1463,7 +1461,7 @@ export default function SwapShell() {
         }
       } catch (e: any) {
         console.error('[SWAP] Token → BTC swap failed:', e);
-        const msg = e?.message || 'See console for details.';
+        const msg = humanizeError(extractErrorMessage(e));
         // Only update state if not already in error state
         if (swapFlowStep.type !== 'error') {
           setSwapFlowStep({ type: 'error', step: 'swap', message: msg });
@@ -1474,17 +1472,17 @@ export default function SwapShell() {
             const [, needed, tokenId, available] = match;
             const neededDisplay = (Number(needed) / 1e8).toFixed(4);
             const availableDisplay = (Number(available) / 1e8).toFixed(4);
-            window.alert(
+            showSwapError(
               `Insufficient spendable balance for ${tokenId}.\n\n` +
               `Requested: ${neededDisplay}\nSpendable: ${availableDisplay}\n\n` +
               `Some tokens may be on UTXOs with inscriptions/other assets and are excluded from swaps. ` +
               `Try a smaller amount (up to ${availableDisplay}).`
             );
           } else {
-            window.alert(`Swap failed: ${msg}`);
+            showSwapError(`Swap failed: ${msg}`);
           }
         } else {
-          window.alert(`Swap failed: ${msg}`);
+          showSwapError(`Swap failed: ${msg}`);
         }
       }
       return;
@@ -1497,16 +1495,10 @@ export default function SwapShell() {
     // Multi-hop swaps use the factory's opcode 13 with a token path, not a single poolId.
     // The quote.route array indicates multi-hop (e.g., [DIESEL, bUSD, frBTC]).
     const hasValidRoute = quote.route && quote.route.length >= 2;
-    console.log('[SWAP] Quote validation:', {
-      poolId: quote.poolId,
-      route: quote.route,
-      hasValidRoute,
-      error: quote.error,
-    });
     if (!quote.poolId && !hasValidRoute) {
       console.error('[SWAP] No poolId or route in quote - cannot execute swap');
       console.error('[SWAP] Full quote object:', JSON.stringify(quote, null, 2));
-      window.alert('Swap failed: Pool not found. Please try again.');
+      showSwapError('Swap failed: Pool not found. Please try again.');
       return;
     }
 
@@ -1531,31 +1523,7 @@ export default function SwapShell() {
       }
     } catch (e: any) {
       console.error('[SWAP] Mutation error:', e?.message);
-      const msg = e?.message || 'Swap failed. See console for details.';
-      // Provide a clearer message when SDK reports insufficient spendable balance.
-      // The UI may show a higher total balance than what's actually spendable,
-      // because some alkane UTXOs are co-located with inscriptions/ordinals and
-      // the SDK excludes those from spending to protect user assets.
-      if (msg.includes('Insufficient alkanes')) {
-        const match = msg.match(/need (\d+) of ([\d:]+), have (\d+)/);
-        if (match) {
-          const [, needed, tokenId, available] = match;
-          const neededDisplay = (Number(needed) / 1e8).toFixed(4);
-          const availableDisplay = (Number(available) / 1e8).toFixed(4);
-          window.alert(
-            `Insufficient spendable balance for ${tokenId}.\n\n` +
-            `Requested: ${neededDisplay}\n` +
-            `Spendable: ${availableDisplay}\n\n` +
-            `Your displayed balance may include tokens on UTXOs that also contain ` +
-            `inscriptions or other assets. These are excluded from swaps to protect your assets. ` +
-            `Try swapping a smaller amount (up to ${availableDisplay}).`
-          );
-        } else {
-          window.alert(msg);
-        }
-      } else {
-        window.alert(msg);
-      }
+      showSwapError(extractErrorMessage(e));
     }
   };
 
@@ -1592,23 +1560,22 @@ export default function SwapShell() {
   };
 
   const handleAddLiquidity = async () => {
-    console.log('[handleAddLiquidity] Starting...', { poolToken0, poolToken1, poolToken0Amount, poolToken1Amount });
 
     if (!poolToken0 || !poolToken1) {
-      window.alert('Please select both tokens');
+      showSwapError('Please select both tokens');
       return;
     }
 
     if (!poolToken0Amount || !poolToken1Amount ||
         parseFloat(poolToken0Amount) <= 0 || parseFloat(poolToken1Amount) <= 0) {
-      window.alert('Please enter valid amounts for both tokens');
+      showSwapError('Please enter valid amounts for both tokens');
       return;
     }
 
     // Handle BTC: requires wrap to frBTC first
     const hasBtc = poolToken0.id === 'btc' || poolToken1.id === 'btc';
     if (hasBtc) {
-      window.alert(
+      showSwapError(
         'Adding liquidity with BTC requires wrapping to frBTC first.\n\n' +
         'Please wrap your BTC to frBTC using the Swap tab, then add liquidity with frBTC.'
       );
@@ -1638,7 +1605,6 @@ export default function SwapShell() {
       });
 
       if (result?.success && result.transactionId) {
-        console.log('[handleAddLiquidity] Success! txid:', result.transactionId);
         showNotification(result.transactionId, 'addLiquidity');
         // Clear amounts after success
         setPoolToken0Amount('');
@@ -1646,25 +1612,24 @@ export default function SwapShell() {
       }
     } catch (e: any) {
       console.error('[handleAddLiquidity] Error:', e);
-      window.alert(`Add liquidity failed: ${e?.message || 'See console for details'}`);
+      showSwapError(`Add liquidity failed: ${extractErrorMessage(e)}`);
     }
   };
 
   const handleRemoveLiquidity = async () => {
-    console.log('[handleRemoveLiquidity] Starting...', { selectedLPPosition, removeAmount });
 
     if (!selectedLPPosition) {
-      window.alert('Please select an LP position to remove');
+      showSwapError('Please select an LP position to remove');
       return;
     }
 
     if (!removeAmount || parseFloat(removeAmount) <= 0) {
-      window.alert('Please enter a valid amount to remove');
+      showSwapError('Please enter a valid amount to remove');
       return;
     }
 
     if (parseFloat(removeAmount) > parseFloat(selectedLPPosition.amount)) {
-      window.alert('Amount exceeds your LP position balance');
+      showSwapError('Amount exceeds your LP position balance');
       return;
     }
 
@@ -1682,7 +1647,6 @@ export default function SwapShell() {
       });
 
       if (result?.success && result.transactionId) {
-        console.log('[handleRemoveLiquidity] Success! txid:', result.transactionId);
         showNotification(result.transactionId, 'removeLiquidity');
         // Clear state after success
         setRemoveAmount('');
@@ -1690,7 +1654,7 @@ export default function SwapShell() {
       }
     } catch (e: any) {
       console.error('[handleRemoveLiquidity] Error:', e);
-      window.alert(`Remove liquidity failed: ${e?.message || 'See console for details'}`);
+      showSwapError(`Remove liquidity failed: ${extractErrorMessage(e)}`);
     }
   };
 
@@ -1778,7 +1742,6 @@ export default function SwapShell() {
   // Diagnostic: log token name data sources (runs once per data change, not every render)
   useEffect(() => {
     if (!tokenNamesMap || tokenNamesMap.size === 0) return;
-    console.log(`[SwapShell] tokenNamesMap loaded: ${tokenNamesMap.size} token names from /get-alkanes`);
   }, [tokenNamesMap]);
 
   const fromTokenOptions = useMemo<TokenOption[]>(() => {
@@ -2220,6 +2183,7 @@ export default function SwapShell() {
                 },
                 onInvert: handleInvert,
                 onSwapClick: handleSwap,
+                isSwapping: swapMutation.isPending || wrapMutation.isPending || unwrapMutation.isPending,
                 fromBalanceText: formatBalance(fromToken?.id),
                 toBalanceText: formatBalance(toToken?.id),
                 fromFiatText: calculateUsdValue(fromToken?.id, fromAmount),
