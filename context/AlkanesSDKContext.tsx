@@ -19,7 +19,7 @@
  * this browser detection logic can be simplified or removed.
  */
 
-import { createContext, useContext, useEffect, useState, useMemo, useCallback, ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, ReactNode } from 'react';
 import { Network } from '@/utils/constants';
 import * as alkWasm from '@alkanes/ts-sdk/wasm';
 
@@ -172,7 +172,6 @@ export function AlkanesSDKProvider({ children, network }: AlkanesSDKProviderProp
       console.error('[AlkanesSDK] Cannot load wallet - provider not initialized');
       return;
     }
-
     try {
       provider.walletLoadMnemonic(mnemonic, passphrase || null);
       setIsWalletLoaded(true);
@@ -285,11 +284,10 @@ export function AlkanesSDKProvider({ children, network }: AlkanesSDKProviderProp
       }
     } catch (error) {
       console.error('Failed to fetch fee estimates:', error);
-      if (!feeEstimates) {
-        setFeeEstimates({ fast: 25, medium: 10, slow: 2, lastUpdated: Date.now() });
-      }
+      // Use functional setter — avoids closing over stale feeEstimates state
+      setFeeEstimates(prev => prev ?? { fast: 25, medium: 10, slow: 2, lastUpdated: Date.now() });
     }
-  }, [feeEstimates]);
+  }, []);
 
   // Fetch once on init — ongoing refresh is handled by HeightPoller + TanStack Query
   useEffect(() => {
@@ -298,17 +296,22 @@ export function AlkanesSDKProvider({ children, network }: AlkanesSDKProviderProp
     refreshFeeEstimates();
   }, [isInitialized, provider]);
 
-  const value = useMemo<AlkanesSDKContextType>(() => ({
-    provider,
-    isInitialized,
-    isWalletLoaded,
-    loadWallet,
-    bitcoinPrice,
-    refreshBitcoinPrice,
-    feeEstimates,
-    refreshFeeEstimates,
-    network,
-  }), [provider, isInitialized, isWalletLoaded, loadWallet, bitcoinPrice, refreshBitcoinPrice, feeEstimates, refreshFeeEstimates, network]);
+  // Memoize context value so consumers only re-render when displayed state changes.
+  // loadWallet/refreshBitcoinPrice/refreshFeeEstimates are stable useCallback refs.
+  const value: AlkanesSDKContextType = useMemo(
+    () => ({
+      provider,
+      isInitialized,
+      isWalletLoaded,
+      loadWallet,
+      bitcoinPrice,
+      refreshBitcoinPrice,
+      feeEstimates,
+      refreshFeeEstimates,
+      network,
+    }),
+    [provider, isInitialized, isWalletLoaded, loadWallet, bitcoinPrice, refreshBitcoinPrice, feeEstimates, refreshFeeEstimates, network],
+  );
 
   return (
     <AlkanesSDKContext.Provider value={value}>

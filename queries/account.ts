@@ -59,18 +59,6 @@ export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
   if (deps.account?.taproot?.address) addresses.push(deps.account.taproot.address);
   const addressKey = addresses.sort().join(',');
 
-  // Debug: log wallet state for balance queries
-  console.log('[enrichedWalletQueryOptions] Wallet state:', {
-    isConnected: deps.isConnected,
-    isInitialized: deps.isInitialized,
-    hasProvider: !!deps.provider,
-    hasAccount: !!deps.account,
-    addresses,
-    nativeSegwit: deps.account?.nativeSegwit?.address || '(none)',
-    taproot: deps.account?.taproot?.address || '(none)',
-    queryEnabled: deps.isInitialized && !!deps.provider && !!deps.account && deps.isConnected && addresses.length > 0,
-  });
-
   return queryOptions({
     queryKey: queryKeys.account.enrichedWallet(deps.network, addressKey),
     enabled:
@@ -371,14 +359,12 @@ export function alkaneBalanceQueryOptions(deps: AlkaneBalanceDeps) {
     retryDelay: (attempt: number) => Math.min(1000 * 2 ** attempt, 10000),
     queryFn: async () => {
       const provider = deps.provider!;
-      const alkaneMap = new Map<string, any>();
 
-      for (const address of addresses) {
-        try {
+      const perAddressItems = await Promise.all(
+        addresses.map(async (address): Promise<any[]> => {
           // On devnet, REST data API returns HTTP 400. Use RPC fallback instead.
-          let items: any[] = [];
           if (deps.network === 'devnet') {
-            const rpcResp = await fetch('http://localhost:18888', {
+            const rpcResp = await fetch(getRpcUrl(deps.network), {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -389,6 +375,7 @@ export function alkaneBalanceQueryOptions(deps: AlkaneBalanceDeps) {
             });
             const rpcJson = await rpcResp.json();
             const outpoints = rpcJson?.result?.outpoints || [];
+            const items: any[] = [];
             for (const outpoint of outpoints) {
               const balances = outpoint.balance_sheet?.cached?.balances || outpoint.runes || [];
               for (const entry of balances) {
@@ -402,48 +389,50 @@ export function alkaneBalanceQueryOptions(deps: AlkaneBalanceDeps) {
               }
             }
             console.log(`[alkaneBalanceQuery] ${address.slice(0, 12)}...: ${items.length} alkanes (RPC fallback)`);
+            return items;
           } else {
             const result = await (provider as any).dataApiGetAlkanesByAddress(address);
-            items = result?.data || [];
+            const items = result?.data || [];
             console.log(`[alkaneBalanceQuery] ${address.slice(0, 12)}...: ${items.length} alkanes (dataApi)`);
+            return items;
           }
+        }),
+      );
 
-          for (const item of items) {
-            const block = item.alkaneId?.block;
-            const tx = item.alkaneId?.tx;
-            if (block == null || tx == null) continue;
+      const alkaneMap = new Map<string, any>();
+      for (const items of perAddressItems) {
+        for (const item of items) {
+          const block = item.alkaneId?.block;
+          const tx = item.alkaneId?.tx;
+          if (block == null || tx == null) continue;
 
-            const alkaneId = `${block}:${tx}`;
-            const balance = String(item.balance || '0');
-            const knownInfo = KNOWN_TOKENS[alkaneId];
+          const alkaneId = `${block}:${tx}`;
+          const balance = String(item.balance || '0');
+          const knownInfo = KNOWN_TOKENS[alkaneId];
 
-            if (!alkaneMap.has(alkaneId)) {
-              alkaneMap.set(alkaneId, {
-                alkaneId,
-                name: item.name || knownInfo?.name || `Token ${alkaneId}`,
-                symbol: item.symbol || knownInfo?.symbol || '',
-                balance,
-                decimals: knownInfo?.decimals ?? 8,
-                logo: item.tokenImage || undefined,
-                priceUsd: item.priceUsd || item.busdPoolPriceInUsd || undefined,
-                priceInSatoshi: item.priceInSatoshi ? Number(item.priceInSatoshi) : undefined,
-              });
-            } else {
-              const existing = alkaneMap.get(alkaneId)!;
-              try {
-                existing.balance = (BigInt(existing.balance) + BigInt(balance)).toString();
-              } catch {
-                existing.balance = String(Number(existing.balance || 0) + Number(balance));
-              }
+          if (!alkaneMap.has(alkaneId)) {
+            alkaneMap.set(alkaneId, {
+              alkaneId,
+              name: item.name || knownInfo?.name || `Token ${alkaneId}`,
+              symbol: item.symbol || knownInfo?.symbol || '',
+              balance,
+              decimals: knownInfo?.decimals ?? 8,
+              logo: item.tokenImage || undefined,
+              priceUsd: item.priceUsd || item.busdPoolPriceInUsd || undefined,
+              priceInSatoshi: item.priceInSatoshi ? Number(item.priceInSatoshi) : undefined,
+            });
+          } else {
+            const existing = alkaneMap.get(alkaneId)!;
+            try {
+              existing.balance = (BigInt(existing.balance) + BigInt(balance)).toString();
+            } catch {
+              existing.balance = String(Number(existing.balance || 0) + Number(balance));
             }
           }
-        } catch (error) {
-          console.error(`[alkaneBalanceQuery] Failed for ${address}:`, error);
-          throw error;
         }
       }
 
-      console.log(`[alkaneBalanceQuery] Final alkanes: ${alkaneMap.size}`, Array.from(alkaneMap.values()).map(a => `${a.name}(${a.alkaneId})=${a.balance}`).join(', '));
+      console.log(`[alkaneBalanceQuery] Final alkanes: ${alkaneMap.size}`);
       return Array.from(alkaneMap.values());
     },
   });

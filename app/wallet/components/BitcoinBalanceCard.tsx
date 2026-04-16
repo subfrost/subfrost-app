@@ -11,7 +11,7 @@ export default function BitcoinBalanceCard() {
   const { account } = useWallet() as any;
   const { bitcoinPrice } = useAlkanesSDK();
   const { t } = useTranslation();
-  const { balances, isLoading, error, refresh } = useEnrichedWalletData();
+  const { balances, isBtcLoading, error, refresh } = useEnrichedWalletData();
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const handleRefresh = async () => {
@@ -36,7 +36,7 @@ export default function BitcoinBalanceCard() {
     return (btc * bitcoinPrice.usd).toFixed(2);
   };
 
-  const isLoadingData = isLoading || isRefreshing;
+  const isLoadingData = isBtcLoading || isRefreshing;
   const showValue = (value: string) => {
     return isLoadingData ? (
       <span className="text-[color:var(--sf-text)]/60">{t('balances.loading')}</span>
