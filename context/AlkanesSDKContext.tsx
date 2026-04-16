@@ -19,7 +19,7 @@
  * this browser detection logic can be simplified or removed.
  */
 
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, useMemo, useCallback, ReactNode } from 'react';
 import { Network } from '@/utils/constants';
 import * as alkWasm from '@alkanes/ts-sdk/wasm';
 
@@ -167,7 +167,7 @@ export function AlkanesSDKProvider({ children, network }: AlkanesSDKProviderProp
   const [feeEstimates, setFeeEstimates] = useState<FeeEstimates | null>(null);
 
   // Load wallet into provider from mnemonic
-  const loadWallet = (mnemonic: string, passphrase?: string) => {
+  const loadWallet = useCallback((mnemonic: string, passphrase?: string) => {
     if (!provider) {
       console.error('[AlkanesSDK] Cannot load wallet - provider not initialized');
       return;
@@ -180,7 +180,7 @@ export function AlkanesSDKProvider({ children, network }: AlkanesSDKProviderProp
     } catch (error) {
       console.error('[AlkanesSDK] Failed to load wallet:', error);
     }
-  };
+  }, [provider]);
 
   // Initialize provider based on network
   // On devnet, wait for the fetch interceptor to be installed before creating
@@ -256,7 +256,7 @@ export function AlkanesSDKProvider({ children, network }: AlkanesSDKProviderProp
   // BTC price and fee estimates are now managed by TanStack Query (queries/market.ts)
   // and invalidated by the central HeightPoller. These context methods are kept for
   // backward compatibility but simply fetch once on init.
-  const refreshBitcoinPrice = async () => {
+  const refreshBitcoinPrice = useCallback(async () => {
     try {
       const response = await fetch('/api/btc-price');
       const data = await response.json();
@@ -269,9 +269,9 @@ export function AlkanesSDKProvider({ children, network }: AlkanesSDKProviderProp
     } catch (error) {
       console.error('Failed to fetch Bitcoin price:', error);
     }
-  };
+  }, []);
 
-  const refreshFeeEstimates = async () => {
+  const refreshFeeEstimates = useCallback(async () => {
     try {
       const response = await fetch('/api/fees');
       const data = await response.json();
@@ -289,7 +289,7 @@ export function AlkanesSDKProvider({ children, network }: AlkanesSDKProviderProp
         setFeeEstimates({ fast: 25, medium: 10, slow: 2, lastUpdated: Date.now() });
       }
     }
-  };
+  }, [feeEstimates]);
 
   // Fetch once on init — ongoing refresh is handled by HeightPoller + TanStack Query
   useEffect(() => {
@@ -298,7 +298,7 @@ export function AlkanesSDKProvider({ children, network }: AlkanesSDKProviderProp
     refreshFeeEstimates();
   }, [isInitialized, provider]);
 
-  const value: AlkanesSDKContextType = {
+  const value = useMemo<AlkanesSDKContextType>(() => ({
     provider,
     isInitialized,
     isWalletLoaded,
@@ -308,7 +308,7 @@ export function AlkanesSDKProvider({ children, network }: AlkanesSDKProviderProp
     feeEstimates,
     refreshFeeEstimates,
     network,
-  };
+  }), [provider, isInitialized, isWalletLoaded, loadWallet, bitcoinPrice, refreshBitcoinPrice, feeEstimates, refreshFeeEstimates, network]);
 
   return (
     <AlkanesSDKContext.Provider value={value}>

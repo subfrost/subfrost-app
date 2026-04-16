@@ -629,10 +629,28 @@ export function usePools(params: UsePoolsParams = {}) {
       // Primary: Direct REST call to get-all-pools-details (preserves ALL API fields
       // including poolApr, poolVolume30dInUsd, etc. which the SDK WASM deserializer drops).
       // On devnet, the fetch interceptor routes these REST calls through quspo.
+      // Token metadata and pool fetch run in parallel — tokenMetaPromise was already
+      // kicked off above; Promise.all awaits both together instead of serially.
       try {
-        tokenMetaMap = await tokenMetaPromise;
+        [tokenMetaMap, items] = await Promise.all([
+          tokenMetaPromise,
+          fetchPoolsFromPoolsDetailsRest(ALKANE_FACTORY_ID, network, tokenMetaMap),
+        ]);
         console.log('[usePools] Token metadata loaded:', tokenMetaMap.size, 'tokens');
-        items = await fetchPoolsFromPoolsDetailsRest(ALKANE_FACTORY_ID, network, tokenMetaMap);
+        // Re-parse pool items with the now-resolved metadata map so symbol lookups
+        // use the full espo-backed name set (pool fetch ran with empty map placeholder).
+        items = items.map(item => {
+          const t0sym = getTokenSymbol(item.token0.id, item.token0.name, tokenMetaMap);
+          const t1sym = getTokenSymbol(item.token1.id, item.token1.name, tokenMetaMap);
+          const t0name = getTokenName(item.token0.id, item.token0.name, tokenMetaMap);
+          const t1name = getTokenName(item.token1.id, item.token1.name, tokenMetaMap);
+          return {
+            ...item,
+            token0: { ...item.token0, symbol: t0sym || item.token0.symbol, name: t0name || item.token0.name },
+            token1: { ...item.token1, symbol: t1sym || item.token1.symbol, name: t1name || item.token1.name },
+            pairLabel: `${t0name || item.token0.name} / ${t1name || item.token1.name} LP`,
+          };
+        });
       } catch (e) {
         console.warn('[usePools] get-all-pools-details REST failed, falling back to SDK WASM:', e);
         try { tokenMetaMap = await tokenMetaPromise; } catch { /* ignore */ }

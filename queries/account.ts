@@ -82,10 +82,11 @@ export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
     // On devnet, short staleTime + polling for fast balance updates after faucets/swaps.
     staleTime: deps.network === 'devnet' ? 2_000 : 30_000,
     refetchInterval: deps.network === 'devnet' ? 5_000 : undefined,
-    // Always refetch when the dashboard mounts (navigating back to wallet page)
-    refetchOnMount: 'always',
-    // Refetch when user returns to the tab
-    refetchOnWindowFocus: true,
+    // HeightPoller is the SINGLE invalidation source on mainnet/regtest.
+    // refetchOnMount / refetchOnWindowFocus are intentionally disabled to match
+    // providers.tsx QueryClient defaults — re-enabling them here bypasses that contract
+    // and causes redundant fetches on every navigation. The useEffect in
+    // useEnrichedWalletData handles refetch-on-connect for the initial wallet load case.
     // Retry up to 3 times with exponential backoff — covers transient API failures
     // that previously caused empty balance display
     retry: 3,
@@ -364,9 +365,8 @@ export function alkaneBalanceQueryOptions(deps: AlkaneBalanceDeps) {
     // See faucet-e2e.test.ts which proves the queryFn itself works correctly —
     // the issue was purely React Query caching, not the data fetching logic.
     staleTime: deps.network === 'devnet' ? 2_000 : 30_000,
-    refetchOnMount: 'always' as const,
-    refetchOnWindowFocus: true,
     refetchInterval: deps.network === 'devnet' ? 5_000 : undefined,
+    // HeightPoller is the SINGLE invalidation source — see providers.tsx QueryClient defaults.
     retry: 3,
     retryDelay: (attempt: number) => Math.min(1000 * 2 ** attempt, 10000),
     queryFn: async () => {

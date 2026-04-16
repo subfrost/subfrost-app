@@ -22,7 +22,7 @@ export default function AlkanesBalancesCard({ onSendAlkane }: AlkanesBalancesCar
   const { network } = useWallet() as any;
   const { bitcoinPrice } = useAlkanesSDK();
   const { t } = useTranslation();
-  const { balances, isLoading, error, refresh } = useEnrichedWalletData();
+  const { balances, isAlkaneLoading: isLoading, error, refresh } = useEnrichedWalletData();
   const { data: poolsData } = usePools();
   const { data: positionMeta } = usePositionMetadata(balances.alkanes);
   const [isRefreshing, setIsRefreshing] = useState(false);

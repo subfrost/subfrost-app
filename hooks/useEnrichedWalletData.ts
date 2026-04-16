@@ -102,7 +102,12 @@ export interface EnrichedWalletData {
     p2tr: EnrichedUTXO[];
     all: EnrichedUTXO[];
   };
+  /** True until BTC UTXO data resolves — does not wait on alkane balances. */
   isLoading: boolean;
+  /** True while alkane balance data is still loading. */
+  isAlkaneLoading: boolean;
+  /** True until both BTC and alkane data have resolved. */
+  isFullyLoaded: boolean;
   error: string | null;
   refresh: () => Promise<void>;
 }
@@ -182,7 +187,10 @@ export function useEnrichedWalletData(): EnrichedWalletData {
   return {
     balances,
     utxos: btcQuery.data?.utxos ?? EMPTY_UTXOS,
-    isLoading: btcQuery.isLoading || alkaneQuery.isLoading,
+    // BTC display unblocked as soon as btcQuery resolves — alkanes load independently.
+    isLoading: btcQuery.isLoading,
+    isAlkaneLoading: alkaneQuery.isLoading,
+    isFullyLoaded: !btcQuery.isLoading && !alkaneQuery.isLoading,
     error: btcQuery.error
       ? (btcQuery.error instanceof Error ? btcQuery.error.message : 'Failed to fetch wallet data')
       : alkaneQuery.error
