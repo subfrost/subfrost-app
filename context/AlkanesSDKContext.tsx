@@ -21,9 +21,12 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, ReactNode } from 'react';
 import { Network } from '@/utils/constants';
-import * as alkWasm from '@alkanes/ts-sdk/wasm';
 
-type WebProvider = InstanceType<typeof alkWasm.WebProvider>;
+// Static import of the WASM module triggers eager binary loading during SSR,
+// crashing the server process. Dynamic import inside initProvider() defers
+// evaluation to the browser, where the binary is safe to load.
+type AlkWasmModule = typeof import('@alkanes/ts-sdk/wasm');
+type WebProvider = InstanceType<AlkWasmModule['WebProvider']>;
 
 /**
  * Check if we're running in a browser context.
@@ -212,12 +215,15 @@ export function AlkanesSDKProvider({ children, network }: AlkanesSDKProviderProp
       try {
         console.log('[AlkanesSDK] Initializing WASM WebProvider for network:', network);
 
+        // Dynamic import keeps WASM off the critical render path — pages load
+        // instantly and queries enable in the background once this resolves.
+        const alkWasm = await import('@alkanes/ts-sdk/wasm');
+
         // Get provider preset name and config overrides
         // Uses proxy URL for networks with CORS issues when in browser localhost context
         const providerName = NETWORK_TO_PROVIDER[network] || 'mainnet';
         const configOverrides = getNetworkConfig(network);
 
-        // Create the WASM WebProvider (module loaded eagerly via static import)
         const providerInstance = new alkWasm.WebProvider(providerName, configOverrides);
 
         console.log('[AlkanesSDK] WASM WebProvider created successfully');

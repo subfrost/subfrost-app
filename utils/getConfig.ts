@@ -31,6 +31,17 @@ export const BLOCK_EXPLORER_URLS: Record<string, string> = {
 };
 
 /**
+ * Returns true for networks that run on localhost and cannot use the remote
+ * data API. On these networks, alkane balance queries must go through the
+ * local RPC node (alkanes_protorunesbyaddress) instead of dataApiGetAlkanesByAddress.
+ *  - 'devnet'       — in-browser WASM indexer (fetch interceptor), no server access
+ *  - 'regtest-local' — Docker stack at localhost:18888, reachable by server proxy
+ */
+export function isLocalOnlyNetwork(network: string): boolean {
+  return network === 'devnet' || network === 'regtest-local';
+}
+
+/**
  * Get the RPC URL for a network. For devnet, returns the localhost URL
  * that the fetch interceptor routes to the in-process server.
  * For other networks, returns the API proxy route.
@@ -137,19 +148,54 @@ export function getConfig(network: string) {
         BLOCK_EXPLORER_URL_ETH: '',
       } as const;
     case 'regtest-local':
+      // ---------------------------------------------------------------------------
+      // Local docker stack — deploy-regtest.sh slot assignments (2026-04-15)
+      // Run: cd ~/subfrost && docker compose up -d
+      //      cd ~/Documents/github/alkanes-rs && bash scripts/deploy-regtest.sh
+      // RPC: http://localhost:18888  (jsonrpc proxy)
+      // Explorer: http://localhost:50010  (esplora)
+      //
+      // Contract slots match deploy-regtest.sh defaults:
+      //   AMM_FACTORY_PROXY_TX   = 65522
+      //   CARBINE_CONTROLLER_TX  = 8260
+      //   CARBINE_TEMPLATE_TX    = 8202
+      //   CARBINE_ORDER_TOKEN_TX = 8211  (order-token NFT)
+      //   FRUSD_AUTH_TOKEN_TX    = 8200
+      //   FRUSD_TOKEN_TX         = 8210  (patched, has name/symbol/decimals)
+      //   DXBTC_TX               = 8270  (rebuilt from current source)
+      //   FROST Token            = 0x1f13 = 7955
+      //   vxFROST Gauge          = 0x1f14 = 7956
+      //   Gauge Contract         = 100
+      // ---------------------------------------------------------------------------
       return {
         ALKANE_FACTORY_ID: '4:65522',
-        BUSD_ALKANE_ID: '2:0', // NOTE: This is DIESEL (2:0 is always DIESEL). No bUSD on regtest.
-        DIESEL_CLAIM_MERKLE_DISTRIBUTOR_ID: '',
         FRBTC_ALKANE_ID: '32:0',
-        FRZEC_ALKANE_ID: '', // Deployed frZEC contract [4:n] — set after deployment
-        FRETH_ALKANE_ID: '', // Deployed frETH contract [4:n] — set after deployment // frBTC (hardcoded in indexer)
+        BUSD_ALKANE_ID: '2:0', // DIESEL — no bUSD on regtest-local
+        DIESEL_CLAIM_MERKLE_DISTRIBUTOR_ID: '',
+        FRZEC_ALKANE_ID: '',
+        FRETH_ALKANE_ID: '',
+        // frUSD
+        FRUSD_AUTH_TOKEN_ID: '4:8200',
+        FRUSD_TOKEN_ID: '4:8210',
+        // Carbine CLOB
+        CARBINE_CONTROLLER_ID: '4:8260',
+        CARBINE_TEMPLATE_ID: '4:8202',
+        CARBINE_ORDER_TOKEN_ID: '4:8211',
+        // DxBTC vault (current source build)
+        DXBTC_VAULT_ID: '4:8270',
+        // FROST / gauge
+        FROST_TOKEN_ID: '4:7955',
+        VXFROST_GAUGE_ID: '4:7956',
+        GAUGE_ID: '4:100',
+        // FIRE Protocol — Phase 13 of deploy-regtest.sh (2026-04-15)
+        // Proxy slots: 256-261 | Impl slots: 10256-10261 | Position token: 262
         FIRE_TOKEN_ID: '4:256',
         FIRE_STAKING_ID: '4:257',
         FIRE_TREASURY_ID: '4:258',
         FIRE_BONDING_ID: '4:259',
         FIRE_REDEMPTION_ID: '4:260',
         FIRE_DISTRIBUTOR_ID: '4:261',
+        FIRE_POSITION_TOKEN_ID: '4:262',
         API_URL: apiUrl,
         BLOCK_EXPLORER_URL_BTC: blockExplorerUrl,
         BLOCK_EXPLORER_URL_ETH: '',

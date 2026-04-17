@@ -9,17 +9,7 @@
  */
 
 import { NextResponse } from 'next/server';
-
-const RPC_ENDPOINTS: Record<string, string> = {
-  mainnet: 'https://mainnet.subfrost.io/v4/subfrost',
-  testnet: 'https://testnet.subfrost.io/v4/subfrost',
-  signet: 'https://signet.subfrost.io/v4/subfrost',
-  regtest: 'https://regtest.subfrost.io/v4/subfrost',
-  'regtest-local': 'http://localhost:18888',
-  'subfrost-regtest': 'https://regtest.subfrost.io/v4/subfrost',
-  oylnet: 'https://regtest.subfrost.io/v4/subfrost',
-  devnet: 'http://localhost:18888', // In-browser only
-};
+import { isLocalOnlyNetwork, SUBFROST_API_URLS } from '@/utils/getConfig';
 
 /**
  * Well-known devnet token details — server can't reach in-browser WASM devnet.
@@ -45,8 +35,8 @@ export async function POST(request: Request) {
     const alkaneIds: string[] = body?.alkaneIds || [];
     const network = body?.network || process.env.NEXT_PUBLIC_NETWORK || 'mainnet';
 
-    // Devnet runs in-browser only — server can't reach it
-    if (network === 'devnet' || network === 'regtest-local') {
+    // Local-only networks run in-browser — server can't reach them
+    if (isLocalOnlyNetwork(network)) {
       return NextResponse.json({ names: {}, count: 0 });
     }
 
@@ -54,20 +44,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ names: {} });
     }
 
-    // Devnet: return known token details, empty for unknown
-    if (network === 'devnet') {
-      const results: Record<string, { name: string; symbol: string }> = {};
-      for (const id of alkaneIds.slice(0, 50)) {
-        if (DEVNET_TOKEN_DETAILS[id]) {
-          results[id] = DEVNET_TOKEN_DETAILS[id];
-        }
-      }
-      return NextResponse.json({ names: results, count: Object.keys(results).length });
-    }
-
     // Cap at 50 to avoid abuse
     const ids = alkaneIds.slice(0, 50);
-    const baseUrl = RPC_ENDPOINTS[network] || RPC_ENDPOINTS.mainnet;
+    const baseUrl = SUBFROST_API_URLS[network] ?? SUBFROST_API_URLS.mainnet;
 
     const results: Record<string, { name: string; symbol: string }> = {};
 

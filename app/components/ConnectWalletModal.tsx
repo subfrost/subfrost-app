@@ -155,13 +155,15 @@ export default function ConnectWalletModal() {
 
   const handleCloseAndNavigate = () => {
     // startTransition defers the close + reset to a non-blocking pass so React
-    // finishes the current render cycle before unmounting. router.push is kept
-    // outside the transition because navigation is always urgent.
+    // finishes the current render cycle before unmounting. router.push is deferred
+    // by one tick so WalletContext's isConnected state has time to propagate before
+    // the wallet page's redirect guard runs — otherwise it sees isConnected=false
+    // and bounces back to '/'.
     startTransition(() => {
       onConnectModalOpenChange(false);
       resetForm();
     });
-    router.push('/wallet');
+    setTimeout(() => router.push('/wallet'), 50);
   };
 
   const handleCreateWallet = async () => {
@@ -471,7 +473,7 @@ export default function ConnectWalletModal() {
                   className="sf-popup-row flex items-center justify-between p-4 mb-2"
                 >
                   <div className="flex items-center gap-3">
-                    <Plus size={24} className="text-green-400" />
+                    <Plus size={24} className="text-[color:var(--sf-info-green-text)]" />
                     <div className="text-left">
                       <div className="font-bold text-[color:var(--sf-text)]">{t('wallet.createNewWallet')}</div>
                       <div className="text-xs font-medium text-[color:var(--sf-text)]/60">{t('wallet.generateNewWallet')}</div>
@@ -750,7 +752,7 @@ export default function ConnectWalletModal() {
                   className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-lg bg-[color:var(--sf-input-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-[color:var(--sf-text)]/40 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)] hover:text-[color:var(--sf-text)]/60"
                   title="Copy to clipboard"
                 >
-                  {copied ? <Check size={16} className="text-green-400" /> : <Copy size={16} />}
+                  {copied ? <Check size={16} className="text-[color:var(--sf-info-green-text)]" /> : <Copy size={16} />}
                 </button>
               </div>
 
@@ -770,65 +772,50 @@ export default function ConnectWalletModal() {
                 </div>
               )}
 
-              {driveConfigured && (
-                <div className="flex flex-col gap-2">
-                  <div className="relative">
-                    <button
-                      onClick={backupSuccess ? handleConfirmMnemonic : handleBackupToDrive}
-                      disabled={isLoading}
-                      className={`w-full rounded-xl py-3 font-bold shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none flex items-center justify-center gap-2 text-white overflow-hidden relative ${
-                        backupSuccess
-                          ? 'bg-green-500 hover:bg-green-600 dark:bg-green-600 dark:hover:bg-green-700 hover:scale-[1.02] active:scale-[0.98]'
-                          : 'bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50'
-                      }`}
-                    >
-                      {/* Progress bar background */}
-                      {isLoading && !backupSuccess && (
-                        <div
-                          className="absolute inset-0 bg-white/20 transition-all duration-200"
-                          style={{ width: `${backupProgress}%` }}
-                        />
+              {/* Primary CTA: always "Continue to Wallet" */}
+              <button
+                onClick={handleConfirmMnemonic}
+                disabled={!mnemonicConfirmed}
+                className="rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] py-3 font-bold shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 text-white"
+              >
+                {t('wallet.continueToWallet')}
+              </button>
+
+              {/* Secondary: Google Drive backup (only when Drive is configured) */}
+              {driveConfigured && !backupSuccess && (
+                <div className="relative">
+                  <button
+                    onClick={handleBackupToDrive}
+                    disabled={isLoading || !mnemonicConfirmed}
+                    className="w-full rounded-xl py-2.5 font-medium shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none flex items-center justify-center gap-2 text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]/80 bg-[color:var(--sf-panel-bg)] hover:bg-[color:var(--sf-surface)] overflow-hidden relative disabled:opacity-50 text-sm"
+                  >
+                    {isLoading && (
+                      <div
+                        className="absolute inset-0 bg-white/10 transition-all duration-200"
+                        style={{ width: `${backupProgress}%` }}
+                      />
+                    )}
+                    <span className="relative z-10 flex items-center gap-2">
+                      {isLoading ? (
+                        <>
+                          <Cloud className="animate-bounce" size={16} />
+                          {t('wallet.backingUp', { progress: backupProgress })}
+                        </>
+                      ) : (
+                        <>
+                          <Cloud size={16} />
+                          {t('wallet.backupToGoogle')}
+                        </>
                       )}
-                      <span className="relative z-10 flex items-center gap-2">
-                        {backupSuccess ? (
-                          <>
-                            <Check size={18} />
-                            {t('wallet.enterApp')}
-                          </>
-                        ) : isLoading ? (
-                          <>
-                            <Cloud className="animate-bounce" size={18} />
-                            {t('wallet.backingUp', { progress: backupProgress })}
-                          </>
-                        ) : (
-                          <>
-                            <Cloud size={18} />
-                            {t('wallet.backupToGoogle')}
-                          </>
-                        )}
-                      </span>
-                    </button>
-                  </div>
-                  {!backupSuccess && (
-                    <button
-                      onClick={handleConfirmMnemonic}
-                      disabled={!mnemonicConfirmed}
-                      className="text-sm font-medium text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]/80 py-2"
-                    >
-                      {t('wallet.skipBackup')}
-                    </button>
-                  )}
+                    </span>
+                  </button>
                 </div>
               )}
-
-              {!driveConfigured && (
-                <button
-                  onClick={handleConfirmMnemonic}
-                  disabled={!mnemonicConfirmed}
-                  className="rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] py-3 font-bold shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 text-white"
-                >
-                  {t('wallet.continueToWallet')}
-                </button>
+              {driveConfigured && backupSuccess && (
+                <div className="flex items-center justify-center gap-2 text-sm text-[color:var(--sf-info-green-text)] py-1">
+                  <Check size={14} />
+                  {t('wallet.enterApp')}
+                </div>
               )}
             </div>
           )}
@@ -910,7 +897,7 @@ export default function ConnectWalletModal() {
                   }`}
                 >
                   {uploadedKeystore ? (
-                    <div className="flex items-center justify-center gap-2 text-green-400 font-bold">
+                    <div className="flex items-center justify-center gap-2 text-[color:var(--sf-info-green-text)] font-bold">
                       <Check size={20} />
                       <span>{t('wallet.keystoreFileLoaded')}</span>
                     </div>

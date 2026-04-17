@@ -20,7 +20,11 @@ const __dirname = path.dirname(__filename);
 const localWasmPath = './lib/oyl/alkanes/alkanes_web_sys.js';
 
 const nextConfig = {
-  reactStrictMode: true,
+  // Strict mode causes every component to mount→unmount→remount in dev,
+  // which doubles the render cost of the deep provider tree and all hooks.
+  // Disabled globally — the double-mount overhead on the WASM provider tree
+  // is too high. Enable per-file with <React.StrictMode> if needed for testing.
+  reactStrictMode: false,
   output: 'standalone',
   outputFileTracingRoot: path.join(__dirname, '.'),
   // Transpile local file: linked packages

@@ -18,6 +18,7 @@
 import { useEffect, useRef } from 'react';
 import { queryOptions, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
+import { getRpcUrl } from '@/utils/getConfig';
 import { queryKeys } from './keys';
 
 type WebProvider = import('@alkanes/ts-sdk/wasm').WebProvider;
@@ -50,15 +51,7 @@ async function fetchHeightViaSDK(provider: WebProvider): Promise<number> {
 }
 
 async function fetchHeightViaRPC(network: string): Promise<number> {
-  // For devnet, use localhost URL that fetch interceptor catches.
-  // For other networks, normalize to slug for API proxy.
-  const rpcUrl = network === 'devnet'
-    ? 'http://localhost:18888'
-    : `/api/rpc/${network === 'mainnet' ? 'mainnet'
-        : network === 'testnet' ? 'testnet'
-        : network === 'signet' ? 'signet'
-        : network === 'regtest' || network === 'subfrost-regtest' || network === 'regtest-local' ? 'regtest'
-        : 'mainnet'}`;
+  const rpcUrl = getRpcUrl(network);
 
   const res = await fetch(rpcUrl, {
     method: 'POST',

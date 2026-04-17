@@ -281,7 +281,7 @@ export default function Header() {
                       {t("header.transactionHistory")}
                     </Link>
                     <Link
-                      href="/wallet?tab=settings"
+                      href="/settings"
                       onClick={() => setMenuOpen(false)}
                       className="block w-full px-4 py-2.5 text-left text-sm font-medium text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10 border-b border-[color:var(--sf-glass-border)]"
                     >
@@ -490,7 +490,7 @@ export default function Header() {
                       {t("header.transactionHistory")}
                     </Link>
                     <Link
-                      href="/wallet?tab=settings"
+                      href="/settings"
                       onClick={() => setMenuOpen(false)}
                       className="block w-full px-4 py-2.5 text-left text-sm font-medium text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10 border-b border-[color:var(--sf-glass-border)]"
                     >

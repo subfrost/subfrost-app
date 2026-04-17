@@ -5,6 +5,7 @@ import {
   getPools,
   type VolumePeriod,
 } from '@/lib/pools/pool-service';
+import { isLocalOnlyNetwork } from '@/utils/getConfig';
 
 export const dynamic = 'force-dynamic';
 
@@ -28,9 +29,9 @@ export async function GET(request: NextRequest) {
     const periodParam = searchParams.get('period') || '24h';
     const network = searchParams.get('network') || undefined;
 
-    // Devnet runs in-browser only — server-side API routes can't reach it.
-    // Return empty data for devnet; the frontend will query directly.
-    if (network === 'devnet' || network === 'regtest-local') {
+    // Local-only networks run in-browser — server-side API routes can't reach them.
+    // Return empty data; the frontend will query directly.
+    if (network && isLocalOnlyNetwork(network)) {
       return NextResponse.json({
         success: true,
         data: poolParam === 'all' ? {} : null,

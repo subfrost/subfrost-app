@@ -17,7 +17,7 @@
 import { queryOptions } from '@tanstack/react-query';
 import { queryKeys } from './keys';
 import { KNOWN_TOKENS } from '@/lib/alkanes-client';
-import { getRpcUrl } from '@/utils/getConfig';
+import { getRpcUrl, isLocalOnlyNetwork } from '@/utils/getConfig';
 import type { CurrencyPriceInfoResponse } from '@/types/alkanes';
 
 type WebProvider = import('@alkanes/ts-sdk/wasm').WebProvider;
@@ -362,8 +362,7 @@ export function alkaneBalanceQueryOptions(deps: AlkaneBalanceDeps) {
 
       const perAddressItems = await Promise.all(
         addresses.map(async (address): Promise<any[]> => {
-          // On devnet, REST data API returns HTTP 400. Use RPC fallback instead.
-          if (deps.network === 'devnet') {
+          if (isLocalOnlyNetwork(deps.network)) {
             const rpcResp = await fetch(getRpcUrl(deps.network), {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -505,18 +504,13 @@ export function sellableCurrenciesQueryOptions(deps: SellableCurrenciesDeps) {
 
         const sellBalancePromises = addresses.map(async (address) => {
           try {
-            // ⚠️ (2026-03-26): On devnet, /api/alkane-balances is a Next.js
-            // server-side route that returns empty ({ balances: [] }) because the
-            // server process can't reach the in-browser WASM devnet. The devnet
-            // runs entirely in the browser via a fetch interceptor — server-side
-            // fetch() to localhost:18888 hits nothing. Must use client-side
-            // dataApiGetAlkanesByAddress instead, which routes through quspo.
-            // This powers the 25/50/75/MAX percentage buttons on the swap page.
+            // Powers the 25/50/75/MAX percentage buttons on the swap page.
+            // devnet and regtest-local can't use the remote REST data API —
+            // query the local node directly via RPC instead.
             let balances: { alkaneId: string; balance: string; name?: string; symbol?: string }[] = [];
 
-            if (deps.network === 'devnet') {
-              // REST data API returns HTTP 400 on devnet. Use RPC directly.
-              const rpcResp = await fetch('http://localhost:18888', {
+            if (isLocalOnlyNetwork(deps.network)) {
+              const rpcResp = await fetch(getRpcUrl(deps.network), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

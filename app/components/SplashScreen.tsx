@@ -41,11 +41,21 @@ const CRITICAL_IMAGES = [
 ];
 
 /** Minimum time (ms) the splash is shown so the animation is visible */
-const MIN_DISPLAY_MS = 2000;
+const MIN_DISPLAY_MS = 800;
+
+/** sessionStorage key — set after the splash dismisses once per tab session */
+const SPLASH_DONE_KEY = 'sf_splash_done';
 
 export default function SplashScreen() {
   const { isInitialized } = useAlkanesSDK();
-  const [visible, setVisible] = useState(true);
+
+  // Skip splash entirely if it already ran this session OR if the SDK is already
+  // initialized (e.g. navigating back to a page after initial load). Without this
+  // guard the splash re-blocks every client-side route change.
+  // Lazy initializer: only reads sessionStorage once on mount, not on every render.
+  const [visible, setVisible] = useState(
+    () => typeof window === 'undefined' || !sessionStorage.getItem(SPLASH_DONE_KEY),
+  );
   const [fading, setFading] = useState(false);
 
   // Real loading milestones
@@ -123,6 +133,7 @@ export default function SplashScreen() {
   // ---------------------------------------------------------------------------
 
   const dismiss = useCallback((fade: boolean) => {
+    sessionStorage.setItem(SPLASH_DONE_KEY, '1');
     if (fade) {
       setFading(true);
       setTimeout(() => setVisible(false), 550);

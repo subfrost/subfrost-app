@@ -25,14 +25,20 @@ import type { Network } from '@/utils/constants';
 
 const NETWORK_STORAGE_KEY = 'subfrost_selected_network';
 
-// Detect network from localStorage, hostname, or env variable
+// Detect network from env variable, localStorage, or hostname.
+// Priority: NEXT_PUBLIC_NETWORK env var > localStorage > hostname > mainnet default.
+// When NEXT_PUBLIC_NETWORK is set (e.g. regtest-local in .env.local), it always wins —
+// localStorage cannot override it. This prevents a stale 'devnet' entry in localStorage
+// from hijacking the configured network on startup.
 function detectNetwork(): Network {
   if (typeof window === 'undefined') return 'mainnet';
 
-  // First check localStorage for user selection
-  // JOURNAL (2026-03-31): Added 'devnet' to the allowlist — it was missing, so
-  // selecting devnet in the balances page would be saved to localStorage but
-  // detectNetwork() would ignore it, reverting to mainnet on next load.
+  // Env var takes highest priority — set in .env.local for local dev
+  if (process.env.NEXT_PUBLIC_NETWORK) {
+    return process.env.NEXT_PUBLIC_NETWORK as Network;
+  }
+
+  // Then check localStorage for user selection (only when no env override)
   const stored = localStorage.getItem(NETWORK_STORAGE_KEY);
   if (stored && ['mainnet', 'testnet', 'signet', 'regtest', 'regtest-local', 'subfrost-regtest', 'oylnet', 'devnet'].includes(stored)) {
     return stored as Network;
@@ -40,21 +46,23 @@ function detectNetwork(): Network {
 
   // Then check hostname
   const host = window.location.host;
-  if (!process.env.NEXT_PUBLIC_NETWORK) {
-    if (host.startsWith('signet.') || host.startsWith('staging-signet.')) {
-      return 'signet';
-    } else if (host.startsWith('regtest.') || host.startsWith('staging-regtest.')) {
-      return 'subfrost-regtest';
-    }
-    // Default to mainnet for all other cases (including localhost)
-    return 'mainnet';
+  if (host.startsWith('signet.') || host.startsWith('staging-signet.')) {
+    return 'signet';
+  } else if (host.startsWith('regtest.') || host.startsWith('staging-regtest.')) {
+    return 'subfrost-regtest';
   }
-  return process.env.NEXT_PUBLIC_NETWORK as Network;
+
+  return 'mainnet';
 }
 
 export default function Providers({ children }: { children: ReactNode }) {
-  const [mounted, setMounted] = useState(false);
-  const [network, setNetwork] = useState<Network>('mainnet');
+  // Initialize network synchronously from the env var so we never start with
+  // 'mainnet' and immediately re-init the WASM provider on the next tick.
+  // When NEXT_PUBLIC_NETWORK is set (e.g. regtest-local in .env.local) this
+  // resolves at module parse time — no double-init, no extra splash wait.
+  const [network, setNetwork] = useState<Network>(
+    (process.env.NEXT_PUBLIC_NETWORK as Network) || 'mainnet'
+  );
 
   // Memoize QueryClient to prevent recreation on re-renders
   // All queries use staleTime: Infinity and never self-refresh.
@@ -77,10 +85,12 @@ export default function Providers({ children }: { children: ReactNode }) {
     []
   );
 
-  // Initialize network on mount and listen for storage changes
+  // On mount, re-run detectNetwork (which can read localStorage) and update only
+  // if the result differs from the synchronous env-var init — avoids a redundant
+  // WASM re-init when NEXT_PUBLIC_NETWORK is set and matches.
   useEffect(() => {
     const initialNetwork = detectNetwork();
-    setNetwork(initialNetwork);
+    setNetwork(prev => prev !== initialNetwork ? initialNetwork : prev);
 
     // Listen for network changes from other tabs/components
     const handleStorageChange = (e: StorageEvent) => {
@@ -107,12 +117,6 @@ export default function Providers({ children }: { children: ReactNode }) {
       window.removeEventListener('network-changed' as any, handleNetworkChange as any);
     };
   }, [queryClient]);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  if (!mounted) return null;
 
   return (
     <ProgressProvider

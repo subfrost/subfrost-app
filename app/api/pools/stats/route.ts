@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getConfig, SUBFROST_API_URLS } from '@/utils/getConfig';
+import { getConfig, SUBFROST_API_URLS, isLocalOnlyNetwork } from '@/utils/getConfig';
 
 export const dynamic = 'force-dynamic';
 
@@ -113,10 +113,9 @@ export async function GET(request: NextRequest) {
     const dashboardParam = searchParams.get('dashboard');
     const network = searchParams.get('network') || 'mainnet';
 
-    // Devnet runs in-browser only — server-side API routes can't reach it.
-    // Return empty data for devnet; the frontend will query the in-browser
-    // devnet directly via fetch interceptor.
-    if (network === 'devnet' || network === 'regtest-local') {
+    // Local-only networks run in-browser — server-side API routes can't reach them.
+    // Return empty data; the frontend will query via fetch interceptor.
+    if (isLocalOnlyNetwork(network)) {
       const emptyStats = {
         success: true,
         data: dashboardParam === 'true'
