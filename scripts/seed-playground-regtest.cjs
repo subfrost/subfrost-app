@@ -77,8 +77,7 @@ const MIN_SIGIL_FOR_SEEDING  = 5_000_000_000n; // 5B frSIGIL
 // since the regtest mempool has no competition.
 // WASM deploys (large envelope) need slightly more due to vbyte count but 3 is fine.
 const WRAP_AMOUNT            = 5_000;     // 5K sats per wrap — reliable with taproot-only + fee_rate=3
-const FEE_RATE               = 3;        // sat/vB — works reliably with fragmented taproot UTXOs + 5K wrap
-const DEPLOY_FEE_RATE        = 3;        // sat/vB for WASM deploys (large vbyte count)
+const FEE_RATE               = 3;        // sat/vB — works reliably with fragmented taproot UTXOs
 
 // Pool initial liquidity: 1B frSIGIL / 50K frBTC → price ≈ 0.00005 frBTC per frSIGIL
 const POOL_SIGIL_AMOUNT = 1_000_000_000n;  // 1B frSIGIL
@@ -136,22 +135,8 @@ async function mineExternal(count = 1) {
 }
 
 async function getAlkaneBalance(address, block, tx) {
-  try {
-    const result = await rpc('alkanes_protorunesbyaddress', [{ address, protocolTag: '1' }]);
-    let total = 0n;
-    for (const op of (result?.outpoints || [])) {
-      for (const rune of (op.runes || [])) {
-        const id = rune?.rune?.id;
-        if (!id) continue;
-        const b = parseInt(id.block, 16);
-        const t = parseInt(id.tx, 16);
-        if (b === Number(block) && t === Number(tx)) {
-          total += BigInt(rune.balance || 0);
-        }
-      }
-    }
-    return total;
-  } catch { return 0n; }
+  const utxos = await getAlkaneUtxos(address, block, tx);
+  return utxos.reduce((s, u) => s + u.amount, 0n);
 }
 
 // Reverse a hex txid between internal (LE) and display (BE) byte order.
@@ -213,16 +198,26 @@ async function simulate(block, tx, inputs) {
   }]);
 }
 
+// Decode a little-endian u128 from a hex-prefixed simulation result ("0x..." or "0x" = 0).
+function parseLeU128(hexData) {
+  if (!hexData || hexData === '0x') return 0n;
+  return BigInt('0x' + Buffer.from(hexData.slice(2), 'hex').reverse().toString('hex'));
+}
+
 async function getNumPools() {
   try {
     const r = await simulate(FACTORY_BLOCK, FACTORY_TX, [4]);
-    const d = r?.execution?.data;
-    if (!d || d === '0x') return 0;
-    const b = Buffer.from(d.slice(2), 'hex');
-    let n = 0n;
-    for (let i = b.length - 1; i >= 0; i--) n = (n << 8n) | BigInt(b[i]);
-    return Number(n);
+    return Number(parseLeU128(r?.execution?.data));
   } catch { return 0; }
+}
+
+// Returns the pool AlkaneId {block, tx} for the frSIGIL/frBTC pair, or null if not found.
+async function findSigilPool() {
+  const r = await simulate(FACTORY_BLOCK, FACTORY_TX, [2, SIGIL_BLOCK, SIGIL_TX, FRBTC_BLOCK, FRBTC_TX]);
+  const data = r?.execution?.data;
+  if (r?.execution?.error || !data || data === '0x' || data === '0x00000000000000000000000000000000') return null;
+  const d = Buffer.from(data.slice(2), 'hex');
+  return { block: Number(d.readBigUInt64LE(0)), tx: Number(d.readBigUInt64LE(16)) };
 }
 
 async function isSlotDeployed(block, tx) {
@@ -302,7 +297,7 @@ async function deployWasm(provider, label, wasmPath, slot, initArgs) {
       JSON.stringify([DEPLOYER_TAPROOT]),
       'B:200000:v0',
       protostone,
-      String(DEPLOY_FEE_RATE),
+      String(FEE_RATE),
       wasmHex,
       JSON.stringify({
         // Use SEGWIT for WASM deploys — large coinbase UTXOs handle the large envelope fee.
@@ -418,19 +413,10 @@ async function ensureFrSigil(provider) {
 // ── Step 3: Create AMM Pool ───────────────────────────────────────────────────
 
 async function ensurePool(provider, sigilBal, frbtcBal) {
-  // Check if frSIGIL/frBTC pool specifically exists via factory opcode 2 (FindExistingPoolId)
-  // This avoids skipping pool creation when another pool (e.g. DIESEL/frBTC) already exists
-  const existingPool = await simulate(FACTORY_BLOCK, FACTORY_TX, [
-    2, SIGIL_BLOCK, SIGIL_TX, FRBTC_BLOCK, FRBTC_TX,
-  ]);
-  const poolError = existingPool?.execution?.error;
-  const poolData  = existingPool?.execution?.data;
-  const poolExists = !poolError && poolData && poolData !== '0x' && poolData !== '0x00000000000000000000000000000000';
-  if (poolExists) {
-    const d = Buffer.from(poolData.slice(2), 'hex');
-    const poolBlock = Number(d.readBigUInt64LE(0));
-    const poolTx    = Number(d.readBigUInt64LE(16));
-    ok(`frSIGIL/frBTC pool already exists at [${poolBlock}:${poolTx}]`);
+  // Use FindExistingPoolId (opcode 2) so we don't skip when another pool already exists
+  const existing = await findSigilPool();
+  if (existing) {
+    ok(`frSIGIL/frBTC pool already exists at [${existing.block}:${existing.tx}]`);
     return true;
   }
 
@@ -441,14 +427,9 @@ async function ensurePool(provider, sigilBal, frbtcBal) {
 
   log(`Creating frSIGIL/frBTC pool: ${POOL_SIGIL_AMOUNT} frSIGIL + ${POOL_FRBTC_AMOUNT} frBTC...`);
 
-  // CreateNewPool (factory opcode 1): tokenA_block, tokenA_tx, tokenB_block, tokenB_tx, amountA, amountB
-  // Both tokens must arrive as incomingAlkanes (two-protostone pattern via inputReqs)
-  const protostone = `[${FACTORY_BLOCK},${FACTORY_TX},1,${SIGIL_BLOCK},${SIGIL_TX},${FRBTC_BLOCK},${FRBTC_TX},${POOL_SIGIL_AMOUNT},${POOL_FRBTC_AMOUNT}]:v0:v0`;
-  const inputReqs  = `${SIGIL_BLOCK}:${SIGIL_TX}:${POOL_SIGIL_AMOUNT},${FRBTC_BLOCK}:${FRBTC_TX}:${POOL_FRBTC_AMOUNT}`;
-
   // WASM provider fails silently on regtest (runes[] format != balances[] format).
-  // It broadcasts the tx but factory receives 0 incomingAlkanes → 0 pools created.
-  // Skip WASM and go straight to manual PSBT which selects alkane UTXOs explicitly.
+  // It broadcasts but factory receives 0 incomingAlkanes → 0 pools created.
+  // Manual PSBT selects alkane UTXOs explicitly.
   warn('WASM pool creation skipped (regtest runes[] format incompatibility) — using manual PSBT');
   return await createPoolManualPsbt(sigilBal, frbtcBal);
 }
@@ -528,9 +509,11 @@ async function createPoolManualPsbt(sigilBal, frbtcBal) {
     if (derivedSegwit  !== DEPLOYER_SEGWIT)  throw new Error(`Segwit address mismatch: ${derivedSegwit}`);
     log('  Key derivation verified — addresses match');
 
-    // ── Gather Alkane UTXOs from deployer taproot ─────────────────────────────
-    const sigilUtxos = await getAlkaneUtxos(DEPLOYER_TAPROOT, SIGIL_BLOCK, SIGIL_TX);
-    const frbtcUtxos = await getAlkaneUtxos(DEPLOYER_TAPROOT, FRBTC_BLOCK, FRBTC_TX);
+    // ── Gather Alkane UTXOs from deployer taproot (parallel) ──────────────────
+    const [sigilUtxos, frbtcUtxos] = await Promise.all([
+      getAlkaneUtxos(DEPLOYER_TAPROOT, SIGIL_BLOCK, SIGIL_TX),
+      getAlkaneUtxos(DEPLOYER_TAPROOT, FRBTC_BLOCK, FRBTC_TX),
+    ]);
 
     if (sigilUtxos.length === 0) throw new Error(`No frSIGIL UTXOs at ${DEPLOYER_TAPROOT}`);
     if (frbtcUtxos.length === 0) throw new Error(`No frBTC UTXOs at ${DEPLOYER_TAPROOT}`);
@@ -774,21 +757,13 @@ async function createPoolManualPsbt(sigilBal, frbtcBal) {
     await sleep(2000);
     await waitSync();
 
-    // Verify pool was created by looking up frSIGIL/frBTC pool specifically
-    const findPool = await simulate(FACTORY_BLOCK, FACTORY_TX, [2, SIGIL_BLOCK, SIGIL_TX, FRBTC_BLOCK, FRBTC_TX]);
-    const findData  = findPool?.execution?.data;
-    const findError = findPool?.execution?.error;
-    const poolCreated = !findError && findData && findData !== '0x' && findData !== '0x00000000000000000000000000000000';
-    if (poolCreated) {
-      const d = Buffer.from(findData.slice(2), 'hex');
-      const poolBlock = Number(d.readBigUInt64LE(0));
-      const poolTx    = Number(d.readBigUInt64LE(16));
-      ok(`  frSIGIL/frBTC pool created at [${poolBlock}:${poolTx}]`);
+    const created = await findSigilPool();
+    if (created) {
+      ok(`  frSIGIL/frBTC pool created at [${created.block}:${created.tx}]`);
       return true;
     } else {
       warn(`  Manual PSBT tx confirmed (${txid.slice(0,16)}...) but factory reports no frSIGIL/frBTC pool`);
       warn('  The protorune may not have executed — check tx OP_RETURN encoding');
-      if (findError) warn(`  FindPool error: ${findError}`);
       return false;
     }
   } catch (e) {
@@ -802,10 +777,7 @@ async function createPoolManualPsbt(sigilBal, frbtcBal) {
 
 async function seedCarbineOrders(provider, sigilBal, frbtcBal) {
   const currentOrders = await simulate(CARBINE_BLOCK, CARBINE_TX, [25]);
-  const orderData = currentOrders?.execution?.data;
-  const orderCount = orderData && orderData !== '0x'
-    ? Number(BigInt('0x' + Buffer.from(orderData.slice(2), 'hex').reverse().toString('hex')))
-    : 0;
+  const orderCount = Number(parseLeU128(currentOrders?.execution?.data));
 
   log(`Current Carbine orders: ${orderCount}`);
   if (orderCount >= 6) {
@@ -869,21 +841,7 @@ async function seedDxbtcVault(provider, frbtcBal) {
 
   log(`Depositing ${depositAmount} frBTC into dxBTC vault...`);
 
-  // dxBTC deposit: frBTC → dxBTC shares
-  // The vault's deposit opcode receives frBTC as incomingAlkanes
-  // Check which opcode is deposit...
-  // From CLAUDE.md: dx-btc alkanes.toml: swap=1, mint=2, burn=3, deposit-fees=6, total-assets=11
-  // Deposit of underlying asset = typically op 1 or 2 based on ERC4626 pattern
-  // Let's check op1 and op2
-  for (const op of [1, 2]) {
-    const r = await simulate(DXBTC_BLOCK, DXBTC_TX, [op]);
-    const e = r?.execution?.error || '';
-    if (!e.includes('Unrecognized') && !e.includes('unexpected end')) {
-      log(`  op${op}: ${e.slice(0, 60) || 'OK'}`);
-    }
-  }
-
-  // Based on CLAUDE.md dx-btc opcode table: swap=1 (exchange frBTC for dxBTC shares)
+  // swap=1 per dx-btc alkanes.toml (exchanges frBTC for dxBTC shares)
   const depositProto = `[${DXBTC_BLOCK},${DXBTC_TX},1]:v0:v0`;
   const inputReqs    = `${FRBTC_BLOCK}:${FRBTC_TX}:${depositAmount}`;
   await executeCall(provider, `Deposit ${depositAmount} frBTC into dxBTC vault`, depositProto, inputReqs);
@@ -997,30 +955,34 @@ async function main() {
 
   console.log('');
   console.log('── Step 4: Carbine CLOB Orders ──────────');
-  const freshSigil = await getAlkaneBalance(DEPLOYER_TAPROOT, SIGIL_BLOCK, SIGIL_TX);
-  const freshFrbtc = await getAlkaneBalance(DEPLOYER_TAPROOT, FRBTC_BLOCK, FRBTC_TX);
+  // Fetch both balances in parallel — both are needed before seeding orders
+  const [freshSigil, freshFrbtc] = await Promise.all([
+    getAlkaneBalance(DEPLOYER_TAPROOT, SIGIL_BLOCK, SIGIL_TX),
+    getAlkaneBalance(DEPLOYER_TAPROOT, FRBTC_BLOCK, FRBTC_TX),
+  ]);
   await seedCarbineOrders(provider, freshSigil, freshFrbtc);
 
   console.log('');
   console.log('── Step 5: dxBTC Vault ──────────────────');
-  const frbtcForVault = await getAlkaneBalance(DEPLOYER_TAPROOT, FRBTC_BLOCK, FRBTC_TX);
-  await seedDxbtcVault(provider, frbtcForVault);
+  // Reuse freshFrbtc — it was fetched after pool creation, still accurate
+  await seedDxbtcVault(provider, freshFrbtc);
 
   console.log('');
   console.log('── Step 6: Fund User Wallet ─────────────');
   await fundUserWallet(provider, USER_WALLET);
 
-  // ── Final Summary ──────────────────────────────────────────────────────────
-  const finalHeight  = await rpc('metashrew_height', []);
-  const finalSigil   = await getAlkaneBalance(DEPLOYER_TAPROOT, SIGIL_BLOCK, SIGIL_TX);
-  const finalFrbtc   = await getAlkaneBalance(DEPLOYER_TAPROOT, FRBTC_BLOCK, FRBTC_TX);
-  const finalPools   = await getNumPools();
-  const finalOrders  = await simulate(CARBINE_BLOCK, CARBINE_TX, [25])
-    .then(r => { const d=r?.execution?.data; return d&&d!=='0x'?Number(BigInt('0x'+Buffer.from(d.slice(2),'hex').reverse().toString('hex'))):0; })
-    .catch(() => 0);
-  const finalAssets  = await simulate(DXBTC_BLOCK, DXBTC_TX, [11])
-    .then(r => { const d=r?.execution?.data; return d&&d!=='0x'?BigInt('0x'+Buffer.from(d.slice(2),'hex').reverse().toString('hex')):0n; })
-    .catch(() => 0n);
+  // ── Final Summary (all queries in parallel) ────────────────────────────────
+  const [finalHeight, finalSigil, finalFrbtc, finalPools, finalOrdersSim, finalAssetsSim] =
+    await Promise.all([
+      rpc('metashrew_height', []),
+      getAlkaneBalance(DEPLOYER_TAPROOT, SIGIL_BLOCK, SIGIL_TX),
+      getAlkaneBalance(DEPLOYER_TAPROOT, FRBTC_BLOCK, FRBTC_TX),
+      getNumPools(),
+      simulate(CARBINE_BLOCK, CARBINE_TX, [25]).catch(() => null),
+      simulate(DXBTC_BLOCK, DXBTC_TX, [11]).catch(() => null),
+    ]);
+  const finalOrders = Number(parseLeU128(finalOrdersSim?.execution?.data));
+  const finalAssets = parseLeU128(finalAssetsSim?.execution?.data);
 
   console.log('');
   console.log('════════════════════════════════════════');
