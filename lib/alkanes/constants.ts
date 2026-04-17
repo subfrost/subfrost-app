@@ -46,6 +46,7 @@ export const FRETH_SIGNER_ADDRESSES: Record<string, string> = {
   mainnet: '',
   devnet: '',
   regtest: '',
+  'regtest-local': '',
 };
 
 /**
@@ -94,6 +95,9 @@ export const SIGNER_ADDRESSES: Record<string, string> = {
   'subfrost-regtest': 'bcrt1p466wtm6hn2llrm02ckx6z03tsygjjyfefdaz6sekczvcr7z00vtsc5gvgz',
   oylnet: 'bcrt1p466wtm6hn2llrm02ckx6z03tsygjjyfefdaz6sekczvcr7z00vtsc5gvgz',
   devnet: 'bcrt1p466wtm6hn2llrm02ckx6z03tsygjjyfefdaz6sekczvcr7z00vtsc5gvgz',
+  // regtest-local: local Docker stack (http://localhost:18888)
+  // Signer derived from frBTC [32:0] opcode 103 GET_SIGNER (boot mnemonic, coinType=1)
+  'regtest-local': 'bcrt1p7aannxnu3cjea43lt80syrx68af3cd8hpzxtcr0979rk9z4csk8qdq3p7a',
 };
 
 /**
@@ -108,7 +112,7 @@ export const FRZEC_SIGNER_ADDRESSES: Record<string, string> = {
   // Zcash mainnet t1... address (CGGMP21 group key)
   // TODO: Set after mainnet deployment
   mainnet: '',
-  // Devnet uses a deterministic test key
   devnet: '',
   regtest: '',
+  'regtest-local': '',
 };
