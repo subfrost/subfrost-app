@@ -1,10 +1,14 @@
 'use client';
 
 import { useState } from 'react';
+import dynamic from 'next/dynamic';
 import type { PoolSummary } from "../types";
 import TokenIcon from "@/app/components/TokenIcon";
 import { useWallet } from "@/context/WalletContext";
-import CandleChart from "./CandleChart";
+// CandleChart statically imports lightweight-charts (~140 KB gz). Keep it off
+// the initial swap-page bundle — it only renders when a pool is selected and
+// the user opens the chart. Defer loading until it's actually mounted.
+const CandleChart = dynamic(() => import('./CandleChart'), { ssr: false });
 import { useBtcUsdtCandles, type CandleTimeframe } from '@/hooks/usePoolCandles';
 
 type Props = {
