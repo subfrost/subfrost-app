@@ -9,7 +9,7 @@ import { queryOptions } from '@tanstack/react-query';
 import { queryKeys } from './keys';
 import { FRBTC_WRAP_FEE_PER_1000, FRBTC_UNWRAP_FEE_PER_1000 } from '@/constants/alkanes';
 import { encodeSimulateCalldata } from '@/utils/simulateCalldata';
-import { getBitcoinPrice as rpcGetBitcoinPrice } from '@/lib/alkanes/rpc';
+import { getBitcoinPrice as rpcGetBitcoinPrice, alkanesSimulate as rpcAlkanesSimulate } from '@/lib/alkanes/rpc';
 // Pricing data is global — always use mainnet subpricer regardless of connected network
 const SUBPRICER_BASE = 'https://mainnet.subfrost.io/v4/subfrost';
 
@@ -123,22 +123,27 @@ export function frbtcPremiumQueryOptions(
       try {
         const frbtcId = parseAlkaneId(frbtcAlkaneId);
         const contractId = `${frbtcId.block}:${frbtcId.tx}`;
-        const context = JSON.stringify({
-          alkanes: [],
-          calldata: encodeSimulateCalldata(contractId, [104]),
-          height: 1000000,
-          txindex: 0,
-          pointer: 0,
-          refund_pointer: 0,
-          vout: 0,
-          transaction: [],
-          block: [],
-        });
 
-        const result = await provider.alkanesSimulate(contractId, context, 'latest');
+        // Server derives the MessageContextParcel from `target + inputs`;
+        // no need to encode calldata client-side. Verified live 2026-04-18
+        // that `alkanes_simulate` with `inputs:["104"]` returns the same
+        // 16-byte u128 GET_PREMIUM result as the calldata form.
+        const result = await rpcAlkanesSimulate(network, {
+          target: contractId,
+          inputs: ['104'],
+          height: '1000000',
+        });
         if (!result?.execution?.data) throw new Error('No response data');
 
-        const premium = parseU128FromBytes(result.execution.data);
+        // `data` is a "0x"-prefixed hex string; parseU128FromBytes accepts
+        // either a hex string (via Uint8Array) or a raw byte array. Convert
+        // once here so the helper keeps its existing contract.
+        const hex = (result.execution.data as string).replace(/^0x/, '');
+        const bytes = new Uint8Array(hex.length / 2);
+        for (let i = 0; i < bytes.length; i++) {
+          bytes[i] = parseInt(hex.substring(i * 2, i * 2 + 2), 16);
+        }
+        const premium = parseU128FromBytes(bytes);
         const feePerThousand = Number(premium) / 100_000;
 
         return {
