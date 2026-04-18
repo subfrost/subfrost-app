@@ -5,7 +5,7 @@ import { useWallet } from '@/context/WalletContext';
 import { useTheme } from '@/context/ThemeContext';
 import { Network, Key, Save, Eye, EyeOff, Copy, Check, ChevronDown, ChevronUp, Download, Shield, Lock, Cloud, AlertTriangle, X, Settings } from 'lucide-react';
 import { initGoogleDrive, isDriveConfigured, backupWalletToDrive } from '@/utils/clientSideDrive';
-import { unlockKeystore } from '@alkanes/ts-sdk';
+import { unlockKeystore } from '@/lib/wallet/keystore';
 import { useTranslation } from '@/hooks/useTranslation';
 
 type NetworkType = 'mainnet' | 'signet' | 'regtest' | 'regtest-local' | 'subfrost-regtest' | 'oylnet' | 'devnet' | 'custom';
