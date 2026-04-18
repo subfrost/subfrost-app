@@ -243,6 +243,12 @@ export function useSwapMutation() {
         console.error('[useSwapMutation] ❌ Wallet not connected');
         throw new Error('Wallet not connected');
       }
+
+      // Ensure browser wallet session is active before building PSBT
+      if (walletType === 'browser') {
+        const { ensureWalletSession } = await import('@/lib/wallet/browserWalletSigning');
+        await ensureWalletSession();
+      }
       if (!provider) {
         console.error('[useSwapMutation] ❌ Provider not available');
         throw new Error('Provider not available');
@@ -388,12 +394,24 @@ export function useSwapMutation() {
 
 
       try {
-        // UniSat: use getBitcoinUtxos to get inscription-filtered UTXOs
-
         // Dual-address wallets (Xverse, Leather) have both segwit + taproot.
         // protect_taproot=true prevents taproot UTXOs from being spent for BTC fees.
         // Single-address wallets (UniSat, OKX) only have taproot — must set false.
         const isDualAddress = Boolean(segwitAddress && taprootAddress);
+
+        // Get clean BTC UTXOs from wallet API (UniSat getBitcoinUtxos).
+        // These are wallet-verified: no inscriptions, no runes, no alkanes.
+        // SDK uses them directly for BTC fee inputs — skips lua get_utxos entirely.
+        let paymentUtxos: string[] | undefined;
+        if (isBrowserWallet && (window as any).unisat?.getBitcoinUtxos) {
+          try {
+            const btcUtxos = await (window as any).unisat.getBitcoinUtxos();
+            if (btcUtxos?.length) {
+              paymentUtxos = btcUtxos.map((u: any) => `${u.txid}:${u.vout}:${u.satoshis}`);
+            }
+          } catch { /* wallet API unavailable — SDK falls back to lua */ }
+        }
+
         const result = await provider.alkanesExecuteTyped({
           inputRequirements,
           protostones: protostone,
@@ -405,6 +423,7 @@ export function useSwapMutation() {
           alkanesChangeAddress: alkanesChangeAddr,
           ordinalsStrategy: 'exclude',
           protectTaproot: isDualAddress,
+          paymentUtxos,
           network,
         });
 

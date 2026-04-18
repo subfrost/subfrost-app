@@ -20,6 +20,37 @@
 
 import * as bitcoin from 'bitcoinjs-lib';
 
+/**
+ * Ensure the browser wallet extension has an active session.
+ *
+ * Auto-reconnect from localStorage restores UI state (addresses, walletType)
+ * but doesn't activate the extension session. Without this, signPsbt() fails
+ * or shows a connect-only popup without proceeding to sign.
+ *
+ * Call this at the start of every mutation (swap, wrap, liquidity, etc.)
+ * before building the PSBT.
+ */
+export async function ensureWalletSession(): Promise<void> {
+  if (typeof window === 'undefined') return;
+
+  // UniSat
+  const unisat = (window as any).unisat;
+  if (unisat) {
+    const accounts = await unisat.getAccounts?.() || [];
+    if (!accounts.length && unisat.requestAccounts) {
+      await unisat.requestAccounts();
+    }
+    return;
+  }
+
+  // OKX
+  const okx = (window as any).okxwallet?.bitcoin;
+  if (okx?.connect) {
+    try { await okx.connect(); } catch { /* already connected */ }
+    return;
+  }
+}
+
 /** Standard signing timeout (60 seconds) */
 const SIGNING_TIMEOUT_MS = 60000;
 

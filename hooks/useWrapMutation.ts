@@ -103,6 +103,11 @@ export function useWrapMutation() {
   return useMutation({
     mutationFn: async (wrapData: WrapTransactionBaseData) => {
       if (!isConnected) throw new Error('Wallet not connected');
+      // Ensure browser wallet session is active before building PSBT
+      if (walletType === 'browser') {
+        const { ensureWalletSession } = await import('@/lib/wallet/browserWalletSigning');
+        await ensureWalletSession();
+      }
       if (!provider) throw new Error('Provider not available');
 
       // Check if WASM provider wallet is loaded for signing
@@ -186,6 +191,17 @@ export function useWrapMutation() {
       console.log('[WRAP] ===================================================');
 
       try {
+        // Get inscription outpoints from UniSat wallet API to protect inscriptions during wrap.
+        // Get clean BTC UTXOs from wallet API (UniSat getBitcoinUtxos).
+        let paymentUtxos: string[] | undefined;
+        if (isBrowserWallet && (window as any).unisat?.getBitcoinUtxos) {
+          try {
+            const btcUtxos = await (window as any).unisat.getBitcoinUtxos();
+            if (btcUtxos?.length) {
+              paymentUtxos = btcUtxos.map((u: any) => `${u.txid}:${u.vout}:${u.satoshis}`);
+            }
+          } catch { /* wallet API unavailable — SDK falls back to lua */ }
+        }
 
         const result = await provider.alkanesExecuteTyped({
           toAddresses,
@@ -193,11 +209,6 @@ export function useWrapMutation() {
           protostones: protostone,
           feeRate: wrapData.feeRate,
           fromAddresses,
-          // For browser wallets, use actual addresses instead of symbolic to prevent
-          // SDK from resolving to dummy wallet addresses.
-          // CRITICAL (2026-02-23): Fall back to taproot when no segwit address
-          // (UniSat taproot-only). Previously fell back to 'p2wpkh:0' which resolves
-          // to the dummy wallet — BTC change permanently lost.
           changeAddress: useActualAddresses ? (userSegwitAddress || userTaprootAddress) : 'p2wpkh:0',
           alkanesChangeAddress: useActualAddresses ? userTaprootAddress : 'p2tr:0',
           autoConfirm: false,
@@ -205,6 +216,7 @@ export function useWrapMutation() {
           mineEnabled: false,
           ordinalsStrategy: 'exclude' as const,
           protectTaproot: Boolean(userSegwitAddress && userTaprootAddress),
+          paymentUtxos,
         });
 
         console.log('[WRAP] Execute result:', result);

@@ -111,7 +111,7 @@ export interface LimitOrderParams {
 }
 
 export function useLimitOrderMutation() {
-  const { account, network, isConnected, signTaprootPsbt, signSegwitPsbt, walletType } = useWallet();
+  const { account, network, isConnected, signTaprootPsbt, signSegwitPsbt, walletType, browserWallet } = useWallet();
   const provider = useSandshrewProvider();
   const { controls: devnetControls } = useDevnet();
   const queryClient = useQueryClient();
@@ -124,6 +124,11 @@ export function useLimitOrderMutation() {
 
       // Validation
       if (!isConnected) throw new Error('Wallet not connected');
+      // Ensure browser wallet session is active before building PSBT
+      if (walletType === 'browser') {
+        const { ensureWalletSession } = await import('@/lib/wallet/browserWalletSigning');
+        await ensureWalletSession();
+      }
       if (!provider) throw new Error('Provider not available');
       if (!provider.walletIsLoaded()) {
         throw new Error('Provider wallet not loaded. Please reconnect your wallet.');
@@ -192,6 +197,7 @@ export function useLimitOrderMutation() {
       console.log('[LimitOrder] To addresses:', toAddresses);
 
       try {
+
         const result = await provider.alkanesExecuteTyped({
           inputRequirements,
           protostones: protostone,
@@ -201,7 +207,7 @@ export function useLimitOrderMutation() {
           toAddresses,
           changeAddress: changeAddr,
           alkanesChangeAddress: alkanesChangeAddr,
-          ordinalsStrategy: 'burn',
+          ordinalsStrategy: 'exclude',
         });
 
         console.log('[LimitOrder] Execute result:', JSON.stringify(result, null, 2));

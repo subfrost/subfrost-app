@@ -95,7 +95,7 @@ export type WrapSwapTransactionData = {
 // ---------------------------------------------------------------------------
 
 export function useWrapSwapMutation() {
-  const { account, network, isConnected, signTaprootPsbt, signSegwitPsbt, walletType } = useWallet();
+  const { account, network, isConnected, signTaprootPsbt, signSegwitPsbt, walletType, browserWallet } = useWallet();
   const provider = useSandshrewProvider();
   const queryClient = useQueryClient();
   const { requestConfirmation } = useTransactionConfirm();
@@ -116,7 +116,13 @@ export function useWrapSwapMutation() {
       console.log('[WrapSwap] wrapFee:', wrapFee);
 
       if (!isConnected) throw new Error('Wallet not connected');
+      // Ensure browser wallet session is active before building PSBT
+      if (walletType === 'browser') {
+        const { ensureWalletSession } = await import('@/lib/wallet/browserWalletSigning');
+        await ensureWalletSession();
+      }
       if (!provider) throw new Error('Provider not available');
+
 
       // ========================================================================
       // Step 1: Get addresses and validate

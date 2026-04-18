@@ -55,7 +55,7 @@ export type UnwrapTransactionBaseData = {
 };
 
 export function useUnwrapMutation() {
-  const { account, network, isConnected, signSegwitPsbt, signTaprootPsbt, walletType } = useWallet();
+  const { account, network, isConnected, signSegwitPsbt, signTaprootPsbt, walletType, browserWallet } = useWallet();
   const provider = useSandshrewProvider();
   const queryClient = useQueryClient();
   const { requestConfirmation } = useTransactionConfirm();
@@ -64,6 +64,11 @@ export function useUnwrapMutation() {
   return useMutation({
     mutationFn: async (unwrapData: UnwrapTransactionBaseData) => {
       if (!isConnected) throw new Error('Wallet not connected');
+      // Ensure browser wallet session is active before building PSBT
+      if (walletType === 'browser') {
+        const { ensureWalletSession } = await import('@/lib/wallet/browserWalletSigning');
+        await ensureWalletSession();
+      }
       if (!provider) throw new Error('Provider not available');
 
       // Get addresses - use actual addresses instead of SDK descriptors
@@ -144,6 +149,7 @@ export function useUnwrapMutation() {
       console.log('[useUnwrapMutation] From addresses:', fromAddresses, '(browser:', isBrowserWallet, ')');
       console.log('[useUnwrapMutation] To addresses:', toAddresses);
       console.log('[useUnwrapMutation] Change address:', changeAddr);
+
 
       const result = await provider.alkanesExecuteTyped({
         toAddresses,
