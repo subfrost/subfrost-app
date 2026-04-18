@@ -342,9 +342,13 @@ export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
 
   // Debug: log wallet state for balance queries
 
+  // Enriched lua (balances.lua) disabled on all networks.
+  // btcFast + alkaneBalances cover all display needs.
+  // Lua provided spendable/assets UTXO categorization — no longer shown.
   return queryOptions({
     queryKey: queryKeys.account.enrichedWallet(deps.network, addressKey),
     enabled:
+      false &&
       deps.isInitialized &&
       !!deps.provider &&
       !!deps.account &&
