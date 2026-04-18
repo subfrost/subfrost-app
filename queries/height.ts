@@ -99,23 +99,35 @@ export function espoHeightQueryOptions(network: string, provider?: WebProvider |
 // HeightPoller component
 // ---------------------------------------------------------------------------
 
+const HEIGHT_STORAGE_KEY = 'subfrost_last_block_height';
+
 export function HeightPoller({ network }: { network: string }) {
   const queryClient = useQueryClient();
-  const prevHeight = useRef<number | null>(null);
+  const storedHeight = typeof window !== 'undefined'
+    ? parseInt(localStorage.getItem(HEIGHT_STORAGE_KEY) || '0', 10) || null
+    : null;
+  const prevHeight = useRef<number | null>(storedHeight);
   const { provider } = useAlkanesSDK();
 
   const { data: height } = useQuery(espoHeightQueryOptions(network, provider));
 
   useEffect(() => {
-    if (height == null) return;
+    if (height == null || height === 0) return; // height 0 = RPC error, not real
 
-    // First mount — record the height and trigger a single invalidation to ensure
-    // balance queries that may have started before HeightPoller mounted get a
-    // fresh fetch. This fixes the case where initial balance fetch returns empty
-    // data and nothing triggers a retry until the next block.
-    if (prevHeight.current === null) {
+    // First poll result — compare with stored height from localStorage.
+    // If height hasn't changed since last visit, skip initial invalidation
+    // to avoid duplicate queries (queries already running from mount).
+    if (prevHeight.current === null || prevHeight.current === storedHeight) {
+      if (prevHeight.current !== null && height <= prevHeight.current) {
+        // Same or lower height — no new block, just record and skip
+        console.log(`[HeightPoller] Initial height: ${height} (stored: ${prevHeight.current}), skipping invalidation`);
+        prevHeight.current = height;
+        return;
+      }
+      // Either first time ever (null) or new block since last visit
+      console.log(`[HeightPoller] Initial height: ${height} (stored: ${prevHeight.current}), invalidating`);
       prevHeight.current = height;
-      console.log(`[HeightPoller] Initial height: ${height}, triggering first invalidation`);
+      if (typeof window !== 'undefined') localStorage.setItem(HEIGHT_STORAGE_KEY, String(height));
       queryClient.invalidateQueries({
         predicate: (query) => {
           const key = query.queryKey;
@@ -137,6 +149,7 @@ export function HeightPoller({ network }: { network: string }) {
         `[HeightPoller] Height changed ${prevHeight.current} → ${height}, invalidating queries`,
       );
       prevHeight.current = height;
+      if (typeof window !== 'undefined') localStorage.setItem(HEIGHT_STORAGE_KEY, String(height));
 
       queryClient.invalidateQueries({
         predicate: (query) => {
