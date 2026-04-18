@@ -22,7 +22,7 @@ export default function AlkanesBalancesCard({ onSendAlkane }: AlkanesBalancesCar
   const { network } = useWallet() as any;
   const { bitcoinPrice } = useAlkanesSDK();
   const { t } = useTranslation();
-  const { balances, isLoading, error, refresh } = useEnrichedWalletData();
+  const { balances, isAlkanesLoading, error, refreshAlkanes } = useEnrichedWalletData();
   const { data: poolsData } = usePools();
   const { data: positionMeta } = usePositionMetadata(balances.alkanes);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -71,7 +71,7 @@ export default function AlkanesBalancesCard({ onSendAlkane }: AlkanesBalancesCar
     setIsRefreshing(true);
     try {
       await Promise.all([
-        refresh(),
+        refreshAlkanes(),
         new Promise(resolve => setTimeout(resolve, 500))
       ]);
     } finally {
@@ -79,7 +79,7 @@ export default function AlkanesBalancesCard({ onSendAlkane }: AlkanesBalancesCar
     }
   };
 
-  const isLoadingData = isLoading || isRefreshing;
+  const isLoadingData = isAlkanesLoading || isRefreshing;
 
   // Auto-retry when balances loaded but alkanes are empty — catches cases where
   // the alkane-balances API was slow or timed out on the initial fetch.
@@ -97,7 +97,7 @@ export default function AlkanesBalancesCard({ onSendAlkane }: AlkanesBalancesCar
 
   useEffect(() => {
     // Only retry when: not loading, alkanes are empty, and we haven't exhausted retries
-    if (isLoading || balances.alkanes.length > 0 || retryCountRef.current >= MAX_AUTO_RETRIES) {
+    if (isAlkanesLoading || balances.alkanes.length > 0 || retryCountRef.current >= MAX_AUTO_RETRIES) {
       return;
     }
 
@@ -112,7 +112,7 @@ export default function AlkanesBalancesCard({ onSendAlkane }: AlkanesBalancesCar
     }, delay);
 
     return () => clearTimeout(timer);
-  }, [balances.alkanes.length, isLoading]);
+  }, [balances.alkanes.length, isAlkanesLoading]);
 
   const isLpToken = (alkane: { symbol: string; name: string; alkaneId?: string }) =>
     /\bLP\b/i.test(alkane.symbol) || /\bLP\b/i.test(alkane.name) || (alkane.alkaneId ? poolMap.has(alkane.alkaneId) : false);
@@ -179,7 +179,7 @@ export default function AlkanesBalancesCard({ onSendAlkane }: AlkanesBalancesCar
         <div className="flex flex-col items-center justify-center py-12">
           <div className="text-red-400 mb-4">{error}</div>
           <button
-            onClick={refresh}
+            onClick={refreshAlkanes}
             className="px-4 py-2 rounded-lg bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white"
           >
             {t('balances.tryAgain')}

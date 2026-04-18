@@ -215,6 +215,117 @@ function mapToObject(value: any): any {
 }
 
 
+// ---------------------------------------------------------------------------
+// Fast BTC balance — wallet API first, esplora fallback (no lua)
+// Browser wallets (UniSat, OKX) return balance instantly from their own state.
+// For SDK/keystore wallets, falls back to esplora address stats (~200ms).
+// ---------------------------------------------------------------------------
+
+interface BtcBalanceFastDeps {
+  account: any;
+  isConnected: boolean;
+  network: string;
+  walletType: string | null;
+}
+
+export interface BtcBalanceFast {
+  p2wpkh: number;
+  p2tr: number;
+  total: number;
+  pendingIn: number;
+  pendingOut: number;
+}
+
+async function fetchBalanceFromWalletApi(): Promise<BtcBalanceFast | null> {
+  // UniSat: getBitcoinUtxos() returns only clean/spendable UTXOs (no inscriptions/runes).
+  // Sum their satoshis = actual spendable balance. Same call used in useSwapMutation.
+  const unisat = (window as any).unisat;
+  if (unisat?.getBitcoinUtxos) {
+    try {
+      const utxos = await unisat.getBitcoinUtxos();
+      if (Array.isArray(utxos)) {
+        const spendable = utxos.reduce((sum: number, u: any) => sum + (u.satoshis || 0), 0);
+        return { p2wpkh: 0, p2tr: spendable, total: spendable, pendingIn: 0, pendingOut: 0 };
+      }
+    } catch { /* fall through */ }
+  }
+
+  // OKX: getBalance() → { confirmed, unconfirmed, total }
+  const okx = (window as any).okxwallet?.bitcoin;
+  if (okx?.getBalance) {
+    try {
+      const bal = await okx.getBalance();
+      if (bal && typeof bal.confirmed === 'number') {
+        return { p2wpkh: 0, p2tr: bal.confirmed, total: bal.confirmed, pendingIn: Math.max(0, bal.unconfirmed || 0), pendingOut: 0 };
+      }
+    } catch { /* fall through */ }
+  }
+
+  return null;
+}
+
+async function fetchAddressBalance(rpcPath: string, address: string) {
+  // Use esplora_address::utxo (proven working in codebase) and sum values
+  const response = await fetch(rpcPath, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    signal: AbortSignal.timeout(5000),
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      method: 'esplora_address::utxo',
+      params: [address],
+      id: 1,
+    }),
+  });
+  const json = await response.json();
+  const utxos = json.result;
+  if (!Array.isArray(utxos)) return 0;
+  return utxos.reduce((sum: number, u: any) => sum + (u.value || 0), 0);
+}
+
+export function btcBalanceFastQueryOptions(deps: BtcBalanceFastDeps) {
+  const addresses: string[] = [];
+  if (deps.account?.nativeSegwit?.address) addresses.push(deps.account.nativeSegwit.address);
+  if (deps.account?.taproot?.address) addresses.push(deps.account.taproot.address);
+  const addressKey = addresses.sort().join(',');
+
+  const isLocal = ['devnet', 'regtest-local', 'qubitcoin-regtest'].includes(deps.network);
+
+  return queryOptions<BtcBalanceFast>({
+    queryKey: queryKeys.account.btcBalanceFast(deps.network, addressKey, deps.walletType),
+    enabled: !!deps.account && deps.isConnected && addresses.length > 0,
+    staleTime: isLocal ? 2_000 : 30_000,
+    refetchOnMount: true,
+    retry: 2,
+    queryFn: async () => {
+      // Browser wallet: get balance directly from wallet API (instant)
+      if (deps.walletType === 'browser' && typeof window !== 'undefined') {
+        const walletBal = await fetchBalanceFromWalletApi();
+        if (walletBal) return walletBal;
+      }
+
+      // Fallback: esplora UTXOs
+      const rpcPath = deps.network === 'devnet'
+        ? 'http://localhost:18888'
+        : `/api/rpc/${deps.network || 'mainnet'}`;
+
+      const results = await Promise.all(addresses.map(addr => fetchAddressBalance(rpcPath, addr)));
+
+      let p2wpkh = 0, p2tr = 0;
+      for (let i = 0; i < addresses.length; i++) {
+        if (addresses[i] === deps.account.nativeSegwit?.address) p2wpkh = results[i];
+        if (addresses[i] === deps.account.taproot?.address) p2tr = results[i];
+      }
+
+      return { p2wpkh, p2tr, total: p2wpkh + p2tr, pendingIn: 0, pendingOut: 0 };
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Enriched wallet data (full UTXO details via lua — slower, background)
+// ---------------------------------------------------------------------------
+
 interface EnrichedWalletDeps {
   provider: WebProvider | null;
   isInitialized: boolean;
@@ -242,9 +353,8 @@ export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
     // On local networks, short staleTime + polling for fast balance updates after operations.
     staleTime: (deps.network === 'devnet' || deps.network === 'regtest-local' || deps.network === 'qubitcoin-regtest') ? 2_000 : 30_000,
     refetchInterval: (deps.network === 'devnet' || deps.network === 'regtest-local' || deps.network === 'qubitcoin-regtest') ? 5_000 : undefined,
-    // Always refetch when the dashboard mounts (navigating back to wallet page)
-    refetchOnMount: 'always',
-    // Refetch when user returns to the tab
+    // Refetch on mount only if stale (respects staleTime — prevents 6+ RPC calls on tab switch)
+    refetchOnMount: true,
     refetchOnWindowFocus: true,
     // Retry up to 3 times with exponential backoff — covers transient API failures
     // that previously caused empty balance display
@@ -532,7 +642,7 @@ export function alkaneBalanceQueryOptions(deps: AlkaneBalanceDeps) {
     // See faucet-e2e.test.ts which proves the queryFn itself works correctly —
     // the issue was purely React Query caching, not the data fetching logic.
     staleTime: (deps.network === 'devnet' || deps.network === 'regtest-local' || deps.network === 'qubitcoin-regtest') ? 2_000 : 30_000,
-    refetchOnMount: 'always' as const,
+    refetchOnMount: true,
     refetchOnWindowFocus: true,
     refetchInterval: (deps.network === 'devnet' || deps.network === 'regtest-local' || deps.network === 'qubitcoin-regtest') ? 5_000 : undefined,
     retry: 3,
@@ -541,50 +651,54 @@ export function alkaneBalanceQueryOptions(deps: AlkaneBalanceDeps) {
       const provider = deps.provider!;
       const alkaneMap = new Map<string, any>();
 
-      for (const address of addresses) {
-        try {
-          let items: any[] = [];
-          if (deps.network === 'regtest-local' || deps.network === 'devnet') {
-            items = await fetchAlkaneBalancesViaProtobuf('http://localhost:18888', address);
-          } else if (deps.network === 'qubitcoin-regtest') {
-            items = await fetchAlkaneBalancesViaProtobuf(`${window.location.origin}/api/rpc/qubitcoin-regtest`, address);
+      // Fetch all addresses in parallel (was sequential for...of loop)
+      const fetchForAddress = async (address: string): Promise<any[]> => {
+        if (deps.network === 'regtest-local' || deps.network === 'devnet') {
+          return fetchAlkaneBalancesViaProtobuf('http://localhost:18888', address);
+        } else if (deps.network === 'qubitcoin-regtest') {
+          return fetchAlkaneBalancesViaProtobuf(`${window.location.origin}/api/rpc/qubitcoin-regtest`, address);
+        } else {
+          const result = await (provider as any).dataApiGetAlkanesByAddress(address);
+          return result?.data || [];
+        }
+      };
+
+      const allResults = await Promise.all(
+        addresses.map(addr => fetchForAddress(addr).catch(err => {
+          console.error(`[alkaneBalanceQuery] Failed for ${addr}:`, err);
+          return [] as any[];
+        }))
+      );
+
+      for (const items of allResults) {
+        for (const item of items) {
+          const block = item.alkaneId?.block;
+          const tx = item.alkaneId?.tx;
+          if (block == null || tx == null) continue;
+
+          const alkaneId = `${block}:${tx}`;
+          const balance = String(item.balance || '0');
+          const knownInfo = KNOWN_TOKENS[alkaneId];
+
+          if (!alkaneMap.has(alkaneId)) {
+            alkaneMap.set(alkaneId, {
+              alkaneId,
+              name: item.name || knownInfo?.name || `Token ${alkaneId}`,
+              symbol: item.symbol || knownInfo?.symbol || '',
+              balance,
+              decimals: knownInfo?.decimals ?? 8,
+              logo: item.tokenImage || undefined,
+              priceUsd: item.priceUsd || item.busdPoolPriceInUsd || undefined,
+              priceInSatoshi: item.priceInSatoshi ? Number(item.priceInSatoshi) : undefined,
+            });
           } else {
-            const result = await (provider as any).dataApiGetAlkanesByAddress(address);
-            items = result?.data || [];
-          }
-
-          for (const item of items) {
-            const block = item.alkaneId?.block;
-            const tx = item.alkaneId?.tx;
-            if (block == null || tx == null) continue;
-
-            const alkaneId = `${block}:${tx}`;
-            const balance = String(item.balance || '0');
-            const knownInfo = KNOWN_TOKENS[alkaneId];
-
-            if (!alkaneMap.has(alkaneId)) {
-              alkaneMap.set(alkaneId, {
-                alkaneId,
-                name: item.name || knownInfo?.name || `Token ${alkaneId}`,
-                symbol: item.symbol || knownInfo?.symbol || '',
-                balance,
-                decimals: knownInfo?.decimals ?? 8,
-                logo: item.tokenImage || undefined,
-                priceUsd: item.priceUsd || item.busdPoolPriceInUsd || undefined,
-                priceInSatoshi: item.priceInSatoshi ? Number(item.priceInSatoshi) : undefined,
-              });
-            } else {
-              const existing = alkaneMap.get(alkaneId)!;
-              try {
-                existing.balance = (BigInt(existing.balance) + BigInt(balance)).toString();
-              } catch {
-                existing.balance = String(Number(existing.balance || 0) + Number(balance));
-              }
+            const existing = alkaneMap.get(alkaneId)!;
+            try {
+              existing.balance = (BigInt(existing.balance) + BigInt(balance)).toString();
+            } catch {
+              existing.balance = String(Number(existing.balance || 0) + Number(balance));
             }
           }
-        } catch (error) {
-          console.error(`[alkaneBalanceQuery] Failed for ${address}:`, error);
-          throw error;
         }
       }
 
@@ -641,9 +755,11 @@ export function sellableCurrenciesQueryOptions(deps: SellableCurrenciesDeps) {
     ? deps.tokensWithPools.map((t) => t.id).sort().join(',')
     : '';
 
+  const isLocal = ['devnet', 'regtest-local', 'qubitcoin-regtest'].includes(deps.network);
   return queryOptions<CurrencyPriceInfoResponse[]>({
     queryKey: queryKeys.account.sellableCurrencies(deps.network, deps.walletAddress || '', tokensKey),
     enabled: deps.isInitialized && !!deps.provider && !!deps.walletAddress,
+    staleTime: isLocal ? 2_000 : 30_000,
     queryFn: async (): Promise<CurrencyPriceInfoResponse[]> => {
       if (!deps.walletAddress || !deps.provider) return [];
 

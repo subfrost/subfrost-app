@@ -91,7 +91,7 @@ export default function Header() {
   } = useWallet() as any;
   const { theme } = useTheme();
   const { t } = useTranslation();
-  const { balances, isLoading: isBalanceLoading } = useEnrichedWalletData();
+  const { btcFast, isBtcFastLoading: isBalanceLoading } = useEnrichedWalletData();
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
   const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
@@ -101,9 +101,9 @@ export default function Header() {
   const truncate = (a: string) => (a ? `${a.slice(0, 6)}…${a.slice(-4)}` : "");
   const walletConnected =
     typeof connected === "boolean" ? connected : isConnected;
-  const btcBalance = balances?.bitcoin?.total
-    ? (balances.bitcoin.total / 1e8).toFixed(5)
-    : "0.00000";
+  const isDualAddress = !!account?.nativeSegwit?.address && !!account?.taproot?.address;
+  const spendableSats = isDualAddress ? (btcFast?.p2wpkh ?? 0) : (btcFast?.total ?? 0);
+  const btcBalance = spendableSats > 0 ? (spendableSats / 1e8).toFixed(5) : "0.00000";
 
   const copyToClipboard = useCallback(async (text: string, type: string) => {
     await navigator.clipboard.writeText(text);
