@@ -291,7 +291,7 @@ export default function AlkanesBalancesCard({ onSendAlkane }: AlkanesBalancesCar
             })}
           </div>
           ) : (
-          <div className="space-y-2 overflow-y-auto flex-1 pr-1">
+          <div className="space-y-2 overflow-y-auto flex-1 no-scrollbar">
             {filtered.map((alkane) => {
               const isExpanded = expandedAlkaneId === alkane.alkaneId;
               return (
