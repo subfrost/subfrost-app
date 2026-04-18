@@ -293,7 +293,7 @@ export function btcBalanceFastQueryOptions(deps: BtcBalanceFastDeps) {
   return queryOptions<BtcBalanceFast>({
     queryKey: queryKeys.account.btcBalanceFast(deps.network, addressKey, deps.walletType),
     enabled: !!deps.account && deps.isConnected && addresses.length > 0,
-    staleTime: isLocal ? 2_000 : 30_000,
+    staleTime: isLocal ? 2_000 : Infinity,
     refetchOnMount: true,
     retry: 3,
     retryDelay: (attempt: number) => Math.min(1000 * 2 ** attempt, 5000),
@@ -645,9 +645,11 @@ export function alkaneBalanceQueryOptions(deps: AlkaneBalanceDeps) {
     // within seconds. DO NOT increase devnet staleTime or remove polling.
     // See faucet-e2e.test.ts which proves the queryFn itself works correctly —
     // the issue was purely React Query caching, not the data fetching logic.
-    staleTime: (deps.network === 'devnet' || deps.network === 'regtest-local' || deps.network === 'qubitcoin-regtest') ? 2_000 : 30_000,
+    // On mainnet: Infinity staleTime — only HeightPoller invalidation triggers refetch.
+    // On local networks: short staleTime + polling for fast updates after faucet/wrap.
+    staleTime: (deps.network === 'devnet' || deps.network === 'regtest-local' || deps.network === 'qubitcoin-regtest') ? 2_000 : Infinity,
     refetchOnMount: true,
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: false,
     refetchInterval: (deps.network === 'devnet' || deps.network === 'regtest-local' || deps.network === 'qubitcoin-regtest') ? 5_000 : undefined,
     retry: 3,
     retryDelay: (attempt: number) => Math.min(1000 * 2 ** attempt, 10000),
