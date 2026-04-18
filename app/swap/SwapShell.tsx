@@ -86,17 +86,17 @@ const MarketsSkeleton = () => (
   </div>
 );
 
-const SWAP_SESSION_KEY = 'subfrost_swap_pair';
+const SWAP_PAIR_KEY = 'subfrost_swap_pair';
 
-function saveSwapPairToSession(from: TokenMeta, to: TokenMeta) {
+function saveSwapPair(from: TokenMeta, to: TokenMeta) {
   try {
-    sessionStorage.setItem(SWAP_SESSION_KEY, JSON.stringify({ from, to }));
+    localStorage.setItem(SWAP_PAIR_KEY, JSON.stringify({ from, to }));
   } catch { /* ignore quota/private mode errors */ }
 }
 
-function loadSwapPairFromSession(): { from: TokenMeta; to: TokenMeta } | null {
+function loadSwapPair(): { from: TokenMeta; to: TokenMeta } | null {
   try {
-    const raw = sessionStorage.getItem(SWAP_SESSION_KEY);
+    const raw = localStorage.getItem(SWAP_PAIR_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (parsed?.from?.id && parsed?.to?.id) return parsed;
@@ -340,6 +340,19 @@ export default function SwapShell() {
   //   Phase 2 (refined): Once volume stats arrive, re-pick trending if we used the TVL fallback.
   const trendingPoolInitializedRef = useRef(false);
   const usedSessionRef = useRef(false);
+
+  // Immediately restore token selection from session — don't wait for pools.
+  // This makes selectors show FROM/TO instantly on page reload.
+  const sessionRestoredRef = useRef(false);
+  if (!sessionRestoredRef.current && !fromToken && !toToken) {
+    const saved = loadSwapPair();
+    if (saved) {
+      setFromToken(saved.from);
+      setToToken(saved.to);
+      sessionRestoredRef.current = true;
+    }
+  }
+
   useEffect(() => {
     if (trendingPoolInitializedRef.current) return;
 
@@ -347,7 +360,7 @@ export default function SwapShell() {
     if (isLoadingPools || markets.length === 0) return;
 
     // Try restoring from session first (user previously selected a pair)
-    const saved = loadSwapPairFromSession();
+    const saved = loadSwapPair();
     if (saved) {
       // Find the matching pool in current markets so selectedPool has full data
       const matchingPool = markets.find(
@@ -405,7 +418,7 @@ export default function SwapShell() {
   // Only save after initialization is complete to avoid overwriting with undefined.
   useEffect(() => {
     if (trendingPoolInitializedRef.current && fromToken && toToken) {
-      saveSwapPairToSession(fromToken, toToken);
+      saveSwapPair(fromToken, toToken);
     }
   }, [fromToken, toToken]);
 
