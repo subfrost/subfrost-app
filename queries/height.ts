@@ -134,6 +134,8 @@ export function HeightPoller({ network }: { network: string }) {
           if (!Array.isArray(key)) return true;
           if (key[0] === 'height') return false;
           if (key[0] === 'frbtc-premium') return false;
+          // Token names/symbols are immutable — no need to refetch on new block
+          if (key[0] === 'token-display') return false;
           return true;
         },
       });
@@ -160,6 +162,8 @@ export function HeightPoller({ network }: { network: string }) {
           // frBTC premium is a contract config that rarely changes — no need
           // to re-simulate on every block.
           if (key[0] === 'frbtc-premium') return false;
+          // Token names/symbols are immutable — no need to refetch on new block
+          if (key[0] === 'token-display') return false;
           return true;
         },
       });

@@ -237,6 +237,9 @@ export function tokenDisplayMapQueryOptions(
   return queryOptions<Record<string, TokenDisplay>>({
     queryKey: queryKeys.market.tokenDisplayMap(network, sortedKey),
     enabled: unique.length > 0 && !!provider,
+    // Token names/symbols never change — fetch once, cache forever
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
     queryFn: async () => {
       const map: Record<string, TokenDisplay> = {};
       const toFetch: string[] = [];
