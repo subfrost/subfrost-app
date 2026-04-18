@@ -91,7 +91,7 @@ export default function Header() {
   } = useWallet() as any;
   const { theme } = useTheme();
   const { t } = useTranslation();
-  const { btcFast, isBtcFastLoading: isBalanceLoading } = useEnrichedWalletData();
+  const { balances, btcFast, isBtcFastLoading: isBalanceLoading } = useEnrichedWalletData();
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
   const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
@@ -102,7 +102,10 @@ export default function Header() {
   const walletConnected =
     typeof connected === "boolean" ? connected : isConnected;
   const isDualAddress = !!account?.nativeSegwit?.address && !!account?.taproot?.address;
-  const spendableSats = isDualAddress ? (btcFast?.p2wpkh ?? 0) : (btcFast?.total ?? 0);
+  const hasFast = btcFast && btcFast.total > 0;
+  const fastSats = isDualAddress ? (btcFast?.p2wpkh ?? 0) : (btcFast?.total ?? 0);
+  const enrichedSats = isDualAddress ? (balances?.bitcoin?.p2wpkh ?? 0) : (balances?.bitcoin?.total ?? 0);
+  const spendableSats = hasFast ? fastSats : enrichedSats;
   const btcBalance = spendableSats > 0 ? (spendableSats / 1e8).toFixed(5) : "0.00000";
 
   const copyToClipboard = useCallback(async (text: string, type: string) => {

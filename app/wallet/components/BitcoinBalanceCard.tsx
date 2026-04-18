@@ -11,7 +11,7 @@ export default function BitcoinBalanceCard() {
   const { account } = useWallet() as any;
   const { bitcoinPrice } = useAlkanesSDK();
   const { t } = useTranslation();
-  const { btcFast, isBtcFastLoading, error, refresh } = useEnrichedWalletData();
+  const { balances, btcFast, isBtcFastLoading, isBtcLoading, error, refresh } = useEnrichedWalletData();
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const handleRefresh = async () => {
@@ -36,16 +36,37 @@ export default function BitcoinBalanceCard() {
     return (btc * bitcoinPrice.usd).toFixed(2);
   };
 
-  const isLoadingData = isBtcFastLoading || isRefreshing;
+  // btcFast: wallet API (instant) or esplora. Fallback to enriched lua data.
+  const hasFast = btcFast && btcFast.total > 0;
+  const hasEnriched = balances.bitcoin.total > 0;
+  // No data from either source = still loading (even if individual isLoading is false)
+  const isLoadingData = (!hasFast && !hasEnriched) || isRefreshing;
 
-  const p2wpkh = btcFast?.p2wpkh ?? 0;
-  const p2tr = btcFast?.p2tr ?? 0;
-  const pendingIn = btcFast?.pendingIn ?? 0;
-
-  // Dual-address wallets (Xverse, Leather, etc.): spendable = payment (segwit) address only.
-  // Single-address wallets (UniSat, OKX): spendable = getBitcoinUtxos() total (taproot).
   const isDualAddress = !!account?.nativeSegwit?.address && !!account?.taproot?.address;
-  const spendable = isDualAddress ? p2wpkh : (btcFast?.total ?? 0);
+
+  let spendable: number;
+  let p2wpkh: number;
+  let p2tr: number;
+  let pendingIn: number;
+
+  if (hasFast) {
+    // Wallet API / esplora — spendable balance
+    p2wpkh = btcFast.p2wpkh;
+    p2tr = btcFast.p2tr;
+    spendable = isDualAddress ? p2wpkh : btcFast.total;
+    pendingIn = btcFast.pendingIn;
+  } else if (hasEnriched) {
+    // Lua enriched — fallback
+    p2wpkh = balances.bitcoin.p2wpkh;
+    p2tr = balances.bitcoin.p2tr;
+    spendable = isDualAddress ? p2wpkh : balances.bitcoin.total;
+    pendingIn = balances.bitcoin.pendingTotal;
+  } else {
+    p2wpkh = 0;
+    p2tr = 0;
+    spendable = 0;
+    pendingIn = 0;
+  }
 
   const totalBTC = formatBTC(spendable);
   const totalUSD = bitcoinPrice ? formatUSD(spendable) : null;

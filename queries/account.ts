@@ -242,12 +242,19 @@ async function fetchBalanceFromWalletApi(): Promise<BtcBalanceFast | null> {
   const unisat = (window as any).unisat;
   if (unisat?.getBitcoinUtxos) {
     try {
+      // Ensure dapp is connected — auto-reconnect from cache doesn't activate the session.
+      // getAccounts() is passive; if empty, requestAccounts() re-establishes without popup
+      // (UniSat remembers previously authorized dapps).
+      const accounts = unisat.getAccounts ? await unisat.getAccounts() : [];
+      if (!accounts?.length && unisat.requestAccounts) {
+        await unisat.requestAccounts();
+      }
       const utxos = await unisat.getBitcoinUtxos();
-      if (Array.isArray(utxos)) {
+      if (Array.isArray(utxos) && utxos.length > 0) {
         const spendable = utxos.reduce((sum: number, u: any) => sum + (u.satoshis || 0), 0);
         return { p2wpkh: 0, p2tr: spendable, total: spendable, pendingIn: 0, pendingOut: 0 };
       }
-    } catch { /* fall through */ }
+    } catch { /* fall through to esplora */ }
   }
 
   // OKX: getBalance() → { confirmed, unconfirmed, total }
@@ -296,7 +303,8 @@ export function btcBalanceFastQueryOptions(deps: BtcBalanceFastDeps) {
     enabled: !!deps.account && deps.isConnected && addresses.length > 0,
     staleTime: isLocal ? 2_000 : 30_000,
     refetchOnMount: true,
-    retry: 2,
+    retry: 3,
+    retryDelay: (attempt: number) => Math.min(1000 * 2 ** attempt, 5000),
     queryFn: async () => {
       // Browser wallet: get balance directly from wallet API (instant)
       if (deps.walletType === 'browser' && typeof window !== 'undefined') {
