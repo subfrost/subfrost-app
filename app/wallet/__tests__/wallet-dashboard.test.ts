@@ -22,8 +22,10 @@ function readSource(filePath: string): string {
 // ---------------------------------------------------------------------------
 // Wallet page.tsx
 // ---------------------------------------------------------------------------
-describe('WalletDashboardPage (page.tsx)', () => {
-  const src = readSource(path.join(WALLET_DIR, 'page.tsx'));
+describe('WalletDashboardContent (WalletDashboardContent.tsx)', () => {
+  // page.tsx is a tiny Suspense wrapper (required by Next.js 16 prerender).
+  // The actual dashboard code lives in WalletDashboardContent.tsx — read that.
+  const src = readSource(path.join(WALLET_DIR, 'WalletDashboardContent.tsx'));
 
   it('imports SendModal component', () => {
     expect(src).toMatch(/import\s+SendModal\s+from\s+['"]\.\/components\/SendModal['"]/);
@@ -149,7 +151,12 @@ describe('AlkanesBalancesCard', () => {
   });
 
   it('destructures balances, isLoading, error, refresh from useEnrichedWalletData', () => {
-    expect(src).toMatch(/\{\s*balances\s*,\s*isLoading\s*,\s*error\s*,\s*refresh\s*\}\s*=\s*useEnrichedWalletData\(\)/);
+    // The hook exposes separate loading flags (isBtcLoading / isAlkaneLoading);
+    // the component aliases the alkane flag to `isLoading` for brevity.
+    // Accept either the plain `isLoading` or the aliased `isAlkaneLoading: isLoading` form.
+    expect(src).toMatch(
+      /\{\s*balances\s*,\s*(?:isLoading|isAlkaneLoading\s*:\s*isLoading)\s*,\s*error\s*,\s*refresh\s*\}\s*=\s*useEnrichedWalletData\(\)/,
+    );
   });
 
   it('renders alkane list from balances.alkanes', () => {
@@ -577,7 +584,8 @@ describe('BalancesPanel', () => {
 // Cross-component integration patterns
 // ---------------------------------------------------------------------------
 describe('Cross-component integration patterns', () => {
-  const pageSrc = readSource(path.join(WALLET_DIR, 'page.tsx'));
+  // page.tsx is now a Suspense wrapper; dashboard logic is in WalletDashboardContent.
+  const pageSrc = readSource(path.join(WALLET_DIR, 'WalletDashboardContent.tsx'));
   const alkanesSrc = readSource(path.join(COMPONENTS_DIR, 'AlkanesBalancesCard.tsx'));
   const sendModalExists = fs.existsSync(path.join(COMPONENTS_DIR, 'SendModal.tsx'));
 
@@ -635,7 +643,7 @@ describe('Cross-component integration patterns', () => {
 
   it('all wallet-context-consuming components use the same useWallet import path', () => {
     const files = [
-      path.join(WALLET_DIR, 'page.tsx'),
+      path.join(WALLET_DIR, 'WalletDashboardContent.tsx'),
       path.join(COMPONENTS_DIR, 'AlkanesBalancesCard.tsx'),
       path.join(COMPONENTS_DIR, 'BitcoinBalanceCard.tsx'),
       path.join(COMPONENTS_DIR, 'TransactionHistory.tsx'),
