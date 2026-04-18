@@ -49,8 +49,25 @@ export async function ensureWalletSession(): Promise<void> {
     if (okx?.connect) {
       try { await okx.connect(); } catch { /* already connected */ }
     }
+  } else if (connectedId === 'xverse') {
+    const xverse = (window as any).XverseProviders?.BitcoinProvider;
+    if (xverse?.request) {
+      try {
+        // wallet_getAccount is the silent check (no popup if already authorized)
+        await xverse.request('wallet_getAccount', null);
+      } catch {
+        // Not authorized or method not supported — try legacy getAccounts
+        try {
+          await xverse.request('getAccounts', { purposes: ['ordinals', 'payment'] });
+        } catch { /* user denied or extension not ready */ }
+      }
+    }
+  } else if (connectedId === 'oyl') {
+    const oyl = (window as any).oyl;
+    if (oyl?.getAddresses) {
+      try { await oyl.getAddresses(); } catch { /* already connected */ }
+    }
   }
-  // Xverse, OYL — manage sessions internally via SDK adapters
 }
 
 /** Standard signing timeout (60 seconds) */
