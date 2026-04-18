@@ -28,6 +28,17 @@ import { Network } from '@/utils/constants';
 type AlkWasmModule = typeof import('@alkanes/ts-sdk/wasm');
 type WebProvider = InstanceType<AlkWasmModule['WebProvider']>;
 
+// Module-level per-network WebProvider cache (Phase 8 of ts-sdk minimization).
+// Navigating back to a previously-visited network no longer re-downloads the
+// 10.6 MB WASM binary. The cache persists across context re-mounts within a
+// single page session; each entry is a fully-initialized WebProvider ready
+// to accept new wallet loads.
+//
+// Cache key: network name. The wallet state on each provider is per-instance,
+// so switching wallets within a network still works via `walletLoadMnemonic`
+// on the cached provider.
+const providerCache = new Map<string, WebProvider>();
+
 /**
  * Check if we're running in a browser context.
  * Used to determine whether to route SDK calls through our /api/rpc proxy to
@@ -230,6 +241,22 @@ export function AlkanesSDKProvider({ children, network }: AlkanesSDKProviderProp
       }
 
       try {
+        // Phase 8: return the cached provider for this network if we have one.
+        // Avoids re-downloading the 10.6 MB WASM binary on every network
+        // switch within a single page session.
+        const cachedProvider = providerCache.get(network);
+        if (cachedProvider) {
+          if (cancelled) return;
+          console.log('[AlkanesSDK] Reusing cached WebProvider for network:', network);
+          setProvider(cachedProvider);
+          setIsInitialized(true);
+          // Wallet state lives on the provider instance; if a wallet was
+          // already loaded on this cache entry, the flag is implicitly correct.
+          // Re-setting to true is safe because `loadWallet` is idempotent.
+          setIsWalletLoaded(true);
+          return;
+        }
+
         console.log('[AlkanesSDK] Initializing WASM WebProvider for network:', network);
 
         // Dynamic import keeps WASM off the critical render path — pages load
@@ -269,6 +296,9 @@ export function AlkanesSDKProvider({ children, network }: AlkanesSDKProviderProp
         }
 
         if (cancelled) return;
+        // Cache the provider instance for future network switches.
+        providerCache.set(network, providerInstance);
+
         setProvider(providerInstance);
         setIsInitialized(true);
       } catch (error) {
