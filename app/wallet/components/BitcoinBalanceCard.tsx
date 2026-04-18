@@ -11,15 +11,15 @@ export default function BitcoinBalanceCard() {
   const { account } = useWallet() as any;
   const { bitcoinPrice } = useAlkanesSDK();
   const { t } = useTranslation();
-  const { balances, btcFast, isBtcFastLoading, isBtcLoading, error, refresh } = useEnrichedWalletData();
+  const { balances, btcFast, isBtcFastLoading, isBtcLoading, error, refreshBtcFast } = useEnrichedWalletData();
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
     try {
       await Promise.all([
-        refresh(),
-        new Promise(resolve => setTimeout(resolve, 500))
+        refreshBtcFast(),
+        new Promise(resolve => setTimeout(resolve, 300))
       ]);
     } finally {
       setIsRefreshing(false);
@@ -83,7 +83,7 @@ export default function BitcoinBalanceCard() {
         <div className="flex flex-col items-center justify-center py-12">
           <div className="text-red-400 mb-4">{error}</div>
           <button
-            onClick={refresh}
+            onClick={refreshBtcFast}
             className="px-4 py-2 rounded-lg bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white"
           >
             {t('balances.tryAgain')}

@@ -111,6 +111,7 @@ export interface EnrichedWalletData {
   error: string | null;
   refresh: () => Promise<void>;
   refreshAlkanes: () => Promise<void>;
+  refreshBtcFast: () => Promise<void>;
 }
 
 const EMPTY_BALANCES: WalletBalances = {
@@ -189,6 +190,10 @@ export function useEnrichedWalletData(): EnrichedWalletData {
     await alkaneQuery.refetch();
   }, [alkaneQuery.refetch]);
 
+  const refreshBtcFast = useCallback(async () => {
+    await btcFastQuery.refetch();
+  }, [btcFastQuery.refetch]);
+
   // Merge BTC data + alkane data into the unified WalletBalances shape.
   // Show alkanes even if btcQuery hasn't resolved yet (e.g. regtest-local
   // where enrichedBalances may fail but protobuf alkane query succeeds).
@@ -217,5 +222,6 @@ export function useEnrichedWalletData(): EnrichedWalletData {
         : null,
     refresh,
     refreshAlkanes,
+    refreshBtcFast,
   };
 }
