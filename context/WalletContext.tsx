@@ -54,11 +54,14 @@ import {
   // Browser wallet imports
   WalletConnector,
   ConnectedWallet,
-  BrowserWalletInfo,
   // Wallet adapter for signing
   createWalletAdapter,
   JsWalletAdapter,
 } from '@alkanes/ts-sdk';
+// BrowserWalletInfo sourced from the local type module (Phase 6 of
+// ts-sdk minimization). The shape must match the SDK's export byte-for-byte;
+// see types/browserWallet.ts for the drift-safety comment.
+import type { BrowserWalletInfo } from '@/types/browserWallet';
 import { BROWSER_WALLETS, getInstalledWallets, isWalletInstalled } from '@/constants/wallets';
 // PSBT patching is now handled by ts-sdk wallet adapters (adapter.ts)
 // import { patchTapInternalKeys } from '@/lib/psbt-patching';
