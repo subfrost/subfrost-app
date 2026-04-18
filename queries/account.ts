@@ -702,7 +702,19 @@ export function alkaneBalanceQueryOptions(deps: AlkaneBalanceDeps) {
         }
       }
 
-      return Array.from(alkaneMap.values());
+      // Sort: frBTC first, DIESEL second, then by USD value desc, then by block:tx
+      return Array.from(alkaneMap.values()).sort((a, b) => {
+        if (a.alkaneId === '32:0') return -1;
+        if (b.alkaneId === '32:0') return 1;
+        if (a.alkaneId === '2:0') return -1;
+        if (b.alkaneId === '2:0') return 1;
+        const aUsd = (a.priceUsd || 0) * Number(a.balance) / 1e8;
+        const bUsd = (b.priceUsd || 0) * Number(b.balance) / 1e8;
+        if (aUsd !== bUsd) return bUsd - aUsd;
+        const [aBlock, aTx] = a.alkaneId.split(':').map(Number);
+        const [bBlock, bTx] = b.alkaneId.split(':').map(Number);
+        return aBlock !== bBlock ? aBlock - bBlock : aTx - bTx;
+      });
     },
   });
 }

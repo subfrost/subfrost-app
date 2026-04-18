@@ -233,6 +233,7 @@ export default function AlkanesBalancesCard({ onSendAlkane }: AlkanesBalancesCar
           if (alkaneFilter === 'nfts') return isNft(a.balance) && !isPosition(a);
           return !isNft(a.balance) && !isPosition(a);
         });
+        // Token sort handled by query (frBTC → DIESEL → USD value → block:tx)
         if (alkaneFilter === 'positions') {
           filtered = [...filtered].sort((a, b) => {
             const aIsLp = isLpToken(a) ? 0 : 1;
