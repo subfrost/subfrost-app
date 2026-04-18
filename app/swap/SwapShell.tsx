@@ -11,7 +11,8 @@ import { useSwapQuotes } from "@/hooks/useSwapQuotes";
 import { useSwapMutation } from "@/hooks/useSwapMutation";
 import { useWallet } from "@/context/WalletContext";
 import { getConfig, getRpcUrl } from "@/utils/getConfig";
-import { useSellableCurrencies } from "@/hooks/useSellableCurrencies";
+// useSellableCurrencies removed — used alkanes_protorunesbyaddress (30s).
+// Now reuses walletBalances.alkanes from useEnrichedWalletData (~1s, already cached).
 import { useEnrichedWalletData } from "@/hooks/useEnrichedWalletData";
 import { useGlobalStore } from "@/stores/global";
 import { useFeeRate } from "@/hooks/useFeeRate";
@@ -232,6 +233,9 @@ export default function SwapShell() {
   const FRUSD_TOKEN_ID = (config as any).FRUSD_TOKEN_ID as string | undefined;
   const VOLBTC_POOL_ID = (config as any).DXBTC_NORMAL_POOL_ID as string | undefined;
 
+  // Wallet balances — single source for BTC + alkanes across swap page
+  const { balances: walletBalances, btcFast, isAlkanesLoading, refresh: refreshWalletData } = useEnrichedWalletData();
+
   // Protocol tokens that should always appear in the token selector
   const protocolTokens = useMemo(() => {
     const tokens: { id: string; symbol: string; name: string }[] = [];
@@ -241,8 +245,18 @@ export default function SwapShell() {
     return tokens;
   }, [FIRE_TOKEN_ID, FRUSD_TOKEN_ID, VOLBTC_POOL_ID]);
 
-  // User tokens (for FROM selector)
-  const { data: userCurrencies = [], isFetching: isFetchingUserCurrencies } = useSellableCurrencies(address);
+  // User tokens — reuse alkane balances from useEnrichedWalletData (already cached, ~1s).
+  // Previously used useSellableCurrencies → alkanes_protorunesbyaddress (30s).
+  const userCurrencies = useMemo(() => {
+    if (!walletBalances?.alkanes) return [];
+    return walletBalances.alkanes.map((alkane: any) => ({
+      id: alkane.alkaneId,
+      name: alkane.name,
+      symbol: alkane.symbol,
+      balance: alkane.balance,
+    }));
+  }, [walletBalances?.alkanes]);
+
   const idToUserCurrency = useMemo(() => {
     const map = new Map<string, any>();
     userCurrencies.forEach((c: any) => map.set(c.id, c));
@@ -696,12 +710,10 @@ export default function SwapShell() {
     return opts;
   }, [fromToken, poolTokenMap, FRBTC_ALKANE_ID, BUSD_ALKANE_ID, protocolTokens, userCurrencies, tokenNamesMap, baseTokenIds, markets, network]);
 
-  // Balances - use useEnrichedWalletData for all balances (BTC and alkanes)
-  // This is the same data source used by the Header for consistency
-  const { balances: walletBalances, isLoading: isLoadingWalletData, refresh: refreshWalletData } = useEnrichedWalletData();
-  // Use walletBalances.bitcoin.total for BTC balance (same as Header)
-  const btcBalanceSats = walletBalances?.bitcoin?.total ?? 0;
-  const isBalancesLoading = Boolean(isFetchingUserCurrencies || isLoadingWalletData);
+  // walletBalances already declared above via useEnrichedWalletData
+  // BTC balance from btcFast (instant) with enriched fallback
+  const btcBalanceSats = btcFast?.total ?? walletBalances?.bitcoin?.total ?? 0;
+  const isBalancesLoading = Boolean(isAlkanesLoading);
 
   // Build a map from alkane ID to balance from wallet data (more reliable than useSellableCurrencies)
   const walletAlkaneBalances = useMemo(() => {
