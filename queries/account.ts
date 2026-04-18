@@ -237,35 +237,38 @@ export interface BtcBalanceFast {
 }
 
 async function fetchBalanceFromWalletApi(): Promise<BtcBalanceFast | null> {
+  const connectedId = localStorage.getItem('subfrost_browser_wallet_id');
+
   // UniSat: getBitcoinUtxos() returns only clean/spendable UTXOs (no inscriptions/runes).
-  // Sum their satoshis = actual spendable balance. Same call used in useSwapMutation.
-  const unisat = (window as any).unisat;
-  if (unisat?.getBitcoinUtxos) {
-    try {
-      // Ensure dapp is connected — auto-reconnect from cache doesn't activate the session.
-      // getAccounts() is passive; if empty, requestAccounts() re-establishes without popup
-      // (UniSat remembers previously authorized dapps).
-      const accounts = unisat.getAccounts ? await unisat.getAccounts() : [];
-      if (!accounts?.length && unisat.requestAccounts) {
-        await unisat.requestAccounts();
-      }
-      const utxos = await unisat.getBitcoinUtxos();
-      if (Array.isArray(utxos) && utxos.length > 0) {
-        const spendable = utxos.reduce((sum: number, u: any) => sum + (u.satoshis || 0), 0);
-        return { p2wpkh: 0, p2tr: spendable, total: spendable, pendingIn: 0, pendingOut: 0 };
-      }
-    } catch { /* fall through to esplora */ }
+  if (connectedId === 'unisat') {
+    const unisat = (window as any).unisat;
+    if (unisat?.getBitcoinUtxos) {
+      try {
+        // Ensure session is active — auto-reconnect from cache doesn't activate it.
+        const accounts = unisat.getAccounts ? await unisat.getAccounts() : [];
+        if (!accounts?.length && unisat.requestAccounts) {
+          await unisat.requestAccounts();
+        }
+        const utxos = await unisat.getBitcoinUtxos();
+        if (Array.isArray(utxos) && utxos.length > 0) {
+          const spendable = utxos.reduce((sum: number, u: any) => sum + (u.satoshis || 0), 0);
+          return { p2wpkh: 0, p2tr: spendable, total: spendable, pendingIn: 0, pendingOut: 0 };
+        }
+      } catch { /* fall through to esplora */ }
+    }
   }
 
   // OKX: getBalance() → { confirmed, unconfirmed, total }
-  const okx = (window as any).okxwallet?.bitcoin;
-  if (okx?.getBalance) {
-    try {
-      const bal = await okx.getBalance();
-      if (bal && typeof bal.confirmed === 'number') {
-        return { p2wpkh: 0, p2tr: bal.confirmed, total: bal.confirmed, pendingIn: Math.max(0, bal.unconfirmed || 0), pendingOut: 0 };
-      }
-    } catch { /* fall through */ }
+  if (connectedId === 'okx') {
+    const okx = (window as any).okxwallet?.bitcoin;
+    if (okx?.getBalance) {
+      try {
+        const bal = await okx.getBalance();
+        if (bal && typeof bal.confirmed === 'number') {
+          return { p2wpkh: 0, p2tr: bal.confirmed, total: bal.confirmed, pendingIn: Math.max(0, bal.unconfirmed || 0), pendingOut: 0 };
+        }
+      } catch { /* fall through */ }
+    }
   }
 
   return null;

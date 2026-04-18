@@ -33,22 +33,24 @@ import * as bitcoin from 'bitcoinjs-lib';
 export async function ensureWalletSession(): Promise<void> {
   if (typeof window === 'undefined') return;
 
-  // UniSat
-  const unisat = (window as any).unisat;
-  if (unisat) {
-    const accounts = await unisat.getAccounts?.() || [];
-    if (!accounts.length && unisat.requestAccounts) {
-      await unisat.requestAccounts();
-    }
-    return;
-  }
+  // Check which wallet is actually connected (not just installed)
+  const connectedId = localStorage.getItem('subfrost_browser_wallet_id');
 
-  // OKX
-  const okx = (window as any).okxwallet?.bitcoin;
-  if (okx?.connect) {
-    try { await okx.connect(); } catch { /* already connected */ }
-    return;
+  if (connectedId === 'unisat') {
+    const unisat = (window as any).unisat;
+    if (unisat) {
+      const accounts = await unisat.getAccounts?.() || [];
+      if (!accounts.length && unisat.requestAccounts) {
+        await unisat.requestAccounts();
+      }
+    }
+  } else if (connectedId === 'okx') {
+    const okx = (window as any).okxwallet?.bitcoin;
+    if (okx?.connect) {
+      try { await okx.connect(); } catch { /* already connected */ }
+    }
   }
+  // Xverse, OYL — manage sessions internally via SDK adapters
 }
 
 /** Standard signing timeout (60 seconds) */
