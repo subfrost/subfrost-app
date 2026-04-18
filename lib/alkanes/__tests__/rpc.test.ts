@@ -222,11 +222,15 @@ describe('rpc.ts — unit (mock fetch)', () => {
       json: async () => ({ pools: { '2:77087': { base: '2:0', base_reserve: '1', quote: '32:0', quote_reserve: '2', source: 'live' } } }),
     } as Response);
 
-    const pairs = await getTokenPairs('mainnet');
+    const pairs = await getTokenPairs('mainnet', '4:65498');
 
     expect(pairs['2:77087']).toBeDefined();
     // Only the primary source should have been called — fallback stays cold.
     expect(global.fetch).toHaveBeenCalledTimes(1);
+    const [, init] = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+    // Body contains factoryId split into block/tx
+    const body = JSON.parse(init.body);
+    expect(body.factoryId).toEqual({ block: '4', tx: '65498' });
   });
 });
 

@@ -41,6 +41,7 @@ import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { useWallet } from '@/context/WalletContext';
 import { KNOWN_TOKENS } from '@/lib/alkanes-client';
 import { queryKeys } from '@/queries/keys';
+import { getTokenPairs as rpcGetTokenPairs } from '@/lib/alkanes/rpc';
 
 export type AlkanesTokenPair = {
   token0: { id: string; token0Amount?: string; alkaneId?: { block: number | string; tx: number | string } };
@@ -146,30 +147,41 @@ async function fetchPoolsFromSDK(
 
   let poolsArray: any[] = [];
 
-  // Method 1: Direct REST call to get-all-token-pairs
-  // On devnet, the fetch interceptor routes this to the espo tertiary indexer.
-  if (poolsArray.length === 0 ) {
+  // Method 1: rpc.getTokenPairs — hedged primary (same REST endpoint as before)
+  // with alkanode fallback. Behavior-equivalent to prior direct fetch for the
+  // primary path. On devnet the fetch interceptor still routes through espo.
+  if (poolsArray.length === 0) {
     try {
-      const [block, tx] = factoryId.split(':');
-      const response = await withTimeout(
-        fetch(`${getRpcUrl(network)}/get-all-token-pairs`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ factoryId: { block, tx } }),
-        }),
+      const pools = await withTimeout(
+        rpcGetTokenPairs(network, factoryId),
         15000,
-        'direct-get-all-token-pairs'
+        'rpc.getTokenPairs',
       );
-      const result = await response.json();
-      console.log('[useAlkanesTokenPairs] Direct REST result:', JSON.stringify(result)?.slice(0, 300));
-      const pools = normalizePoolArray(result);
-      console.log('[useAlkanesTokenPairs] Direct REST normalized pools count:', pools.length);
-      if (pools.length > 0) {
-        poolsArray = pools.map(toPoolRow);
-        console.log('[useAlkanesTokenPairs] Direct REST returned', poolsArray.length, 'pools');
+      // rpc.getTokenPairs returns Record<string, AmmPoolData>; convert to the
+      // shape normalizePoolArray expects (array of rows) so `toPoolRow` downstream
+      // can unify it with the other methods.
+      const arr = Object.entries(pools).map(([poolId, data]) => {
+        const [pb, pt] = poolId.split(':');
+        const [tab, tat] = (data.base || ':').split(':');
+        const [tbb, tbt] = (data.quote || ':').split(':');
+        return {
+          pool_block_id: pb,
+          pool_tx_id: pt,
+          token0_block_id: tab,
+          token0_tx_id: tat,
+          token1_block_id: tbb,
+          token1_tx_id: tbt,
+          token0_amount: data.base_reserve,
+          token1_amount: data.quote_reserve,
+        };
+      });
+      const normalized = normalizePoolArray(arr);
+      if (normalized.length > 0) {
+        poolsArray = normalized.map(toPoolRow);
+        console.log('[useAlkanesTokenPairs] rpc.getTokenPairs returned', poolsArray.length, 'pools');
       }
     } catch (e) {
-      console.warn('[useAlkanesTokenPairs] Direct REST get-all-token-pairs failed:', e);
+      console.warn('[useAlkanesTokenPairs] rpc.getTokenPairs failed:', e);
     }
   }
 
