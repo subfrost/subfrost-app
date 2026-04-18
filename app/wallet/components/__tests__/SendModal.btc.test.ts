@@ -17,7 +17,7 @@ import * as ecc from '@bitcoinerlab/secp256k1';
 import * as fs from 'fs';
 import * as path from 'path';
 import { getBitcoinNetwork } from '@/lib/alkanes/helpers';
-import { computeSendFee, estimateSelectionFee, DUST_THRESHOLD } from '@alkanes/ts-sdk';
+import { computeSendFee, estimateSelectionFee, DUST_THRESHOLD } from '@/lib/wallet/feeEstimation';
 
 // ---------- Setup ----------
 
@@ -136,9 +136,14 @@ describe('Source code analysis — SendModal.tsx', () => {
     expect(source).toMatch(/\.toLowerCase\(\)/);
   });
 
-  it('uses computeSendFee from SDK for fee calculation', () => {
+  it('uses computeSendFee from fee-estimation shim for fee calculation', () => {
     expect(source).toContain('computeSendFee');
-    expect(source).toContain("import { computeSendFee, estimateSelectionFee, DUST_THRESHOLD } from '@alkanes/ts-sdk'");
+    // Phase 9 of the ts-sdk minimization: the fee helpers now come from
+    // `@/lib/wallet/feeEstimation`, which re-exports from `@alkanes/ts-sdk`.
+    // If the import line changes again, update this assertion.
+    expect(source).toContain(
+      "import { computeSendFee, estimateSelectionFee, DUST_THRESHOLD } from '@/lib/wallet/feeEstimation'",
+    );
   });
 });
 
