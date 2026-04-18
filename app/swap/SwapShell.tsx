@@ -121,7 +121,7 @@ export default function SwapShell() {
   const { t } = useTranslation();
 
   // Markets from API: all pools sorted by TVL desc
-  const { data: poolsData, isLoading: isLoadingPools } = usePools({ sortBy: 'tvl', order: 'desc', limit: 20 });
+  const { data: poolsData, isLoading: isLoadingPools } = usePools({ sortBy: 'tvl', order: 'desc' });
 
   // Enhanced pool stats from our local API (TVL, Volume, APR)
   const { data: poolStats, isLoading: isLoadingPoolStats } = useAllPoolStats();
