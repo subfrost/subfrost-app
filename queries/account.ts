@@ -258,18 +258,7 @@ async function fetchBalanceFromWalletApi(): Promise<BtcBalanceFast | null> {
     }
   }
 
-  // OKX: getBalance() → { confirmed, unconfirmed, total }
-  if (connectedId === 'okx') {
-    const okx = (window as any).okxwallet?.bitcoin;
-    if (okx?.getBalance) {
-      try {
-        const bal = await okx.getBalance();
-        if (bal && typeof bal.confirmed === 'number') {
-          return { p2wpkh: 0, p2tr: bal.confirmed, total: bal.confirmed, pendingIn: Math.max(0, bal.unconfirmed || 0), pendingOut: 0 };
-        }
-      } catch { /* fall through */ }
-    }
-  }
+  // OKX, Xverse, OYL — no wallet-side balance API. Falls through to esplora.
 
   return null;
 }
