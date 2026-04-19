@@ -1,8 +1,14 @@
 import path from 'path';
 import { fileURLToPath } from 'url';
+import bundleAnalyzer from '@next/bundle-analyzer';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+const withBundleAnalyzer = bundleAnalyzer({
+  enabled: process.env.ANALYZE === 'true',
+  openAnalyzer: false,
+});
 
 // IMPORTANT: Local WASM alias for @alkanes/ts-sdk/wasm
 // ================================================
@@ -32,11 +38,28 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: false,
   },
+  // Tree-shake hints for heavy libs — lets Next.js rewrite barrel imports to subpath imports.
+  experimental: {
+    optimizePackageImports: ['lucide-react', '@tanstack/react-query'],
+  },
   async rewrites() {
     return [
       {
         source: '/api/regtest/:path*',
         destination: `${process.env.NEXT_PUBLIC_API_URL || 'https://regtest.subfrost.io/v4/subfrost'}/:path*`,
+      },
+    ];
+  },
+  async headers() {
+    return [
+      {
+        // Long-lived cache for WASM chunks. Next.js emits content-hashed filenames
+        // (static/wasm/[modulehash].wasm), so immutable is safe — changes produce
+        // new URLs, never mutate an existing one.
+        source: '/_next/static/wasm/:path*',
+        headers: [
+          { key: 'Cache-Control', value: 'public, max-age=31536000, immutable' },
+        ],
       },
     ];
   },
@@ -133,8 +156,7 @@ const nextConfig = {
   env: {
     NEXT_PUBLIC_NETWORK: process.env.NEXT_PUBLIC_NETWORK || 'subfrost-regtest',
     NEXT_PUBLIC_DEMO_MODE: process.env.NEXT_PUBLIC_DEMO_MODE || '',
-    NEXT_PUBLIC_DEVNET_AUTOSTART: process.env.NEXT_PUBLIC_DEVNET_AUTOSTART || '',
   },
 };
 
-export default nextConfig;
+export default withBundleAnalyzer(nextConfig);

@@ -184,24 +184,40 @@ export function AlkanesSDKProvider({ children, network }: AlkanesSDKProviderProp
     }
   }, [provider]);
 
-  // Initialize provider based on network
+  // Initialize provider based on network.
+  //
   // On devnet, wait for the fetch interceptor to be installed before creating
-  // the provider — otherwise requests to localhost:18888 go nowhere.
+  // the provider — otherwise requests to localhost:18888 go nowhere. This
+  // wait can be up to 120 s.
+  //
+  // CANCELLATION: the effect re-runs on every `network` change, but the
+  // outer <AlkanesSDKProvider> isn't keyed and React doesn't unmount it,
+  // so the prior `initProvider()` keeps running in the background. Without
+  // a `cancelled` guard, a slow devnet init can finish AFTER a fast
+  // mainnet init and clobber `provider` / `isInitialized` / `isWalletLoaded`,
+  // silently routing every subsequent SDK call to localhost:18888 on a
+  // mainnet page. Each `await` is followed by a `cancelled` check that
+  // bails before any state setter fires.
   useEffect(() => {
+    let cancelled = false;
+
     const initProvider = async () => {
       // Devnet: wait for fetch interceptor before making any requests
       if (network === 'devnet') {
         const maxWait = 120_000; // 2 min max
         const start = Date.now();
         while (Date.now() - start < maxWait) {
+          if (cancelled) return;
           try {
             const testResp = await fetch('http://localhost:18888', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ jsonrpc: '2.0', method: 'btc_getblockcount', params: [], id: 0 }),
             });
+            if (cancelled) return;
             if (testResp.ok) {
               const data = await testResp.json();
+              if (cancelled) return;
               if (data?.result !== undefined) {
                 console.log('[AlkanesSDK] Devnet fetch interceptor ready, height:', data.result);
                 break;
@@ -210,6 +226,7 @@ export function AlkanesSDKProvider({ children, network }: AlkanesSDKProviderProp
           } catch { /* interceptor not ready yet */ }
           await new Promise(r => setTimeout(r, 1000));
         }
+        if (cancelled) return;
       }
 
       try {
@@ -218,6 +235,7 @@ export function AlkanesSDKProvider({ children, network }: AlkanesSDKProviderProp
         // Dynamic import keeps WASM off the critical render path — pages load
         // instantly and queries enable in the background once this resolves.
         const alkWasm = await import('@alkanes/ts-sdk/wasm');
+        if (cancelled) return;
 
         // Get provider preset name and config overrides
         // Uses proxy URL for networks with CORS issues when in browser localhost context
@@ -225,6 +243,7 @@ export function AlkanesSDKProvider({ children, network }: AlkanesSDKProviderProp
         const configOverrides = getNetworkConfig(network);
 
         const providerInstance = new alkWasm.WebProvider(providerName, configOverrides);
+        if (cancelled) return;
 
         console.log('[AlkanesSDK] WASM WebProvider created successfully');
         console.log('[AlkanesSDK] RPC URL:', providerInstance.sandshrew_rpc_url());
@@ -243,19 +262,27 @@ export function AlkanesSDKProvider({ children, network }: AlkanesSDKProviderProp
             providerInstance.walletCreate();
             console.log('[AlkanesSDK] Dummy wallet loaded (required by SDK)');
           }
+          if (cancelled) return;
           setIsWalletLoaded(true);
         } catch (e) {
           console.warn('[AlkanesSDK] walletCreate failed (non-fatal):', e);
         }
 
+        if (cancelled) return;
         setProvider(providerInstance);
         setIsInitialized(true);
       } catch (error) {
-        console.error('[AlkanesSDK] Failed to initialize WASM provider:', error);
+        if (!cancelled) {
+          console.error('[AlkanesSDK] Failed to initialize WASM provider:', error);
+        }
       }
     };
 
     initProvider();
+
+    return () => {
+      cancelled = true;
+    };
   }, [network]);
 
   // BTC price and fee estimates are now managed by TanStack Query (queries/market.ts)

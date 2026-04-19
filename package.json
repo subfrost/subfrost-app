@@ -7,6 +7,7 @@
     "dev": "next dev",
     "dev:turbo": "next dev --turbopack",
     "build": "prisma generate && next build",
+    "analyze": "ANALYZE=true next build",
     "postinstall": "prisma generate",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
@@ -79,13 +80,12 @@
     "qrcode": "^1.5.4",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
-    "sats-connect": "^4.2.1",
     "tiny-secp256k1": "^2.2.4",
     "use-debounce": "^10.1.0",
-    "varuint-bitcoin": "^2.0.0",
-    "wasmoon": "^1.16.0"
+    "varuint-bitcoin": "^2.0.0"
   },
   "devDependencies": {
+    "@next/bundle-analyzer": "^16.1.6",
     "@noble/curves": "^2.0.1",
     "@playwright/experimental-ct-react": "^1.58.2",
     "@playwright/test": "^1.58.2",
@@ -121,6 +121,7 @@
     "typescript": "^5.9.3",
     "vite-plugin-top-level-await": "^1.6.0",
     "vite-plugin-wasm": "^3.5.0",
-    "vitest": "^4.0.18"
+    "vitest": "^4.0.18",
+    "wasmoon": "^1.16.0"
   }
 }

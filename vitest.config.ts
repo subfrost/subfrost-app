@@ -12,7 +12,11 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     include: ['**/*.{test,spec}.{ts,tsx}'],
-    exclude: ['**/node_modules/**', '.next', 'ts-sdk/**', 'reference/**'],
+    // `.claude/worktrees/**` contains frozen snapshots of prior agent sessions.
+    // Their test files reference source paths that no longer match live code,
+    // producing confusing pseudo-failures that are unrelated to the current
+    // codebase. Exclude from every vitest run.
+    exclude: ['**/node_modules/**', '.next', 'ts-sdk/**', 'reference/**', '.claude/**'],
     testTimeout: 30000,
     hookTimeout: 30000,
     // Setup file to polyfill fetch for Node.js

@@ -72,23 +72,34 @@ if (typeof (globalThis as any).window.localStorage === 'undefined') {
 /**
  * Initialize @alkanes/ts-sdk ECC library
  *
- * The ts-sdk bundles its own copy of bitcoinjs-lib, which requires ecc initialization.
- * The bundle has initEccLib call at module load time, but due to ESM/CommonJS
- * interop issues in the bundled output, we need to ensure the module is fully
- * loaded and its side effects executed before tests run.
+ * The ts-sdk bundles its own copy of bitcoinjs-lib, which requires ecc
+ * initialization. The bundle has an initEccLib call at module load time,
+ * but due to ESM/CommonJS interop issues in the bundled output, we need
+ * to ensure the module is fully loaded and its side effects executed
+ * before tests run.
  *
- * This is done by importing and calling initSDK() which forces all lazy ESM
- * module initializers to run.
+ * Previously this was a fire-and-forget `.then(...)`, which raced with
+ * tests that import the SDK on their own. Under parallel pool load in
+ * CI the race produced intermittent hangs — the affected test would
+ * wait for `buildAlkaneTransferPsbt` (which imports from the SDK) to
+ * resolve while another worker was still completing the SDK init.
+ *
+ * The `await` at top level (allowed by Vitest setup files via
+ * top-level-await) ensures every test starts with a fully-initialized
+ * SDK and no active import is in flight.
  */
-import('@alkanes/ts-sdk').then(async (sdk) => {
-  // The initSDK function forces initialization of all internal modules
-  // including the wallet module which calls bitcoin.initEccLib(ecc)
-  try {
-    await sdk.initSDK();
-    console.log('[Setup] @alkanes/ts-sdk initialized successfully');
-  } catch (e) {
-    console.log('[Setup] @alkanes/ts-sdk initSDK call (may be expected):', e);
-  }
-}).catch((e) => {
-  console.error('[Setup] Failed to import @alkanes/ts-sdk:', e);
-});
+await import('@alkanes/ts-sdk')
+  .then(async (sdk) => {
+    try {
+      await sdk.initSDK();
+      console.log('[Setup] @alkanes/ts-sdk initialized successfully');
+    } catch (e) {
+      console.log('[Setup] @alkanes/ts-sdk initSDK call (may be expected):', e);
+    }
+  })
+  .catch((e) => {
+    // The bundled bip32's testEcc check fails in some Node CI environments
+    // even though the SDK is otherwise usable (bitcoinjs-lib has its own ecc
+    // init that succeeds). Treat as a warning, not a fatal error.
+    console.warn('[Setup] @alkanes/ts-sdk import warning (non-fatal):', (e as Error)?.message ?? e);
+  });
