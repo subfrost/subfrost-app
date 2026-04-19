@@ -127,7 +127,7 @@ The Alkanes SDK has **two separate derivation systems** that use **different coi
 - `@alkanes/ts-sdk` JS — coinType=0 always (immutable without SDK source change)
 
 ### Address Handling — useActualAddresses is MANDATORY
-Every mutation hook MUST use `useActualAddresses = isBrowserWallet || network === 'devnet'` for address ternaries (fromAddresses, toAddresses, changeAddr, alkanesChangeAddr).
+Every mutation hook MUST use `useActualAddresses = isBrowserWallet || network === 'devnet' || network === 'regtest-local' || network === 'qubitcoin-regtest'` for address ternaries (fromAddresses, toAddresses, changeAddr, alkanesChangeAddr).
 
 **Why:** On devnet, the SDK provider loads the boot mnemonic via `walletLoadMnemonic()`, but `createWalletFromMnemonic()` in WalletContext derives DIFFERENT addresses from the same mnemonic. Symbolic addresses (`p2tr:0`) resolve to the SDK wallet's derivation, not the connected wallet's — tokens land at wrong addresses → "insufficient balance" errors despite having assets.
 
@@ -165,7 +165,7 @@ u32 numAsks (4 bytes LE)  ← NOT u128
 - See full Carbine CLOB section at bottom of this file for deployment, pair ordering, and verification scripts
 
 ### PSBT Patching — Input-Only
-`patchPsbtForBrowserWallet()` was permanently removed (2026-02-20). Only input-level patching is used: `patchInputsOnly()` for witnessUtxo scripts and redeemScript injection (P2SH-P2WPKH for Xverse). Output patching is never needed because all hooks pass actual addresses via `useActualAddresses`.
+`patchPsbtForBrowserWallet()` was removed from all mutation hooks (2026-02-20). Only input-level patching is used: `patchInputsOnly()` for witnessUtxo scripts and redeemScript injection (P2SH-P2WPKH for Xverse). Output patching is never needed because all hooks pass actual addresses via `useActualAddresses`.
 
 ---
 
@@ -230,7 +230,7 @@ Do not assume a single grep caught everything.
 
 **Journal entries / investigation notes MUST be written as inline comments in the relevant source files they pertain to — NOT in separate documentation files.** CLAUDE.md is for architectural reference and historical issues only. When documenting a fix or finding, put the notes directly in the file header comment of the hook, component, or utility that was affected. Never create standalone docs/ files for investigation notes.
 
-**Rolling insight log:** Maintain a persistent rolling log of insights, gotchas, and debugging patterns in `MEMORY.md` (auto-memory) to create psychic continuity across LLM sessions. When you discover a non-obvious behavior (SDK quirks, wallet-specific bugs, Buffer vs Uint8Array issues, etc.), record it immediately in MEMORY.md and as a JOURNAL comment in the relevant source file. Future sessions should consult these notes before attempting fixes.
+**Rolling insight log:** Record non-obvious behaviors (SDK quirks, wallet-specific bugs, etc.) as JOURNAL comments in the relevant source files. The wiki at `/Users/misha/divergent/` provides cross-session knowledge persistence.
 
 ## UI Design System
 
@@ -471,24 +471,18 @@ See [docs/AMM_DEPLOYMENT.md](docs/AMM_DEPLOYMENT.md) for full deployment procedu
 
 ## UTXO and Token Discovery
 
-### Alkane Balance Fetching via OYL Alkanode API
+### Alkane Balance Fetching
 
-Alkane token balances are fetched via the OYL Alkanode REST API (`https://oyl.alkanode.com`):
-- **Endpoint:** `POST /get-alkanes-by-address` with body `{ address: string }`
-- **Response:** `{ statusCode: number, data: AlkaneBalance[] }` where each entry has `name`, `symbol`, `balance`, `alkaneId: { block, tx }`, price data, etc.
-- **Config:** `OYL_ALKANODE_URL` in `utils/getConfig.ts` (overridable via `NEXT_PUBLIC_OYL_ALKANODE_URL` env var)
-- **Helper:** `fetchAlkaneBalances()` in `utils/getConfig.ts`
+Three independent data streams (see `queries/account.ts`):
+- **BTC balance:** `btcBalanceFastQueryOptions` — UniSat `getBitcoinUtxos()` (instant) or esplora fallback
+- **Alkane balances:** `alkaneBalanceQueryOptions` — SDK `dataApiGetAlkanesByAddress()` on mainnet, `fetchAlkaneBalancesViaProtobuf()` on local networks
+- **Enriched BTC (disabled on mainnet):** `enrichedWalletQueryOptions` — lua `balances.lua`, only on devnet
 
-This replaced the old `alkanes_protorunesbyaddress` RPC method which returned `0x` (empty) on regtest.
+All use `staleTime: Infinity` on mainnet — refetch only on HeightPoller block change.
 
-### SDK UTXO Selection Limitation
+### SDK UTXO Selection
 
-The `@alkanes/ts-sdk` UTXO selection does NOT automatically find alkane token UTXOs. The frontend must:
-1. Discover alkane UTXOs manually (via esplora address UTXO endpoint)
-2. Inject them into the PSBT inputs before signing
-3. Handle change outputs for excess alkane amounts
-
-See `discoverAlkaneUtxos()` and `injectAlkaneInputs()` in `hooks/useAddLiquidityMutation.ts`.
+For swap/wrap: SDK uses `payment_utxos` from UniSat `getBitcoinUtxos()` (clean UTXOs only) + espo `get_address_outpoints` for alkane UTXOs. For add liquidity: `discoverAlkaneUtxos()` and `injectAlkaneInputs()` in `hooks/useAddLiquidityMutation.ts`.
 
 ---
 
@@ -523,7 +517,7 @@ See `discoverAlkaneUtxos()` and `injectAlkaneInputs()` in `hooks/useAddLiquidity
 
 ### frBTC wrap sends BTC but never mints frBTC
 **Cause:** Stale hardcoded signer address. The frBTC contract only mints when BTC arrives at the address derived from its GET_SIGNER opcode (103). A wrong address means BTC goes to an unrelated output and the contract sees zero incoming BTC.
-**Fix:** Update `SIGNER_ADDRESSES` in `useWrapMutation.ts` and `useWrapSwapMutation.ts`. Get the correct address by running: `alkanes-cli -p subfrost-regtest wrap-btc --amount 1000 --fee-rate 1` and checking which address receives BTC at output 0.
+**Fix:** Update signer address in `lib/alkanes/constants.ts`. Get the correct address by running: `alkanes-cli -p subfrost-regtest wrap-btc --amount 1000 --fee-rate 1` and checking which address receives BTC at output 0.
 
 ### "insufficient output" / swap quote wildly inflated on regtest
 **Cause:** Espo `ammdata.get_pools` (`api.alkanode.com/rpc`) returns **mainnet** pool data. Mainnet and regtest share genesis token IDs (`2:0` DIESEL, `32:0` frBTC), so the frontend uses mainnet reserves for regtest swap quotes. Mainnet pool `2:77087` has DIESEL reserve ~347B and frBTC reserve ~10.7M, while regtest pool `2:6` has DIESEL ~35.7B and frBTC ~2.17B — completely different ratios. The resulting `amount_out_min` is ~191x too large for regtest, causing the factory to revert.
@@ -602,8 +596,7 @@ pnpm db:push          # Apply schema
 | Repo | Purpose | Notes |
 |------|---------|-------|
 | `oyl-amm` (github.com/Oyl-Wallet/oyl-amm) | AMM factory + pool source code | Build WASMs from here |
-| `alkanes-rs` (github.com/kungfuflex/alkanes-rs) | Core alkanes runtime, standard contracts | Only has `main` branch. No CLI. |
-| `alkanes-rs-dev` (local) | CLI binary, prod_wasms, deploy scripts | **Note:** prod_wasms may be stale |
+| `alkanes-rs` (github.com/kungfuflex/alkanes-rs) | Core alkanes runtime, CLI, WASM SDK | Branches: `main`, `develop`. Fork: `Misha-btc/alkanes-rs` branch `feat/sdk-perf-and-coinselect` |
 | `subfrost-consensus` | Indexer, test harness, hex-encoded test WASMs | Test WASMs are NOT deployable on-chain |
 
 ---
