@@ -2,12 +2,16 @@
  * Browser wallet configuration with custom ordering.
  * Uses SDK wallet data (including base64 icons) with our preferred display order.
  * Wallets not in the SDK (oyl, tokeo, keplr) use local definitions.
+ *
+ * Phase 6 of the ts-sdk minimization plan: the `BrowserWalletInfo` type is now
+ * sourced from `@/types/browserWallet`, decoupling type callers from the SDK
+ * barrel. The runtime `BROWSER_WALLETS` array is still sourced from the SDK
+ * because it carries ~600 LOC of base64-encoded wallet icons that would bloat
+ * this repo for zero functional benefit.
  */
 
-import {
-  BROWSER_WALLETS as SDK_WALLETS,
-  type BrowserWalletInfo,
-} from '@alkanes/ts-sdk';
+import { BROWSER_WALLETS as SDK_WALLETS } from '@alkanes/ts-sdk';
+import type { BrowserWalletInfo } from '@/types/browserWallet';
 
 export type { BrowserWalletInfo };
 
