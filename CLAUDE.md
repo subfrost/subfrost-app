@@ -221,6 +221,12 @@ Do not assume a single grep caught everything.
 
 **Rolling insight log:** Record non-obvious behaviors (SDK quirks, wallet-specific bugs, etc.) as JOURNAL comments in the relevant source files. The wiki at `/Users/misha/divergent/` provides cross-session knowledge persistence.
 
+## Data Architecture
+
+See [docs/DATA_ARCHITECTURE.md](docs/DATA_ARCHITECTURE.md) for complete endpoint reference: balance streams, swap flow, UTXO selection, pool data, wallet session, HeightPoller, RPC proxy routing, and optimization history.
+
+---
+
 ## UI Design System
 
 Glass morphism + top highlight. Use `.sf-*` CSS classes from `app/globals.css`, never raw Tailwind borders. See [docs/UI_DESIGN_SYSTEM.md](docs/UI_DESIGN_SYSTEM.md) for full class reference and rules.
