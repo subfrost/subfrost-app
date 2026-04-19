@@ -117,7 +117,7 @@ import TokenIcon from '@/app/components/TokenIcon';
 import { useFeeRate, FeeSelection } from '@/hooks/useFeeRate';
 import { usePools } from '@/hooks/usePools';
 import { useTranslation } from '@/hooks/useTranslation';
-import { computeSendFee, estimateSelectionFee, DUST_THRESHOLD } from '@alkanes/ts-sdk';
+import { computeSendFee, estimateSelectionFee, DUST_THRESHOLD } from '@/lib/wallet/feeEstimation';
 import * as bitcoin from 'bitcoinjs-lib';
 import * as ecc from '@bitcoinerlab/secp256k1';
 import { injectRedeemScripts } from '@/lib/psbt-patching';
