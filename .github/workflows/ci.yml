@@ -2,9 +2,11 @@ name: CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main, develop, 'ts-sdk-perf*', 'fix/**']
   pull_request:
-    branches: [main]
+    # Run CI on PRs against any branch — catches regressions on stacked PRs
+    # (ts-sdk-perf, ts-sdk-perf-phase-N-*) and on fix branches against develop.
+    branches: ['**']
   workflow_dispatch:
     inputs:
       run_integration:
