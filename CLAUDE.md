@@ -221,6 +221,10 @@ Do not assume a single grep caught everything.
 
 **Rolling insight log:** Record non-obvious behaviors (SDK quirks, wallet-specific bugs, etc.) as JOURNAL comments in the relevant source files. The wiki at `/Users/misha/divergent/` provides cross-session knowledge persistence.
 
+## Core Principles
+
+Before adding queries, changing data flow, or debugging performance — read [docs/CORE_PRINCIPLES.md](docs/CORE_PRINCIPLES.md). These 6 rules are derived from root causes found in this codebase. Violate only deliberately with a clear reason. When reviewing code that touches data fetching or caching, verify it doesn't violate these principles.
+
 ## Data Architecture
 
 See [docs/DATA_ARCHITECTURE.md](docs/DATA_ARCHITECTURE.md) for complete endpoint reference: balance streams, swap flow, UTXO selection, pool data, wallet session, HeightPoller, RPC proxy routing, and optimization history.
