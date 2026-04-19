@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useWallet } from '@/context/WalletContext';
-import { getConfig, getRpcUrl } from '@/utils/getConfig';
+import { getConfig } from '@/utils/getConfig';
+import { alkanesSimulate as rpcAlkanesSimulate } from '@/lib/alkanes/rpc';
 
 export interface FujinMarket {
   marketId: string;
@@ -42,34 +43,6 @@ function parseNumMarkets(data: string | number[]): number {
 }
 
 /**
- * Parse GetAllMarkets (opcode 3) response — returns a list of market AlkaneIds
- * Format: u128 count, then count * (u128 block, u128 tx) pairs
- */
-function parseMarketsList(data: string | number[]): FujinMarket[] {
-  const bytes = typeof data === 'string'
-    ? Array.from(Buffer.from(data.replace(/^0x/, ''), 'hex'))
-    : data;
-  if (bytes.length < 16) return [];
-
-  const count = Number(readU128LE(bytes, 0));
-  const markets: FujinMarket[] = [];
-  let offset = 16;
-
-  for (let i = 0; i < count && offset + 32 <= bytes.length; i++) {
-    const block = Number(readU128LE(bytes, offset));
-    const tx = Number(readU128LE(bytes, offset + 16));
-    markets.push({
-      marketId: `${block}:${tx}`,
-      block,
-      tx,
-    });
-    offset += 32;
-  }
-
-  return markets;
-}
-
-/**
  * Queries MasterFujin [4:7112] for market count and list.
  *
  * MasterFujin opcodes (from reference/Fujin-contracts/alkanes/fujin-master/src/lib.rs):
@@ -87,28 +60,19 @@ export function useFujinMarkets() {
 
   return useQuery<FujinMarketsResult | null>({
     queryKey: ['fujin-markets', network],
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       const config = getConfig(network || 'devnet');
       // Use MasterFujin (market registry), not factory logic (uninitialized template)
       const masterId = (config as any).FUJIN_MASTER_ID || (config as any).FUJIN_FACTORY_ID;
       if (!masterId) return null;
 
-      const [block, tx] = masterId.split(':');
-      const target = { block, tx };
-
       // MasterFujin opcode 91: GetMarketCount → u128
-      const numResp = await fetch(getRpcUrl(network), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          method: 'alkanes_simulate',
-          params: [{ target, inputs: ['91'], alkanes: [], transaction: '0x', block: '0x', height: '999999', txindex: 0, vout: 0 }],
-          id: 1,
-        }),
-      });
-      const numData = await numResp.json();
-      const numExec = numData?.result?.execution;
+      const numRes = await rpcAlkanesSimulate(
+        network,
+        { target: masterId, inputs: ['91'], height: '999999' },
+        signal,
+      );
+      const numExec = numRes.execution;
 
       if (numExec?.error) {
         return { factoryId: masterId, markets: [], numMarkets: 0, error: numExec.error };
@@ -120,40 +84,40 @@ export function useFujinMarkets() {
         return { factoryId: masterId, markets: [], numMarkets: 0, error: null };
       }
 
-      // MasterFujin opcode 93: GetAllMarkets → market list
-      // Response format differs from factory — each entry is (base_token_block, base_token_tx, duration)
-      // For now, query each market individually via opcode 92 (GetMarketAtIndex)
-      let markets: FujinMarket[] = [];
-      try {
-        for (let i = 0; i < numMarkets && i < 20; i++) {
-          const idxResp = await fetch(getRpcUrl(network), {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              jsonrpc: '2.0',
-              method: 'alkanes_simulate',
-              params: [{ target, inputs: ['92', String(i)], alkanes: [], transaction: '0x', block: '0x', height: '999999', txindex: 0, vout: 0 }],
-              id: 2 + i,
-            }),
+      // MasterFujin opcode 92: GetMarketAtIndex. Parallelize — server doesn't
+      // support JSON-RPC batch arrays, so we use Promise.all instead. The
+      // per-index calls are independent reads so the AbortSignal is shared
+      // to cancel all in-flight requests on unmount.
+      const indicesToFetch = Math.min(numMarkets, 20);
+      const marketResponses = await Promise.all(
+        Array.from({ length: indicesToFetch }, (_, i) =>
+          rpcAlkanesSimulate(
+            network,
+            { target: masterId, inputs: ['92', String(i)], height: '999999' },
+            signal,
+          ).catch((err) => {
+            console.warn(`[useFujinMarkets] index ${i} failed:`, err);
+            return null;
+          }),
+        ),
+      );
+
+      const markets: FujinMarket[] = [];
+      for (const res of marketResponses) {
+        const idxExec = res?.execution;
+        if (!idxExec?.data || idxExec.error) continue;
+        const hex = idxExec.data.replace(/^0x/, '');
+        // GetMarketAtIndex returns: base_token(32 bytes) + duration(16 bytes) = 80 bytes
+        if (hex.length >= 80) {
+          const bytes = Array.from(Buffer.from(hex, 'hex'));
+          const baseBlock = Number(readU128LE(bytes, 0));
+          const baseTx = Number(readU128LE(bytes, 16));
+          markets.push({
+            marketId: `${baseBlock}:${baseTx}`,
+            block: baseBlock,
+            tx: baseTx,
           });
-          const idxData = await idxResp.json();
-          const idxExec = idxData?.result?.execution;
-          if (idxExec?.data && !idxExec.error) {
-            const hex = idxExec.data.replace(/^0x/, '');
-            // GetMarketAtIndex returns: base_token(32 bytes) + duration(16 bytes) = 80 bytes
-            if (hex.length >= 80) {
-              const baseBlock = Number(readU128LE(Array.from(Buffer.from(hex, 'hex')), 0));
-              const baseTx = Number(readU128LE(Array.from(Buffer.from(hex, 'hex')), 16));
-              markets.push({
-                marketId: `${baseBlock}:${baseTx}`,
-                block: baseBlock,
-                tx: baseTx,
-              });
-            }
-          }
         }
-      } catch (err) {
-        console.warn('[useFujinMarkets] Failed to fetch market list:', err);
       }
 
       return { factoryId: masterId, markets, numMarkets, error: null };
