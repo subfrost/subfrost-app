@@ -2,11 +2,15 @@
  * Shared utilities for alkanes RPC calls.
  *
  * All hooks that query contract state or token balances should use these
- * helpers instead of raw fetch(). This ensures consistent error handling,
- * response validation, and abort support.
+ * helpers. Internally delegates to `lib/alkanes/rpc.ts` — the single
+ * fetch-layer source of truth. This file is kept as a thin compatibility
+ * shim so its 4 call sites don't need to change during the migration.
+ *
+ * Phase 3 of the ts-sdk minimization plan (2026-04-18): consolidated
+ * duplicate `alkanes_protorunesbyaddress` + `alkanes_simulate` implementations.
  */
 
-import { getRpcUrl } from '@/utils/getConfig';
+import { alkanesSimulate, getProtorunesByAddress } from '@/lib/alkanes/rpc';
 
 // Factory-created alkanes (NFT receipts, LP tokens) are always at block 2
 export const ALKANE_FACTORY_BLOCK = 2;
@@ -36,32 +40,19 @@ export async function simulateCall(
   inputs: string[],
   signal?: AbortSignal,
 ): Promise<{ data: string; error: string | null }> {
-  const rpcUrl = getRpcUrl(network);
-  const resp = await fetch(rpcUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+  const result = await alkanesSimulate(
+    network,
+    {
+      target: `${targetBlock}:${targetTx}`,
+      inputs,
+      height: '999',
+    },
     signal,
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      method: 'alkanes_simulate',
-      params: [{
-        target: { block: targetBlock, tx: targetTx },
-        inputs,
-        alkanes: [],
-        transaction: '0x',
-        block: '0x',
-        height: '999',
-        txindex: 0,
-        vout: 0,
-      }],
-      id: 1,
-    }),
-  });
-  if (!resp.ok) throw new Error(`RPC HTTP ${resp.status}`);
-  const json = await resp.json();
-  const error = json?.result?.execution?.error || null;
-  const data = (json?.result?.execution?.data || '').replace('0x', '');
-  return { data, error };
+  );
+  return {
+    data: (result.execution?.data || '').replace('0x', ''),
+    error: result.execution?.error ?? null,
+  };
 }
 
 export interface AlkaneToken {
@@ -79,27 +70,17 @@ export async function queryAlkanesAtAddress(
   address: string,
   signal?: AbortSignal,
 ): Promise<AlkaneToken[]> {
-  const rpcUrl = getRpcUrl(network);
-  const resp = await fetch(rpcUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    signal,
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      method: 'alkanes_protorunesbyaddress',
-      params: [{ address, protocolTag: '1' }],
-      id: 1,
-    }),
-  });
-  if (!resp.ok) throw new Error(`RPC HTTP ${resp.status}`);
-  const json = await resp.json();
+  const response = await getProtorunesByAddress(network, address, signal);
   const tokens: AlkaneToken[] = [];
-  for (const outpoint of json?.result?.outpoints || []) {
-    const balances = outpoint.balance_sheet?.cached?.balances || outpoint.runes || [];
+  for (const outpoint of response?.outpoints || []) {
+    const balances =
+      outpoint.balance_sheet?.cached?.balances ||
+      (outpoint as unknown as { runes?: { block: number; tx: number; amount: string }[] }).runes ||
+      [];
     for (const entry of balances) {
       tokens.push({
-        block: parseInt(entry.block ?? '0', 10),
-        tx: parseInt(entry.tx ?? '0', 10),
+        block: parseInt(String(entry.block ?? '0'), 10),
+        tx: parseInt(String(entry.tx ?? '0'), 10),
         amount: BigInt(entry.amount || '0'),
       });
     }
