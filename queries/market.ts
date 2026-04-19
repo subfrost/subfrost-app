@@ -9,6 +9,7 @@ import { queryOptions } from '@tanstack/react-query';
 import { queryKeys } from './keys';
 import { FRBTC_WRAP_FEE_PER_1000, FRBTC_UNWRAP_FEE_PER_1000 } from '@/constants/alkanes';
 import { encodeSimulateCalldata } from '@/utils/simulateCalldata';
+import { getBitcoinPrice as rpcGetBitcoinPrice } from '@/lib/alkanes/rpc';
 // Pricing data is global — always use mainnet subpricer regardless of connected network
 const SUBPRICER_BASE = 'https://mainnet.subfrost.io/v4/subfrost';
 
@@ -63,19 +64,15 @@ export function btcPriceQueryOptions(
           const price = data?.usd ?? data?.price ?? 0;
           if (price > 0) return price;
         }
-      } catch { /* fall through to SDK */ }
+      } catch { /* fall through to rpc layer */ }
 
-      // Fallback: SDK data API
-      if (!provider) return 90000;
+      // Fallback: rpc.ts (Next.js /api/btc-price route).
+      // Replaces the previous WASM call `provider.dataApiGetBitcoinPrice()` —
+      // same upstream data, no WASM roundtrip. `provider` arg kept for hook API
+      // backwards compat but no longer used in this branch.
       try {
-        const response = await provider.dataApiGetBitcoinPrice();
-        const price =
-          typeof response === 'number'
-            ? response
-            : (response as { usd?: number; price?: number })?.usd ??
-              (response as { price?: number })?.price ??
-              0;
-        return price > 0 ? price : 90000;
+        const { usd } = await rpcGetBitcoinPrice();
+        return usd > 0 ? usd : 90000;
       } catch {
         return 90000;
       }

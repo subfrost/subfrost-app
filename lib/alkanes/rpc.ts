@@ -351,16 +351,26 @@ export interface TokenPair {
  * Fetch all token pairs discoverable from the app's own REST proxy.
  * Routes through `/api/rpc/{network}/get-all-token-pairs` (existing app endpoint).
  *
+ * The upstream REST endpoint expects a body `{ factoryId: { block, tx } }`.
+ * `factoryId` is passed as `"block:tx"` and split internally.
+ *
  * Hedged with `getAllAmmPools` since that returns the same information in a
  * different shape. Normalized here so callers can `.pools` directly.
  */
 export async function getTokenPairs(
   network: string,
+  factoryId: string,
   signal?: AbortSignal,
 ): Promise<Record<string, AmmPoolData>> {
+  const [block, tx] = factoryId.split(':');
   // Primary: REST endpoint the app already maintains. Fast on subfrost networks.
   const primary = async (s: AbortSignal) => {
-    const res = await fetch(`${getRpcUrl(network)}/get-all-token-pairs`, { signal: s });
+    const res = await fetch(`${getRpcUrl(network)}/get-all-token-pairs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ factoryId: { block, tx } }),
+      signal: s,
+    });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const json = await res.json();
     // Normalize whatever shape the server returned into `ammdata.get_pools` format.
