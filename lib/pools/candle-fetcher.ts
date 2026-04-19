@@ -5,7 +5,8 @@
  * lua_evalscript with metashrew_view. Uses alkanes-client for RPC calls.
  */
 
-import { getAlkanesClient, type PoolConfig, getPools, calculatePrice } from '@/lib/alkanes-client';
+import { type PoolConfig, getPools, calculatePrice } from '@/lib/alkanes-client';
+import { luaEvalScript, getHeight } from '@/lib/alkanes/rpc';
 
 // ============================================================================
 // Types
@@ -311,10 +312,14 @@ export async function fetchPoolDataPoints(
   }
 
   try {
-    const client = getAlkanesClient(network);
-    const luaResult = await client.executeLuaScript<LuaScriptResult>(
+    // luaEvalScript targets the server's `lua_evalscript` method directly.
+    // The SDK's `executeLuaScript` wraps this via WASM but does nothing extra
+    // at runtime except serialize args as JSON (we do that ourselves).
+    // Script hash caching happens server-side.
+    const luaResult = await luaEvalScript<LuaScriptResult>(
+      network || 'mainnet',
       POOL_CANDLES_LUA_SCRIPT,
-      [[pool.protobufPayload, startHeight.toString(), endHeight.toString(), interval.toString()]]
+      [[pool.protobufPayload, startHeight.toString(), endHeight.toString(), interval.toString()]],
     );
 
     if (luaResult?.error) {
@@ -340,8 +345,7 @@ export async function fetchPoolDataPoints(
  * @param network - Optional network name for network-specific client
  */
 export async function getCurrentHeight(network?: string): Promise<number> {
-  const client = getAlkanesClient(network);
-  return client.getCurrentHeight();
+  return getHeight(network || 'mainnet');
 }
 
 /**
@@ -610,10 +614,10 @@ export async function fetchDieselStats(network?: string): Promise<{
   height: number;
 }> {
   try {
-    const client = getAlkanesClient(network);
-    const luaResult = await client.executeLuaScript<StatsLuaResult>(
+    const luaResult = await luaEvalScript<StatsLuaResult>(
+      network || 'mainnet',
       STATS_LUA_SCRIPT,
-      [[]]
+      [[]],
     );
 
     return {

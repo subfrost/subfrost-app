@@ -15,6 +15,7 @@ import {
   calculatePrice as calcPrice,
   type PoolConfig,
 } from '@/lib/alkanes-client';
+import { getBitcoinPrice as rpcGetBitcoinPrice } from '@/lib/alkanes/rpc';
 import {
   fetchPoolDataPoints,
   fetchDieselStats,
@@ -170,11 +171,12 @@ export async function getBitcoinPrice(_network?: string): Promise<BitcoinPrice> 
     return cached;
   }
 
-  // Always use mainnet for BTC price - it's the same across all networks
-  const client = getAlkanesClient('mainnet');
-  const price = await client.getBitcoinPrice();
+  // Always use mainnet for BTC price - it's the same across all networks.
+  // rpc.getBitcoinPrice hits the /api/btc-price Next.js route (same upstream
+  // the SDK's dataApi.getBitcoinPrice reached, minus the WASM boundary).
+  const { usd } = await rpcGetBitcoinPrice();
   const result: BitcoinPrice = {
-    usd: price,
+    usd,
     timestamp: Date.now(),
   };
 
@@ -239,6 +241,11 @@ export async function getPoolReserves(poolKey: string, network?: string): Promis
     };
   }
 
+  // Kept on AlkanesClient path for totalSupply fidelity: rpc.getPoolReserves
+  // (via api.alkanode.com/rpc ammdata.get_pools) returns reserves but not
+  // totalSupply. Switching would regress LP-supply UIs. Alkanes-client has
+  // a multi-source cascade (dataApi.getReserves → /get-pool-details) that
+  // provides totalSupply — see Phase 7 notes for the deferred optimization.
   const client = getAlkanesClient(network);
   const reserves = await client.getPoolReserves(pool);
   if (!reserves) return null;

@@ -282,6 +282,35 @@ export async function metashrewView(
 }
 
 // ============================================================================
+// Lua script evaluation
+// ============================================================================
+
+/**
+ * Execute a Lua script via the metashrew node's `lua_evalscript` JSON-RPC
+ * method. The server evaluates the script with the provided arguments and
+ * returns whatever the script returns.
+ *
+ * Used for balance-aggregation + candle-backfill scripts that are too
+ * expensive to run as protostone simulations. The script is hashed + cached
+ * server-side, so repeated calls with the same script are O(1) dispatch.
+ */
+export async function luaEvalScript<T = unknown>(
+  network: string,
+  script: string,
+  args: unknown[],
+  signal?: AbortSignal,
+): Promise<T> {
+  const argsJson = JSON.stringify(args);
+  const result = await jsonRpcCall<unknown>(
+    subfrostRpcUrl(network),
+    'lua_evalscript',
+    [script, argsJson],
+    signal,
+  );
+  return result as T;
+}
+
+// ============================================================================
 // AMM pool data — via api.alkanode.com/rpc (third-party)
 // ============================================================================
 
