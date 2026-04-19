@@ -49,14 +49,27 @@ const SPLASH_DONE_KEY = 'sf_splash_done';
 export default function SplashScreen() {
   const { isInitialized } = useAlkanesSDK();
 
-  // Skip splash entirely if it already ran this session OR if the SDK is already
-  // initialized (e.g. navigating back to a page after initial load). Without this
-  // guard the splash re-blocks every client-side route change.
-  // Lazy initializer: only reads sessionStorage once on mount, not on every render.
-  const [visible, setVisible] = useState(
-    () => typeof window === 'undefined' || !sessionStorage.getItem(SPLASH_DONE_KEY),
-  );
+  // Always start visible to avoid a hydration mismatch. SSR cannot inspect
+  // sessionStorage and prerenders with the splash present; if we initialized
+  // `visible` from sessionStorage on the client, a revisit (key already set
+  // from a prior mount) would render `null`, conflict with the SSR HTML, and
+  // produce React's "Hydration failed because the initial UI does not match
+  // what was rendered on the server" warning plus a brief flash of the
+  // splash DOM as React reconciles.
+  //
+  // The post-hydration effect below dismisses the splash within one frame
+  // when the key is already set, preserving the "skip splash on revisits
+  // within the same tab" UX.
+  const [visible, setVisible] = useState(true);
   const [fading, setFading] = useState(false);
+
+  // Post-hydration: if the splash already ran this tab session, dismiss
+  // it before the user perceives it. Runs once on mount.
+  useEffect(() => {
+    if (typeof window !== 'undefined' && sessionStorage.getItem(SPLASH_DONE_KEY)) {
+      setVisible(false);
+    }
+  }, []);
 
   // Real loading milestones
   const [fontsLoaded, setFontsLoaded] = useState(false);
