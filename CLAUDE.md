@@ -105,20 +105,9 @@ The Alkanes SDK has **two separate derivation systems** that use **different coi
 
 **WalletContext uses coinType=0** because `createWalletFromMnemonic` hardcodes it. The UI displays coinType=0 addresses.
 
-**Consequence for boot-seeded state:**
-- **Global Trades**: ✅ Shows all trades (no address filter) — boot swaps visible
-- **Orderbook**: ✅ Shows all orders (stored by pair, not by address)
-- **Open Orders**: ⚠️ Uses simulate context with WASM provider address — may or may not match
-- **Positions (LP)**: ❌ Queries connected wallet address (coinType=0) — boot LP is at coinType=1
-- **My Activity**: ❌ Queries connected wallet address — boot txs are from coinType=1
+**Consequence:** Boot-seeded LP/activity shows under coinType=1 addresses, not the connected wallet's coinType=0 addresses. Global trades/orderbook are unaffected (no address filter).
 
-**What this means for QA:**
-- Contract deployments, pool creation, CLOB orders, and swaps all WORK (WASM provider handles them)
-- Global Trades and Orderbook show boot-seeded data (no address filter)
-- Positions and My Activity only show data from USER-initiated actions (not boot-seeded)
-- To QA Positions/My Activity, the user must manually execute a swap or add liquidity from the UI
-
-**DO NOT try to "fix" this by changing boot.ts to coinType=0.** That was attempted 2026-04-03 and caused `"Address not found in keystore"` on every transaction, breaking the entire boot sequence. The WASM provider's internal keystore is the constraint — it cannot be changed without rebuilding the WASM.
+**DO NOT change boot.ts to coinType=0** — causes `"Address not found in keystore"` on every transaction.
 
 **Files involved:**
 - `lib/devnet/boot.ts` — coinType=1 (MUST match WASM provider)
@@ -519,23 +508,17 @@ For swap/wrap: SDK uses `payment_utxos` from UniSat `getBitcoinUtxos()` (clean U
 **Cause:** Stale hardcoded signer address. The frBTC contract only mints when BTC arrives at the address derived from its GET_SIGNER opcode (103). A wrong address means BTC goes to an unrelated output and the contract sees zero incoming BTC.
 **Fix:** Update signer address in `lib/alkanes/constants.ts`. Get the correct address by running: `alkanes-cli -p subfrost-regtest wrap-btc --amount 1000 --fee-rate 1` and checking which address receives BTC at output 0.
 
-### "insufficient output" / swap quote wildly inflated on regtest
-**Cause:** Espo `ammdata.get_pools` (`api.alkanode.com/rpc`) returns **mainnet** pool data. Mainnet and regtest share genesis token IDs (`2:0` DIESEL, `32:0` frBTC), so the frontend uses mainnet reserves for regtest swap quotes. Mainnet pool `2:77087` has DIESEL reserve ~347B and frBTC reserve ~10.7M, while regtest pool `2:6` has DIESEL ~35.7B and frBTC ~2.17B — completely different ratios. The resulting `amount_out_min` is ~191x too large for regtest, causing the factory to revert.
-**Fix:** Skip Espo on regtest in `useAlkanesTokenPairs.ts` and `usePools.ts`. The RPC simulation fallback (factory opcode 3 + pool opcode 999) queries actual regtest on-chain reserves.
+### "insufficient output" / swap quote inflated on regtest
+**Cause:** Espo returns mainnet pool data for regtest (shared genesis token IDs).
+**Fix:** Skip Espo on regtest — RPC simulation fallback queries actual on-chain reserves.
 
 ### "EXPIRED deadline" on regtest
 **Cause:** Regtest blocks are mined manually, so a deadline of current_block + 3 can easily expire before the swap tx is mined.
 **Fix:** On regtest, all mutation hooks override `deadlineBlocks` to 1000 regardless of user setting.
 
 ### ⚠️ Tokens/BTC sent to wrong addresses (browser wallet)
-**Cause:** Mutation hook used symbolic addresses (`p2tr:0`, `p2wpkh:0`) for browser wallet outputs. These resolve to SDK's DUMMY wallet, NOT user's wallet.
-**Fix:** Use conditional logic to pass ACTUAL addresses for browser wallets:
-```typescript
-const toAddresses = isBrowserWallet ? [taprootAddress] : ['p2tr:0'];
-const changeAddr = isBrowserWallet ? segwitAddress : 'p2wpkh:0';
-const alkanesChangeAddr = isBrowserWallet ? taprootAddress : 'p2tr:0';
-```
-**See:** `useSwapMutation.ts` header comment for full documentation. This bug caused **actual token loss** — see Historical Issues section "2026-03-01: Browser Wallet Output Address Bug".
+**Cause:** Symbolic addresses (`p2tr:0`) resolve to SDK's dummy wallet, not user's.
+**Fix:** See "Address Handling — useActualAddresses is MANDATORY" section above.
 
 ---
 
@@ -548,30 +531,7 @@ The app has optional backend services for caching and persistence:
 - **Memorystore (Redis 7.0):** `subfrost-cache` at `10.11.193.4:6379`
 - **VPC Connector:** `subfrost-connector` (10.8.0.0/28) — connects Cloud Run to private services
 
-### Database/Cache Usage
-```typescript
-import { prisma, cache, redis } from '@/lib/db';
-
-// Prisma for PostgreSQL
-const user = await prisma.user.findUnique({ where: { taprootAddress } });
-
-// Redis cache with TTL
-const data = await cache.getOrSet('key', () => fetchData(), 300);
-```
-
-### Key Files
-- `lib/db/prisma.ts` — Prisma singleton client
-- `lib/db/redis.ts` — ioredis client with cache helpers
-- `prisma/schema.prisma` — Database schema
-- `app/api/health/route.ts` — Health check endpoint
-- `app/api/example/route.ts` — Usage examples for new developers
-- `docs/BACKEND_SETUP.md` — Full infrastructure documentation
-
-### Local Development
-```bash
-docker-compose up -d  # Start PostgreSQL + Redis
-pnpm db:push          # Apply schema
-```
+See [docs/BACKEND_SETUP.md](docs/BACKEND_SETUP.md) for usage examples and local setup.
 
 ---
 
@@ -744,27 +704,14 @@ All input alkanes automatically go to the FIRST protostone with matching `protoc
 
 ---
 
-## Resolved Issues Reference
+## Key Lessons from Past Incidents
 
-Investigation timelines are in git history. This table captures the key lessons.
-
-| Date | Issue | Key Lesson | Files |
-|------|-------|------------|-------|
-| 2026-03-16 | tapInternalKey regression | SDK adapters can't patch tapInternalKey — frontend MUST do it | `WalletContext.tsx` |
-| 2026-03-03 | Alkane transfer spends all assets | Never select dust UTXOs blindly — query indexer + ord_outputs, score by cleanliness | `buildAlkaneTransferPsbt.ts`, `SendModal.tsx` |
-| 2026-03-03 | UniSat signing null error | Bypass SDK adapter, call `window.unisat` directly with `autoFinalized: true` + `address` in toSignInputs | `WalletContext.tsx` |
-| 2026-03-03 | Dust output broadcast failure | Use DUST_VALUE=600 sats (not 546) for relay compatibility | `buildAlkaneTransferPsbt.ts` |
-| 2026-03-02 | UniSat/OKX connection hangs | Add 10s timeout to `requestAccounts()`/`connect()`, try `getAccounts()` first | `WalletContext.tsx` |
-| 2026-03-01 | Browser wallet token loss | NEVER use symbolic addresses for browser wallets — tokens go to SDK dummy wallet | All mutation hooks |
-| 2026-03-01 | Send Modal UTXO/signing bugs | Use esplora REST proxy (not RPC), aggregate both address types, add tapInternalKey | `SendModal.tsx` |
-| 2026-03-01 | OYL "Invalid PSBT hex" | Auto-reconnect via `getAddresses()` on "connected first" error | `WalletContext.tsx` |
-| 2026-02-01 | BTC→DIESEL swap triple bug | No manual edicts (SDK handles it), wait for wrap confirm before swap, skip Espo on regtest | Swap hooks, `useAlkanesTokenPairs.ts` |
-| 2026-01-28 | AMM incomplete WASM | Always build from oyl-amm source, never trust prod_wasms/. Verify opcodes via simulate after deploy | AMM deployment docs |
-| 2026-01-28 | Pool missing Swap opcode | Use factory router opcode 13 instead of pool opcode 3 | Swap hooks |
-| 2026-01-28 | frBTC wrap silent fail | Check signer address (opcode 103). Run CLI wrap-btc to get correct address | `useWrapMutation.ts` |
-| 2026-01-18 | WASM alias stale | Always sync `lib/oyl/alkanes/` after SDK update | `next.config.mjs` |
-| 2026-01-14 | AddLiquidity creates new pool | Verify pool exists before AddLiquidity (use opcode 2 first) | Liquidity hooks |
-| 2026-01-12 | Genesis alkanes missing | Need `--features regtest` in metashrew build | Docker config |
+- **tapInternalKey**: SDK adapters can't patch it — frontend `patchTapInternalKeys()` is mandatory before signing
+- **Symbolic addresses**: NEVER use `p2tr:0`/`p2wpkh:0` for browser wallets — tokens go to SDK dummy wallet
+- **Wallet session**: `ensureWalletSession()` in `lib/wallet/browserWalletSigning.ts` must run before all mutations
+- **Factory router for swaps**: Use factory opcode 13, not pool opcode 3 (pool's Swap is missing)
+- **WASM sync**: Always copy `lib/oyl/alkanes/` after SDK rebuild
+- **DUST_VALUE = 600 sats** (not 546) for relay compatibility
 
 ---
 
