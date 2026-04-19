@@ -9,8 +9,10 @@
 // Define Network type locally to avoid import issues with ts-sdk
 import type { Network } from '@/utils/constants';
 
-// Import from the browser-bundled alkanes SDK
-import { createKeystore, unlockKeystore, KeystoreManager } from '@alkanes/ts-sdk';
+// Keystore helpers are re-exported from @/lib/wallet/keystore — a shim that
+// lets us swap the implementation later without touching call sites. See
+// lib/wallet/keystore.ts for the migration rationale.
+import { createKeystore, unlockKeystore, KeystoreManager } from '@/lib/wallet/keystore';
 
 export type { Network };
 
