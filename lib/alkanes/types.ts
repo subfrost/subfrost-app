@@ -33,4 +33,12 @@ export interface AlkanesExecuteTypedParams {
   protectTaproot?: boolean;
   /** Network name — used to reliably detect devnet (instead of URL sniffing). */
   network?: string;
+  /** Pre-verified BTC UTXOs from wallet API (e.g. UniSat getBitcoinUtxos).
+   *  When provided, the SDK skips the slow `lua get_utxos` call entirely.
+   *  Format: array of `txid:vout:satoshis` strings.
+   *  Added by Misha's perf branch (feat: SDK perf — payment_utxos, ...);
+   *  the WASM type-defs in node_modules don't yet declare it, so we bridge
+   *  here. Used by `useSwapMutation` and `useWrapMutation`.
+   */
+  paymentUtxos?: string[];
 }
