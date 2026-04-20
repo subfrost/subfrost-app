@@ -221,7 +221,7 @@ describe('Browser wallet address handling', () => {
 
 describe('ordinalsStrategy setting', () => {
   describe.each(ACTIVE_HOOKS)('%s', (hookFile) => {
-    it("should set ordinalsStrategy to 'burn' in alkanesExecuteTyped call", () => {
+    it("should set ordinalsStrategy to 'exclude' in alkanesExecuteTyped call", () => {
       const src = readHook(hookFile);
       // useWrapMutation and useUnwrapMutation do not set ordinalsStrategy (use default)
       if (hookFile === 'useWrapMutation.ts' || hookFile === 'useUnwrapMutation.ts') {
@@ -229,7 +229,12 @@ describe('ordinalsStrategy setting', () => {
         expect(src).toContain('alkanesExecuteTyped');
         return;
       }
-      expect(src).toContain("ordinalsStrategy: 'burn'");
+      // Misha's perf branch switched 'burn' (destroys inscriptions) → 'exclude'
+      // (refuses to spend inscribed UTXOs). 'exclude' is the canonical safe
+      // value going forward — never accept 'burn' (destructive) or
+      // 'preserve' (splits inscribed UTXOs, edge-case behavior).
+      // Type def: 'exclude' | 'preserve' | 'burn' (lib/alkanes/types.ts).
+      expect(src).toContain("ordinalsStrategy: 'exclude'");
     });
   });
 });

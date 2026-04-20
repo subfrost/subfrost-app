@@ -284,8 +284,11 @@ describe('Browser wallet address handling in useAddLiquidityMutation', () => {
     expect(match![1]).not.toContain("'p2tr:0'");
   });
 
-  it('should set ordinalsStrategy to burn', () => {
-    expect(src).toContain("ordinalsStrategy: 'burn'");
+  it("should set ordinalsStrategy to 'exclude'", () => {
+    // 'exclude' is the canonical safe value (refuses inscribed UTXOs).
+    // Never accept 'burn' (destructive). Misha's perf branch standardized
+    // on 'exclude'; enforce that going forward.
+    expect(src).toContain("ordinalsStrategy: 'exclude'");
   });
 
   it('should call signTaprootPsbt once for browser wallets (not both segwit and taproot)', () => {

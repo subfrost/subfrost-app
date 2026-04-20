@@ -188,7 +188,11 @@ describe('useLPPositions', () => {
     expect(result.current.positions[0].token1Symbol).toBe('BAR');
   });
 
-  it('formats balance correctly with 4 decimal places', () => {
+  it('formats balance correctly with 8 decimal places (full precision)', () => {
+    // Misha's perf branch widened the displayed precision from 4 → 8 decimal
+    // places so users see the exact spendable amount of LP tokens. The
+    // smallest LP unit is 10^-8; narrower truncation hides real spendable
+    // value. See useLPPositions.ts: `remainderStr.slice(0, 8)`.
     mockUseEnrichedWalletData.mockReturnValue({
       balances: {
         alkanes: [makeAlkane({ balance: '123456789', decimals: 8, symbol: 'A/B LP' })],
@@ -198,11 +202,11 @@ describe('useLPPositions', () => {
     });
 
     const { result } = renderHook(() => useLPPositions());
-    // 123456789 / 10^8 = 1.23456789 -> "1.2345"
-    expect(result.current.positions[0].amount).toBe('1.2345');
+    // 123456789 / 10^8 = 1.23456789 → full 8-decimal display
+    expect(result.current.positions[0].amount).toBe('1.23456789');
   });
 
-  it('formats large balance correctly', () => {
+  it('formats large balance correctly with 8 decimal places', () => {
     mockUseEnrichedWalletData.mockReturnValue({
       balances: {
         alkanes: [makeAlkane({ balance: '10000000000', decimals: 8, symbol: 'A/B LP' })],
@@ -212,8 +216,8 @@ describe('useLPPositions', () => {
     });
 
     const { result } = renderHook(() => useLPPositions());
-    // 10000000000 / 10^8 = 100 -> "100.0000"
-    expect(result.current.positions[0].amount).toBe('100.0000');
+    // 10000000000 / 10^8 = 100 → "100.00000000" (full 8-decimal display)
+    expect(result.current.positions[0].amount).toBe('100.00000000');
   });
 
   it('does not include non-LP, non-pool tokens', () => {

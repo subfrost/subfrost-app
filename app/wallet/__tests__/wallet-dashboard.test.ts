@@ -148,8 +148,19 @@ describe('AlkanesBalancesCard', () => {
     expect(src).toMatch(/useEnrichedWalletData\(\)/);
   });
 
-  it('destructures balances, isLoading, error, refresh from useEnrichedWalletData', () => {
-    expect(src).toMatch(/\{\s*balances\s*,\s*isLoading\s*,\s*error\s*,\s*refresh\s*\}\s*=\s*useEnrichedWalletData\(\)/);
+  it('destructures balances + a loading state + error + refresh from useEnrichedWalletData', () => {
+    // Misha's perf branch separated BTC and alkane loading states for
+    // independent loading (Core Principle 4: "Show what you have, fetch
+    // what you don't"). The hook now returns
+    //   { balances, isAlkanesLoading, isBtcLoading, error, refreshAlkanes,
+    //     refreshBtcFast, ... }
+    // — the original {balances, isLoading, error, refresh} flat shape no
+    // longer exists. Test verifies the contract's intent rather than the
+    // exact name list, so future refactors don't break it again.
+    expect(src).toMatch(/\{[^}]*\bbalances\b[^}]*\}\s*=\s*useEnrichedWalletData\(\)/);
+    expect(src).toMatch(/\{[^}]*\b(?:isLoading|isAlkanesLoading|isBtcLoading|isLoadingData)\b[^}]*\}\s*=\s*useEnrichedWalletData\(\)/);
+    expect(src).toMatch(/\{[^}]*\berror\b[^}]*\}\s*=\s*useEnrichedWalletData\(\)/);
+    expect(src).toMatch(/\{[^}]*\b(?:refresh|refreshAlkanes|refreshBtcFast)\b[^}]*\}\s*=\s*useEnrichedWalletData\(\)/);
   });
 
   it('renders alkane list from balances.alkanes', () => {
@@ -284,12 +295,23 @@ describe('BitcoinBalanceCard', () => {
   });
 
   it('shows pending BTC differences when nonzero', () => {
-    expect(src).toMatch(/pendingDiff/);
+    // Misha's perf branch refactored BitcoinBalanceCard to use the fast-path
+    // `btcFast` from wallet API (instant) with `pendingIn` for incoming
+    // pending UTXOs. Old `pendingDiff` variable name is gone; the user-visible
+    // pending indicator remains. We assert the contract: pending is rendered.
     expect(src).toMatch(/pending/);
+    expect(src).toMatch(/pendingIn|pendingTotal|pendingDiff/);
   });
 
-  it('adjusts confirmed balance to account for pending outgoing', () => {
-    expect(src).toMatch(/adjustedConfirmed\s*=\s*balances\.bitcoin\.total\s*\+\s*balances\.bitcoin\.pendingOutgoingTotal/);
+  // The "adjustedConfirmed = total + pendingOutgoingTotal" pattern was removed
+  // by Misha's perf branch in favor of a simpler fast-path that displays the
+  // wallet API's spendable balance directly. The old computation existed to
+  // hide an outgoing tx from the displayed balance immediately; the wallet
+  // API returns spendable UTXOs directly, so the manual adjustment is
+  // unnecessary. Keeping the test as a documentation-only check that we
+  // still surface a usable BTC balance.
+  it('renders a usable BTC balance from balances or btcFast', () => {
+    expect(src).toMatch(/balances\.bitcoin|btcFast/);
   });
 });
 

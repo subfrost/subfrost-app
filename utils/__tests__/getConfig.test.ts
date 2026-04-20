@@ -19,9 +19,13 @@ describe('getConfig', () => {
     expect(config.ALKANE_FACTORY_ID).toBe('4:65522');
   });
 
-  it('devnet returns factory ID 4:65522', () => {
+  // Devnet uses the WORKING AMM factory (4:65498) built from oyl-amm source —
+  // distinct from mainnet (4:65522, original deployment). The 4:65522 slot
+  // exists on devnet but lacks the write opcodes (Create/AddLiquidity/Swap).
+  // See CLAUDE.md "AMM Contract Architecture" + Misha's perf branch.
+  it('devnet returns factory ID 4:65498 (working oyl-amm build)', () => {
     const config = getConfig('devnet');
-    expect(config.ALKANE_FACTORY_ID).toBe('4:65522');
+    expect(config.ALKANE_FACTORY_ID).toBe('4:65498');
   });
 
   it('signet returns factory ID 4:65522', () => {
