@@ -185,8 +185,14 @@ describe('useEnrichedWalletData', () => {
     });
 
     it('has withTimeout helper for resilience against slow RPC', () => {
+      // Misha's perf branch refactored the helper from "throw on timeout"
+      // to "return a fallback value" (less disruptive UX, no error toast
+      // when a slow query simply times out). Signature is now
+      //   withTimeout<T>(promise, timeoutMs, fallback): Promise<T>
+      // — see queries/account.ts. The literal 'Request timed out' string
+      // is no longer present; we just confirm the helper exists.
       expect(querySrc).toContain('withTimeout');
-      expect(querySrc).toContain('Request timed out');
+      expect(querySrc).toMatch(/withTimeout\s*=\s*<[^>]+>\s*\(/);
     });
 
     it('calls provider.getEnrichedBalances for UTXO data', () => {
@@ -718,10 +724,15 @@ describe('Cross-cutting: React Query caching', () => {
 });
 
 describe('Cross-cutting: timeout / resilience', () => {
-  it('enrichedWalletQueryOptions has 15s timeout on getEnrichedBalances', () => {
+  it('enrichedWalletQueryOptions has a generous timeout on getEnrichedBalances', () => {
+    // Misha's perf branch increased the timeout from 15s → 25s for resilience
+    // against slow RPC. The exact constant matters less than the fact that
+    // a withTimeout wrapper is applied. Accept any timeout >= 15s (15_000 with
+    // underscore separator is also allowed by JS).
     const querySrc = readSrc('queries/account.ts');
-    expect(querySrc).toContain('15000');
     expect(querySrc).toContain('withTimeout(provider.getEnrichedBalances');
+    // Look for a numeric arg in the call site, allowing 15000, 15_000, 25000, 25_000, etc.
+    expect(querySrc).toMatch(/withTimeout\(provider\.getEnrichedBalances\([^)]*\),\s*(?:15|20|25|30)_?000/);
   });
 
   it('enrichedWalletQueryOptions has 15s timeout on alkane balance fetch', () => {

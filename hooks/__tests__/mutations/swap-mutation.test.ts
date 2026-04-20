@@ -416,8 +416,11 @@ describe('ordinalsStrategy in swap hook', () => {
     src = fs.readFileSync(path.resolve(__dirname, '../../useSwapMutation.ts'), 'utf-8');
   });
 
-  it('should set ordinalsStrategy to burn', () => {
-    expect(src).toContain("ordinalsStrategy: 'burn'");
+  it("should set ordinalsStrategy to 'exclude'", () => {
+    // 'exclude' is the canonical safe value (refuses to spend inscribed
+    // UTXOs). Never accept 'burn' (destructive). Misha's perf branch switched
+    // from 'burn' → 'exclude'; we enforce that going forward.
+    expect(src).toContain("ordinalsStrategy: 'exclude'");
   });
 
   it('should pass ordinalsStrategy to alkanesExecuteTyped', () => {

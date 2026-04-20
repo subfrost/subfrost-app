@@ -210,12 +210,19 @@ describe('usePools', () => {
     expect(pool.token1Amount).toBe('2170000000');
   });
 
-  it('falls back to REST pools-details when Data API fails', async () => {
+  it('falls back to REST pools-details (server-side cached endpoint) when Data API fails', async () => {
+    // Misha's perf branch: REST `/api/pools/cached?network=...` is now the
+    // PRIMARY data source (server-side 30s cache, preserves all API fields
+    // like poolApr/poolVolume30dInUsd that the SDK WASM strips). The SDK
+    // dataApiGetAllPoolsDetails is the FALLBACK now. So this "Data API fails"
+    // scenario is satisfied as long as the cached REST endpoint succeeds.
+    // See hooks/usePools.ts:280-287 — `/api/pools/cached` route + Promise.race
+    // with a 10s timeout.
     mockProvider.dataApiGetAllPoolsDetails.mockRejectedValue(new Error('API down'));
 
-    // Mock the REST fallback fetch
     mockFetch.mockImplementation(async (url: string) => {
-      if (typeof url === 'string' && url.includes('get-all-pools-details')) {
+      // PRIMARY path on Misha's branch: server-side cached REST proxy
+      if (typeof url === 'string' && (url.includes('/api/pools/cached') || url.includes('get-all-pools-details'))) {
         return {
           ok: true,
           json: async () => makePoolApiResponse(),
@@ -236,7 +243,9 @@ describe('usePools', () => {
     mockProvider.dataApiGetAllPoolsDetails.mockRejectedValue(new Error('API down'));
 
     mockFetch.mockImplementation(async (url: string) => {
-      if (typeof url === 'string' && url.includes('get-all-pools-details')) {
+      // Misha's perf branch: primary endpoint is `/api/pools/cached` — match
+      // both names so this stays correct if/when the endpoint name changes.
+      if (typeof url === 'string' && (url.includes('/api/pools/cached') || url.includes('get-all-pools-details'))) {
         return { ok: false, status: 500 };
       }
       if (typeof url === 'string' && url.includes('get-all-token-pairs')) {
@@ -261,7 +270,9 @@ describe('usePools', () => {
     mockProvider.dataApiGetAllTokenPairs.mockRejectedValue(new Error('API down'));
 
     mockFetch.mockImplementation(async (url: string) => {
-      if (typeof url === 'string' && url.includes('get-all-pools-details')) {
+      // Both the cached REST proxy and the legacy direct REST endpoint
+      // should fail so that the SDK RPC fallback takes over.
+      if (typeof url === 'string' && (url.includes('/api/pools/cached') || url.includes('get-all-pools-details'))) {
         return { ok: false, status: 500 };
       }
       if (typeof url === 'string' && url.includes('get-all-token-pairs')) {
@@ -392,7 +403,9 @@ describe('usePools', () => {
     mockProvider.alkanesGetAllPoolsWithDetails.mockResolvedValue(makeSDKFallbackResponse());
 
     mockFetch.mockImplementation(async (url: string) => {
-      if (typeof url === 'string' && (url.includes('get-all-pools-details') || url.includes('get-all-token-pairs'))) {
+      // Treat the cached REST proxy + legacy direct REST + token-pairs as
+      // all returning empty so the SDK fallback path is exercised.
+      if (typeof url === 'string' && (url.includes('/api/pools/cached') || url.includes('get-all-pools-details') || url.includes('get-all-token-pairs'))) {
         return { ok: true, json: async () => ({ pools: [] }) };
       }
       return { ok: true, json: async () => ({ names: {} }) };
