@@ -21,9 +21,32 @@
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { Network } from '@/utils/constants';
-import * as alkWasm from '@alkanes/ts-sdk/wasm';
 
-type WebProvider = InstanceType<typeof alkWasm.WebProvider>;
+// PERF (2026-04-20): WASM is now lazy-loaded via dynamic import inside the
+// initProvider effect below — this used to be a top-level `import * as alkWasm
+// from '@alkanes/ts-sdk/wasm'` which forced the 10.6 MB WASM binary to download
+// on EVERY page mount, even read-only pages (home, wallet dashboard, history,
+// vault landing pages) that never invoke the SDK. Webpack code-splits a
+// dynamic `await import(...)` into its own async chunk, so the WASM bytes
+// only travel over the wire when an SDK call actually happens.
+//
+// The type below is a TypeScript-only `import(...)` — it compiles to nothing
+// at runtime. The actual WASM module is realized inside `initProvider()` and
+// cached in module-level `wasmModulePromise` so subsequent network switches
+// don't re-fetch the binary.
+type AlkWasmModule = typeof import('@alkanes/ts-sdk/wasm');
+type WebProvider = InstanceType<AlkWasmModule['WebProvider']>;
+
+// Module-level promise that resolves to the loaded WASM module. First caller
+// triggers the dynamic import; subsequent callers (e.g., switching networks)
+// get the cached module instantly.
+let wasmModulePromise: Promise<AlkWasmModule> | null = null;
+function getWasmModule(): Promise<AlkWasmModule> {
+  if (!wasmModulePromise) {
+    wasmModulePromise = import('@alkanes/ts-sdk/wasm');
+  }
+  return wasmModulePromise;
+}
 
 /**
  * Check if we're running in a browser context.
@@ -223,7 +246,16 @@ export function AlkanesSDKProvider({ children, network }: AlkanesSDKProviderProp
         const providerName = NETWORK_TO_PROVIDER[network] || 'mainnet';
         const configOverrides = getNetworkConfig(network);
 
-        // Create the WASM WebProvider (module loaded eagerly via static import)
+        // Lazy-load the WASM module (10.6 MB binary). First page that mounts
+        // AlkanesSDKProvider triggers the dynamic import; module-level cache
+        // means subsequent network switches reuse it. Read-only pages that
+        // don't actually invoke any SDK call still pay the cost here because
+        // the provider is mounted at the app root — but the cost is now an
+        // async streaming download that happens AFTER first paint, not a
+        // synchronous bundle-blocking import.
+        const alkWasm = await getWasmModule();
+
+        // Create the WASM WebProvider
         const providerInstance = new alkWasm.WebProvider(providerName, configOverrides);
 
         console.log('[AlkanesSDK] WASM WebProvider created successfully');
