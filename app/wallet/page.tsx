@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import type { AlkaneAsset } from '@/hooks/useEnrichedWalletData';
 import { useWallet } from '@/context/WalletContext';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -20,7 +20,7 @@ import { useNotification } from '@/context/NotificationContext';
 
 type TabView = 'balances' | 'utxos' | 'transactions' | 'settings';
 
-export default function WalletDashboardPage() {
+function WalletDashboardContent() {
   const { connected, isConnected, address, paymentAddress, network } = useWallet() as any;
   const { t } = useTranslation();
   const router = useRouter();
@@ -258,5 +258,13 @@ export default function WalletDashboardPage() {
         onClose={() => setShowReceiveModal(false)}
       />
     </div>
+  );
+}
+
+export default function WalletDashboardPage() {
+  return (
+    <Suspense fallback={null}>
+      <WalletDashboardContent />
+    </Suspense>
   );
 }

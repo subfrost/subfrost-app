@@ -28,6 +28,12 @@ interface Stats {
   }>;
   allParentRedemptions: number[];
   allCodeRedemptions: number[];
+  topIndividualCodes: Array<{
+    id: string;
+    code: string;
+    isChild: boolean;
+    redemptions: number;
+  }>;
 }
 
 function formatLabel(dateStr: string): string {
@@ -309,6 +315,15 @@ function CommunityFuelPie({ data, showValues, sizeScale = 1 }: { data: Community
   const grandTotal = sorted.reduce((s, d) => s + d.total, 0);
   if (grandTotal === 0) return null;
 
+  // Top 5 + "Other" bucket for the rest
+  const top5 = sorted.slice(0, 5);
+  const otherTotal = sorted.slice(5).reduce((s, d) => s + d.total, 0);
+  const otherCount = sorted.length - 5;
+  const pieData: Array<{ community: string; total: number }> = [...top5];
+  if (otherTotal > 0) {
+    pieData.push({ community: `Other (${otherCount})`, total: otherTotal });
+  }
+
   const size = Math.round(200 * sizeScale);
   const cx = size / 2;
   const cy = size / 2;
@@ -316,7 +331,7 @@ function CommunityFuelPie({ data, showValues, sizeScale = 1 }: { data: Community
 
   // Build slices
   let cumAngle = -Math.PI / 2;
-  const slices = sorted.map((item, i) => {
+  const slices = pieData.map((item, i) => {
     const frac = item.total / grandTotal;
     const startAngle = cumAngle;
     const endAngle = cumAngle + frac * 2 * Math.PI;
@@ -383,14 +398,55 @@ function CommunityFuelPie({ data, showValues, sizeScale = 1 }: { data: Community
   );
 }
 
-function TopParentsBarChart({ data, heightScale = 1 }: { data: Stats['topParents']; heightScale?: number }) {
+function TopParentsRowChart({ data }: { data: Stats['topParents'] }) {
+  const sorted = [...data].sort((a, b) => b.totalRedemptions - a.totalRedemptions);
+  const maxVal = sorted.length > 0 ? sorted[0].totalRedemptions : 1;
+
+  const rowHeight = 28;
+  const gap = 4;
+
+  return (
+    <div className="flex w-full flex-col" style={{ gap }}>
+      {sorted.map((item) => {
+        const pct = maxVal > 0 ? (item.totalRedemptions / maxVal) * 100 : 0;
+        return (
+          <div key={item.id} className="flex items-center" style={{ height: rowHeight, gap: 8 }}>
+            {/* Label */}
+            <div
+              className="shrink-0 truncate text-right text-xs text-[color:var(--sf-muted)]"
+              style={{ width: 100 }}
+              title={item.code}
+            >
+              {item.code}
+            </div>
+            {/* Bar */}
+            <div className="relative h-5 flex-1 overflow-hidden rounded" style={{ background: 'var(--sf-glass-border)' }}>
+              <div
+                className="absolute inset-y-0 left-0 rounded"
+                style={{
+                  width: `${Math.max(pct, 1)}%`,
+                  background: 'rgb(59,130,246)',
+                  transition: 'width 400ms cubic-bezier(0,0,0,1)',
+                }}
+              />
+            </div>
+            {/* Value */}
+            <div className="shrink-0 text-right text-xs font-bold text-[color:var(--sf-text)]" style={{ width: 40 }}>
+              {item.totalRedemptions.toLocaleString()}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function TopCodesBarChart({ data }: { data: Stats['topIndividualCodes'] }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
 
   const updateWidth = useCallback(() => {
-    if (containerRef.current) {
-      setWidth(containerRef.current.clientWidth);
-    }
+    if (containerRef.current) setWidth(containerRef.current.clientWidth);
   }, []);
 
   useEffect(() => {
@@ -400,20 +456,20 @@ function TopParentsBarChart({ data, heightScale = 1 }: { data: Stats['topParents
     return () => observer.disconnect();
   }, [updateWidth]);
 
-  const sorted = [...data].sort((a, b) => b.totalRedemptions - a.totalRedemptions);
-  const maxVal = sorted.length > 0 ? sorted[0].totalRedemptions : 1;
+  const sorted = [...data].sort((a, b) => b.redemptions - a.redemptions);
+  const maxVal = sorted.length > 0 ? sorted[0].redemptions : 1;
 
-  const height = Math.round(220 * heightScale);
-  const padLeft = 50;
+  const height = 260;
+  const padLeft = 40;
   const padRight = 12;
-  const padTop = 12;
-  const padBottom = 60;
+  const padTop = 16;
+  const padBottom = 64;
   const chartW = Math.max(width - padLeft - padRight, 1);
   const chartH = height - padTop - padBottom;
 
   const barCount = sorted.length;
-  const gap = Math.max(4, chartW * 0.02);
-  const barWidth = barCount > 0 ? Math.max(8, (chartW - gap * (barCount + 1)) / barCount) : 0;
+  const gap = Math.max(2, chartW * 0.01);
+  const barWidth = barCount > 0 ? Math.max(6, (chartW - gap * (barCount + 1)) / barCount) : 0;
 
   const yTicks: number[] = [];
   if (maxVal <= 5) {
@@ -431,35 +487,30 @@ function TopParentsBarChart({ data, heightScale = 1 }: { data: Stats['topParents
           {yTicks.map((v) => {
             const y = padTop + chartH - (maxVal > 0 ? (v / maxVal) * chartH : 0);
             return (
-              <line
-                key={v}
-                x1={padLeft}
-                y1={y}
-                x2={padLeft + chartW}
-                y2={y}
-                stroke="var(--sf-glass-border)"
-                strokeDasharray="3,3"
-              />
-            );
-          })}
-          {yTicks.map((v) => {
-            const y = padTop + chartH - (maxVal > 0 ? (v / maxVal) * chartH : 0);
-            return (
-              <text
-                key={v}
-                x={padLeft - 6}
-                y={y}
-                textAnchor="end"
-                dominantBaseline="middle"
-                fill="var(--sf-muted)"
-                fontSize={10}
-              >
-                {v}
-              </text>
+              <g key={v}>
+                <line
+                  x1={padLeft}
+                  y1={y}
+                  x2={padLeft + chartW}
+                  y2={y}
+                  stroke="var(--sf-glass-border)"
+                  strokeDasharray="3,3"
+                />
+                <text
+                  x={padLeft - 6}
+                  y={y}
+                  textAnchor="end"
+                  dominantBaseline="middle"
+                  fill="var(--sf-muted)"
+                  fontSize={10}
+                >
+                  {v}
+                </text>
+              </g>
             );
           })}
           {sorted.map((item, i) => {
-            const barH = maxVal > 0 ? (item.totalRedemptions / maxVal) * chartH : 0;
+            const barH = maxVal > 0 ? (item.redemptions / maxVal) * chartH : 0;
             const x = padLeft + gap + i * (barWidth + gap);
             const y = padTop + chartH - barH;
             return (
@@ -469,27 +520,29 @@ function TopParentsBarChart({ data, heightScale = 1 }: { data: Stats['topParents
                   y={y}
                   width={barWidth}
                   height={barH}
-                  fill="rgb(59,130,246)"
+                  fill={item.isChild ? '#8b5cf6' : 'rgb(59,130,246)'}
                   rx={2}
                 />
+                {barH > 14 && (
+                  <text
+                    x={x + barWidth / 2}
+                    y={y - 4}
+                    textAnchor="middle"
+                    fill="var(--sf-text)"
+                    fontSize={9}
+                    fontWeight="bold"
+                  >
+                    {item.redemptions}
+                  </text>
+                )}
                 <text
                   x={x + barWidth / 2}
-                  y={y - 4}
-                  textAnchor="middle"
-                  fill="var(--sf-text)"
-                  fontSize={9}
-                  fontWeight="bold"
-                >
-                  {item.totalRedemptions}
-                </text>
-                <text
-                  x={x + barWidth / 2}
-                  y={padTop + chartH + 12}
+                  y={padTop + chartH + 8}
                   textAnchor="end"
                   dominantBaseline="hanging"
                   fill="var(--sf-muted)"
-                  fontSize={10}
-                  transform={`rotate(-45, ${x + barWidth / 2}, ${padTop + chartH + 12})`}
+                  fontSize={9}
+                  transform={`rotate(-45, ${x + barWidth / 2}, ${padTop + chartH + 8})`}
                 >
                   {item.code}
                 </text>
@@ -498,6 +551,17 @@ function TopParentsBarChart({ data, heightScale = 1 }: { data: Stats['topParents
           })}
         </svg>
       )}
+      {/* Legend */}
+      <div className="mt-2 flex items-center justify-center gap-4 text-[10px] text-[color:var(--sf-muted)]">
+        <div className="flex items-center gap-1">
+          <span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: 'rgb(59,130,246)' }} />
+          Parent
+        </div>
+        <div className="flex items-center gap-1">
+          <span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: '#8b5cf6' }} />
+          Child
+        </div>
+      </div>
     </div>
   );
 }
@@ -725,7 +789,7 @@ export default function DashboardTab() {
               {stats.topParents.length === 0 ? (
                 <div className="text-sm text-[color:var(--sf-muted)]">No codes yet</div>
               ) : (
-                <TopParentsBarChart data={stats.topParents} heightScale={dashboardView === 'BOTH' ? 1.5 : 1.875} />
+                <TopParentsRowChart data={stats.topParents} />
               )}
             </div>
 
@@ -740,6 +804,18 @@ export default function DashboardTab() {
                 <CumulativeRedemptionsGraph data={stats.redemptionsByDay} heightScale={dashboardView === 'BOTH' ? 1.5 : 1.875} />
               )}
             </div>
+          </div>
+
+          {/* Top 25 individual codes bar chart */}
+          <div className="rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-6">
+            <h3 className="mb-4 text-sm font-semibold text-[color:var(--sf-text)]">
+              Top 25 Codes by Redemptions
+            </h3>
+            {stats.topIndividualCodes.length === 0 ? (
+              <div className="text-sm text-[color:var(--sf-muted)]">No codes yet</div>
+            ) : (
+              <TopCodesBarChart data={stats.topIndividualCodes} />
+            )}
           </div>
         </>
       )}

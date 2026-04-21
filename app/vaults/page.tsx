@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import PageContent from '@/app/components/PageContent';
 import MainnetFeatureNotice from '@/app/components/MainnetFeatureNotice';
 import VaultShell from './VaultShell';
@@ -10,7 +11,9 @@ export default function VaultsPage() {
     <PageContent>
       <MainnetFeatureNotice feature="vaults">
         <VaultsPageHeader>
-          <VaultShell />
+          <Suspense fallback={null}>
+            <VaultShell />
+          </Suspense>
         </VaultsPageHeader>
       </MainnetFeatureNotice>
     </PageContent>

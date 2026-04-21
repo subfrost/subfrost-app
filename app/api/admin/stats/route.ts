@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
     const cached = await cache.get(CACHE_KEY);
     if (cached) return NextResponse.json(cached);
 
-    const [totalCodes, activeCodes, totalRedemptions, totalUsers, recentRedemptions, topCodes, allRedemptionDates] =
+    const [totalCodes, activeCodes, totalRedemptions, totalUsers, recentRedemptions, topCodes, allRedemptionDates, topIndividualCodes] =
       await Promise.all([
         prisma.inviteCode.count(),
         prisma.inviteCode.count({ where: { isActive: true } }),
@@ -53,6 +53,17 @@ export async function GET(request: NextRequest) {
           orderBy: { redeemedAt: 'asc' },
           select: { redeemedAt: true },
         }),
+        // Top 25 individual codes (parent or child) by their own redemption count
+        prisma.inviteCode.findMany({
+          orderBy: { redemptions: { _count: 'desc' } },
+          take: 25,
+          select: {
+            id: true,
+            code: true,
+            parentCodeId: true,
+            _count: { select: { redemptions: true } },
+          },
+        }),
       ]);
 
     // Build daily redemption counts for cumulative graph
@@ -82,7 +93,7 @@ export async function GET(request: NextRequest) {
       })
       .sort((a, b) => b.totalRedemptions - a.totalRedemptions);
 
-    const topParents = allParents.slice(0, 10);
+    const topParents = allParents.slice(0, 15);
 
     // Individual redemption counts per code (parent + child) for median by address
     const allCodeRedemptions = topCodes.flatMap((parent) => [
@@ -101,6 +112,12 @@ export async function GET(request: NextRequest) {
       redemptionsByDay,
       allParentRedemptions: allParents.map((p) => p.totalRedemptions),
       allCodeRedemptions,
+      topIndividualCodes: topIndividualCodes.map((c) => ({
+        id: c.id,
+        code: c.code,
+        isChild: c.parentCodeId !== null,
+        redemptions: c._count.redemptions,
+      })),
     };
 
     await cache.set(CACHE_KEY, stats, CACHE_TTL);
