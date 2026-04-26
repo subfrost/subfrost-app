@@ -180,7 +180,7 @@ export function useSwapUnwrapMutation() {
       console.log('[SwapUnwrap] Deadline:', deadline, `(+${deadlineBlocks} blocks)`);
 
       const isBrowserWallet = walletType === 'browser';
-      const useActualAddresses = isBrowserWallet || network === 'devnet' || network === 'regtest-local' || network === 'qubitcoin-regtest';
+      const useActualAddresses = isBrowserWallet || network === 'devnet' || network === 'regtest-local' || network === 'qubitcoin-regtest' || network === 'regtest';
 
       // ========================================================================
       // Step 3: Fetch all available UTXOs BEFORE building swap

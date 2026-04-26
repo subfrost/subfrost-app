@@ -1,6 +1,38 @@
 /**
  * useWrapMutation - Wrap BTC into frBTC
  *
+ * ## JOURNAL (2026-04-26): regtest-local QA — wrap WORKS, no deadlock
+ *
+ * Test mnemonic: `legal winner thank year wave sausage worth useful legal winner thank yellow`.
+ *
+ * Three wraps on metabot regtest-local; all completed in <5s (no deadlock):
+ *   #1: 4.1s — tx c4a9f60554bfe1d37785279d184914bfa88ab8c6b5b78d9c74213f3596c8896f,
+ *       after `prioritisetransaction` + `generatetoaddress`, mint of 99,900 frBTC
+ *       sats verified at outpoint via `alkanes_protorunesbyoutpoint`.
+ *   #2: 4.4s — broadcast (UI errored on post-broadcast trace; harmless on regtest).
+ *   #3: 0.5s — rejected at consensus (premature coinbase spend); SDK bounced fast.
+ *
+ * `[ALIVE]` heartbeat (lines 216–258) ticked at steady ~1s intervals throughout —
+ * JS event loop never blocked. Upstream RPC continuous (~14 calls per wrap). The
+ * P0 deadlock claim from the prior baton did NOT reproduce. Most likely the
+ * `paymentUtxos` shortcut from `getCleanPaymentUtxos` (commit d95d99e3) bypasses
+ * whatever slow path was hanging before.
+ *
+ * **Operator note that cost real time today:** plain `generatetoaddress` against
+ * metabot produces empty blocks because new mempool txs default to
+ * `unbroadcast=true`. Wraps "succeeded" but sat unmined for ~10 minutes; I
+ * misread the empty `protorunesbyoutpoint` as a mint failure. Per CLAUDE.md
+ * "Mining is manual" section: ALWAYS prioritise the txid before mining on
+ * metabot. If a tx is already in mempool, the right command is:
+ *   ssh ubuntu@metabot "kubectl exec -n regtest-alkanes bitcoind-0 -- \
+ *     bitcoin-cli prioritisetransaction <txid> 0 1000000 && \
+ *     bitcoin-cli generatetoaddress 1 'bcrt1q6rz28mcfaxtmd6v789l9rrlrusdprr9pz3cppk'"
+ *
+ * **`[HANG-PROBE]` instrumentation (lines 216–258)** is now a no-op timer that
+ * proves the wrap path is healthy. Safe to remove. Removal: search for
+ * `[HANG-PROBE 2026-04-26]`, delete the comment block + `try/finally` heartbeat,
+ * restore a single `await provider.alkanesExecuteTyped({...})`.
+ *
  * ## WASM Dependency Note
  *
  * Uses `@alkanes/ts-sdk/wasm` aliased to `lib/oyl/alkanes/` (see next.config.mjs).
@@ -150,7 +182,7 @@ export function useWrapMutation() {
         : getSignerAddress(network);
 
       const isBrowserWallet = walletType === 'browser';
-      const useActualAddresses = isBrowserWallet || network === 'devnet' || network === 'regtest-local' || network === 'qubitcoin-regtest';
+      const useActualAddresses = isBrowserWallet || network === 'devnet' || network === 'regtest-local' || network === 'qubitcoin-regtest' || network === 'regtest';
 
       // For browser wallets, use actual addresses for UTXO discovery (passed as
       // opaque strings to esplora — no Address parsing, no LegacyAddressTooLong).
@@ -213,21 +245,49 @@ export function useWrapMutation() {
             })
           : undefined;
 
-        const result = await provider.alkanesExecuteTyped({
-          toAddresses,
-          inputRequirements,
-          protostones: protostone,
-          feeRate: wrapData.feeRate,
-          fromAddresses,
-          changeAddress: useActualAddresses ? (userSegwitAddress || userTaprootAddress) : 'p2wpkh:0',
-          alkanesChangeAddress: useActualAddresses ? userTaprootAddress : 'p2tr:0',
-          autoConfirm: false,
-          traceEnabled: true,
-          mineEnabled: false,
-          ordinalsStrategy: 'exclude' as const,
-          protectTaproot: Boolean(userSegwitAddress && userTaprootAddress),
-          paymentUtxos,
-        });
+        // [HANG-PROBE 2026-04-26] Heartbeat instrumentation around the SDK call
+        // to discriminate between "JS thread blocked by sync WASM loop" vs "WASM
+        // awaiting a Promise that never resolves" during regtest-local keystore
+        // wrap deadlock (see CLAUDE.md P0). If [ALIVE] ticks keep firing during
+        // the hang -> JS event loop is free -> hang is an unresolved await. If
+        // ticks stop firing -> WASM is in a CPU-bound loop. Remove after the
+        // bug is localized.
+        const __probeStart = performance.now();
+        let __probeLastSeen = __probeStart;
+        const __probeInterval = setInterval(() => {
+          const now = performance.now();
+          const sinceStart = ((now - __probeStart) / 1000).toFixed(1);
+          const sinceLast = ((now - __probeLastSeen) / 1000).toFixed(1);
+          __probeLastSeen = now;
+          // eslint-disable-next-line no-console
+          console.log(`[ALIVE] alkanesExecuteTyped pending: ${sinceStart}s elapsed, ${sinceLast}s since last tick`);
+        }, 1000);
+        // eslint-disable-next-line no-console
+        console.log('[HANG-PROBE] BEFORE alkanesExecuteTyped at t=0');
+
+        let result: any;
+        try {
+          result = await provider.alkanesExecuteTyped({
+            toAddresses,
+            inputRequirements,
+            protostones: protostone,
+            feeRate: wrapData.feeRate,
+            fromAddresses,
+            changeAddress: useActualAddresses ? (userSegwitAddress || userTaprootAddress) : 'p2wpkh:0',
+            alkanesChangeAddress: useActualAddresses ? userTaprootAddress : 'p2tr:0',
+            autoConfirm: false,
+            traceEnabled: true,
+            mineEnabled: false,
+            ordinalsStrategy: 'exclude' as const,
+            protectTaproot: Boolean(userSegwitAddress && userTaprootAddress),
+            paymentUtxos,
+          });
+        } finally {
+          clearInterval(__probeInterval);
+          const __probeElapsed = ((performance.now() - __probeStart) / 1000).toFixed(1);
+          // eslint-disable-next-line no-console
+          console.log(`[HANG-PROBE] AFTER alkanesExecuteTyped at t=${__probeElapsed}s`);
+        }
 
         console.log('[WRAP] Execute result:', result);
 

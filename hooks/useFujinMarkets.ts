@@ -141,7 +141,7 @@ export function useFujinMarkets() {
       const LOCAL_NETWORKS = ['regtest-local', 'devnet'];
       const rpcUrl = LOCAL_NETWORKS.includes(network || '')
         ? 'http://localhost:18888'
-        : network === 'qubitcoin-regtest'
+        : network === 'qubitcoin-regtest' || network === 'regtest'
           ? `${typeof window !== 'undefined' ? window.location.origin : ''}/api/rpc/qubitcoin-regtest`
           : getRpcUrl(network);
 
@@ -149,7 +149,7 @@ export function useFujinMarkets() {
       const fujinFactoryId = (config as any).FUJIN_FACTORY_ID;
       const espoUrl = (config as any).FUJIN_ESPO_URL;
 
-      if (fujinFactoryId && (network === 'regtest-local' || network === 'qubitcoin-regtest')) {
+      if (fujinFactoryId && (network === 'regtest-local' || network === 'qubitcoin-regtest' || network === 'regtest')) {
         try {
           return await fetchViaFactory(rpcUrl, fujinFactoryId, espoUrl);
         } catch (e) {

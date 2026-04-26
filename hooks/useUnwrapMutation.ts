@@ -33,6 +33,42 @@
  * there is an older build missing this opcode. The regtest contract returns:
  *   "ALKANES: revert: Error: Unrecognized opcode" (status: 1)
  * The tier1/unwrap-frbtc.test.ts skip comment applies to REGTEST only.
+ *
+ * ## Hosted regtest unwrap blocker (2026-04-26) — NOT a frontend bug
+ *
+ * Symptom: keystore wallet, hosted regtest, fresh wrap mints frBTC at the correct
+ * outpoint, but unwrap fails with `Wallet error: Insufficient alkanes: need X of 32:0, have 0`.
+ *
+ * The frontend now correctly:
+ *   - loads the session mnemonic into the WASM provider on `regtest`
+ *     (AlkanesSDKContext.tsx:235 — added 'regtest' to allowlist 2026-04-26)
+ *   - passes actual coinType=1 keystore addresses via useActualAddresses (this hook line ~122)
+ *   - resolves `from_addresses` to the real outpoint owner
+ *
+ * Verified via JSON-RPC that the outpoint exists and contains the alkane balance:
+ *   alkanes_protorunesbyoutpoint({ txid: '<wrap_txid>', vout: 1 }) → balance present
+ *   alkanes_protorunesbyaddress({ address: '<our_taproot>' }) → outpoint listed with balance
+ *
+ * BUT the SDK's UTXO discovery uses the espo essentials index (REST endpoint
+ * /api/rpc/regtest/get-alkanes-utxo + JSON-RPC essentials.get_address_outpoints
+ * via /api/rpc/regtest/espo). On hosted regtest BOTH return:
+ *   - get-alkanes-utxo: lists outpoints with `alkanes: {}` (empty) for ALL outpoints
+ *   - essentials.get_address_outpoints: `outpoints: []`
+ *
+ * Even after a fresh successful wrap (txid 689b151e443988ad095ccd226055dda1bdf51566594ef01a83cc32fb0a91c620,
+ * 9,990 frBTC verified at vout 1) the espo essentials index for the address remained empty.
+ *
+ * This is the same root cause as the metabot regtest-local blocker documented elsewhere in
+ * CLAUDE.md: espo essentials skips writing balance entries when the trace return status is
+ * not Success (espo: src/modules/essentials/utils/balances/lib.rs:378-379). On hosted regtest
+ * traces are stored, but for some reason the balance index population still fails. Same shape:
+ * outpoint indexer (alkanes_protorunesbyoutpoint) is correct, address indexer (espo essentials)
+ * is empty.
+ *
+ * Frontend cannot fix this — the SDK's UTXO selection bypasses the outpoint indexer.
+ * Two real fix paths, both out of frontend scope:
+ *   1. fr-btc contract: remove or non-revert the seen/<txid> guard
+ *   2. espo essentials: read balances from protorunes_by_outpoint instead of trace events
  */
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import * as bitcoin from 'bitcoinjs-lib';
@@ -119,7 +155,7 @@ export function useUnwrapMutation() {
       });
 
       const isBrowserWallet = walletType === 'browser';
-      const useActualAddresses = isBrowserWallet || network === 'devnet' || network === 'regtest-local' || network === 'qubitcoin-regtest';
+      const useActualAddresses = isBrowserWallet || network === 'devnet' || network === 'regtest-local' || network === 'qubitcoin-regtest' || network === 'regtest';
 
       // ============================================================================
       // ⚠️ CRITICAL: Browser wallets need ACTUAL addresses, not symbolic ⚠️

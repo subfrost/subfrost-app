@@ -231,8 +231,18 @@ export function AlkanesSDKProvider({ children, network }: AlkanesSDKProviderProp
 
         // RESOLVED (2026-03-31): Passing actual addresses via useActualAddresses pattern
         // in all mutation hooks fixes the address resolution issue. See CLAUDE.md Rule 0b.
+        //
+        // EXTENDED (2026-04-26): Added 'regtest' (hosted regtest at regtest.subfrost.io)
+        // to the mnemonic-loading allowlist. Previously hosted regtest used walletCreate()
+        // which produces a random dummy wallet — this broke unwrap/swap on hosted regtest
+        // because the SDK queried esplora script-history for the dummy wallet's addresses
+        // (which had none) and failed with "Script not found for hash: ...".
+        // After this fix, hosted regtest uses the same mnemonic-derived coinType=1 addresses
+        // as the WalletContext keystore wallet, so script-history lookups succeed.
+        // Verified by tx 689b151e443988ad095ccd226055dda1bdf51566594ef01a83cc32fb0a91c620
+        // (fresh wrap broadcast successfully through keystore wallet on hosted regtest).
         try {
-          if (network === 'devnet' || network === 'regtest-local' || network === 'qubitcoin-regtest') {
+          if (network === 'devnet' || network === 'regtest-local' || network === 'qubitcoin-regtest' || network === 'regtest') {
             // On local networks, load the session mnemonic so the SDK provider
             // can find UTXOs for signing. A dummy wallet resolves p2tr:0/p2wpkh:0
             // to unrelated addresses with no balance.

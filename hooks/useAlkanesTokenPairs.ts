@@ -212,9 +212,9 @@ async function fetchPoolsFromSDK(
   console.log('[fetchPoolsFromSDK] ENTRY - factoryId:', factoryId, 'network:', network);
 
   // regtest-local: skip REST/SDK (503 or 30s timeout). Use direct metashrew_view simulate.
-  if (network === 'regtest-local' || network === 'qubitcoin-regtest') {
+  if (network === 'regtest-local' || network === 'qubitcoin-regtest' || network === 'regtest') {
     try {
-      const simRpcUrl = network === 'qubitcoin-regtest'
+      const simRpcUrl = network === 'qubitcoin-regtest' || network === 'regtest'
         ? `${typeof window !== 'undefined' ? window.location.origin : ''}/api/rpc/qubitcoin-regtest`
         : 'http://localhost:18888';
       return await fetchTokenPairsFromDirectSimulate(factoryId, simRpcUrl);

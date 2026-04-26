@@ -75,7 +75,7 @@ export function useWrapEthMutation() {
       }
 
       const isBrowserWallet = walletType === 'browser';
-      const useActualAddresses = isBrowserWallet || network === 'devnet' || network === 'regtest-local' || network === 'qubitcoin-regtest';
+      const useActualAddresses = isBrowserWallet || network === 'devnet' || network === 'regtest-local' || network === 'qubitcoin-regtest' || network === 'regtest';
       const fromAddresses = useActualAddresses
         ? [userSegwitAddress, userTaprootAddress].filter(Boolean) as string[]
         : ['p2wpkh:0', 'p2tr:0'];

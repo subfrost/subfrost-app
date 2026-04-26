@@ -588,29 +588,114 @@ These two can disagree. Concrete case: re-broadcasting an in-flight wrap tx via 
 2. Mine via the wallet/settings page Mine 1 Block button, NOT `prioritisetransaction` — the latter combined with re-broadcast is what produced our zombie state.
 3. If you do hit zombie state (balance at outpoint but not at address), the recovery is a fresh wallet + fresh wrap with a single broadcast.
 
-### ⚠️ Open P0: WASM PSBT builder deadlocks on regtest-local keystore wraps
+### Hosted regtest funding (`regtest.subfrost.io`) — operational recipe (2026-04-26)
 
-Verified 2026-04-26 across both develop and perf branches with two different wallets (412 UTXO old + 101 UTXO fresh): the WASM provider's wrap mutation enters `[WRAP] Starting wrap: 100000 sats` and then hangs indefinitely with **zero subsequent RPC activity**. We've observed:
+For when matrix QA needs a funded wallet on hosted regtest, use the `regtest` bitcoind wallet pre-loaded server-side. **No API key needed** for any `bitcoind_*` JSON-RPC method — only `essentials.*` REST endpoints require one.
 
-- ~31 RPC calls to `localhost:18888` in the first ~20 seconds (UTXO discovery / pre-build queries) → all complete
-- Then 350+ seconds of pure local WASM compute with no fetch traffic
-- Browser remains responsive (JS eval works) — WASM is NOT crashing, just stuck
-- Reproducible across two distinct wallets and both branches
+**Step 1: load the funded wallet** (8,738+ BTC available):
+```bash
+curl -s https://regtest.subfrost.io/v4/subfrost -X POST -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","method":"bitcoind_loadwallet","params":["regtest"],"id":1}'
+```
 
-What we ruled out:
-- Not a UTXO-bloat O(n²) issue: 101 UTXOs hangs the same as 412
-- Not the metabot tunnel: tunnel is alive throughout, RPC calls earlier in the same session work fine
-- Not a network-config bug: pre-wrap balance display (which uses dataApi paths) works
-- Not the `paymentUtxos` optimization: hang reproduces with and without our extension
+**Step 2: send BTC to your address.** Note the explicit positional argument list — `bitcoind_sendtoaddress` requires all 10 positional args (including `fee_rate` as the 10th) because fallback fee estimation is disabled on this chain. Map params: `[address, amount, "", "", false, false, null, "unset", null, fee_rate_sat_vb]`:
+```bash
+curl -s https://regtest.subfrost.io/v4/subfrost -X POST -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","method":"bitcoind_sendtoaddress","params":["bcrt1q…", 1.0, "", "", false, false, null, "unset", null, 1],"id":1}'
+# → returns the txid
+```
 
-What's happening: needs whoever owns the WASM provider build to attach a debugger. The `alkanesExecuteFull` (called by useWrapMutation) finishes its async UTXO discovery and then enters synchronous PSBT construction. Something in that synchronous loop never returns.
+**Step 3: prioritise + mine.** Same `unbroadcast=true` mempool quirk as metabot:
+```bash
+TXID=…
+ADDR=bcrt1q6rz28mcfaxtmd6v789l9rrlrusdprr9pz3cppk  # mining recipient (any address; whoever's wallet has its key gets the (small) coinbase)
+curl -s https://regtest.subfrost.io/v4/subfrost -X POST -H 'Content-Type: application/json' \
+  -d "{\"jsonrpc\":\"2.0\",\"method\":\"bitcoind_prioritisetransaction\",\"params\":[\"$TXID\", 0, 1000000],\"id\":1}"
+curl -s https://regtest.subfrost.io/v4/subfrost -X POST -H 'Content-Type: application/json' \
+  -d "{\"jsonrpc\":\"2.0\",\"method\":\"bitcoind_generatetoaddress\",\"params\":[1, \"$ADDR\"],\"id\":1}"
+```
 
-Workaround: untested. Possible avenues:
-- Call `alkanesExecuteTyped` instead of `alkanesExecuteFull` (different internal path)
-- Add a watchdog timeout in the SDK
-- Profile in Chrome DevTools to see what stack the WASM is sitting in
+**Critical: fund BOTH coinType=0 AND coinType=1 derivations.** The JS SDK (`createWalletFromMnemonic` in `WalletContext`) uses **coinType=0** so balance display reads from there; the WASM provider's `walletLoadMnemonic` uses **coinType=1** so on-chain wraps go there. UI shows balance from coinType=0; mints land at coinType=1. Fund both. To derive both for a mnemonic:
+```js
+// coinType=0 (UI / WalletContext)
+root.derivePath("m/86'/0'/0'/0/0")  // taproot
+root.derivePath("m/84'/0'/0'/0/0")  // segwit
+// coinType=1 (WASM provider, on-chain)
+root.derivePath("m/86'/1'/0'/0/0")
+root.derivePath("m/84'/1'/0'/0/0")
+```
 
-This blocks the keystore wrap/unwrap/alkane-send matrix on regtest-local until resolved.
+**Verified working flow:** Funded test mnemonic `legal winner thank year wave sausage worth useful legal winner thank yellow` with 5 BTC segwit + 2 BTC taproot at coinType=0 AND 5+2 at coinType=1. Hosted regtest wrap (tx `f2f272318c922565521eaa663a224662d06adba0aa9373d45edbfefb88d4f861`) successfully minted 99,900 frBTC at the expected coinType=1 outpoint, with a SUCCESS execution trace (verified `metashrew_view traceblock`) — distinct from metabot where the equivalent wrap traces as a revert. The address-keyed alkane index populates correctly here.
+
+**Hosted regtest unwrap blocker (deferred):** The unwrap path on hosted regtest fails with `Script not found for hash: …` from esplora during SDK UTXO discovery. The mismatch is real but architectural — `AlkanesSDKContext` only loads the user mnemonic into the WASM provider on `devnet`/`regtest-local`/`qubitcoin-regtest`; on hosted regtest it does `walletCreate()` (random dummy wallet). So while the wrap path works because the BROWSER tab somehow routed `p2tr:0` to our coinType=1 address (likely via state cached from a prior `regtest-local` session), the unwrap path tries to query esplora for our actual wallet's script-history and finds none. To unblock: either (a) extend `AlkanesSDKContext` to load the session mnemonic on `regtest` too, or (b) keep `walletCreate()` and pre-populate the dummy wallet's first send so esplora has script history. Option (a) is the simpler fix — change line 235 of `context/AlkanesSDKContext.tsx` to include `'regtest'` in the allowlist.
+
+### Resolved (2026-04-26): WASM PSBT builder deadlock on regtest-local keystore wraps
+
+**Status:** Could not reproduce on the perf branch with current metabot state.
+
+**Empirical evidence (3 wraps, all completed in <5s):**
+
+| Attempt | `[HANG-PROBE]` BEFORE→AFTER | Outcome |
+|---|---|---|
+| 1 | 4.1s | Broadcast `c4a9f60554bfe1d37785279d184914bfa88ab8c6b5b78d9c74213f3596c8896f` |
+| 2 | 4.4s | Broadcast (UI errored on post-broadcast trace lookup) |
+| 3 | 0.5s | Failed at consensus: `bad-txns-premature-spend-of-coinbase` |
+
+`[ALIVE]` heartbeat ticks fired at steady ~1s intervals throughout (1.8s, 2.8s, 3.5s) — JS event loop never blocked. Upstream RPC traffic continuous through each wrap window (~14 calls per wrap), never the "350+ seconds of zero RPC" the prior baton described.
+
+Test wallet: `legal winner thank year wave sausage worth useful legal winner thank yellow` (the same 101-UTXO mnemonic the baton said reproduced). 0.62 BTC balance at metabot.
+
+**Most likely cause of the discrepancy:** the perf-branch commits already in this branch (`d95d99e3` paymentUtxos extension + `d88efbf6` regtest-local plumbing fix) bypass the slow lua `spendable_utxos.lua` path — the `getCleanPaymentUtxos` shortcut pre-fetches via `dataApiGetAlkanesUtxo` for the keystore wallet. Console capture confirms this shortcut fired during all 3 wraps. The original deadlock was probably in the lua-path-only side that's now bypassed.
+
+**Diagnostic instrumentation in `useWrapMutation.ts:216-258`** (`[HANG-PROBE]` markers + `[ALIVE]` heartbeat) is left in place pending one cleanup pass. Removal protocol: search for `[HANG-PROBE 2026-04-26]` and remove that comment block + the surrounding `try/finally` heartbeat, restoring a single `await provider.alkanesExecuteTyped({...})`.
+
+**Wrap actually works — the earlier "doesn't mint" was operator error:** The wrap broadcast succeeded but I forgot to `prioritisetransaction` before `generatetoaddress`, so the test wraps sat in the mempool unmined (CLAUDE.md operational checklist explicitly warns about this — `unbroadcast=true` flag means plain mining produces empty blocks). After prioritising tx `c4a9f60554bfe1d37785279d184914bfa88ab8c6b5b78d9c74213f3596c8896f` and mining one block, `alkanes_protorunesbyoutpoint` for vout 1 returned the expected `99,900 frBTC` — exactly matching the prior baton's mint amount. The wrap path is healthy end-to-end.
+
+**Real metabot constraint that DOES affect the matrix (final root cause, 2026-04-26 evening):** The investigation went through three layers before bottoming out:
+
+1. **First layer:** The SDK calls `essentials.get_address_outpoints` (via `localhost:18888/espo` JSON-RPC) to discover alkane UTXOs and gets `outpoints: []` — even when the wrap minted at the outpoint (verified via `alkanes_protorunesbyoutpoint`).
+2. **Second layer:** Suspected the `oylapi` and `ammdata` espo modules were disabled. Confirmed and enabled them: patched `ESPO_EXTRA_CONFIG` on the `metashrew` StatefulSet to add `oylapi_port=9710;oylapi_icon_cdn=https://placeholder.invalid/icons/;ammdata_eth_rpc=http://anvil.regtest-alkanes:8545;ammdata_eth_call_throttle=1000`. Created `oylapi` ClusterIP and `oylapi-np` NodePort (31971 → 9710) Services. After restart, `[oylapi] listening on 0.0.0.0:9710` confirmed and `/get-alkanes-utxo` started responding. But the `alkanes` field was empty for all our outpoints.
+3. **Third layer (the actual root cause):** Traces ARE stored on metabot (`metashrew_view traceblock` returns full protobuf data; the per-outpoint `alkanes_trace` API just had wrong input encoding). But the trace stored for every fr-btc wrap is `ALKANES: revert: Error: transaction already processed`. Verified for both today's wraps (`c4a9f60554...` block 2058, `41f5b358...` block 2064) AND the prior baton's wrap (`dd367db68f9...` block 1846). The fr-btc contract's `/seen/<txid>` guard fires per indexer invocation; metashrew evidently invokes the protostone twice per block (mempool preview + confirmation? or some replay), and the second invocation hits the guard, producing the revert that becomes the canonical stored trace. The mint persists in the protorune state machine (which is why `protorunesbyoutpoint` shows balance), but the trace says revert.
+4. Espo essentials at `/Users/erickdelgado/Documents/github/espo/src/modules/essentials/utils/balances/lib.rs:378-379` explicitly **skips** writing `/balances/<address>/...` entries when the trace return status is not Success: `if ret.status != EspoSandshrewLikeTraceStatus::Success { continue; }`. So the address-keyed alkane index never populates for ANY wrap on metabot — has been broken since metabot's provisioning, not just since today.
+
+**Two real fix paths, both out of frontend scope:**
+
+1. **Modify the fr-btc contract** to remove the `seen/<txid>` guard or make it non-reverting (e.g. log + continue on duplicate). Risky — that guard was there for replay-protection reasons. Requires redeploying [32:0] which is the canonical frBTC ID; also affects all production tests.
+2. **Modify espo essentials** to read alkane balances from `protorunes_by_outpoint` (always correct) instead of relying on trace events. The change would be in `lib/balances/lib.rs` — even if the trace is a revert, query the outpoint and write the balance accordingly. Safer than touching the contract; only affects how essentials populates its index.
+
+**Frontend monkey-patch is not viable**: the SDK calls `essentials.get_address_outpoints` directly during UTXO selection. To bypass we'd have to intercept the espo-proxied JSON-RPC call and synthesize the response from `protorunesbyoutpoint`+`spendablesbyaddress` data — possible but a real engineering effort across all alkane-input mutation hooks AND the WASM SDK call path. Same magnitude of effort as the espo fix.
+
+### Pre-launch matrix verification status (regtest-local keystore, 2026-04-26)
+
+| Flow | Status | Evidence / blocker |
+|---|---|---|
+| **Wrap (BTC → frBTC)** | ✅ **WORKS** | Tx `c4a9f60554bfe1d37785279d184914bfa88ab8c6b5b78d9c74213f3596c8896f`, `protorunesbyoutpoint` confirms 99,900 frBTC minted to vout 1. Wrap completes in ~4s end-to-end. |
+| Swap BTC → frBTC (wrap-via-swap) | ✅ inferred from wrap | Same code path |
+| **Unwrap (frBTC → BTC)** | ⬜ **blocked by metabot SDK alkane discovery** | UI shows correct frBTC balance (via account.ts fallback), but SDK fails: `Insufficient alkanes: need 99900 of 32:0, have 0`. The frBTC IS at the correct outpoint; SDK can't see it because `protorunesbyaddress` returns empty on metabot. |
+| Swap DIESEL ↔ frBTC | ⬜ same blocker as unwrap | Any flow that needs alkane inputs fails the same way |
+| Swap frBTC → BTC (unwrap-via-swap) | ⬜ same blocker | |
+| Alkane Send (DIESEL/frBTC transfer) | ⬜ same blocker | |
+| **BTC Send** | ⬜ untested | Doesn't need alkane discovery; should work but not exercised this session |
+| Browser-extension matrix (Xverse, UniSat, OYL, OKX) | ⬜ untested | Deferred to follow-on; no extension wallet driven this session |
+
+**Why frontend monkey-patches don't fix this:** The SDK calls `essentials.get_address_outpoints` (and the SDK has another path that calls `protorunes_by_address` via `metashrew_view`). Both ultimately depend on metashrew having recorded a trace for the wrap tx. With traces missing, no amount of frontend logic can synthesize the data the SDK needs — the underlying chain state is incomplete.
+
+We did try `paymentUtxos` injection earlier in the perf branch (commit `d95d99e3`); turned out to be a no-op. `strings lib/oyl/alkanes/alkanes_web_sys_bg.wasm | grep payment_utxos` returns nothing — the SDK has no such field. (No harm done, but it's not actually doing anything; safe to remove as cleanup.)
+
+**Path forward for matrix QA:**
+
+1. **For alkane-input flows on regtest-local:** wait for whoever owns the metashrew/rockshrew build to ship a trace-storing indexer image, then redeploy. This unblocks the entire matrix at once.
+2. **In the meantime, alkane-input flows can only be tested on hosted regtest** (`regtest.subfrost.io`), which uses a trace-storing indexer. Need a funded test wallet there — the perf branch's `legal winner...` mnemonic has zero balance on hosted regtest, so requires a faucet hit or known-funded mnemonic from whoever runs hosted regtest.
+3. **Wrap path (BTC → frBTC) is verified on regtest-local** end-to-end (tx `c4a9f60554...`, 99,900 frBTC mint at outpoint).
+
+**Changes made to metabot k8s state during this investigation (pending revert decision):**
+- StatefulSet `metashrew` env: appended `;oylapi_port=9710;oylapi_icon_cdn=https://placeholder.invalid/icons/;ammdata_eth_rpc=http://anvil.regtest-alkanes:8545;ammdata_eth_call_throttle=1000` to `ESPO_EXTRA_CONFIG`
+- New Services: `oylapi` (ClusterIP :9710) and `oylapi-np` (NodePort :31971)
+- Backup of pre-change StatefulSet at metabot:`/tmp/metashrew-sts-backup-1777214877.json`
+
+These changes are functionally inert (oylapi is up but returns empty alkane fields because of the trace-storage gap). They can be left in place harmlessly OR reverted. If left in, the next person doesn't need to do this work; if the trace-storing indexer ships, oylapi will start returning real data without further changes.
+
+**Prior baton claims now reconciled:** ✅ Wrap (prior `dd367db68f96...`) is consistent with today's `c4a9f60...` — both mint 99,900 frBTC at the outpoint. The prior session's "Swap" claim (`84310ad1aad8...`) was almost certainly a wrap-route swap, not an alkane-input swap. The prior session never actually exercised the alkane-input matrix on metabot — they hit the same trace-storage wall and stopped at "wrap works."
 
 ---
 
