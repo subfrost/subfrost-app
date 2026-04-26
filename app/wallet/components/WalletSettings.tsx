@@ -8,7 +8,7 @@ import { initGoogleDrive, isDriveConfigured, backupWalletToDrive } from '@/utils
 import { unlockKeystore } from '@alkanes/ts-sdk';
 import { useTranslation } from '@/hooks/useTranslation';
 
-type NetworkType = 'mainnet' | 'signet' | 'regtest' | 'regtest-local' | 'subfrost-regtest' | 'oylnet' | 'devnet' | 'custom';
+type NetworkType = 'mainnet' | 'signet' | 'regtest' | 'regtest-local' | 'qubitcoin-regtest' | 'subfrost-regtest' | 'oylnet' | 'devnet' | 'custom';
 
 interface DerivationConfig {
   accountIndex: number;
@@ -63,6 +63,7 @@ export default function WalletSettings() {
       case 'signet': return 'Signet';
       case 'regtest': return 'Local Regtest (localhost)';
       case 'regtest-local': return 'Local Docker (localhost:18888)';
+      case 'qubitcoin-regtest': return 'Qubitcoin Regtest (meta.lake.direct)';
       case 'subfrost-regtest': return 'Subfrost Regtest (regtest.subfrost.io)';
       case 'devnet': return 'Devnet (in-browser)';
       default: return networkType;
@@ -223,6 +224,7 @@ export default function WalletSettings() {
     { value: 'mainnet', label: t('settings.mainnet') },
     { value: 'signet', label: t('settings.signet') },
     { value: 'subfrost-regtest', label: t('settings.subfrostRegtest') + ' (regtest.subfrost.io)' },
+    { value: 'qubitcoin-regtest', label: 'Qubitcoin Regtest (meta.lake.direct)' },
     { value: 'regtest-local', label: t('settings.localRegtest') + ' (localhost:18888)' },
     { value: 'regtest', label: t('settings.localRegtest') + ' (legacy)' },
     { value: 'custom', label: t('settings.customNetwork') },

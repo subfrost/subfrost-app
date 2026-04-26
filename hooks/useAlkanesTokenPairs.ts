@@ -41,6 +41,7 @@ import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { useWallet } from '@/context/WalletContext';
 import { KNOWN_TOKENS } from '@/lib/alkanes-client';
 import { queryKeys } from '@/queries/keys';
+import { simulateContract, extractField3Data, parseU128LE } from '@/lib/fujin/rpc';
 
 export type AlkanesTokenPair = {
   token0: { id: string; token0Amount?: string; alkaneId?: { block: number | string; tx: number | string } };
@@ -129,12 +130,104 @@ function toPoolRow(p: any): any {
   };
 }
 
+async function fetchTokenPairsFromDirectSimulate(factoryId: string, rpcUrl: string = 'http://localhost:18888'): Promise<AlkanesTokenPair[]> {
+
+  // Factory opcode 3: GetAllPools
+  const allPoolsHex = await simulateContract(rpcUrl, factoryId, 3);
+  const allPoolsData = extractField3Data(allPoolsHex, 32);
+  if (!allPoolsData) return [];
+
+  const numPools = Number(parseU128LE(allPoolsData, 0));
+  const items: AlkanesTokenPair[] = [];
+
+  for (let i = 0; i < numPools; i++) {
+    const offset = 32 + i * 64;
+    if (offset + 64 > allPoolsData.length) break;
+    const poolBlock = Number(parseU128LE(allPoolsData, offset));
+    const poolTx = Number(parseU128LE(allPoolsData, offset + 32));
+    const poolId = `${poolBlock}:${poolTx}`;
+
+    try {
+      // Pool opcode 999: PoolDetails → token IDs
+      const detailsHex = await simulateContract(rpcUrl, poolId, 999);
+      const detailsData = extractField3Data(detailsHex, 32);
+
+      // Pool opcode 97: GetReserves
+      const reservesHex = await simulateContract(rpcUrl, poolId, 97);
+      const reservesData = extractField3Data(reservesHex, 32);
+
+      // Pool opcode 99: GetName
+      const nameHex = await simulateContract(rpcUrl, poolId, 99);
+      const nameData = extractField3Data(nameHex, 1);
+      let poolName = '';
+      if (nameData) {
+        for (let ci = 0; ci < nameData.length; ci += 2) {
+          const byte = parseInt(nameData.slice(ci, ci + 2), 16);
+          if (byte === 0) break;
+          poolName += String.fromCharCode(byte);
+        }
+      }
+
+      let token0Id = '', token1Id = '', token0Name = '', token1Name = '';
+      if (detailsData && detailsData.length >= 128) {
+        token0Id = `${Number(parseU128LE(detailsData, 0))}:${Number(parseU128LE(detailsData, 32))}`;
+        token1Id = `${Number(parseU128LE(detailsData, 64))}:${Number(parseU128LE(detailsData, 96))}`;
+      }
+
+      const nameMatch = poolName.match(/^(.+?)\s*\/\s*(.+?)(?:\s*LP)?$/);
+      if (nameMatch) {
+        token0Name = nameMatch[1].trim();
+        token1Name = nameMatch[2].trim();
+      }
+      token0Name = KNOWN_TOKENS[token0Id]?.symbol || token0Name || token0Id;
+      token1Name = KNOWN_TOKENS[token1Id]?.symbol || token1Name || token1Id;
+
+      let reserve0 = '0', reserve1 = '0';
+      if (reservesData && reservesData.length >= 64) {
+        reserve0 = parseU128LE(reservesData, 0).toString();
+        reserve1 = parseU128LE(reservesData, 32).toString();
+      }
+
+      items.push({
+        token0: { id: token0Id, token0Amount: reserve0, alkaneId: parseAlkaneId(token0Id), name: token0Name, symbol: token0Name },
+        token1: { id: token1Id, token1Amount: reserve1, alkaneId: parseAlkaneId(token1Id), name: token1Name, symbol: token1Name },
+        poolId: { block: poolBlock, tx: poolTx },
+        poolName,
+      } as AlkanesTokenPair);
+
+      console.log('[useAlkanesTokenPairs] Direct simulate pool:', poolId, token0Name, '/', token1Name, 'reserves:', reserve0, reserve1);
+    } catch (e) {
+      console.warn('[useAlkanesTokenPairs] Direct simulate failed for pool', poolId, e);
+    }
+  }
+
+  return items;
+}
+
 async function fetchPoolsFromSDK(
   provider: any,
   factoryId: string,
   network: string,
 ): Promise<AlkanesTokenPair[]> {
   console.log('[fetchPoolsFromSDK] ENTRY - factoryId:', factoryId, 'network:', network);
+
+  // regtest-local: skip REST/SDK (503 or 30s timeout). Use direct metashrew_view simulate.
+  if (network === 'regtest-local' || network === 'qubitcoin-regtest' || network === 'regtest') {
+    try {
+      // [JOURNAL 2026-04-26] Hosted regtest needs `/api/rpc/regtest` (not the
+      // qubitcoin-regtest path). Fix is symmetric to usePools.ts:531.
+      const simRpcUrl = network === 'qubitcoin-regtest'
+        ? `${typeof window !== 'undefined' ? window.location.origin : ''}/api/rpc/qubitcoin-regtest`
+        : network === 'regtest'
+          ? `${typeof window !== 'undefined' ? window.location.origin : ''}/api/rpc/regtest`
+          : 'http://localhost:18888';
+      return await fetchTokenPairsFromDirectSimulate(factoryId, simRpcUrl);
+    } catch (e) {
+      console.warn('[useAlkanesTokenPairs] Direct simulate failed (factory not deployed?):', (e as Error)?.message?.slice(0, 80));
+      return [];
+    }
+  }
+
   console.log('[fetchPoolsFromSDK] provider available:', !!provider);
   console.log('[fetchPoolsFromSDK] provider.dataApiGetAllTokenPairs:', typeof provider?.dataApiGetAllTokenPairs);
 

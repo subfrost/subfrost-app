@@ -216,12 +216,18 @@ describe('Browser wallet address handling', () => {
 });
 
 // ==========================================================================
-// 2. ordinalsStrategy: 'burn'
+// 2. ordinalsStrategy is set explicitly (not left to default)
 // ==========================================================================
+//
+// All swap/liquidity mutations must explicitly pin ordinalsStrategy so the
+// SDK never picks ordinal-bearing UTXOs implicitly. The accepted values are
+// 'burn' and 'exclude' — the perf branch switched from 'burn' → 'exclude'
+// (commit ac03660c..6fa5a0ad in perf/mainnet-optimization, 2026-04). Both
+// satisfy the safety invariant.
 
 describe('ordinalsStrategy setting', () => {
   describe.each(ACTIVE_HOOKS)('%s', (hookFile) => {
-    it("should set ordinalsStrategy to 'burn' in alkanesExecuteTyped call", () => {
+    it('should set ordinalsStrategy explicitly in alkanesExecuteTyped call', () => {
       const src = readHook(hookFile);
       // useWrapMutation and useUnwrapMutation do not set ordinalsStrategy (use default)
       if (hookFile === 'useWrapMutation.ts' || hookFile === 'useUnwrapMutation.ts') {
@@ -229,7 +235,11 @@ describe('ordinalsStrategy setting', () => {
         expect(src).toContain('alkanesExecuteTyped');
         return;
       }
-      expect(src).toContain("ordinalsStrategy: 'burn'");
+      // Accept either 'burn' or 'exclude' — both are valid safety strategies.
+      const hasOrdinalsStrategy =
+        src.includes("ordinalsStrategy: 'burn'") ||
+        src.includes("ordinalsStrategy: 'exclude'");
+      expect(hasOrdinalsStrategy).toBe(true);
     });
   });
 });

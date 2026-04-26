@@ -21,11 +21,22 @@ export interface AlkanesExecuteTypedParams {
   autoConfirm?: boolean;
   rawOutput?: boolean;
   /** Controls handling of UTXOs that may contain ordinal inscriptions.
-   *  - 'exclude': refuse to spend inscribed UTXOs (default SDK behavior)
+   *  - 'exclude': refuse to spend inscribed UTXOs (default — protects inscriptions/runes)
    *  - 'preserve': split inscribed UTXOs to protect inscriptions
    *  - 'burn': spend inscribed UTXOs without protection (destroys inscriptions)
    */
   ordinalsStrategy?: 'exclude' | 'preserve' | 'burn';
+  /** Protect taproot UTXOs from being spent for BTC fees (default: true).
+   *  When true, taproot UTXOs are only used for alkane token spending.
+   *  Set to false for single-address wallets (UniSat, OKX) where taproot is the only address.
+   */
+  protectTaproot?: boolean;
+  /** Pre-fetched clean BTC UTXOs (`txid:vout:satoshis`) for fee inputs.
+   *  When supplied, the WASM SDK skips its lua `spendable_utxos.lua` flow
+   *  (which does an esplora_tx round-trip per UTXO and is slow on wallets
+   *  with many UTXOs). See `getCleanPaymentUtxos` in `lib/alkanes/helpers.ts`.
+   */
+  paymentUtxos?: string[];
   /** Network name — used to reliably detect devnet (instead of URL sniffing). */
   network?: string;
 }

@@ -55,7 +55,7 @@ export default function VaultShell() {
   };
 
   // Show yv-frbtc on regtest/oylnet for testing, hide on mainnet
-  const isTestNetwork = network === 'regtest' || network === 'oylnet' || network === 'devnet' || network === 'subfrost-regtest';
+  const isTestNetwork = network === 'regtest' || network === 'oylnet' || network === 'devnet' || network === 'subfrost-regtest' || network === 'regtest-local' || network === 'qubitcoin-regtest';
 
   const HIDDEN_VAULT_IDS = ['vx-fuel', 'vx-btcusd'];
 

@@ -3,9 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { blocks = 1, address } = body;
-
-    console.log('[API /regtest/mine] Request:', { blocks, address, network: process.env.NEXT_PUBLIC_NETWORK });
+    const { blocks = 1, address, network: clientNetwork } = body;
 
     if (!address) {
       return NextResponse.json(
@@ -14,7 +12,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate address format (bcrt1... for regtest)
     if (!address.startsWith('bcrt1')) {
       return NextResponse.json(
         { error: `Invalid regtest address format: ${address}` },
@@ -22,15 +19,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Use local endpoint for local networks, hosted regtest otherwise.
-    // JOURNAL (2026-03-31): Added 'devnet' alongside 'regtest-local' — both use
-    // localhost:18888 (qubitcoin in-process node). The fetch interceptor that routes
-    // devnet calls only runs in the browser; server-side routes hit localhost directly.
-    const network = process.env.NEXT_PUBLIC_NETWORK;
+    // Determine RPC URL: prefer client-provided network, fall back to env var.
+    // Client passes network from localStorage selection (regtest-local, devnet, etc.)
+    const network = clientNetwork || process.env.NEXT_PUBLIC_NETWORK;
     const LOCAL_NETWORKS = ['regtest-local', 'devnet'];
-    const rpcUrl = LOCAL_NETWORKS.includes(network ?? '')
+    const isLocal = LOCAL_NETWORKS.includes(network ?? '');
+    const isQubitcoin = network === 'qubitcoin-regtest';
+    const rpcUrl = isLocal
       ? 'http://localhost:18888'
-      : 'https://regtest.subfrost.io/v4/subfrost';
+      : isQubitcoin
+        ? 'https://meta.lake.direct'
+        : 'https://regtest.subfrost.io/v4/subfrost';
+
+    // qubitcoin uses native bitcoin RPC method names (no bitcoind_ prefix)
+    const mineMethod = isQubitcoin ? 'generatetoaddress' : 'bitcoind_generatetoaddress';
 
     // Mine all requested blocks in a single RPC call (cap at 500 for safety)
     const blocksToMine = Math.min(blocks, 500);
@@ -40,7 +42,7 @@ export async function POST(request: NextRequest) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         jsonrpc: '2.0',
-        method: 'bitcoind_generatetoaddress',
+        method: mineMethod,
         params: [blocksToMine, address],
         id: 1,
       }),

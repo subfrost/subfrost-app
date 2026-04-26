@@ -77,7 +77,7 @@ export function useFujinBuyMutation() {
 
       const btcNetwork = getBitcoinNetwork(network);
       const isBrowserWallet = walletType === 'browser';
-      const useActualAddresses = isBrowserWallet || network === 'devnet';
+      const useActualAddresses = isBrowserWallet || network === 'devnet' || network === 'regtest-local' || network === 'qubitcoin-regtest' || network === 'regtest';
 
       // Browser wallets need ACTUAL addresses, not symbolic
       const fromAddresses = useActualAddresses

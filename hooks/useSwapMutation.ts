@@ -343,7 +343,16 @@ export function useSwapMutation() {
       const btcNetwork = getBitcoinNetwork(network);
 
       const isBrowserWallet = walletType === 'browser';
-      const useActualAddresses = isBrowserWallet || network === 'devnet';
+      // Hosted regtest, regtest-local, qubitcoin-regtest also need actual
+      // addresses because the WASM provider is keystore-loaded on these
+      // networks (see context/AlkanesSDKContext.tsx). Symbolic addresses
+      // would resolve to the dummy wallet and lose user funds.
+      const useActualAddresses =
+        isBrowserWallet ||
+        network === 'devnet' ||
+        network === 'regtest' ||
+        network === 'regtest-local' ||
+        network === 'qubitcoin-regtest';
 
       // ============================================================================
       // ⚠️ CRITICAL: Browser wallets need ACTUAL addresses, not symbolic ⚠️

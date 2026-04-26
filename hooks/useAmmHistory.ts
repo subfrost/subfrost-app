@@ -272,7 +272,7 @@ function usePoolsMetadata(network: string, poolIds: string[]) {
 
 export function useInfiniteAmmTxHistory({
   address,
-  count = 50,
+  count = 10,
   enabled = true,
   transactionType,
 }: {
@@ -295,11 +295,19 @@ export function useInfiniteAmmTxHistory({
     enabled: enabled && isInitialized && !!network && !!provider,
     queryFn: async ({ pageParam }) => {
       if (!provider) return { items: [], nextPage: undefined, total: 0 };
-      // On devnet, the SDK's dataApi hangs the main thread (freezes loading at 95%).
-      // There is no non-deprecated indexer for trade history on devnet — quspo is
-      // deprecated and must not be used. Return empty gracefully.
-      // Activity data is available on mainnet/regtest via the SDK dataApi.
-      if (network === 'devnet') return { items: [], nextPage: undefined, total: 0 };
+      // On devnet and the regtest variants, the SDK's dataApi either hangs
+      // (devnet — hits deprecated quspo, freezes UI at 95%) or returns HTTP
+      // errors (regtest variants — REST endpoint returns 400). Skip entirely;
+      // trade history is only available on live networks via the SDK dataApi.
+      // Activity data IS available on mainnet via the SDK dataApi.
+      if (
+        network === 'devnet' ||
+        network === 'regtest-local' ||
+        network === 'qubitcoin-regtest' ||
+        network === 'regtest'
+      ) {
+        return { items: [], nextPage: undefined, total: 0 };
+      }
       const offset = pageParam * count;
 
       try {
@@ -315,7 +323,7 @@ export function useInfiniteAmmTxHistory({
 
         raw = await Promise.race([
           dataApiCall,
-          new Promise((_, reject) => setTimeout(() => reject(new Error('dataApi timeout (3s)')), 3000)),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('dataApi timeout (10s)')), 10000)),
         ]);
 
         const result = mapToObject(raw);

@@ -29,6 +29,7 @@ type Props = {
   onSelectToToken?: (symbol: string) => void;
   onInvert: () => void;
   onSwapClick: () => void;
+  isSwapping?: boolean;
   fromBalanceText?: string; // e.g., "Balance 8.908881"
   toBalanceText?: string;
   fromFiatText?: string; // e.g., "$0.00"
@@ -53,6 +54,7 @@ export default function SwapInputs({
   onSelectToToken,
   onInvert,
   onSwapClick,
+  isSwapping = false,
   fromBalanceText,
   toBalanceText,
   fromFiatText = "$0.00",
@@ -637,43 +639,46 @@ export default function SwapInputs({
       >
         <button
           type="button"
+          disabled={isSwapping}
           onClick={() => {
-            console.log('[SwapInputs] Confirm button clicked');
-            console.log('[SwapInputs] isConnected:', isConnected);
-            console.log('[SwapInputs] isDemoGated:', isDemoGated);
-            console.log('[SwapInputs] from:', from?.symbol, 'to:', to?.symbol);
-            console.log('[SwapInputs] fromAmount:', fromAmount, 'toAmount:', toAmount);
+            if (isSwapping) return;
 
             if (!isConnected) {
-              console.log('[SwapInputs] Not connected, opening connect modal');
               onConnectModalOpenChange(true);
               return;
             }
             // Bridge tokens: show bridge deposit flow instead of normal swap
             const isBridgeSwap = isFromBridgeToken || isToBridgeToken;
             if (isBridgeSwap && isCrossChainPair && fromAmount) {
-              console.log('[SwapInputs] Cross-chain pair, showing bridge flow');
               setShowBridgeFlow(true);
               return;
             }
             if (!isDemoGated || isBridgeSwap) {
-              console.log('[SwapInputs] NOT demo gated (or bridge swap), calling onSwapClick');
               onSwapClick();
               return;
             }
-            console.log('[SwapInputs] Demo gated, showing coming soon');
             if (!showSwapComingSoon) {
               setShowSwapComingSoon(true);
               setTimeout(() => setShowSwapComingSoon(false), 1000);
             }
           }}
           className={`h-12 w-full rounded-xl font-bold text-sm uppercase tracking-wider transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none focus:outline-none ${
-            isConnected && isDemoGated && !isFromBridgeToken && !isToBridgeToken
+            isSwapping
+              ? "bg-[color:var(--sf-primary)]/60 text-white/80 cursor-wait"
+              : isConnected && isDemoGated && !isFromBridgeToken && !isToBridgeToken
               ? "bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)]/30 cursor-not-allowed"
               : "bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] text-white shadow-[0_4px_16px_rgba(0,0,0,0.3)] hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98]"
           }`}
         >
-          {showSwapComingSoon ? (
+          {isSwapping ? (
+            <span className="flex items-center justify-center gap-2">
+              <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              Building Transaction...
+            </span>
+          ) : showSwapComingSoon ? (
             <span className="animate-pulse">{t("badge.comingSoon")}</span>
           ) : !isConnected ? (
             t("swap.connectWallet")

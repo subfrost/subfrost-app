@@ -55,8 +55,23 @@ export function getSignerAddress(network: string): string {
 
 /**
  * Dynamically query the frBTC signer address from the contract via opcode 103.
- * On devnet the signer key changes each boot, so the hardcoded address is stale.
- * Falls back to the static SIGNER_ADDRESSES entry if the query fails.
+ *
+ * Why dynamic: on devnet the signer key changes each boot, and on regtest-local
+ * (the SSH-tunneled metabot stack) the FROST signing group may not match the
+ * hardcoded `SIGNER_ADDRESSES['regtest']` value at all. Verified 2026-04-26
+ * during the perf-branch QA session: hosted regtest signer is `bcrt1p466wtm…`
+ * (matches `SIGNER_ADDRESSES.regtest`) but metabot regtest-local signer is
+ * `bcrt1p5lushq…` (derived from x-only pubkey `7940ef3b…` returned by opcode
+ * 103). Wraps to the wrong signer silently confirm but mint zero frBTC.
+ *
+ * Derivation: opcode 103 returns the 32-byte x-only OUTPUT pubkey of the
+ * FROST signing group's P2TR address. Pass it as `internalPubkey` to
+ * `bitcoin.payments.p2tr({...})` — bitcoinjs-lib applies the BIP341 even-y
+ * tweak internally, which matches how the contract derived its own signer
+ * address in the first place. (Do NOT manually wrap the bytes as a script
+ * `0x51 0x20 <xonly>` — that produces a different, wrong address.)
+ *
+ * Falls back to the static `SIGNER_ADDRESSES` entry if the query fails.
  */
 export async function getSignerAddressDynamic(network: string): Promise<string> {
   try {
@@ -150,4 +165,69 @@ export function extractPsbtBase64(psbt: unknown): string {
     return uint8ArrayToBase64(bytes);
   }
   throw new Error('Unexpected PSBT format: ' + typeof psbt);
+}
+
+/**
+ * Pre-fetch clean BTC UTXOs for `provider.alkanesExecuteTyped({ paymentUtxos })`.
+ *
+ * When `paymentUtxos` is supplied the WASM SDK skips its lua
+ * `spendable_utxos.lua` flow, which does an `esplora_tx()` round-trip per UTXO
+ * to check coinbase maturity. Wallets with many UTXOs spend several minutes
+ * inside the WASM otherwise.
+ *
+ * Two fast sources, in order of preference:
+ *   1. UniSat `getBitcoinUtxos()` — wallet-side, already filtered.
+ *   2. `provider.dataApiGetAlkanesUtxo(address)` — single HTTP call returning
+ *      every UTXO at the address with full enrichment (alkanes, inscriptions,
+ *      runes, satoshis). We filter to confirmed, non-dust, fully clean entries.
+ *
+ * Caller must only pass addresses that match the addresses the SDK will sign
+ * for. Browser wallets and `useActualAddresses` networks always pass actual
+ * addresses, so this is safe. For keystore on regtest/mainnet the SDK resolves
+ * symbolic `p2tr:0`/`p2wpkh:0` against the WASM-loaded keystore (coinType=1 on
+ * regtest), so callers must skip this helper there to avoid producing a PSBT
+ * with inputs from coinType=0 (JS-derived) addresses that can't be signed.
+ *
+ * Returns undefined when no clean UTXOs are found, so callers let the SDK fall
+ * back to its own lua-based discovery without distinguishing failure modes.
+ */
+export async function getCleanPaymentUtxos(opts: {
+  provider: { dataApiGetAlkanesUtxo(address: string): Promise<unknown> };
+  addresses: (string | undefined | null)[];
+  unisat?: { getBitcoinUtxos?: () => Promise<Array<{ txid: string; vout: number; satoshis: number }>> };
+}): Promise<string[] | undefined> {
+  if (opts.unisat?.getBitcoinUtxos) {
+    try {
+      const btcUtxos = await opts.unisat.getBitcoinUtxos();
+      if (btcUtxos?.length) {
+        return btcUtxos.map((u) => `${u.txid}:${u.vout}:${u.satoshis}`);
+      }
+    } catch { /* fall through */ }
+  }
+
+  const sources = opts.addresses.filter(Boolean) as string[];
+  if (sources.length === 0) return undefined;
+
+  try {
+    const lists = await Promise.all(
+      sources.map((addr) => opts.provider.dataApiGetAlkanesUtxo(addr).catch(() => null)),
+    );
+
+    const cleaned: string[] = [];
+    for (const list of lists) {
+      const entries: any[] = (list as any)?.data ?? (Array.isArray(list) ? list : []);
+      for (const u of entries) {
+        const sats = Number(u.satoshis ?? u.value ?? 0);
+        const alkaneCount = u.alkanes ? Object.keys(u.alkanes).length : 0;
+        const runeCount = u.runes ? Object.keys(u.runes).length : 0;
+        const inscriptionCount = Array.isArray(u.inscriptions) ? u.inscriptions.length : 0;
+        if (sats > 1000 && alkaneCount === 0 && runeCount === 0 && inscriptionCount === 0) {
+          cleaned.push(`${u.txId ?? u.txid}:${u.outputIndex ?? u.vout}:${sats}`);
+        }
+      }
+    }
+    return cleaned.length ? cleaned : undefined;
+  } catch {
+    return undefined;
+  }
 }

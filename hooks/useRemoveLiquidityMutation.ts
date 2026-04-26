@@ -120,7 +120,7 @@ export type RemoveLiquidityTransactionData = {
 };
 
 export function useRemoveLiquidityMutation() {
-  const { account, network, isConnected, signTaprootPsbt, signSegwitPsbt, walletType } = useWallet();
+  const { account, network, isConnected, signTaprootPsbt, signSegwitPsbt, walletType, browserWallet } = useWallet();
   const provider = useSandshrewProvider();
   const queryClient = useQueryClient();
   const { requestConfirmation } = useTransactionConfirm();
@@ -129,6 +129,11 @@ export function useRemoveLiquidityMutation() {
     mutationFn: async (data: RemoveLiquidityTransactionData) => {
       // Validation
       if (!isConnected) throw new Error('Wallet not connected');
+      // Ensure browser wallet session is active before building PSBT
+      if (walletType === 'browser') {
+        const { ensureWalletSession } = await import('@/lib/wallet/browserWalletSigning');
+        await ensureWalletSession();
+      }
       if (!provider) throw new Error('Provider not available');
       if (!provider.walletIsLoaded()) {
         throw new Error('Provider wallet not loaded. Please reconnect your wallet.');
@@ -153,7 +158,7 @@ export function useRemoveLiquidityMutation() {
       const minAmount1Alks = data.minAmount1 ? toAlks(data.minAmount1, data.token1Decimals ?? 8) : '0';
 
       // Get block height for deadline (regtest uses large offset so deadline never expires)
-      const isRegtest = network === 'regtest' || network === 'subfrost-regtest' || network === 'regtest-local';
+      const isRegtest = network === 'regtest' || network === 'subfrost-regtest' || network === 'regtest-local' || network === 'qubitcoin-regtest';
       const deadline = await getFutureBlockHeight(
         isRegtest ? 1000 : (data.deadlineBlocks || 3),
         provider as any
@@ -178,7 +183,7 @@ export function useRemoveLiquidityMutation() {
       const btcNetwork = getBitcoinNetwork(network);
 
       const isBrowserWallet = walletType === 'browser';
-      const useActualAddresses = isBrowserWallet || network === 'devnet';
+      const useActualAddresses = isBrowserWallet || network === 'devnet' || network === 'regtest-local' || network === 'qubitcoin-regtest' || network === 'regtest';
 
       // ============================================================================
       // ⚠️ CRITICAL: Browser wallets need ACTUAL addresses, not symbolic ⚠️
@@ -205,6 +210,7 @@ export function useRemoveLiquidityMutation() {
         : 'p2tr:0';
 
       try {
+
         const result = await provider.alkanesExecuteTyped({
           inputRequirements,
           protostones: protostone,
@@ -214,7 +220,7 @@ export function useRemoveLiquidityMutation() {
           toAddresses,
           changeAddress: changeAddr,
           alkanesChangeAddress: alkanesChangeAddr,
-          ordinalsStrategy: 'burn',
+          ordinalsStrategy: 'exclude',
         });
 
         // Handle auto-completed transaction

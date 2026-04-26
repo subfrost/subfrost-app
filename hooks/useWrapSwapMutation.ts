@@ -63,7 +63,7 @@ import * as bitcoin from 'bitcoinjs-lib';
 import * as ecc from '@bitcoinerlab/secp256k1';
 import { patchInputsOnly } from '@/lib/psbt-patching';
 import { buildSwapProtostone } from '@/lib/alkanes/builders';
-import { getBitcoinNetwork, getSignerAddress, extractPsbtBase64 } from '@/lib/alkanes/helpers';
+import { getBitcoinNetwork, getSignerAddress, getSignerAddressDynamic, extractPsbtBase64 } from '@/lib/alkanes/helpers';
 import {
   getUnfinalizedPsbtTxId,
   getRemainingUtxosAfterPsbt,
@@ -95,7 +95,7 @@ export type WrapSwapTransactionData = {
 // ---------------------------------------------------------------------------
 
 export function useWrapSwapMutation() {
-  const { account, network, isConnected, signTaprootPsbt, signSegwitPsbt, walletType } = useWallet();
+  const { account, network, isConnected, signTaprootPsbt, signSegwitPsbt, walletType, browserWallet } = useWallet();
   const provider = useSandshrewProvider();
   const queryClient = useQueryClient();
   const { requestConfirmation } = useTransactionConfirm();
@@ -116,7 +116,13 @@ export function useWrapSwapMutation() {
       console.log('[WrapSwap] wrapFee:', wrapFee);
 
       if (!isConnected) throw new Error('Wallet not connected');
+      // Ensure browser wallet session is active before building PSBT
+      if (walletType === 'browser') {
+        const { ensureWalletSession } = await import('@/lib/wallet/browserWalletSigning');
+        await ensureWalletSession();
+      }
       if (!provider) throw new Error('Provider not available');
+
 
       // ========================================================================
       // Step 1: Get addresses and validate
@@ -133,7 +139,10 @@ export function useWrapSwapMutation() {
         throw new Error('Taproot pubkey required for signing');
       }
 
-      const signerAddress = getSignerAddress(network);
+      // regtest-local and devnet have ephemeral signer keys — query dynamically.
+      const signerAddress = (network === 'devnet' || network === 'regtest-local')
+        ? await getSignerAddressDynamic(network)
+        : getSignerAddress(network);
       const btcNetwork = getBitcoinNetwork(network);
 
       console.log('[WrapSwap] Addresses:', { taprootAddress, segwitAddress, primaryAddress, signerAddress });
@@ -167,13 +176,13 @@ export function useWrapSwapMutation() {
       console.log('[WrapSwap] Min output (after slippage):', minAmountOut);
 
       // Get deadline block height
-      const isRegtest = network === 'regtest' || network === 'subfrost-regtest' || network === 'regtest-local';
+      const isRegtest = network === 'regtest' || network === 'subfrost-regtest' || network === 'regtest-local' || network === 'qubitcoin-regtest';
       const deadlineBlocks = isRegtest ? 1000 : (data.deadlineBlocks || 3);
       const deadline = await getFutureBlockHeight(deadlineBlocks, provider as any);
       console.log('[WrapSwap] Deadline:', deadline, `(+${deadlineBlocks} blocks)`);
 
       const isBrowserWallet = walletType === 'browser';
-      const useActualAddresses = isBrowserWallet || network === 'devnet';
+      const useActualAddresses = isBrowserWallet || network === 'devnet' || network === 'regtest-local' || network === 'qubitcoin-regtest' || network === 'regtest';
 
       // ========================================================================
       // Step 3: Fetch all available UTXOs BEFORE building wrap

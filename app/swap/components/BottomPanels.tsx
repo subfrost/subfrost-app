@@ -21,7 +21,7 @@
 // Source: hooks/useUserOrders.ts, hooks/useCancelOrderMutation.ts
 
 import { useState, lazy, Suspense } from 'react';
-import { BarChart3, Layers, Clock, Activity, X } from 'lucide-react';
+import { BarChart3, Layers, Clock, Activity, X, LogOut } from 'lucide-react';
 import { useLPPositions } from '@/hooks/useLPPositions';
 import { useWallet } from '@/context/WalletContext';
 import { useUserOrders } from '@/hooks/useUserOrders';
@@ -67,6 +67,64 @@ export default function BottomPanels({ baseToken, quoteToken }: Props) {
   // Cancel order mutation — opcode 21 (CancelOrder) on the Carbine controller.
   // On devnet, mines 1 block after broadcast to keep metashrew synced.
   const cancelMutation = useCancelOrderMutation();
+
+  // Close LP position — remove all liquidity via pool opcode 2 (WithdrawAndBurn)
+  const [closingPositionId, setClosingPositionId] = useState<string | null>(null);
+  const { account } = useWallet() as any;
+  const handleClosePosition = async (pos: typeof lpPositions[0]) => {
+    if (closingPositionId) return;
+    setClosingPositionId(pos.id);
+    try {
+      const isLocal = network === 'regtest-local' || network === 'devnet';
+      if (!isLocal) { window.alert('Close position only supported on local networks for now'); return; }
+
+      const taprootAddress = account?.taproot?.address;
+      const segwitAddress = account?.nativeSegwit?.address;
+      if (!taprootAddress) throw new Error('No taproot address');
+
+      const wasm = await import('@alkanes/ts-sdk/wasm');
+      const rpcUrl = 'http://localhost:18888';
+      const execProvider = new wasm.WebProvider('regtest', { jsonrpc_url: rpcUrl, data_api_url: rpcUrl });
+      const mnemonic = sessionStorage.getItem('subfrost_session_mnemonic') || '';
+      if (!mnemonic) throw new Error('Wallet not unlocked');
+      execProvider.walletLoadMnemonic(mnemonic, null);
+
+      const lpBalance = pos.amount ? Math.floor(parseFloat(pos.amount) * 1e8).toString() : '0';
+      const [poolBlock, poolTx] = pos.id.split(':').map(Number);
+
+      // Pool opcode 2: WithdrawAndBurn — send LP as incomingAlkanes, no extra args
+      const protostone = `[${poolBlock},${poolTx},2]:v0:v0`;
+      const inputReqs = `${pos.id}:${lpBalance}`;
+
+      const fromAddrs = [taprootAddress, segwitAddress].filter(Boolean);
+      const result = await execProvider.alkanesExecuteFull(
+        JSON.stringify([taprootAddress]),
+        inputReqs,
+        protostone,
+        1,
+        null,
+        JSON.stringify({
+          from: fromAddrs,
+          change_address: segwitAddress || taprootAddress,
+          alkanes_change_address: taprootAddress,
+          lock_alkanes: true,
+          mine_enabled: true,
+          auto_confirm: true,
+        }),
+      );
+
+      const parsed = typeof result === 'string' ? JSON.parse(result) : result;
+      const txId = parsed?.txid || parsed?.reveal_txid || '';
+      console.log('[ClosePosition] Success:', txId);
+      window.alert(`Position closed! TX: ${txId.slice(0, 16)}...`);
+    } catch (e: any) {
+      console.error('[ClosePosition] Error:', e);
+      window.alert(`Close failed: ${e?.message || 'See console'}`);
+    } finally {
+      setClosingPositionId(null);
+    }
+  };
+
   const config = getConfig(network || 'mainnet');
   const controllerId = (config as any).CARBINE_CONTROLLER_ID as string | undefined;
 
@@ -199,13 +257,14 @@ export default function BottomPanels({ baseToken, quoteToken }: Props) {
             ) : (
               <div>
                 {/* Header */}
-                <div className="sf-table-header grid grid-cols-[1fr_auto_auto] gap-4 px-3 py-2">
+                <div className="sf-table-header grid grid-cols-[1fr_auto_auto_auto] gap-3 px-3 py-2">
                   <span>Pool</span>
                   <span className="text-right">Amount</span>
-                  <span className="text-right w-[72px]">ID</span>
+                  <span className="text-right w-[52px]">ID</span>
+                  <span className="text-right w-[56px]">Close</span>
                 </div>
                 {lpPositions.map((pos) => (
-                  <div key={pos.id} className="sf-row grid grid-cols-[1fr_auto_auto] gap-4 px-3 py-2.5 items-center">
+                  <div key={pos.id} className="sf-row grid grid-cols-[1fr_auto_auto_auto] gap-3 px-3 py-2.5 items-center">
                     <div className="flex items-center gap-2 min-w-0">
                       <div className="flex -space-x-2 shrink-0">
                         <div className="relative z-10">
@@ -222,9 +281,18 @@ export default function BottomPanels({ baseToken, quoteToken }: Props) {
                     <span className="text-[11px] text-right tabular-nums text-[color:var(--sf-text)]/60">
                       {pos.amount || '--'}
                     </span>
-                    <span className="text-[10px] text-right tabular-nums text-[color:var(--sf-text)]/40 w-[72px] truncate">
+                    <span className="text-[10px] text-right tabular-nums text-[color:var(--sf-text)]/40 w-[52px] truncate">
                       {pos.id}
                     </span>
+                    <div className="w-[56px] flex justify-end">
+                      <button
+                        onClick={() => handleClosePosition(pos)}
+                        disabled={closingPositionId === pos.id}
+                        className="sf-btn-ghost text-[10px] px-2 py-1 text-red-400 hover:text-red-300 disabled:opacity-50"
+                      >
+                        {closingPositionId === pos.id ? '...' : <><LogOut size={10} className="inline mr-0.5" />Close</>}
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>

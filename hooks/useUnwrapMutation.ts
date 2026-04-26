@@ -1,38 +1,19 @@
 /**
- * useUnwrapMutation - Unwrap frBTC back to BTC
+ * useUnwrapMutation — Unwrap frBTC back to BTC.
  *
- * ============================================================================
- * ⚠️⚠️⚠️ CRITICAL: BROWSER WALLET OUTPUT ADDRESS BUG (2026-03-01) ⚠️⚠️⚠️
- * ============================================================================
+ * Browser wallets MUST receive actual addresses (not 'p2tr:0' / 'p2wpkh:0')
+ * via the `useActualAddresses` pattern; symbolic addresses resolve to the
+ * SDK's dummy wallet and lose user funds. See `useSwapMutation` for the
+ * full incident writeup (mainnet tx 985436b5c5c8...).
  *
- * When using browser wallets (Xverse, OYL, etc.), you MUST pass ACTUAL addresses
- * to toAddresses/changeAddress/alkanesChangeAddress — NOT symbolic addresses like
- * 'p2tr:0' or 'p2wpkh:0'. Symbolic addresses resolve to SDK's DUMMY wallet!
+ * Networks where the deployed fr-btc `[32:0]` doesn't support opcode 78
+ * are gated by `lib/alkanes/contractFeatures.ts` — UI should hide the
+ * Unwrap path there, and this hook throws a defense-in-depth error if a
+ * callsite slips through.
  *
- * See useSwapMutation.ts header comment for full documentation of this bug,
- * including the transaction that lost user tokens:
- * TX: 985436b5c5c850bd121cd4862f32413f467145b121d34c006417724d71588db9
- *
- * REQUIRED PATTERN:
- * ```typescript
- * const toAddresses = useActualAddresses ? [segwitAddress] : ['p2wpkh:0'];
- * const changeAddr = useActualAddresses ? segwitAddress : 'p2wpkh:0';
- * const alkanesChangeAddr = useActualAddresses ? taprootAddress : 'p2tr:0';
- * ```
- * ============================================================================
- *
- * ## WASM Dependency Note
- *
- * Uses `@alkanes/ts-sdk/wasm` aliased to `lib/oyl/alkanes/` (see next.config.mjs).
- * If "Insufficient alkanes" errors occur, sync WASM: see docs/SDK_DEPENDENCY_MANAGEMENT.md
- *
- * ## frBTC Unwrap (opcode 78) — network-dependent (2026-03-26)
- *
- * Opcode 78 WORKS on devnet (fresh deploy from prod_wasms/fr_btc.wasm).
- * Opcode 78 does NOT work on regtest.subfrost.io — the deployed frBTC [32:0]
- * there is an older build missing this opcode. The regtest contract returns:
- *   "ALKANES: revert: Error: Unrecognized opcode" (status: 1)
- * The tier1/unwrap-frbtc.test.ts skip comment applies to REGTEST only.
+ * WASM dependency: `@alkanes/ts-sdk/wasm` aliased to `lib/oyl/alkanes/`
+ * (see next.config.mjs). On "Insufficient alkanes" errors, sync the WASM
+ * per docs/SDK_DEPENDENCY_MANAGEMENT.md.
  */
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import * as bitcoin from 'bitcoinjs-lib';
@@ -46,6 +27,7 @@ import { useSandshrewProvider } from './useSandshrewProvider';
 import { getConfig } from '@/utils/getConfig';
 import { buildUnwrapProtostone, buildUnwrapInputRequirements } from '@/lib/alkanes/builders';
 import { getBitcoinNetwork, extractPsbtBase64, toAlks } from '@/lib/alkanes/helpers';
+import { getFrBtcFeatures } from '@/lib/alkanes/contractFeatures';
 
 bitcoin.initEccLib(ecc);
 
@@ -55,7 +37,7 @@ export type UnwrapTransactionBaseData = {
 };
 
 export function useUnwrapMutation() {
-  const { account, network, isConnected, signSegwitPsbt, signTaprootPsbt, walletType } = useWallet();
+  const { account, network, isConnected, signSegwitPsbt, signTaprootPsbt, walletType, browserWallet } = useWallet();
   const provider = useSandshrewProvider();
   const queryClient = useQueryClient();
   const { requestConfirmation } = useTransactionConfirm();
@@ -64,6 +46,11 @@ export function useUnwrapMutation() {
   return useMutation({
     mutationFn: async (unwrapData: UnwrapTransactionBaseData) => {
       if (!isConnected) throw new Error('Wallet not connected');
+      // Ensure browser wallet session is active before building PSBT
+      if (walletType === 'browser') {
+        const { ensureWalletSession } = await import('@/lib/wallet/browserWalletSigning');
+        await ensureWalletSession();
+      }
       if (!provider) throw new Error('Provider not available');
 
       // Get addresses - use actual addresses instead of SDK descriptors
@@ -82,6 +69,19 @@ export function useUnwrapMutation() {
       // Verify wallet is loaded in provider
       if (!provider.walletIsLoaded()) {
         throw new Error('Wallet not loaded in provider');
+      }
+
+      // Refuse to broadcast if the deployed fr-btc contract on this network
+      // doesn't implement opcode 78 yet. The capability matrix in
+      // lib/alkanes/contractFeatures.ts is the source of truth; flip the
+      // flag there when the contract is upgraded. The Unwrap UI should
+      // already be hidden on networks where this is false — this throw is
+      // a defense-in-depth check for any callsite that bypasses the gate.
+      if (!getFrBtcFeatures(network).unwrap) {
+        throw new Error(
+          'Unwrap is not yet supported by the deployed frBTC contract on this network. ' +
+          'Your frBTC is safe — please use Swap to convert frBTC → BTC instead.',
+        );
       }
 
       const unwrapAmount = toAlks(unwrapData.amount);
@@ -105,7 +105,7 @@ export function useUnwrapMutation() {
       const btcNetwork = getBitcoinNetwork(network);
 
       const isBrowserWallet = walletType === 'browser';
-      const useActualAddresses = isBrowserWallet || network === 'devnet';
+      const useActualAddresses = isBrowserWallet || network === 'devnet' || network === 'regtest-local' || network === 'qubitcoin-regtest' || network === 'regtest';
 
       // ============================================================================
       // ⚠️ CRITICAL: Browser wallets need ACTUAL addresses, not symbolic ⚠️

@@ -1,80 +1,24 @@
 /**
- * useWrapMutation - Wrap BTC into frBTC
+ * useWrapMutation — Wrap BTC into frBTC.
  *
- * ## WASM Dependency Note
+ * Tx layout (must match CLI `wrap_btc.rs` ordering):
+ *   - Output 0 (v0): Signer address — receives BTC via `inputRequirements = "B:<sats>:v0"`
+ *   - Output 1 (v1): User taproot — receives minted frBTC via pointer=v1
+ *   - protostone: `[32,0,77]:v1:v1` — fr-btc contract, opcode 77 (wrap)
  *
- * Uses `@alkanes/ts-sdk/wasm` aliased to `lib/oyl/alkanes/` (see next.config.mjs).
- * If "Insufficient alkanes" errors occur, sync WASM: see docs/SDK_DEPENDENCY_MANAGEMENT.md
+ * Signer address is the P2TR derived from the contract's GET_SIGNER (opcode 103).
+ * Hardcoded per network in `lib/alkanes/constants.ts`. If the contract is
+ * redeployed with a new signer key, that constant MUST be updated — wrong
+ * address means BTC routes to nowhere and no frBTC is minted.
  *
- * ## SDK Update (2026-02-20)
+ * Browser wallets need actual addresses for changeAddress/alkanesChangeAddress;
+ * symbolic 'p2tr:0' / 'p2wpkh:0' resolve to the SDK's dummy wallet. Use the
+ * `useActualAddresses` pattern. (See useSwapMutation header for the full
+ * incident writeup, mainnet tx 985436b5...)
  *
- * Updated to @alkanes/ts-sdk from develop branch (via pkg.alkanes.build).
- * New features include WasmBrowserWalletProvider and JsWalletAdapter interface.
- * Current implementation continues to use alkanesExecuteWithStrings via alkanesExecuteTyped.
- *
- * ## CRITICAL FIX (2026-02-20): Browser Wallet Address Resolution
- *
- * The WASM SDK has a dummy wallet loaded (via walletCreate() in AlkanesSDKContext) to satisfy
- * the "Wallet not loaded" check. When symbolic addresses like 'p2tr:0' or 'p2wpkh:0' are used
- * for change_address or alkanes_change_address options, the SDK resolves them to the dummy
- * wallet's addresses, causing ALL outputs to go to the dummy wallet instead of the user!
- *
- * Root cause: Even when actual Bitcoin addresses are passed in toAddresses, the SDK uses
- * the change_address and alkanes_change_address options for output destinations, resolving
- * symbolic addresses to the loaded (dummy) wallet.
- *
- * Fix: For browser wallets, pass actual user addresses for changeAddress and alkanesChangeAddress
- * instead of symbolic addresses. For keystore wallets, symbolic addresses work correctly since
- * the actual user's mnemonic is loaded into the provider.
- *
- * On devnet, symbolic addresses do NOT work — useActualAddresses ensures actual addresses
- * are used regardless of wallet type.
- *
- * Transaction ce185f7... showed both outputs going to bcrt1pvu3q2... (dummy wallet taproot
- * address from 'p2tr:0') instead of the signer and user addresses.
- *
- * ## Implementation Note (2026-01-28)
- *
- * Uses alkanesExecuteTyped from the extended provider for cleaner parameter handling.
- * Uses symbolic addresses (p2tr:0, p2wpkh:0) for keystore wallets, actual addresses for browser wallets.
- *
- * ## Critical: Output Ordering & Signer Address (2026-01-28)
- *
- * The wrap transaction MUST match the CLI (wrap_btc.rs) output ordering:
- *
- *   - Output 0 (v0): Signer address — receives BTC via `B:amount:v0`
- *   - Output 1 (v1): User taproot address — receives minted frBTC via pointer=v1
- *
- * The protostone is `[32,0,77]:v1:v1` meaning:
- *   - Cellpack: frBTC contract [32:0], opcode 77 (wrap)
- *   - pointer=v1: minted frBTC goes to output 1 (user)
- *   - refund=v1: refunds go to output 1 (user)
- *
- * `inputRequirements = "B:<sats>:v0"` explicitly assigns BTC value to output 0 (signer).
- *
- * ### Signer Address
- *
- * The signer address is the P2TR address derived from the frBTC contract's GET_SIGNER
- * opcode (103). The CLI fetches this dynamically via `get_subfrost_address()` in
- * `subfrost.rs`, which calls opcode 103 on [32:0], receives a 32-byte x-only pubkey,
- * and converts it to a P2TR (bc1p...) address.
- *
- * For the frontend, we hardcode this address per network. If the frBTC contract is
- * redeployed with a different signer key, this address MUST be updated. You can
- * obtain the correct address by running:
- *
- *   alkanes-cli -p subfrost-regtest wrap-btc --amount 1000 --fee-rate 1
- *
- * and observing which address the CLI sends BTC to at output 0.
- *
- * ### Debugging History
- *
- * The original bug was that BTC was sent but frBTC was never minted. Root cause:
- * a stale hardcoded signer address. The frBTC contract only mints when BTC arrives
- * at its expected signer address. A wrong address means BTC is lost to an unrelated
- * output and the contract sees no incoming BTC. The protostone encoding (two-layer
- * Protocol field with ProtoPointer/Refund inside Protocol tag 16383) was correct
- * all along — both WASM and CLI share the same Rust encoding path.
+ * WASM dependency: `@alkanes/ts-sdk/wasm` aliased to `lib/oyl/alkanes/`
+ * (see next.config.mjs). On "Insufficient alkanes", sync per
+ * docs/SDK_DEPENDENCY_MANAGEMENT.md.
  */
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useWallet } from '@/context/WalletContext';
@@ -83,7 +27,7 @@ import { useSandshrewProvider } from './useSandshrewProvider';
 import { getConfig } from '@/utils/getConfig';
 import * as bitcoin from 'bitcoinjs-lib';
 import * as ecc from '@bitcoinerlab/secp256k1';
-import { getBitcoinNetwork, getSignerAddress, getSignerAddressDynamic, extractPsbtBase64 } from '@/lib/alkanes/helpers';
+import { getBitcoinNetwork, getSignerAddress, getSignerAddressDynamic, extractPsbtBase64, getCleanPaymentUtxos } from '@/lib/alkanes/helpers';
 import { buildWrapProtostone } from '@/lib/alkanes/builders';
 
 bitcoin.initEccLib(ecc);
@@ -94,7 +38,7 @@ export type WrapTransactionBaseData = {
 };
 
 export function useWrapMutation() {
-  const { account, network, isConnected, signTaprootPsbt, signSegwitPsbt, walletType } = useWallet();
+  const { account, network, isConnected, signTaprootPsbt, signSegwitPsbt, walletType, browserWallet } = useWallet();
   const provider = useSandshrewProvider();
   const queryClient = useQueryClient();
   const { requestConfirmation } = useTransactionConfirm();
@@ -103,6 +47,11 @@ export function useWrapMutation() {
   return useMutation({
     mutationFn: async (wrapData: WrapTransactionBaseData) => {
       if (!isConnected) throw new Error('Wallet not connected');
+      // Ensure browser wallet session is active before building PSBT
+      if (walletType === 'browser') {
+        const { ensureWalletSession } = await import('@/lib/wallet/browserWalletSigning');
+        await ensureWalletSession();
+      }
       if (!provider) throw new Error('Provider not available');
 
       // Check if WASM provider wallet is loaded for signing
@@ -136,12 +85,14 @@ export function useWrapMutation() {
 
       // Get the signer address — on devnet, query dynamically since each boot
       // generates a new frBTC contract with a different signer key.
-      const signerAddress = (network === 'devnet')
+      // regtest-local and devnet have ephemeral signer keys — query the contract dynamically.
+      // Other networks use the static SIGNER_ADDRESSES map.
+      const signerAddress = (network === 'devnet' || network === 'regtest-local')
         ? await getSignerAddressDynamic(network)
         : getSignerAddress(network);
 
       const isBrowserWallet = walletType === 'browser';
-      const useActualAddresses = isBrowserWallet || network === 'devnet';
+      const useActualAddresses = isBrowserWallet || network === 'devnet' || network === 'regtest-local' || network === 'qubitcoin-regtest' || network === 'regtest';
 
       // For browser wallets, use actual addresses for UTXO discovery (passed as
       // opaque strings to esplora — no Address parsing, no LegacyAddressTooLong).
@@ -170,22 +121,40 @@ export function useWrapMutation() {
         : [signerAddress, 'p2tr:0'];
 
       try {
+        // Skip the WASM SDK's lua `spendable_utxos.lua` flow (slow on wallets
+        // with many UTXOs because of per-UTXO `esplora_tx` coinbase-check
+        // round-trips) by pre-fetching clean BTC UTXOs.
+        // See `getCleanPaymentUtxos` for the fast UniSat / dataApi paths.
+        //
+        // Only safe when the addresses we fetch from match the addresses the
+        // SDK will actually sign for. That's true when `useActualAddresses` is
+        // true (browser wallet or devnet/regtest-local — addresses passed
+        // verbatim) or for UniSat. For keystore on regtest/mainnet the SDK
+        // resolves symbolic `p2tr:0`/`p2wpkh:0` against the WASM keystore
+        // (coinType=1 on regtest); JS-derived (coinType=0) UTXOs would produce
+        // an unsignable PSBT. Fall through to the SDK's lua path.
+        const paymentUtxos = useActualAddresses || (isBrowserWallet && (window as any).unisat?.getBitcoinUtxos)
+          ? await getCleanPaymentUtxos({
+              provider,
+              addresses: [userSegwitAddress, userTaprootAddress],
+              unisat: isBrowserWallet ? (window as any).unisat : undefined,
+            })
+          : undefined;
+
         const result = await provider.alkanesExecuteTyped({
           toAddresses,
           inputRequirements,
           protostones: protostone,
           feeRate: wrapData.feeRate,
           fromAddresses,
-          // For browser wallets, use actual addresses instead of symbolic to prevent
-          // SDK from resolving to dummy wallet addresses.
-          // CRITICAL (2026-02-23): Fall back to taproot when no segwit address
-          // (UniSat taproot-only). Previously fell back to 'p2wpkh:0' which resolves
-          // to the dummy wallet — BTC change permanently lost.
           changeAddress: useActualAddresses ? (userSegwitAddress || userTaprootAddress) : 'p2wpkh:0',
           alkanesChangeAddress: useActualAddresses ? userTaprootAddress : 'p2tr:0',
           autoConfirm: false,
-          traceEnabled: true, // DIAGNOSTIC: Enable to trace address resolution flow
+          traceEnabled: true,
           mineEnabled: false,
+          ordinalsStrategy: 'exclude' as const,
+          protectTaproot: Boolean(userSegwitAddress && userTaprootAddress),
+          paymentUtxos,
         });
 
         // Check if execution completed (auto_confirm: true path)

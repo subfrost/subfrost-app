@@ -10,6 +10,7 @@ import { useWallet } from '@/context/WalletContext';
 import { getConfig, getRpcUrl } from '@/utils/getConfig';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { KNOWN_TOKENS } from '@/lib/alkanes-client';
+import { simulateContract, extractField3Data, parseU128LE } from '@/lib/fujin/rpc';
 import { queryKeys } from '@/queries/keys';
 
 export type UsePoolsParams = {
@@ -197,8 +198,6 @@ async function fetchPoolsFromDataApi(
     || parsed?.data?.pools
     || (Array.isArray(parsed?.data) ? parsed.data : []);
 
-  console.log('[usePools] dataApiGetAllPoolsDetails returned', pools.length, 'pools');
-
   if (pools.length === 0) {
     throw new Error('dataApiGetAllPoolsDetails returned 0 pools (API may be down)');
   }
@@ -279,19 +278,14 @@ async function fetchPoolsFromPoolsDetailsRest(
 ): Promise<PoolsListItem[]> {
   const [factoryBlock, factoryTx] = factoryId.split(':');
   // Route through app API proxy — never call external URLs directly from hooks
+  // Use server-side cached endpoint (30s TTL) to avoid hitting RPC every page load
   const resp = await Promise.race([
-    fetch(`${getRpcUrl(network)}/get-all-pools-details`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ factoryId: { block: factoryBlock, tx: factoryTx } }),
-    }),
-    new Promise<never>((_, reject) => setTimeout(() => reject(new Error('get-all-pools-details REST timeout (15s)')), 15000)),
+    fetch(`/api/pools/cached?network=${network}`),
+    new Promise<never>((_, reject) => setTimeout(() => reject(new Error('cached pools timeout (10s)')), 10000)),
   ]);
-  if (!resp.ok) throw new Error(`get-all-pools-details REST HTTP ${resp.status}`);
+  if (!resp.ok) throw new Error(`cached pools HTTP ${resp.status}`);
   const json = await resp.json();
   const pools: any[] = json?.data?.pools || json?.pools || [];
-
-  console.log('[usePools] get-all-pools-details REST returned', pools.length, 'pools');
 
   if (pools.length === 0) {
     throw new Error('get-all-pools-details REST returned 0 pools');
@@ -380,8 +374,6 @@ async function fetchPoolsFromTokenPairsRest(
   const json = await resp.json();
   const pools: any[] = json?.data?.pools || (Array.isArray(json?.data) ? json.data : null) || json?.pools || [];
 
-  console.log('[usePools] get-all-token-pairs REST returned', pools.length, 'pools');
-
   const items: PoolsListItem[] = [];
 
   for (const p of pools) {
@@ -461,8 +453,6 @@ async function fetchPoolsFromTokenPairsApi(
   // API returns { data: [...] } with pool objects
   const pools = parsed?.pools || parsed?.data?.pools || (Array.isArray(parsed?.data) ? parsed.data : []) || (Array.isArray(parsed) ? parsed : []);
 
-  console.log('[usePools] dataApiGetAllTokenPairs returned', pools.length, 'pools');
-
   if (pools.length === 0) {
     throw new Error('dataApiGetAllTokenPairs returned 0 pools');
   }
@@ -530,6 +520,118 @@ async function fetchPoolsFromTokenPairsApi(
 }
 
 // ============================================================================
+// Direct metashrew_view simulate fallback (regtest-local)
+// ============================================================================
+
+async function fetchPoolsFromDirectSimulate(
+  factoryId: string,
+  network: string,
+): Promise<PoolsListItem[]> {
+  // [JOURNAL 2026-04-26] On hosted regtest, route through the dev-server proxy
+  // at `/api/rpc/regtest` so requests are forwarded to regtest.subfrost.io.
+  // The earlier conditional collapsed `regtest` and `qubitcoin-regtest` onto
+  // the same `/api/rpc/qubitcoin-regtest` path — that was wrong for hosted
+  // regtest where the proxy needs the network slug to match the endpoint map.
+  // Fixing this populates `usePools` data on hosted regtest, which makes swap
+  // quotes compute (otherwise quote = 0 and CONFIRM SWAP is disabled).
+  const rpcUrl = network === 'qubitcoin-regtest'
+    ? `${typeof window !== 'undefined' ? window.location.origin : ''}/api/rpc/qubitcoin-regtest`
+    : network === 'regtest'
+      ? `${typeof window !== 'undefined' ? window.location.origin : ''}/api/rpc/regtest`
+      : 'http://localhost:18888';
+
+  // Factory opcode 3: GetAllPools — returns list of pool AlkaneIds
+  const allPoolsHex = await simulateContract(rpcUrl, factoryId, 3);
+  const allPoolsData = extractField3Data(allPoolsHex, 32);
+  if (!allPoolsData) {
+    return [];
+  }
+
+  // First u128 = pool count, then pairs of u128 (block, tx)
+  const numPools = Number(parseU128LE(allPoolsData, 0));
+  const pools: { block: number; tx: number }[] = [];
+  for (let i = 0; i < numPools; i++) {
+    const offset = 32 + i * 64; // skip count (32 hex chars), each pool = 64 hex chars
+    if (offset + 64 > allPoolsData.length) break;
+    const block = Number(parseU128LE(allPoolsData, offset));
+    const tx = Number(parseU128LE(allPoolsData, offset + 32));
+    pools.push({ block, tx });
+  }
+  const items: PoolsListItem[] = [];
+  for (const pool of pools) {
+    const poolId = `${pool.block}:${pool.tx}`;
+    try {
+      // Pool opcode 999: PoolDetails
+      const detailsHex = await simulateContract(rpcUrl, poolId, 999);
+      const detailsData = extractField3Data(detailsHex, 32);
+
+      // Pool opcode 99: GetName
+      const nameHex = await simulateContract(rpcUrl, poolId, 99);
+      const nameData = extractField3Data(nameHex, 1);
+      let poolName = '';
+      if (nameData) {
+        for (let i = 0; i < nameData.length; i += 2) {
+          const byte = parseInt(nameData.slice(i, i + 2), 16);
+          if (byte === 0) break;
+          poolName += String.fromCharCode(byte);
+        }
+      }
+
+      // Pool opcode 97: GetReserves
+      const reservesHex = await simulateContract(rpcUrl, poolId, 97);
+      const reservesData = extractField3Data(reservesHex, 32);
+
+      let token0Id = '', token1Id = '', token0Symbol = '', token1Symbol = '';
+      let token0Amount: string | undefined, token1Amount: string | undefined;
+
+      // Parse pool name "TOKEN0 / TOKEN1 LP" → symbols
+      const nameMatch = poolName.match(/^(.+?)\s*\/\s*(.+?)(?:\s*LP)?$/);
+      if (nameMatch) {
+        token0Symbol = nameMatch[1].trim();
+        token1Symbol = nameMatch[2].trim();
+      }
+
+      // Parse details for token IDs (PoolDetails format: various u128 fields)
+      if (detailsData && detailsData.length >= 128) {
+        const t0Block = Number(parseU128LE(detailsData, 0));
+        const t0Tx = Number(parseU128LE(detailsData, 32));
+        const t1Block = Number(parseU128LE(detailsData, 64));
+        const t1Tx = Number(parseU128LE(detailsData, 96));
+        token0Id = `${t0Block}:${t0Tx}`;
+        token1Id = `${t1Block}:${t1Tx}`;
+      }
+
+      // Parse reserves
+      if (reservesData && reservesData.length >= 64) {
+        token0Amount = parseU128LE(reservesData, 0).toString();
+        token1Amount = parseU128LE(reservesData, 32).toString();
+      }
+
+      // Resolve known token symbols
+      if (token0Id && (!token0Symbol || /^\d+$/.test(token0Symbol))) {
+        token0Symbol = KNOWN_TOKENS[token0Id]?.symbol || token0Symbol || token0Id;
+      }
+      if (token1Id && (!token1Symbol || /^\d+$/.test(token1Symbol))) {
+        token1Symbol = KNOWN_TOKENS[token1Id]?.symbol || token1Symbol || token1Id;
+      }
+
+      items.push({
+        id: poolId,
+        pairLabel: `${token0Symbol}/${token1Symbol}`,
+        token0: { id: token0Id, symbol: token0Symbol, name: token0Symbol },
+        token1: { id: token1Id, symbol: token1Symbol, name: token1Symbol },
+        token0Amount,
+        token1Amount,
+      });
+    } catch (e) {
+      console.warn('[usePools] Direct simulate: failed to query pool', poolId, e);
+    }
+  }
+
+  return items;
+}
+
+// ============================================================================
 // SDK RPC fallback (N+1 calls via alkanesGetAllPoolsWithDetails)
 // ============================================================================
 
@@ -545,8 +647,6 @@ async function fetchPoolsFromSDKFallback(
   ]);
   const parsed = typeof rpcResult === 'string' ? JSON.parse(rpcResult) : rpcResult;
   const rpcPools = parsed?.pools || [];
-
-  console.log('[usePools] SDK fallback returned', rpcPools.length, 'pools');
 
   const items: PoolsListItem[] = [];
 
@@ -614,8 +714,6 @@ export function usePools(params: UsePoolsParams = {}) {
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10000),
     enabled: !!network && !!ALKANE_FACTORY_ID && !!provider,
     queryFn: async () => {
-      console.log('[usePools] Fetching pools for factory:', ALKANE_FACTORY_ID);
-
       if (!provider) {
         throw new Error('SDK provider not available');
       }
@@ -625,6 +723,18 @@ export function usePools(params: UsePoolsParams = {}) {
 
       let items: PoolsListItem[] = [];
       let tokenMetaMap: Map<string, { name: string; symbol: string }> = new Map();
+
+      // regtest-local: skip REST/SDK fallbacks (all return 503 or hang 30s).
+      // Go directly to metashrew_view simulate which is the only working path.
+      if (network === 'regtest-local' || network === 'qubitcoin-regtest' || network === 'regtest') {
+        try { tokenMetaMap = await tokenMetaPromise; } catch { /* ignore */ }
+        try {
+          items = await fetchPoolsFromDirectSimulate(ALKANE_FACTORY_ID, network);
+        } catch (e) {
+          console.warn('[usePools] regtest-local: Direct simulate failed:', e);
+        }
+        return { items, total: items.length };
+      }
 
       // Primary: Direct REST call to get-all-pools-details (preserves ALL API fields
       // including poolApr, poolVolume30dInUsd, etc. which the SDK WASM deserializer drops).
@@ -713,7 +823,6 @@ export function usePools(params: UsePoolsParams = {}) {
         }
       }
       if (missingIds.size > 0) {
-        console.log('[usePools] Fetching metadata for', missingIds.size, 'tokens with numeric names:', [...missingIds]);
         await fetchMissingTokenMetadata([...missingIds], network, tokenMetaMap);
         // Re-apply proper names from the updated metadata map
         // Use name as fallback for symbol (and vice versa) when one is empty
@@ -746,7 +855,6 @@ export function usePools(params: UsePoolsParams = {}) {
       const beforeCount = items.length;
       items = items.filter(p => !isBlacklistedPool(p));
       if (items.length < beforeCount) {
-        console.log(`[usePools] Filtered out ${beforeCount - items.length} blacklisted pool(s)`);
       }
 
       // Remove dust/dead pools with negligible TVL (skip on regtest/devnet where pricing is unavailable)

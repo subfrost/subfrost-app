@@ -200,18 +200,21 @@ interface OrdOutputsResult {
 async function fetchOrdOutputs(address: string, networkName?: string): Promise<OrdOutputsResult> {
   console.log('[fetchOrdOutputs] Fetching ord outputs for:', address);
 
-  // Determine the RPC endpoint based on network
-  const RPC_ENDPOINTS: Record<string, string> = {
-    mainnet: 'https://mainnet.subfrost.io/v4/subfrost',
-    testnet: 'https://testnet.subfrost.io/v4/subfrost',
-    signet: 'https://signet.subfrost.io/v4/subfrost',
-    regtest: 'https://regtest.subfrost.io/v4/subfrost',
-    'regtest-local': 'http://localhost:18888',
-    'subfrost-regtest': 'https://regtest.subfrost.io/v4/subfrost',
-    oylnet: 'https://regtest.subfrost.io/v4/subfrost',
-  };
-
-  const baseUrl = RPC_ENDPOINTS[networkName || 'mainnet'] || RPC_ENDPOINTS.mainnet;
+  // [JOURNAL 2026-04-26] Use dev-server proxy for browser-side calls to avoid CORS.
+  const baseUrl = (() => {
+    const net = networkName || 'mainnet';
+    if (net === 'regtest-local') return 'http://localhost:18888';
+    if (typeof window !== 'undefined') return `${window.location.origin}/api/rpc/${net}`;
+    const SERVER_FALLBACK: Record<string, string> = {
+      mainnet: 'https://mainnet.subfrost.io/v4/subfrost',
+      testnet: 'https://testnet.subfrost.io/v4/subfrost',
+      signet: 'https://signet.subfrost.io/v4/subfrost',
+      regtest: 'https://regtest.subfrost.io/v4/subfrost',
+      'subfrost-regtest': 'https://regtest.subfrost.io/v4/subfrost',
+      oylnet: 'https://regtest.subfrost.io/v4/subfrost',
+    };
+    return SERVER_FALLBACK[net] || SERVER_FALLBACK.mainnet;
+  })();
   const result = new Map<string, { hasInscriptions: boolean; hasRunes: boolean }>();
 
   try {
@@ -276,18 +279,26 @@ async function fetchOrdOutputs(address: string, networkName?: string): Promise<O
 async function fetchAlkaneOutpoints(address: string, networkName?: string): Promise<AlkaneOutpoint[]> {
   console.log('[fetchAlkaneOutpoints] Fetching alkane outpoints for:', address);
 
-  // Determine the RPC endpoint based on network
-  const RPC_ENDPOINTS: Record<string, string> = {
-    mainnet: 'https://mainnet.subfrost.io/v4/subfrost',
-    testnet: 'https://testnet.subfrost.io/v4/subfrost',
-    signet: 'https://signet.subfrost.io/v4/subfrost',
-    regtest: 'https://regtest.subfrost.io/v4/subfrost',
-    'regtest-local': 'http://localhost:18888',
-    'subfrost-regtest': 'https://regtest.subfrost.io/v4/subfrost',
-    oylnet: 'https://regtest.subfrost.io/v4/subfrost',
-  };
-
-  const baseUrl = RPC_ENDPOINTS[networkName || 'mainnet'] || RPC_ENDPOINTS.mainnet;
+  // [JOURNAL 2026-04-26] Route through dev-server proxy at `/api/rpc/<network>`
+  // for browser-side calls. Direct calls to `regtest.subfrost.io` etc. are
+  // blocked by CORS — that's the same proxy pattern the rest of the codebase
+  // uses (see app/api/rpc/[[...segments]]/route.ts).
+  // regtest-local stays as-is since it tunnels through localhost.
+  const baseUrl = (() => {
+    const net = networkName || 'mainnet';
+    if (net === 'regtest-local') return 'http://localhost:18888';
+    if (typeof window !== 'undefined') return `${window.location.origin}/api/rpc/${net}`;
+    // Server-side fallback: direct subfrost endpoint (no CORS issue server-side)
+    const SERVER_FALLBACK: Record<string, string> = {
+      mainnet: 'https://mainnet.subfrost.io/v4/subfrost',
+      testnet: 'https://testnet.subfrost.io/v4/subfrost',
+      signet: 'https://signet.subfrost.io/v4/subfrost',
+      regtest: 'https://regtest.subfrost.io/v4/subfrost',
+      'subfrost-regtest': 'https://regtest.subfrost.io/v4/subfrost',
+      oylnet: 'https://regtest.subfrost.io/v4/subfrost',
+    };
+    return SERVER_FALLBACK[net] || SERVER_FALLBACK.mainnet;
+  })();
 
   const resp = await fetch(baseUrl, {
     method: 'POST',

@@ -34,6 +34,8 @@ export const queryKeys = {
   account: {
     enrichedWallet: (network: string, addresses: string) =>
       ['enriched-wallet', network, addresses] as const,
+    btcBalanceFast: (network: string, addresses: string, walletType?: string | null) =>
+      ['btc-balance-fast', network, addresses, walletType ?? 'none'] as const,
     btcBalance: (network: string, address: string) =>
       ['btc-balance', address, network] as const,
     alkaneBalances: (network: string, addresses: string) =>

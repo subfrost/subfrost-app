@@ -149,8 +149,11 @@ async function findPoolId(
         if (buf[i] === 0x1a && buf[i + 1] === 0x20) {
           const dataStart = i + 2;
           if (dataStart + 32 <= buf.length) {
-            const block = Number(buf.readBigUInt64LE(dataStart));
-            const tx = Number(buf.readBigUInt64LE(dataStart + 16));
+            // Browser-safe LE u128 parse (readBigUInt64LE not available in browser Buffer polyfill)
+            let block = 0;
+            for (let b = 0; b < 8; b++) block += buf[dataStart + b] * (256 ** b);
+            let tx = 0;
+            for (let b = 0; b < 8; b++) tx += buf[dataStart + 16 + b] * (256 ** b);
             if (block > 0 && block < 100000 && tx >= 0 && tx < 100000) {
               return { block, tx };
             }
@@ -295,7 +298,7 @@ function injectAlkaneInputs(
 }
 
 export function useAddLiquidityMutation() {
-  const { account, network, isConnected, signTaprootPsbt, signSegwitPsbt, walletType } = useWallet();
+  const { account, network, isConnected, signTaprootPsbt, signSegwitPsbt, walletType, browserWallet } = useWallet();
   const provider = useSandshrewProvider();
   const queryClient = useQueryClient();
   const { requestConfirmation } = useTransactionConfirm();
@@ -307,6 +310,11 @@ export function useAddLiquidityMutation() {
     mutationFn: async (data: AddLiquidityTransactionData) => {
       // Validation
       if (!isConnected) throw new Error('Wallet not connected');
+      // Ensure browser wallet session is active before building PSBT
+      if (walletType === 'browser') {
+        const { ensureWalletSession } = await import('@/lib/wallet/browserWalletSigning');
+        await ensureWalletSession();
+      }
       if (!provider) throw new Error('Provider not available');
       if (!provider.walletIsLoaded()) {
         throw new Error('Provider wallet not loaded. Please reconnect your wallet.');
@@ -383,7 +391,7 @@ export function useAddLiquidityMutation() {
       const btcNetwork = getBitcoinNetwork(network);
 
       const isBrowserWallet = walletType === 'browser';
-      const useActualAddresses = isBrowserWallet || network === 'devnet';
+      const useActualAddresses = isBrowserWallet || network === 'devnet' || network === 'regtest-local' || network === 'qubitcoin-regtest' || network === 'regtest';
 
       // ============================================================================
       // ⚠️ CRITICAL: Browser wallets need ACTUAL addresses, not symbolic ⚠️
@@ -410,6 +418,7 @@ export function useAddLiquidityMutation() {
         : 'p2tr:0';
 
       try {
+
         const result = await provider.alkanesExecuteTyped({
           inputRequirements,
           protostones: protostone,
@@ -419,7 +428,7 @@ export function useAddLiquidityMutation() {
           toAddresses,
           changeAddress: changeAddr,
           alkanesChangeAddress: alkanesChangeAddr,
-          ordinalsStrategy: 'burn',
+          ordinalsStrategy: 'exclude',
           network,
         });
 
@@ -440,7 +449,9 @@ export function useAddLiquidityMutation() {
           // The SDK's internal protorunesbyaddress is broken (returns 0x on regtest),
           // so the PSBT is built WITHOUT alkane-bearing inputs. We manually discover
           // alkane UTXOs and inject them into the PSBT before signing.
-          const alkaneUtxos = await discoverAlkaneUtxos(taprootAddress!, '/api/rpc');
+          console.log('[AddLiquidity] Discovering alkane UTXOs for injection...');
+          const rpcPath = network ? `/api/rpc/${network}` : '/api/rpc';
+          const alkaneUtxos = await discoverAlkaneUtxos(taprootAddress!, rpcPath);
 
           if (alkaneUtxos.length > 0) {
             const tapInternalKeyHex = account?.taproot?.pubKeyXOnly;

@@ -174,13 +174,13 @@ export function useSwapUnwrapMutation() {
       console.log('[SwapUnwrap] Expected BTC after unwrap fee:', expectedBtcAfterUnwrap, 'sats');
 
       // Get deadline block height
-      const isRegtest = network === 'regtest' || network === 'subfrost-regtest' || network === 'regtest-local';
+      const isRegtest = network === 'regtest' || network === 'subfrost-regtest' || network === 'regtest-local' || network === 'qubitcoin-regtest';
       const deadlineBlocks = isRegtest ? 1000 : (data.deadlineBlocks || 3);
       const deadline = await getFutureBlockHeight(deadlineBlocks, provider as any);
       console.log('[SwapUnwrap] Deadline:', deadline, `(+${deadlineBlocks} blocks)`);
 
       const isBrowserWallet = walletType === 'browser';
-      const useActualAddresses = isBrowserWallet || network === 'devnet';
+      const useActualAddresses = isBrowserWallet || network === 'devnet' || network === 'regtest-local' || network === 'qubitcoin-regtest' || network === 'regtest';
 
       // ========================================================================
       // Step 3: Fetch all available UTXOs BEFORE building swap

@@ -63,8 +63,8 @@ export function useLPPositions() {
         const wholeStr = whole.toString();
         const remainderStr = remainder.toString().padStart(decimals, '0');
 
-        // Format balance with 4 decimal places
-        const formattedBalance = `${wholeStr}.${remainderStr.slice(0, 4)}`;
+        // Format balance with 8 decimal places (full precision)
+        const formattedBalance = `${wholeStr}.${remainderStr.slice(0, 8)}`;
 
         // Get token symbols - from pool if available, otherwise use alkane symbol or derive from ID
         let token0Symbol = 'Token0';

@@ -18,6 +18,7 @@ const NETWORK_URLS: Record<Network, string> = {
   'regtest-local': 'regtest',
   oylnet: 'regtest',
   'subfrost-regtest': 'subfrost-regtest',
+  'qubitcoin-regtest': 'regtest',
   devnet: 'subfrost-regtest',
 };
 
@@ -50,6 +51,10 @@ const NETWORK_CONFIG: Record<Network, Record<string, string>> = {
   'subfrost-regtest': {
     jsonrpc_url: 'https://regtest.subfrost.io/v4/subfrost',
     data_api_url: 'https://regtest.subfrost.io/v4/subfrost',
+  },
+  'qubitcoin-regtest': {
+    jsonrpc_url: 'https://meta.lake.direct',
+    data_api_url: 'https://meta.lake.direct',
   },
   devnet: {
     jsonrpc_url: 'http://localhost:18888',

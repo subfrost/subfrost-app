@@ -38,7 +38,13 @@ export const BLOCK_EXPLORER_URLS: Record<string, string> = {
  *  - 'regtest-local' — Docker stack at localhost:18888, reachable by server proxy
  */
 export function isLocalOnlyNetwork(network: string): boolean {
-  return network === 'devnet' || network === 'regtest-local';
+  // 'regtest' (hosted) is included here even though it's a remote endpoint
+  // because its espo essentials index is broken — `dataApiGetAlkanesByAddress`
+  // returns empty there. We fall back to direct `alkanes_protorunesbyaddress`
+  // RPC, same as the local-only networks. Remove `'regtest'` from this list
+  // when the hosted espo essentials index is fixed (see
+  // docs/HOSTED_REGTEST_WORKAROUNDS.md, workaround #7).
+  return network === 'devnet' || network === 'regtest-local' || network === 'regtest';
 }
 
 /**

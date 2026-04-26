@@ -40,7 +40,7 @@ function detectNetwork(): Network {
 
   // Then check localStorage for user selection (only when no env override)
   const stored = localStorage.getItem(NETWORK_STORAGE_KEY);
-  if (stored && ['mainnet', 'testnet', 'signet', 'regtest', 'regtest-local', 'subfrost-regtest', 'oylnet', 'devnet'].includes(stored)) {
+  if (stored && ['mainnet', 'testnet', 'signet', 'regtest', 'regtest-local', 'qubitcoin-regtest', 'subfrost-regtest', 'oylnet', 'devnet'].includes(stored)) {
     return stored as Network;
   }
 

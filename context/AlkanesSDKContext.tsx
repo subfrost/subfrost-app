@@ -91,6 +91,7 @@ const NETWORK_TO_PROVIDER: Record<Network, string> = {
   signet: 'signet',
   regtest: 'regtest',
   'regtest-local': 'regtest',
+  'qubitcoin-regtest': 'regtest',
   oylnet: 'regtest',
   'subfrost-regtest': 'subfrost-regtest',
   devnet: 'subfrost-regtest', // Devnet uses regtest params, fetch interceptor routes to in-process
@@ -116,7 +117,11 @@ const DIRECT_NETWORK_CONFIG: Record<Network, Record<string, string> | undefined>
   },
   'regtest-local': {
     jsonrpc_url: 'http://localhost:18888',
-    data_api_url: 'http://localhost:4000',
+    data_api_url: 'http://localhost:18888',
+  },
+  'qubitcoin-regtest': {
+    jsonrpc_url: 'https://meta.lake.direct',
+    data_api_url: 'https://meta.lake.direct',
   },
   oylnet: {
     jsonrpc_url: 'https://regtest.subfrost.io/v4/subfrost',
@@ -137,7 +142,7 @@ const DIRECT_NETWORK_CONFIG: Record<Network, Record<string, string> | undefined>
  * These are remote networks whose endpoints may not return proper CORS headers.
  * regtest-local uses local Docker (localhost) which doesn't need a proxy.
  */
-const NETWORKS_NEEDING_PROXY: Network[] = ['regtest', 'oylnet', 'subfrost-regtest', 'mainnet', 'testnet', 'signet'];
+const NETWORKS_NEEDING_PROXY: Network[] = ['regtest', 'oylnet', 'subfrost-regtest', 'qubitcoin-regtest', 'mainnet', 'testnet', 'signet'];
 
 /**
  * Get network configuration, using proxy URL when in browser localhost context
@@ -231,14 +236,26 @@ export function AlkanesSDKProvider({ children, network }: AlkanesSDKProviderProp
 
         // RESOLVED (2026-03-31): Passing actual addresses via useActualAddresses pattern
         // in all mutation hooks fixes the address resolution issue. See CLAUDE.md Rule 0b.
+        //
+        // EXTENDED (2026-04-26): Added 'regtest' (hosted regtest at regtest.subfrost.io)
+        // to the mnemonic-loading allowlist. Previously hosted regtest used walletCreate()
+        // which produces a random dummy wallet — this broke unwrap/swap on hosted regtest
+        // because the SDK queried esplora script-history for the dummy wallet's addresses
+        // (which had none) and failed with "Script not found for hash: ...".
+        // After this fix, hosted regtest uses the same mnemonic-derived coinType=1 addresses
+        // as the WalletContext keystore wallet, so script-history lookups succeed.
+        // Verified by tx 689b151e443988ad095ccd226055dda1bdf51566594ef01a83cc32fb0a91c620
+        // (fresh wrap broadcast successfully through keystore wallet on hosted regtest).
         try {
-          if (network === 'devnet') {
-            // On devnet, load the boot mnemonic so the SDK provider can find
-            // UTXOs minted by faucets and boot deploys. A dummy wallet would
-            // resolve p2tr:0/p2wpkh:0 to unrelated addresses with no balance.
-            const BOOT_MNEMONIC = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
-            providerInstance.walletLoadMnemonic(BOOT_MNEMONIC, null);
-            console.log('[AlkanesSDK] Boot mnemonic loaded for devnet');
+          if (network === 'devnet' || network === 'regtest-local' || network === 'qubitcoin-regtest' || network === 'regtest') {
+            // On local networks, load the session mnemonic so the SDK provider
+            // can find UTXOs for signing. A dummy wallet resolves p2tr:0/p2wpkh:0
+            // to unrelated addresses with no balance.
+            const sessionMnemonic = typeof sessionStorage !== 'undefined'
+              ? sessionStorage.getItem('subfrost_session_mnemonic') : null;
+            const mnemonic = sessionMnemonic || 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
+            providerInstance.walletLoadMnemonic(mnemonic, null);
+            console.log('[AlkanesSDK] Mnemonic loaded for', network);
           } else {
             providerInstance.walletCreate();
             console.log('[AlkanesSDK] Dummy wallet loaded (required by SDK)');

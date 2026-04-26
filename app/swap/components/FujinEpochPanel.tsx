@@ -30,10 +30,10 @@ export default function FujinEpochPanel({ poolId }: Props) {
 
   const markets = fujinData?.markets ?? [];
   const currentMarket = poolId
-    ? markets.find((m) => m.marketId === poolId)
+    ? markets.find((m) => `${m.pool.block}:${m.pool.tx}` === poolId)
     : markets[markets.length - 1] ?? null;
 
-  const epochNum = currentMarket ? currentMarket.block : '--';
+  const epochNum = currentMarket ? currentMarket.epoch : '--';
 
   // Derive LONG/SHORT price from reserves if synth pool is active
   const longPrice = useMemo(() => {
@@ -59,9 +59,9 @@ export default function FujinEpochPanel({ poolId }: Props) {
 
   // Epoch settlement status: derived from on-chain market state.
   // When Fujin market is settled, the settlement payouts are computed from actual difficulty change.
-  const settled = currentMarket?.expiry != null && typeof blockHeight === 'number'
-    ? (blockHeight >= (currentMarket.expiry ?? Infinity))
-    : false;
+  const settled = currentMarket?.endHeight != null && typeof blockHeight === 'number'
+    ? (blockHeight >= (currentMarket.endHeight ?? Infinity))
+    : (currentMarket?.settled ?? false);
 
   return (
     <div className="rounded-2xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] shadow-sm p-4">

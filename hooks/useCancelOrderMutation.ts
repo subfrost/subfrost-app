@@ -35,7 +35,7 @@ export interface CancelOrderParams {
 }
 
 export function useCancelOrderMutation() {
-  const { account, network, isConnected, signTaprootPsbt, signSegwitPsbt, walletType } = useWallet();
+  const { account, network, isConnected, signTaprootPsbt, signSegwitPsbt, walletType, browserWallet } = useWallet();
   const provider = useSandshrewProvider();
   const queryClient = useQueryClient();
 
@@ -47,6 +47,11 @@ export function useCancelOrderMutation() {
 
       // Validation
       if (!isConnected) throw new Error('Wallet not connected');
+      // Ensure browser wallet session is active before building PSBT
+      if (walletType === 'browser') {
+        const { ensureWalletSession } = await import('@/lib/wallet/browserWalletSigning');
+        await ensureWalletSession();
+      }
       if (!provider) throw new Error('Provider not available');
       if (!provider.walletIsLoaded()) {
         throw new Error('Provider wallet not loaded. Please reconnect your wallet.');
@@ -76,7 +81,7 @@ export function useCancelOrderMutation() {
 
       const btcNetwork = getBitcoinNetwork(network);
       const isBrowserWallet = walletType === 'browser';
-      const useActualAddresses = isBrowserWallet || network === 'devnet';
+      const useActualAddresses = isBrowserWallet || network === 'devnet' || network === 'regtest-local' || network === 'qubitcoin-regtest' || network === 'regtest';
 
       // Browser wallets need ACTUAL addresses, not symbolic
       const fromAddresses = useActualAddresses
@@ -99,6 +104,7 @@ export function useCancelOrderMutation() {
       console.log('[CancelOrder] To addresses:', toAddresses);
 
       try {
+
         const result = await provider.alkanesExecuteTyped({
           inputRequirements,
           protostones: protostone,
@@ -108,7 +114,7 @@ export function useCancelOrderMutation() {
           toAddresses,
           changeAddress: changeAddr,
           alkanesChangeAddress: alkanesChangeAddr,
-          ordinalsStrategy: 'burn',
+          ordinalsStrategy: 'exclude',
         });
 
         console.log('[CancelOrder] Execute result:', JSON.stringify(result, null, 2));

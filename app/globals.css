@@ -353,6 +353,14 @@ body {
   scrollbar-color: rgba(255, 255, 255, 0.2) rgba(255, 255, 255, 0.05);
 }
 
+/* Hide scrollbar but keep scroll functionality */
+.no-scrollbar {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none !important;
+}
 
 @theme inline {
   --color-primary: var(--sf-primary);
@@ -649,6 +657,11 @@ textarea:focus-visible,
 
 .animate-fade-in-out {
   animation: fade-in-out 1.5s ease-in-out forwards;
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translate(-50%, -100%); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
 }
 
 /* Smooth scroll */

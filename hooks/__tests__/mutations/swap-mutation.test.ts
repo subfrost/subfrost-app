@@ -200,7 +200,7 @@ describe('Swap wrap fee adjustment', () => {
 
 describe('Regtest deadline override', () => {
   function isRegtestNetwork(network: string): boolean {
-    return network === 'regtest' || network === 'subfrost-regtest' || network === 'regtest-local';
+    return network === 'regtest' || network === 'subfrost-regtest' || network === 'regtest-local' || network === 'qubitcoin-regtest' || network === 'regtest';
   }
 
   it('should use 1000 blocks on regtest', () => {
@@ -416,8 +416,13 @@ describe('ordinalsStrategy in swap hook', () => {
     src = fs.readFileSync(path.resolve(__dirname, '../../useSwapMutation.ts'), 'utf-8');
   });
 
-  it('should set ordinalsStrategy to burn', () => {
-    expect(src).toContain("ordinalsStrategy: 'burn'");
+  it('should set ordinalsStrategy explicitly (burn or exclude)', () => {
+    // Both 'burn' and 'exclude' are valid ordinal-safety strategies.
+    // The perf branch switched from 'burn' → 'exclude' (2026-04).
+    const hasOrdinalsStrategy =
+      src.includes("ordinalsStrategy: 'burn'") ||
+      src.includes("ordinalsStrategy: 'exclude'");
+    expect(hasOrdinalsStrategy).toBe(true);
   });
 
   it('should pass ordinalsStrategy to alkanesExecuteTyped', () => {

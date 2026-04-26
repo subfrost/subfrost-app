@@ -106,11 +106,27 @@ function setupFetchMock(config: FetchMockConfig) {
     esploraRpcUtxos = [],
   } = config;
 
+  // [JOURNAL 2026-04-26] After lib/alkanes/buildAlkaneTransferPsbt.ts switched
+  // browser-side calls from direct subfrost.io URLs to /api/rpc/<network>, this
+  // matcher needs to recognize both shapes.
+  const isRpcEndpoint = (urlStr: string) =>
+    urlStr.includes('subfrost.io') ||
+    /\/api\/rpc(\/[^?]*)?$/.test(urlStr);
+
   const mockFetch = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
     const urlStr = typeof url === 'string' ? url : url instanceof URL ? url.toString() : url.url;
     const body = init?.body ? JSON.parse(init.body as string) : undefined;
 
-    if (urlStr.includes('subfrost.io') && body?.method) {
+    // esplora_address::utxo is more specific than the generic alkane/ord
+    // dispatch — match it first so the alkane RPCs don't swallow it.
+    if (urlStr.includes('/api/rpc') && body?.method === 'esplora_address::utxo') {
+      return new Response(
+        JSON.stringify({ jsonrpc: '2.0', id: 1, result: esploraRpcUtxos }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      );
+    }
+
+    if (isRpcEndpoint(urlStr) && body?.method) {
       if (body.method === 'alkanes_protorunesbyaddress') {
         return new Response(
           JSON.stringify({ jsonrpc: '2.0', id: 1, result: { outpoints: alkaneOutpoints } }),
@@ -129,13 +145,6 @@ function setupFetchMock(config: FetchMockConfig) {
           { status: 200, headers: { 'Content-Type': 'application/json' } },
         );
       }
-    }
-
-    if (urlStr.includes('/api/rpc') && body?.method === 'esplora_address::utxo') {
-      return new Response(
-        JSON.stringify({ jsonrpc: '2.0', id: 1, result: esploraRpcUtxos }),
-        { status: 200, headers: { 'Content-Type': 'application/json' } },
-      );
     }
 
     return new Response(JSON.stringify({ jsonrpc: '2.0', id: 1, result: [] }), { status: 200 });
