@@ -83,7 +83,7 @@ import { useSandshrewProvider } from './useSandshrewProvider';
 import { getConfig } from '@/utils/getConfig';
 import * as bitcoin from 'bitcoinjs-lib';
 import * as ecc from '@bitcoinerlab/secp256k1';
-import { getBitcoinNetwork, getSignerAddress, getSignerAddressDynamic, extractPsbtBase64 } from '@/lib/alkanes/helpers';
+import { getBitcoinNetwork, getSignerAddress, getSignerAddressDynamic, extractPsbtBase64, getCleanPaymentUtxos } from '@/lib/alkanes/helpers';
 import { buildWrapProtostone } from '@/lib/alkanes/builders';
 
 bitcoin.initEccLib(ecc);
@@ -191,17 +191,25 @@ export function useWrapMutation() {
       console.log('[WRAP] ===================================================');
 
       try {
-        // Get inscription outpoints from UniSat wallet API to protect inscriptions during wrap.
-        // Get clean BTC UTXOs from wallet API (UniSat getBitcoinUtxos).
-        let paymentUtxos: string[] | undefined;
-        if (isBrowserWallet && (window as any).unisat?.getBitcoinUtxos) {
-          try {
-            const btcUtxos = await (window as any).unisat.getBitcoinUtxos();
-            if (btcUtxos?.length) {
-              paymentUtxos = btcUtxos.map((u: any) => `${u.txid}:${u.vout}:${u.satoshis}`);
-            }
-          } catch { /* wallet API unavailable — SDK falls back to lua */ }
-        }
+        // Skip the WASM SDK's lua `spendable_utxos.lua` flow (slow on wallets
+        // with many UTXOs because of per-UTXO `esplora_tx` coinbase-check
+        // round-trips) by pre-fetching clean BTC UTXOs.
+        // See `getCleanPaymentUtxos` for the fast UniSat / dataApi paths.
+        //
+        // Only safe when the addresses we fetch from match the addresses the
+        // SDK will actually sign for. That's true when `useActualAddresses` is
+        // true (browser wallet or devnet/regtest-local — addresses passed
+        // verbatim) or for UniSat. For keystore on regtest/mainnet the SDK
+        // resolves symbolic `p2tr:0`/`p2wpkh:0` against the WASM keystore
+        // (coinType=1 on regtest); JS-derived (coinType=0) UTXOs would produce
+        // an unsignable PSBT. Fall through to the SDK's lua path.
+        const paymentUtxos = useActualAddresses || (isBrowserWallet && (window as any).unisat?.getBitcoinUtxos)
+          ? await getCleanPaymentUtxos({
+              provider,
+              addresses: [userSegwitAddress, userTaprootAddress],
+              unisat: isBrowserWallet ? (window as any).unisat : undefined,
+            })
+          : undefined;
 
         const result = await provider.alkanesExecuteTyped({
           toAddresses,

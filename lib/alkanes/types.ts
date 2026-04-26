@@ -31,6 +31,12 @@ export interface AlkanesExecuteTypedParams {
    *  Set to false for single-address wallets (UniSat, OKX) where taproot is the only address.
    */
   protectTaproot?: boolean;
+  /** Pre-fetched clean BTC UTXOs (`txid:vout:satoshis`) for fee inputs.
+   *  When supplied, the WASM SDK skips its lua `spendable_utxos.lua` flow
+   *  (which does an esplora_tx round-trip per UTXO and is slow on wallets
+   *  with many UTXOs). See `getCleanPaymentUtxos` in `lib/alkanes/helpers.ts`.
+   */
+  paymentUtxos?: string[];
   /** Network name — used to reliably detect devnet (instead of URL sniffing). */
   network?: string;
 }
