@@ -28,7 +28,7 @@ to be unaffected by every entry below — see "Mainnet parity check" column.
 | 6 | Skip `getEnrichedBalances` (Lua) on `regtest` | `queries/account.ts:537-539` | 25-second timeout per balance fetch before falling back to esplora | **No** — mainnet has Lua scripts deployed; `getEnrichedBalances` works in <2s. | When hosted regtest deploys the `balances.lua` script (or the codebase abandons Lua entirely). |
 | 7 | Hosted regtest alkane balance via `alkanes_protorunesbyaddress` | `queries/account.ts:760-794` | "No alkanes available to send" in SendModal — `dataApiGetAlkanesByAddress` returns empty `data: []` because espo essentials is broken | **No** — mainnet's `dataApiGetAlkanesByAddress` returns real data because espo essentials is healthy. | Same as #3 (espo essentials fix). |
 | 8 | Route `fetchAlkaneOutpoints` / `fetchOrdOutputs` through dev-server proxy | `lib/alkanes/buildAlkaneTransferPsbt.ts:282-302, 199-217` | "Failed to fetch" CORS errors when buildAlkaneTransferPsbt hits direct subfrost.io URLs from the browser | **Mainnet was also CORS-broken** — this fix repairs both networks. The codebase already used proxy pattern everywhere else; this code was an outlier. | Never — universal correctness fix, not a workaround |
-| 9 | Pre-flight opcode-78 simulate before unwrap broadcast | `hooks/useUnwrapMutation.ts:160-211` | User pays BTC fee for an unwrap tx that the contract silently rejects (no BTC release happens) | **YES** — mainnet's `[32:0]` is the same stale build as regtest. Verified 2026-04-26: both return `"Unrecognized opcode"` for opcode 78. | When the fr-btc contract is upgraded to support opcode 78. After upgrade, the simulate succeeds and the broadcast proceeds normally — preflight becomes a fast no-op. |
+| 9 | Compile-time fr-btc capability gate (opcode 78 / unwrap) | `lib/alkanes/contractFeatures.ts` + `hooks/useUnwrapMutation.ts` | User pays BTC fee for an unwrap tx that the contract silently rejects (no BTC release happens) | **YES** — mainnet's `[32:0]` is the same stale build as regtest. Verified 2026-04-26: both return `"Unrecognized opcode"` for opcode 78. | When the fr-btc contract is upgraded, flip `unwrap: false → true` for the affected network in `contractFeatures.ts`. Source-of-truth is `reference/subfrost-alkanes/alkanes/fr-btc/alkanes.toml`. |
 | 10 | `usePools` and `useAlkanesTokenPairs` route hosted regtest to `/api/rpc/regtest` | `hooks/usePools.ts:530-538`, `hooks/useAlkanesTokenPairs.ts:217-220` | Pool data fetch returns nothing on hosted regtest (was incorrectly using qubitcoin-regtest proxy path) | **No** — mainnet uses `/api/rpc/mainnet` correctly | Never — bug fix, not workaround |
 
 ## Mainnet parity verification probes
@@ -74,21 +74,26 @@ Process when one of the gaps is closed upstream:
 ### Why the Unwrap UI tab stays visible despite opcode 78 being unimplemented
 
 Considered hiding the Unwrap path on networks where opcode 78 is missing.
-Decided to leave it visible and rely on the preflight guard (Workaround #9).
-Reasoning:
+Decided to leave the UI visible and rely on a compile-time capability gate
+(Workaround #9). Reasoning:
 
-1. **Preflight is fast and early** — the simulate runs at the start of
-   `mutationFn`, before PSBT build, signing, or any user-visible work.
-   User clicks Confirm, sees error in <1s, no funds at risk.
-2. **Hiding the UI requires surgery** in `SwapShell.tsx` with many
+1. **Capability gate is synchronous and known at compile time** — the hook
+   reads `getFrBtcFeatures(network).unwrap` and throws synchronously before
+   any PSBT build, signing, or fee assessment. Zero RPC roundtrips, zero
+   indeterminism.
+2. **Source-of-truth is contract code, not the network** — opcode interfaces
+   are fixed at deploy time. We never probe contracts to discover what they
+   support; the deployed version's interface is data we encode based on
+   reading `reference/subfrost-alkanes/alkanes/fr-btc/alkanes.toml`.
+3. **Hiding the UI requires surgery** in `SwapShell.tsx` with many
    dependencies (PoolDetailsCard, swap quote logic, chart selection).
    High regression risk for marginal UX gain.
-3. **Error message is actionable** — "Your frBTC is safe and can be
-   swapped to BTC instead." The user has a clear next step.
-4. **Self-healing on contract upgrade** — when fr-btc supports opcode 78,
-   the preflight succeeds automatically and the broadcast proceeds. No
-   code change needed to "re-enable" the path. Cleanest possible
-   deployment for the contract team.
+4. **Error message is actionable** — "Your frBTC is safe — please use Swap
+   to convert frBTC → BTC instead."
+5. **One-line update on contract upgrade** — when fr-btc is redeployed
+   supporting opcode 78, flip `unwrap: false → true` in
+   `lib/alkanes/contractFeatures.ts`. The Unwrap path activates immediately;
+   no rebuild of mutation hooks needed.
 
 If an actual user reports the error message is confusing in production,
 revisit this decision — but don't hide the UI preemptively.

@@ -1,112 +1,24 @@
 /**
- * useWrapMutation - Wrap BTC into frBTC
+ * useWrapMutation — Wrap BTC into frBTC.
  *
- * ## JOURNAL (2026-04-26): regtest-local QA — wrap WORKS, no deadlock
+ * Tx layout (must match CLI `wrap_btc.rs` ordering):
+ *   - Output 0 (v0): Signer address — receives BTC via `inputRequirements = "B:<sats>:v0"`
+ *   - Output 1 (v1): User taproot — receives minted frBTC via pointer=v1
+ *   - protostone: `[32,0,77]:v1:v1` — fr-btc contract, opcode 77 (wrap)
  *
- * Test mnemonic: `legal winner thank year wave sausage worth useful legal winner thank yellow`.
+ * Signer address is the P2TR derived from the contract's GET_SIGNER (opcode 103).
+ * Hardcoded per network in `lib/alkanes/constants.ts`. If the contract is
+ * redeployed with a new signer key, that constant MUST be updated — wrong
+ * address means BTC routes to nowhere and no frBTC is minted.
  *
- * Three wraps on metabot regtest-local; all completed in <5s (no deadlock):
- *   #1: 4.1s — tx c4a9f60554bfe1d37785279d184914bfa88ab8c6b5b78d9c74213f3596c8896f,
- *       after `prioritisetransaction` + `generatetoaddress`, mint of 99,900 frBTC
- *       sats verified at outpoint via `alkanes_protorunesbyoutpoint`.
- *   #2: 4.4s — broadcast (UI errored on post-broadcast trace; harmless on regtest).
- *   #3: 0.5s — rejected at consensus (premature coinbase spend); SDK bounced fast.
+ * Browser wallets need actual addresses for changeAddress/alkanesChangeAddress;
+ * symbolic 'p2tr:0' / 'p2wpkh:0' resolve to the SDK's dummy wallet. Use the
+ * `useActualAddresses` pattern. (See useSwapMutation header for the full
+ * incident writeup, mainnet tx 985436b5...)
  *
- * `[ALIVE]` heartbeat (lines 216–258) ticked at steady ~1s intervals throughout —
- * JS event loop never blocked. Upstream RPC continuous (~14 calls per wrap). The
- * P0 deadlock claim from the prior baton did NOT reproduce. Most likely the
- * `paymentUtxos` shortcut from `getCleanPaymentUtxos` (commit d95d99e3) bypasses
- * whatever slow path was hanging before.
- *
- * **Operator note that cost real time today:** plain `generatetoaddress` against
- * metabot produces empty blocks because new mempool txs default to
- * `unbroadcast=true`. Wraps "succeeded" but sat unmined for ~10 minutes; I
- * misread the empty `protorunesbyoutpoint` as a mint failure. Per CLAUDE.md
- * "Mining is manual" section: ALWAYS prioritise the txid before mining on
- * metabot. If a tx is already in mempool, the right command is:
- *   ssh ubuntu@metabot "kubectl exec -n regtest-alkanes bitcoind-0 -- \
- *     bitcoin-cli prioritisetransaction <txid> 0 1000000 && \
- *     bitcoin-cli generatetoaddress 1 'bcrt1q6rz28mcfaxtmd6v789l9rrlrusdprr9pz3cppk'"
- *
- * **`[HANG-PROBE]` instrumentation (lines 216–258)** is now a no-op timer that
- * proves the wrap path is healthy. Safe to remove. Removal: search for
- * `[HANG-PROBE 2026-04-26]`, delete the comment block + `try/finally` heartbeat,
- * restore a single `await provider.alkanesExecuteTyped({...})`.
- *
- * ## WASM Dependency Note
- *
- * Uses `@alkanes/ts-sdk/wasm` aliased to `lib/oyl/alkanes/` (see next.config.mjs).
- * If "Insufficient alkanes" errors occur, sync WASM: see docs/SDK_DEPENDENCY_MANAGEMENT.md
- *
- * ## SDK Update (2026-02-20)
- *
- * Updated to @alkanes/ts-sdk from develop branch (via pkg.alkanes.build).
- * New features include WasmBrowserWalletProvider and JsWalletAdapter interface.
- * Current implementation continues to use alkanesExecuteWithStrings via alkanesExecuteTyped.
- *
- * ## CRITICAL FIX (2026-02-20): Browser Wallet Address Resolution
- *
- * The WASM SDK has a dummy wallet loaded (via walletCreate() in AlkanesSDKContext) to satisfy
- * the "Wallet not loaded" check. When symbolic addresses like 'p2tr:0' or 'p2wpkh:0' are used
- * for change_address or alkanes_change_address options, the SDK resolves them to the dummy
- * wallet's addresses, causing ALL outputs to go to the dummy wallet instead of the user!
- *
- * Root cause: Even when actual Bitcoin addresses are passed in toAddresses, the SDK uses
- * the change_address and alkanes_change_address options for output destinations, resolving
- * symbolic addresses to the loaded (dummy) wallet.
- *
- * Fix: For browser wallets, pass actual user addresses for changeAddress and alkanesChangeAddress
- * instead of symbolic addresses. For keystore wallets, symbolic addresses work correctly since
- * the actual user's mnemonic is loaded into the provider.
- *
- * On devnet, symbolic addresses do NOT work — useActualAddresses ensures actual addresses
- * are used regardless of wallet type.
- *
- * Transaction ce185f7... showed both outputs going to bcrt1pvu3q2... (dummy wallet taproot
- * address from 'p2tr:0') instead of the signer and user addresses.
- *
- * ## Implementation Note (2026-01-28)
- *
- * Uses alkanesExecuteTyped from the extended provider for cleaner parameter handling.
- * Uses symbolic addresses (p2tr:0, p2wpkh:0) for keystore wallets, actual addresses for browser wallets.
- *
- * ## Critical: Output Ordering & Signer Address (2026-01-28)
- *
- * The wrap transaction MUST match the CLI (wrap_btc.rs) output ordering:
- *
- *   - Output 0 (v0): Signer address — receives BTC via `B:amount:v0`
- *   - Output 1 (v1): User taproot address — receives minted frBTC via pointer=v1
- *
- * The protostone is `[32,0,77]:v1:v1` meaning:
- *   - Cellpack: frBTC contract [32:0], opcode 77 (wrap)
- *   - pointer=v1: minted frBTC goes to output 1 (user)
- *   - refund=v1: refunds go to output 1 (user)
- *
- * `inputRequirements = "B:<sats>:v0"` explicitly assigns BTC value to output 0 (signer).
- *
- * ### Signer Address
- *
- * The signer address is the P2TR address derived from the frBTC contract's GET_SIGNER
- * opcode (103). The CLI fetches this dynamically via `get_subfrost_address()` in
- * `subfrost.rs`, which calls opcode 103 on [32:0], receives a 32-byte x-only pubkey,
- * and converts it to a P2TR (bc1p...) address.
- *
- * For the frontend, we hardcode this address per network. If the frBTC contract is
- * redeployed with a different signer key, this address MUST be updated. You can
- * obtain the correct address by running:
- *
- *   alkanes-cli -p subfrost-regtest wrap-btc --amount 1000 --fee-rate 1
- *
- * and observing which address the CLI sends BTC to at output 0.
- *
- * ### Debugging History
- *
- * The original bug was that BTC was sent but frBTC was never minted. Root cause:
- * a stale hardcoded signer address. The frBTC contract only mints when BTC arrives
- * at its expected signer address. A wrong address means BTC is lost to an unrelated
- * output and the contract sees no incoming BTC. The protostone encoding (two-layer
- * Protocol field with ProtoPointer/Refund inside Protocol tag 16383) was correct
- * all along — both WASM and CLI share the same Rust encoding path.
+ * WASM dependency: `@alkanes/ts-sdk/wasm` aliased to `lib/oyl/alkanes/`
+ * (see next.config.mjs). On "Insufficient alkanes", sync per
+ * docs/SDK_DEPENDENCY_MANAGEMENT.md.
  */
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useWallet } from '@/context/WalletContext';
@@ -245,49 +157,21 @@ export function useWrapMutation() {
             })
           : undefined;
 
-        // [HANG-PROBE 2026-04-26] Heartbeat instrumentation around the SDK call
-        // to discriminate between "JS thread blocked by sync WASM loop" vs "WASM
-        // awaiting a Promise that never resolves" during regtest-local keystore
-        // wrap deadlock (see CLAUDE.md P0). If [ALIVE] ticks keep firing during
-        // the hang -> JS event loop is free -> hang is an unresolved await. If
-        // ticks stop firing -> WASM is in a CPU-bound loop. Remove after the
-        // bug is localized.
-        const __probeStart = performance.now();
-        let __probeLastSeen = __probeStart;
-        const __probeInterval = setInterval(() => {
-          const now = performance.now();
-          const sinceStart = ((now - __probeStart) / 1000).toFixed(1);
-          const sinceLast = ((now - __probeLastSeen) / 1000).toFixed(1);
-          __probeLastSeen = now;
-          // eslint-disable-next-line no-console
-          console.log(`[ALIVE] alkanesExecuteTyped pending: ${sinceStart}s elapsed, ${sinceLast}s since last tick`);
-        }, 1000);
-        // eslint-disable-next-line no-console
-        console.log('[HANG-PROBE] BEFORE alkanesExecuteTyped at t=0');
-
-        let result: any;
-        try {
-          result = await provider.alkanesExecuteTyped({
-            toAddresses,
-            inputRequirements,
-            protostones: protostone,
-            feeRate: wrapData.feeRate,
-            fromAddresses,
-            changeAddress: useActualAddresses ? (userSegwitAddress || userTaprootAddress) : 'p2wpkh:0',
-            alkanesChangeAddress: useActualAddresses ? userTaprootAddress : 'p2tr:0',
-            autoConfirm: false,
-            traceEnabled: true,
-            mineEnabled: false,
-            ordinalsStrategy: 'exclude' as const,
-            protectTaproot: Boolean(userSegwitAddress && userTaprootAddress),
-            paymentUtxos,
-          });
-        } finally {
-          clearInterval(__probeInterval);
-          const __probeElapsed = ((performance.now() - __probeStart) / 1000).toFixed(1);
-          // eslint-disable-next-line no-console
-          console.log(`[HANG-PROBE] AFTER alkanesExecuteTyped at t=${__probeElapsed}s`);
-        }
+        const result = await provider.alkanesExecuteTyped({
+          toAddresses,
+          inputRequirements,
+          protostones: protostone,
+          feeRate: wrapData.feeRate,
+          fromAddresses,
+          changeAddress: useActualAddresses ? (userSegwitAddress || userTaprootAddress) : 'p2wpkh:0',
+          alkanesChangeAddress: useActualAddresses ? userTaprootAddress : 'p2tr:0',
+          autoConfirm: false,
+          traceEnabled: true,
+          mineEnabled: false,
+          ordinalsStrategy: 'exclude' as const,
+          protectTaproot: Boolean(userSegwitAddress && userTaprootAddress),
+          paymentUtxos,
+        });
 
         console.log('[WRAP] Execute result:', result);
 

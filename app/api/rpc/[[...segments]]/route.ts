@@ -253,28 +253,14 @@ export async function POST(
 
     // ========================================================================
     // [JOURNAL 2026-04-26] HOSTED REGTEST ESPO ESSENTIALS WORKAROUND
-    // ========================================================================
-    // Hosted regtest's espo essentials index is broken: it skips writing
-    // /balances/<address>/... entries when the alkane trace return status is
-    // not Success. As a result, both `essentials.get_address_outpoints` and
-    // `get-alkanes-utxo` return empty alkane data even when the canonical
-    // outpoint indexer (`alkanes_protorunesbyoutpoint`) shows the balance.
-    //
-    // Production (mainnet) is unaffected: its trace storage works correctly
-    // and these endpoints return populated data, so the enrichment below is a
-    // no-op when responses already contain alkane data.
-    //
-    // This is gated to network === 'regtest' (hosted) only. The fix path for
-    // a permanent solution is to modify espo essentials to read balances from
-    // protorunes_by_outpoint instead of relying on trace events; until that
-    // ships, this patch lets unwrap/swap proceed on the hosted regtest matrix.
-    //
-    // We synthesize the alkane data by querying `alkanes_protorunesbyaddress`
-    // (which uses the canonical address-keyed indexer that DOES populate
-    // correctly on hosted regtest) and merging the per-outpoint balances into
-    // either the espo essentials response shape or the get-alkanes-utxo REST
-    // response shape.
-    // ========================================================================
+    // Hosted regtest's espo essentials index doesn't populate alkane balances
+    // (skips writes when the alkane trace return status isn't Success), so
+    // `essentials.get_address_outpoints` and `get-alkanes-utxo` return empty
+    // even when `alkanes_protorunesbyoutpoint` shows the balance correctly.
+    // We synthesize the missing data from the canonical outpoint indexer.
+    // Production (mainnet) is unaffected — populated responses skip the patch.
+    // Permanent fix: espo essentials reading balances from protorunes_by_outpoint
+    // (out of frontend scope). See docs/HOSTED_REGTEST_WORKAROUNDS.md.
     if (network === 'regtest') {
       const enriched = await enrichRegtestAlkaneData(method, body, data, segments);
       if (enriched) return NextResponse.json(enriched);
