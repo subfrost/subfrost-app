@@ -588,6 +588,30 @@ These two can disagree. Concrete case: re-broadcasting an in-flight wrap tx via 
 2. Mine via the wallet/settings page Mine 1 Block button, NOT `prioritisetransaction` — the latter combined with re-broadcast is what produced our zombie state.
 3. If you do hit zombie state (balance at outpoint but not at address), the recovery is a fresh wallet + fresh wrap with a single broadcast.
 
+### ⚠️ Open P0: WASM PSBT builder deadlocks on regtest-local keystore wraps
+
+Verified 2026-04-26 across both develop and perf branches with two different wallets (412 UTXO old + 101 UTXO fresh): the WASM provider's wrap mutation enters `[WRAP] Starting wrap: 100000 sats` and then hangs indefinitely with **zero subsequent RPC activity**. We've observed:
+
+- ~31 RPC calls to `localhost:18888` in the first ~20 seconds (UTXO discovery / pre-build queries) → all complete
+- Then 350+ seconds of pure local WASM compute with no fetch traffic
+- Browser remains responsive (JS eval works) — WASM is NOT crashing, just stuck
+- Reproducible across two distinct wallets and both branches
+
+What we ruled out:
+- Not a UTXO-bloat O(n²) issue: 101 UTXOs hangs the same as 412
+- Not the metabot tunnel: tunnel is alive throughout, RPC calls earlier in the same session work fine
+- Not a network-config bug: pre-wrap balance display (which uses dataApi paths) works
+- Not the `paymentUtxos` optimization: hang reproduces with and without our extension
+
+What's happening: needs whoever owns the WASM provider build to attach a debugger. The `alkanesExecuteFull` (called by useWrapMutation) finishes its async UTXO discovery and then enters synchronous PSBT construction. Something in that synchronous loop never returns.
+
+Workaround: untested. Possible avenues:
+- Call `alkanesExecuteTyped` instead of `alkanesExecuteFull` (different internal path)
+- Add a watchdog timeout in the SDK
+- Profile in Chrome DevTools to see what stack the WASM is sitting in
+
+This blocks the keystore wrap/unwrap/alkane-send matrix on regtest-local until resolved.
+
 ---
 
 ## Devnet Testing & QA
