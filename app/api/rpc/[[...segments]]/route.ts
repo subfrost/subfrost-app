@@ -386,18 +386,34 @@ async function enrichGetAlkanesUtxo(address: string, data: any): Promise<any | n
   const protorunes = await fetchProtorunesByAddress(address);
   if (!protorunes || protorunes.length === 0) return null;
 
-  // Build {`txid:vout` → {alkaneId: amount}} map from protorune data
-  const balanceMap = new Map<string, Record<string, string>>();
+  // Build {`txid:vout` → {alkaneId: { name, symbol, value }}} map from protorune data.
+  //
+  // [JOURNAL 2026-04-26] Production (mainnet) returns the rich shape:
+  //   "alkanes": { "32:0": { "name": "frBTC", "symbol": "FRBTC", "value": "9950" } }
+  // We mirror that shape exactly so the SDK consumes a uniform format across
+  // networks. Verified hand-spot against mainnet curl response.
+  // For unknown alkaneIds we leave name/symbol empty — SDK either has cached
+  // metadata from elsewhere or treats it as unknown.
+  const KNOWN_ALKANE_META: Record<string, { name: string; symbol: string }> = {
+    '32:0': { name: 'frBTC', symbol: 'FRBTC' },
+    '2:0': { name: 'DIESEL', symbol: 'DIESEL' },
+  };
+  const balanceMap = new Map<string, Record<string, any>>();
   for (const op of protorunes) {
     const txid = op.outpoint?.txid;
     const vout = op.outpoint?.vout;
     if (!txid || vout === undefined) continue;
     const balances = op.balance_sheet?.cached?.balances;
     if (!Array.isArray(balances) || balances.length === 0) continue;
-    const alkanesField: Record<string, string> = {};
+    const alkanesField: Record<string, any> = {};
     for (const b of balances) {
       const id = `${b.block}:${b.tx}`;
-      alkanesField[id] = String(b.amount);
+      const meta = KNOWN_ALKANE_META[id] || { name: '', symbol: '' };
+      alkanesField[id] = {
+        name: meta.name,
+        symbol: meta.symbol,
+        value: String(b.amount),
+      };
     }
     balanceMap.set(`${txid}:${vout}`, alkanesField);
   }
