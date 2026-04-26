@@ -26,13 +26,45 @@
  * Uses `@alkanes/ts-sdk/wasm` aliased to `lib/oyl/alkanes/` (see next.config.mjs).
  * If "Insufficient alkanes" errors occur, sync WASM: see docs/SDK_DEPENDENCY_MANAGEMENT.md
  *
- * ## frBTC Unwrap (opcode 78) — network-dependent (2026-03-26)
+ * ## frBTC Unwrap (opcode 78) — UPDATED 2026-04-26: mainnet also affected
  *
- * Opcode 78 WORKS on devnet (fresh deploy from prod_wasms/fr_btc.wasm).
- * Opcode 78 does NOT work on regtest.subfrost.io — the deployed frBTC [32:0]
- * there is an older build missing this opcode. The regtest contract returns:
- *   "ALKANES: revert: Error: Unrecognized opcode" (status: 1)
- * The tier1/unwrap-frbtc.test.ts skip comment applies to REGTEST only.
+ * Opcode 78 (Unwrap) is NOT supported on either mainnet or hosted regtest.
+ * Both deployments of `[32:0]` are running an older fr-btc WASM that lacks
+ * this opcode. Verified via `alkanes_simulate` on both endpoints:
+ *
+ *   target: 32:0, inputs: ["78"]
+ *   → mainnet:        "ALKANES: revert: Error: Unrecognized opcode" (status: 1)
+ *   → hosted regtest: "ALKANES: revert: Error: Unrecognized opcode" (status: 1)
+ *
+ * Opcode 77 (Wrap), 99 (GetName), and 103 (GetSigner) DO work on both, so
+ * wraps mint correctly and signer-routing works. Only Unwrap is broken.
+ *
+ * ## What this means for the user
+ *
+ * If a user submits an unwrap PSBT, the BTC fee/inputs go through (the tx
+ * confirms on Bitcoin), but the contract revert means the frBTC is NOT
+ * burned. The protorune runtime routes the alkanes to `alkanes_change_address`
+ * (i.e. back to the user's taproot at a new outpoint). End result: user
+ * pays the BTC fee, frBTC migrates to a new outpoint, NO BTC release happens.
+ *
+ * This is the same UX hosted regtest produces (verified tx d6a37e2e... at
+ * block 9121 — frBTC moved to vout 0, no BTC return). Hosted regtest is a
+ * faithful production emulator for this opcode gap.
+ *
+ * ## What this hook should do
+ *
+ * Until the frBTC contract is upgraded to support opcode 78, this hook is
+ * effectively a no-op-with-fee-cost from a user's perspective. The UI should
+ * either:
+ *   1. Disable the Unwrap path entirely on networks where opcode 78 is
+ *      unimplemented (current state: mainnet + hosted regtest).
+ *   2. Pre-flight a simulate before broadcasting and surface a clear error
+ *      ("Unwrap not yet supported by the deployed contract") instead of
+ *      letting the user pay a fee for nothing.
+ *
+ * Devnet still works correctly (fresh deploy from prod_wasms/fr_btc.wasm
+ * supports opcode 78). Test enforcement in tier1/unwrap-frbtc.test.ts
+ * applies to live networks (mainnet + hosted regtest), not devnet.
  *
  * ## Hosted regtest unwrap blocker (2026-04-26) — NOT a frontend bug
  *
@@ -125,6 +157,65 @@ export function useUnwrapMutation() {
       // Verify wallet is loaded in provider
       if (!provider.walletIsLoaded()) {
         throw new Error('Wallet not loaded in provider');
+      }
+
+      // ============================================================================
+      // PRE-FLIGHT GUARD: Verify the contract supports opcode 78 (Unwrap)
+      // ============================================================================
+      // [JOURNAL 2026-04-26] Both mainnet and hosted regtest are running an older
+      // fr-btc WASM that doesn't implement opcode 78 (Unwrap). Without this guard,
+      // the user would broadcast a tx, pay the BTC fee, and the contract would
+      // silently reject the unwrap intent — frBTC stays minted, no BTC release.
+      //
+      // We simulate the protostone target before broadcasting. If the contract
+      // returns "Unrecognized opcode" we abort with a clear error so the user
+      // doesn't waste sats. Devnet supports opcode 78 (fresh deploy), so the
+      // simulate succeeds there and the unwrap proceeds normally.
+      //
+      // Skip the pre-flight on devnet to keep its tests fast (opcode 78 is known
+      // to work there, and the local indexer's simulate has different overhead).
+      // ============================================================================
+      if (network !== 'devnet') {
+        try {
+          const [frbtcBlock, frbtcTx] = FRBTC_ALKANE_ID.split(':');
+          const sandshrewUrl = (provider as any).sandshrew_rpc_url?.() || `${typeof window !== 'undefined' ? window.location.origin : ''}/api/rpc/${network}`;
+          const simResp = await fetch(sandshrewUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              jsonrpc: '2.0',
+              method: 'alkanes_simulate',
+              params: [{
+                target: `${frbtcBlock}:${frbtcTx}`,
+                inputs: ['78'],
+                alkanes: [],
+                transaction: '0x',
+                block: '0x',
+                height: '0',
+                txindex: 0,
+                vout: 0,
+              }],
+              id: 1,
+            }),
+          });
+          const simJson = await simResp.json();
+          const simErr = simJson?.result?.execution?.error || '';
+          if (typeof simErr === 'string' && simErr.includes('Unrecognized opcode')) {
+            throw new Error(
+              `Unwrap is not supported by the deployed frBTC contract on this network ` +
+              `(opcode 78 not implemented). The contract needs to be upgraded before ` +
+              `unwrap will work. Your frBTC is safe and can be swapped to BTC instead.`,
+            );
+          }
+        } catch (preflightErr: any) {
+          // Re-throw our own thrown errors so the user sees them
+          if (preflightErr?.message?.includes('Unwrap is not supported')) {
+            throw preflightErr;
+          }
+          // Otherwise (RPC failure, network blip) just log and proceed —
+          // we don't want a flaky preflight to block a legitimate unwrap.
+          console.warn('[useUnwrapMutation] Preflight opcode-78 check failed (non-fatal):', preflightErr);
+        }
       }
 
       const unwrapAmount = toAlks(unwrapData.amount);

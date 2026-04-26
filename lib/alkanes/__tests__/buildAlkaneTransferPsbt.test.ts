@@ -119,9 +119,16 @@ interface FetchMockConfig {
  * Set up global fetch mock.
  *
  * Routes:
- * - POST to RPC endpoints (subfrost.io) → dispatches by JSON-RPC method
+ * - POST to RPC endpoints → dispatches by JSON-RPC method:
+ *   * Direct subfrost endpoint (e.g. https://mainnet.subfrost.io/v4/subfrost) — server-side
+ *   * Dev-server proxy (/api/rpc/<network>) — browser-side; production code path since 2026-04-26
  * - POST to /api/rpc → esplora_address::utxo (for BTC UTXOs)
  * - GET  to /api/esplora/... → REST fallback for BTC UTXOs
+ *
+ * [JOURNAL 2026-04-26] After lib/alkanes/buildAlkaneTransferPsbt.ts was changed to route
+ * browser-side calls through /api/rpc/<network> (instead of direct subfrost.io URLs to
+ * avoid CORS), the test mock needed to match both URL shapes since vitest can run server-
+ * or browser-style depending on environment.
  */
 function setupFetchMock(config: FetchMockConfig) {
   const {
@@ -133,12 +140,31 @@ function setupFetchMock(config: FetchMockConfig) {
     esploraRestUtxos,
   } = config;
 
+  // Predicate: this URL is an RPC endpoint that carries a JSON-RPC alkane/ord payload.
+  // Matches both the direct subfrost endpoint AND the dev-server proxy path.
+  const isRpcEndpoint = (urlStr: string) =>
+    urlStr.includes('subfrost.io') ||
+    /\/api\/rpc(\/[^?]*)?$/.test(urlStr);
+
   const mockFetch = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
     const urlStr = typeof url === 'string' ? url : url instanceof URL ? url.toString() : url.url;
     const body = init?.body ? JSON.parse(init.body as string) : undefined;
 
-    // --- Direct RPC calls (alkanes_protorunesbyaddress, ord_outputs) ---
-    if (urlStr.includes('subfrost.io') && body?.method) {
+    // --- esplora_address::utxo special-cased before generic alkane/ord dispatch ---
+    // This matches /api/rpc<...> with the esplora_address::utxo method specifically.
+    if (urlStr.includes('/api/rpc') && body?.method === 'esplora_address::utxo') {
+      return new Response(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          result: esploraRpcUtxos,
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      );
+    }
+
+    // --- JSON-RPC alkane / ord dispatch (subfrost.io OR /api/rpc/<network>) ---
+    if (isRpcEndpoint(urlStr) && body?.method) {
       if (body.method === 'alkanes_protorunesbyaddress') {
         return new Response(
           JSON.stringify({
@@ -168,18 +194,6 @@ function setupFetchMock(config: FetchMockConfig) {
           { status: 200, headers: { 'Content-Type': 'application/json' } },
         );
       }
-    }
-
-    // --- /api/rpc (esplora_address::utxo for BTC UTXOs) ---
-    if (urlStr.includes('/api/rpc') && body?.method === 'esplora_address::utxo') {
-      return new Response(
-        JSON.stringify({
-          jsonrpc: '2.0',
-          id: 1,
-          result: esploraRpcUtxos,
-        }),
-        { status: 200, headers: { 'Content-Type': 'application/json' } },
-      );
     }
 
     // --- /api/esplora REST fallback ---
@@ -824,14 +838,20 @@ describe('buildAlkaneTransferPsbt', () => {
     });
 
     it('should throw when alkane outpoints RPC fails', async () => {
-      // Override fetch to return an RPC error for alkanes_protorunesbyaddress
+      // Override fetch to return an RPC error for alkanes_protorunesbyaddress.
+      // [JOURNAL 2026-04-26] Production code now routes through /api/rpc/<network>
+      // (browser) instead of direct subfrost.io URLs. Match both shapes.
+      const isRpcEndpoint = (urlStr: string) =>
+        urlStr.includes('subfrost.io') ||
+        /\/api\/rpc(\/[^?]*)?$/.test(urlStr);
+
       vi.stubGlobal(
         'fetch',
         vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
           const urlStr = typeof url === 'string' ? url : url instanceof URL ? url.toString() : url.url;
           const body = init?.body ? JSON.parse(init.body as string) : undefined;
 
-          if (urlStr.includes('subfrost.io') && body?.method === 'alkanes_protorunesbyaddress') {
+          if (isRpcEndpoint(urlStr) && body?.method === 'alkanes_protorunesbyaddress') {
             return new Response(
               JSON.stringify({
                 jsonrpc: '2.0',
@@ -842,7 +862,7 @@ describe('buildAlkaneTransferPsbt', () => {
             );
           }
           // ord_outputs — just return empty to avoid blocking
-          if (urlStr.includes('subfrost.io') && body?.method === 'ord_outputs') {
+          if (isRpcEndpoint(urlStr) && body?.method === 'ord_outputs') {
             return new Response(
               JSON.stringify({ jsonrpc: '2.0', id: 1, result: [] }),
               { status: 200, headers: { 'Content-Type': 'application/json' } },
