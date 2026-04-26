@@ -415,10 +415,22 @@ export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
   // Enriched lua (balances.lua) disabled on all networks.
   // btcFast + alkaneBalances cover all display needs.
   // Lua provided spendable/assets UTXO categorization — no longer shown.
+  // [JOURNAL 2026-04-26] Re-enable enrichedWallet on hosted regtest only so the
+  // SendModal sees UTXOs for spending. The query was disabled globally because
+  // btcFast + alkaneBalances cover *display* needs, but the SendModal's BTC
+  // path depends on `useEnrichedWalletData().utxos.all` to populate the
+  // available-UTXO list. Without this re-enable on `regtest`, the modal shows
+  // "0 available UTXOs" and the BTC Send button silently no-ops.
+  // Mainnet stays disabled to respect the original rate-limit/perf decision.
+  const enableForSendModalUtxos =
+    deps.network === 'regtest' ||
+    deps.network === 'regtest-local' ||
+    deps.network === 'qubitcoin-regtest' ||
+    deps.network === 'devnet';
   return queryOptions({
     queryKey: queryKeys.account.enrichedWallet(deps.network, addressKey),
     enabled:
-      false &&
+      enableForSendModalUtxos &&
       deps.isInitialized &&
       !!deps.provider &&
       !!deps.account &&
@@ -517,8 +529,14 @@ export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
       // (enriched balances, mempool spent, alkane balances)
       const enrichedDataPromises = addresses.map(async (address) => {
         try {
-          // qubitcoin-regtest: skip getEnrichedBalances (not supported), go straight to esplora
-          if (deps.network === 'qubitcoin-regtest') throw new Error('Skip to esplora for qubitcoin-regtest');
+          // qubitcoin-regtest + hosted regtest: skip getEnrichedBalances (Lua script not deployed
+          // on these chains), go straight to the esplora UTXO fallback. Without this skip, the
+          // 25s timeout fires before the fallback runs, leaving SendModal with 0 UTXOs and the
+          // BTC Send button no-ops silently.
+          // [JOURNAL 2026-04-26] Added 'regtest' to the skip list.
+          if (deps.network === 'qubitcoin-regtest' || deps.network === 'regtest') {
+            throw new Error('Skip to esplora for ' + deps.network);
+          }
 
           // Lua balances script takes ~19s for wallets with many UTXOs (160+).
           // Timeout must be longer than the script runtime — otherwise fallback triggers

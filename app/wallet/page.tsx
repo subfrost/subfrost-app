@@ -21,7 +21,7 @@ import { useNotification } from '@/context/NotificationContext';
 type TabView = 'balances' | 'utxos' | 'transactions' | 'settings';
 
 export default function WalletDashboardPage() {
-  const { connected, isConnected, address, paymentAddress, network } = useWallet() as any;
+  const { connected, isConnected, isInitializing, address, paymentAddress, network } = useWallet() as any;
   const { t } = useTranslation();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -64,11 +64,15 @@ export default function WalletDashboardPage() {
 
   const walletConnected = typeof connected === 'boolean' ? connected : isConnected;
 
-  // Redirect if not connected (must be in useEffect to avoid setState during render)
+  // [JOURNAL 2026-04-26] Don't redirect while the wallet context is still
+  // initializing (keystore async-restore from sessionStorage takes a tick).
+  // Without this, navigating directly to /wallet bounces straight to / before
+  // the keystore mounts.
   useEffect(() => {
-    if (!walletConnected) router.push('/');
-  }, [walletConnected, router]);
+    if (!isInitializing && !walletConnected) router.push('/');
+  }, [walletConnected, isInitializing, router]);
 
+  if (isInitializing) return null;
   if (!walletConnected) return null;
 
   // Settings tab is rendered separately for responsive control
