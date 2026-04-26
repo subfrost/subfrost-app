@@ -759,6 +759,45 @@ export function alkaneBalanceQueryOptions(deps: AlkaneBalanceDeps) {
           return fetchAlkaneBalancesViaSpendablesFallback('http://localhost:18888', address);
         } else if (deps.network === 'qubitcoin-regtest') {
           return fetchAlkaneBalancesViaProtobuf(`${window.location.origin}/api/rpc/qubitcoin-regtest`, address);
+        } else if (deps.network === 'regtest') {
+          // [JOURNAL 2026-04-26] Hosted regtest's espo essentials index is broken
+          // (skips writing /balances/ entries when trace status != Success). The SDK's
+          // dataApiGetAlkanesByAddress hits `/get-alkanes-by-address` which depends on
+          // that broken index. But `alkanes_protorunesbyaddress` works correctly on
+          // hosted regtest because it uses the canonical outpoint-aware indexer.
+          // Use it directly so the SendModal (and any other consumer) sees real
+          // alkane balances. No-op on production where get-alkanes-by-address works.
+          try {
+            const res = await fetch(`${window.location.origin}/api/rpc/regtest`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                jsonrpc: '2.0',
+                method: 'alkanes_protorunesbyaddress',
+                params: [{ address, protocolTag: '1' }],
+                id: 1,
+              }),
+            });
+            const j = await res.json();
+            const outpoints: any[] = j?.result?.outpoints || [];
+            // Aggregate balances per alkaneId across all outpoints
+            const agg = new Map<string, bigint>();
+            for (const op of outpoints) {
+              const balances = op?.balance_sheet?.cached?.balances || [];
+              for (const b of balances) {
+                const key = `${b.block}:${b.tx}`;
+                const cur = agg.get(key) || 0n;
+                agg.set(key, cur + BigInt(b.amount || 0));
+              }
+            }
+            return Array.from(agg, ([id, bal]) => {
+              const [block, tx] = id.split(':');
+              return { alkaneId: { block, tx }, balance: bal.toString() };
+            });
+          } catch (err) {
+            console.error('[alkaneBalanceQuery] hosted regtest protorunesbyaddress fallback failed:', err);
+            return [];
+          }
         } else {
           const result = await (provider as any).dataApiGetAlkanesByAddress(address);
           return result?.data || [];
