@@ -574,6 +574,20 @@ Without this, downstream `alkanes_protorunesbyaddress` queries return empty and 
 
 When adding new flows or touching network-conditional code, grep for `regtest-local` and confirm it's listed wherever the other regtest variants are.
 
+**Two alkane indexes, both reachable from the WASM SDK, with different update semantics.** Verified 2026-04-26 on metabot:
+
+- `alkanes_protorunesbyoutpoint(txid, vout)` — outpoint-keyed; updates on every contract execution that mutates protorune state. **Always reflects current chain state for that outpoint.**
+- `alkanes_protorunesbyaddress({address})` — address-keyed; only updates when the alkane runtime's trace records a successful transfer event. **Won't reflect a balance change if the trace shows a revert**, even when the underlying outpoint has the balance.
+
+These two can disagree. Concrete case: re-broadcasting an in-flight wrap tx via `bitcoin-cli sendrawtransaction` triggers fr-btc's `/seen/<txid>` guard (`subfrost-alkanes/alkanes/fr-btc/src/lib.rs::observe_transaction`), which reverts the second invocation. The first invocation's mint already credited the outpoint, so `protorunesbyoutpoint` shows the balance — but `protorunesbyaddress` doesn't, because the most-recent trace for that txid is a revert and the address index never got updated.
+
+**Why this matters for SDK alkane discovery.** `dataApiGetAlkanesUtxo` (espo) and the lua/`protorunesbyaddress` fallbacks are **all address-index-based** — they don't enumerate outpoints directly. So an alkane that's only visible via `protorunesbyoutpoint` is invisible to the SDK and effectively unspendable until something fixes the address index.
+
+**Guidance to avoid this**:
+1. Never use `bitcoin-cli sendrawtransaction` to "nudge" an unbroadcast tx — let bitcoind propagate naturally, even if it takes a block.
+2. Mine via the wallet/settings page Mine 1 Block button, NOT `prioritisetransaction` — the latter combined with re-broadcast is what produced our zombie state.
+3. If you do hit zombie state (balance at outpoint but not at address), the recovery is a fresh wallet + fresh wrap with a single broadcast.
+
 ---
 
 ## Devnet Testing & QA
