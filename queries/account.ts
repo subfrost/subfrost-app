@@ -192,6 +192,76 @@ async function fetchAlkaneBalancesViaProtobuf(
   });
 }
 
+// ⚠️ MONKEY-PATCH (regtest-local only) ⚠️
+//
+// On metabot's `regtest-local` deployment, `alkanes_protorunesbyaddress` and
+// `metashrew_view protorunesbyaddress` return empty for ALL addresses (verified
+// 2026-04-26 — even the deployer wallet with known alkane balances returns
+// `outpoints: []`). Either the address index isn't enabled in metabot's
+// metashrew config, or the espo data API service isn't deployed on metabot
+// (it's defined as a k8s Service but has no backing pod). We can't fix either
+// from the frontend.
+//
+// Production (mainnet, hosted regtest, qubitcoin-regtest) uses espo's
+// `/get-alkanes-utxo` endpoint — a single HTTP call returning every UTXO at
+// the address with full alkane enrichment. That's the scalable path: O(1)
+// per address regardless of UTXO count.
+//
+// This fallback enumerates dust UTXOs from `spendablesbyaddress` (one call)
+// and resolves each via `alkanes_protorunesbyoutpoint` (N calls, one per dust
+// UTXO). It's an N+1 anti-pattern that we accept ONLY for regtest-local
+// development — DO NOT extend this gating to production networks. Any test
+// wallet rarely has more than ~20 dust outpoints, so the O(N) fanout is
+// tolerable for QA. For live users, spin up espo or wait for the indexer fix.
+async function fetchAlkaneBalancesViaSpendablesFallback(
+  rpcUrl: string,
+  address: string,
+): Promise<{ alkaneId: { block: string; tx: string }; balance: string }[]> {
+  const rpc = async (method: string, params: unknown[]) => {
+    const r = await fetch(rpcUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(20000),
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
+    });
+    return (await r.json())?.result;
+  };
+
+  let spendables: any;
+  try {
+    spendables = await rpc('spendablesbyaddress', [address]);
+  } catch {
+    return [];
+  }
+  const outpoints: Array<{ txid: string; vout: number; value: number }> =
+    (spendables?.outpoints ?? [])
+      .map((o: any) => ({ txid: o.outpoint?.txid, vout: o.outpoint?.vout, value: o.value }))
+      .filter((o: any) => Number.isFinite(o.value) && o.value <= 1000);
+  if (outpoints.length === 0) return [];
+
+  const checks = await Promise.all(
+    outpoints.map(async (u) => {
+      try {
+        const r = await rpc('alkanes_protorunesbyoutpoint', [u.txid, u.vout]);
+        return r?.balance_sheet?.cached?.balances ?? [];
+      } catch { return []; }
+    }),
+  );
+
+  const totals = new Map<string, bigint>();
+  for (const balances of checks) {
+    for (const b of balances) {
+      const key = `${b.block}:${b.tx}`;
+      const amt = BigInt(b.amount ?? 0);
+      totals.set(key, (totals.get(key) ?? 0n) + amt);
+    }
+  }
+  return Array.from(totals, ([id, amt]) => {
+    const [block, tx] = id.split(':');
+    return { alkaneId: { block, tx }, balance: amt.toString() };
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Enriched wallet data
 // ---------------------------------------------------------------------------
@@ -659,8 +729,16 @@ export function alkaneBalanceQueryOptions(deps: AlkaneBalanceDeps) {
 
       // Fetch all addresses in parallel (was sequential for...of loop)
       const fetchForAddress = async (address: string): Promise<any[]> => {
-        if (deps.network === 'regtest-local' || deps.network === 'devnet') {
+        if (deps.network === 'devnet') {
           return fetchAlkaneBalancesViaProtobuf('http://localhost:18888', address);
+        } else if (deps.network === 'regtest-local') {
+          // metabot's `alkanes_protorunesbyaddress` returns empty (no espo, no
+          // address index) — fall back to spendables→protorunesbyoutpoint
+          // enumeration. See `fetchAlkaneBalancesViaSpendablesFallback` for
+          // why this anti-pattern is scoped to regtest-local only.
+          const direct = await fetchAlkaneBalancesViaProtobuf('http://localhost:18888', address);
+          if (direct.length > 0) return direct;
+          return fetchAlkaneBalancesViaSpendablesFallback('http://localhost:18888', address);
         } else if (deps.network === 'qubitcoin-regtest') {
           return fetchAlkaneBalancesViaProtobuf(`${window.location.origin}/api/rpc/qubitcoin-regtest`, address);
         } else {
