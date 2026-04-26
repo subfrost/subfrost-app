@@ -143,7 +143,9 @@ export function useWrapMutation() {
 
       // Get the signer address — on devnet, query dynamically since each boot
       // generates a new frBTC contract with a different signer key.
-      const signerAddress = (network === 'devnet')
+      // regtest-local and devnet have ephemeral signer keys — query the contract dynamically.
+      // Other networks use the static SIGNER_ADDRESSES map.
+      const signerAddress = (network === 'devnet' || network === 'regtest-local')
         ? await getSignerAddressDynamic(network)
         : getSignerAddress(network);
 

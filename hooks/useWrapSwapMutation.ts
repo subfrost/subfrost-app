@@ -63,7 +63,7 @@ import * as bitcoin from 'bitcoinjs-lib';
 import * as ecc from '@bitcoinerlab/secp256k1';
 import { patchInputsOnly } from '@/lib/psbt-patching';
 import { buildSwapProtostone } from '@/lib/alkanes/builders';
-import { getBitcoinNetwork, getSignerAddress, extractPsbtBase64 } from '@/lib/alkanes/helpers';
+import { getBitcoinNetwork, getSignerAddress, getSignerAddressDynamic, extractPsbtBase64 } from '@/lib/alkanes/helpers';
 import {
   getUnfinalizedPsbtTxId,
   getRemainingUtxosAfterPsbt,
@@ -139,7 +139,10 @@ export function useWrapSwapMutation() {
         throw new Error('Taproot pubkey required for signing');
       }
 
-      const signerAddress = getSignerAddress(network);
+      // regtest-local and devnet have ephemeral signer keys — query dynamically.
+      const signerAddress = (network === 'devnet' || network === 'regtest-local')
+        ? await getSignerAddressDynamic(network)
+        : getSignerAddress(network);
       const btcNetwork = getBitcoinNetwork(network);
 
       console.log('[WrapSwap] Addresses:', { taprootAddress, segwitAddress, primaryAddress, signerAddress });

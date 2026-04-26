@@ -94,6 +94,10 @@ export const SIGNER_ADDRESSES: Record<string, string> = {
   'subfrost-regtest': 'bcrt1p466wtm6hn2llrm02ckx6z03tsygjjyfefdaz6sekczvcr7z00vtsc5gvgz',
   oylnet: 'bcrt1p466wtm6hn2llrm02ckx6z03tsygjjyfefdaz6sekczvcr7z00vtsc5gvgz',
   devnet: 'bcrt1p466wtm6hn2llrm02ckx6z03tsygjjyfefdaz6sekczvcr7z00vtsc5gvgz',
+  // regtest-local: signer is queried dynamically via opcode 103 in mutation hooks
+  // (the metabot regtest signer key may rotate independently of the hardcoded map).
+  // A static fallback is provided here so non-mutation code paths don't crash.
+  'regtest-local': 'bcrt1p466wtm6hn2llrm02ckx6z03tsygjjyfefdaz6sekczvcr7z00vtsc5gvgz',
 };
 
 /**

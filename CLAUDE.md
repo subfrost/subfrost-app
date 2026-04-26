@@ -527,6 +527,53 @@ alkanes-cli -p subfrost-regtest \
 - **App user (taproot):** `bcrt1pqjwdlfg4lht3jwl0p5u58yn8fc2ksqx5v44g6ekcru5szdm2u32qum3gpe`
 - **App user (segwit):** `bcrt1qvjucyzgwjjkmgl5wg3fdeacgthmh29nv4pk82x`
 
+### Metabot regtest-local (SSH tunnel) — operational checklist
+
+`regtest-local` is a separate live regtest stack (different from `regtest`/`subfrost-regtest` which is the public hosted endpoint). It runs on the `metabot` deployment host inside the team's OpenVPN. The frontend's `regtest-local` config points at `localhost:18888/18889/50010`, which only reaches the K8s NodePort if an SSH port-forward is active.
+
+**Bring up the tunnel** (SSH user is `ubuntu`, NOT `erickdelgado`):
+```bash
+ssh -fN \
+  -L 18888:localhost:31945 \
+  -L 18889:localhost:31945 \
+  -L 50010:localhost:31050 \
+  -i ~/.ssh/id_ed25519 \
+  -o StrictHostKeyChecking=no -o ServerAliveInterval=30 \
+  ubuntu@192.168.10.140
+# Verify
+curl -s -m 5 http://localhost:18889 -X POST -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","method":"metashrew_height","params":[],"id":1}'
+```
+NodePorts inside metabot map: alkanes-jsonrpc-np 31945 → svc/alkanes-jsonrpc:18888, esplora-np 31050 → 50010, metashrew-nodeport 31080 → 8080. The dev server's RPC proxy + the WASM provider both target our `localhost:18888` (and `:18889` for batch endpoints), so both flow over the same tunnel.
+
+**Diagnose-upstream-first rule:** when swap/wrap/send flows feel slow on `regtest-local` ("Building Transaction…" forever, `bad-txns-inputs-missingorspent`, `Can not sign for this input`), check the tunnel **before** touching code:
+```bash
+nc -zv 127.0.0.1 18888       # tunnel up?
+curl -s -m 5 http://localhost:18889 -X POST -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","method":"metashrew_height","params":[],"id":1}'
+```
+If reset/refused, restart the tunnel before debugging anything else. A dead tunnel makes the SDK fall back to lua paths and the public regtest endpoint, producing many symptoms that look like code bugs but are environmental.
+
+**Mining is manual.** metabot's bitcoind doesn't auto-mine, AND new mempool txs are flagged `unbroadcast=true` by default — `generatetoaddress` via NodePort will produce empty blocks that don't include them. After every state-mutating tx (swap, wrap, unwrap, alkane send, BTC send), trigger a block via the wallet/settings page Mine 1 Block button OR via:
+```bash
+ssh -i ~/.ssh/id_ed25519 ubuntu@192.168.10.140 \
+  "kubectl exec -n regtest-alkanes bitcoind-0 -- \
+   bitcoin-cli -regtest -rpcuser=bitcoinrpc -rpcpassword=bitcoinrpc \
+   prioritisetransaction <txid> 0 1000000 && \
+   bitcoin-cli -regtest -rpcuser=bitcoinrpc -rpcpassword=bitcoinrpc \
+   generatetoaddress 1 'bcrt1q6rz28mcfaxtmd6v789l9rrlrusdprr9pz3cppk'"
+```
+Without this, downstream `alkanes_protorunesbyaddress` queries return empty and it looks like the mutation failed when it just hasn't been included.
+
+**`regtest-local` case-statement gotcha.** This network was added later than the others; many lookup tables and switch statements forgot it. Common gaps observed (each one breaks a flow when keystore wallets use this network):
+- `utils/getConfig.ts` per-network factory IDs — must align with the actually-deployed factory on metabot (currently `4:65498`).
+- `lib/alkanes/constants.ts SIGNER_ADDRESSES` — needs an entry as static fallback.
+- `useWrapMutation` / `useWrapSwapMutation` dynamic-signer trigger — gate is `network === 'devnet' || network === 'regtest-local'` (the metabot signer key may be different from the hardcoded hosted one; use `getSignerAddressDynamic` to query opcode 103 on `[32:0]` and derive via `bitcoin.payments.p2tr({ internalPubkey })`).
+- `app/api/rpc/[[...segments]]/route.ts` — devnet returns 503 to force the in-browser interceptor; `regtest-local` must NOT be conflated with devnet here, it's a real backend that needs proxying.
+- `useActualAddresses` allowlist in mutation hooks — `['devnet', 'regtest-local', 'qubitcoin-regtest']` is the canonical trio.
+
+When adding new flows or touching network-conditional code, grep for `regtest-local` and confirm it's listed wherever the other regtest variants are.
+
 ---
 
 ## Devnet Testing & QA

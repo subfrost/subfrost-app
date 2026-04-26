@@ -55,8 +55,23 @@ export function getSignerAddress(network: string): string {
 
 /**
  * Dynamically query the frBTC signer address from the contract via opcode 103.
- * On devnet the signer key changes each boot, so the hardcoded address is stale.
- * Falls back to the static SIGNER_ADDRESSES entry if the query fails.
+ *
+ * Why dynamic: on devnet the signer key changes each boot, and on regtest-local
+ * (the SSH-tunneled metabot stack) the FROST signing group may not match the
+ * hardcoded `SIGNER_ADDRESSES['regtest']` value at all. Verified 2026-04-26
+ * during the perf-branch QA session: hosted regtest signer is `bcrt1p466wtm…`
+ * (matches `SIGNER_ADDRESSES.regtest`) but metabot regtest-local signer is
+ * `bcrt1p5lushq…` (derived from x-only pubkey `7940ef3b…` returned by opcode
+ * 103). Wraps to the wrong signer silently confirm but mint zero frBTC.
+ *
+ * Derivation: opcode 103 returns the 32-byte x-only OUTPUT pubkey of the
+ * FROST signing group's P2TR address. Pass it as `internalPubkey` to
+ * `bitcoin.payments.p2tr({...})` — bitcoinjs-lib applies the BIP341 even-y
+ * tweak internally, which matches how the contract derived its own signer
+ * address in the first place. (Do NOT manually wrap the bytes as a script
+ * `0x51 0x20 <xonly>` — that produces a different, wrong address.)
+ *
+ * Falls back to the static `SIGNER_ADDRESSES` entry if the query fails.
  */
 export async function getSignerAddressDynamic(network: string): Promise<string> {
   try {
