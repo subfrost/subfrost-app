@@ -251,6 +251,35 @@ export async function POST(
       }
     }
 
+    // ========================================================================
+    // [JOURNAL 2026-04-26] HOSTED REGTEST ESPO ESSENTIALS WORKAROUND
+    // ========================================================================
+    // Hosted regtest's espo essentials index is broken: it skips writing
+    // /balances/<address>/... entries when the alkane trace return status is
+    // not Success. As a result, both `essentials.get_address_outpoints` and
+    // `get-alkanes-utxo` return empty alkane data even when the canonical
+    // outpoint indexer (`alkanes_protorunesbyoutpoint`) shows the balance.
+    //
+    // Production (mainnet) is unaffected: its trace storage works correctly
+    // and these endpoints return populated data, so the enrichment below is a
+    // no-op when responses already contain alkane data.
+    //
+    // This is gated to network === 'regtest' (hosted) only. The fix path for
+    // a permanent solution is to modify espo essentials to read balances from
+    // protorunes_by_outpoint instead of relying on trace events; until that
+    // ships, this patch lets unwrap/swap proceed on the hosted regtest matrix.
+    //
+    // We synthesize the alkane data by querying `alkanes_protorunesbyaddress`
+    // (which uses the canonical address-keyed indexer that DOES populate
+    // correctly on hosted regtest) and merging the per-outpoint balances into
+    // either the espo essentials response shape or the get-alkanes-utxo REST
+    // response shape.
+    // ========================================================================
+    if (network === 'regtest') {
+      const enriched = await enrichRegtestAlkaneData(method, body, data, segments);
+      if (enriched) return NextResponse.json(enriched);
+    }
+
     return NextResponse.json(data);
   } catch (error) {
     console.error('[RPC Proxy] Error:', error);
@@ -259,4 +288,204 @@ export async function POST(
       { status: 500 }
     );
   }
+}
+
+// ============================================================================
+// Hosted regtest enrichment helpers (see [JOURNAL 2026-04-26] block above)
+// ============================================================================
+
+type ProtoruneOutpoint = {
+  outpoint: { txid: string; vout: number };
+  output: { value: number };
+  height?: number;
+  txindex?: number;
+  balance_sheet?: {
+    cached?: { balances?: Array<{ amount: number; block: number; tx: number }> };
+  };
+};
+
+/**
+ * Query `alkanes_protorunesbyaddress` on hosted regtest for the given address.
+ * Returns the outpoint list with their balance sheets, or null on any error.
+ *
+ * Uses the canonical outpoint-keyed indexer which DOES populate correctly on
+ * hosted regtest (verified via curl for tx 689b151e... at vout 1).
+ */
+async function fetchProtorunesByAddress(address: string): Promise<ProtoruneOutpoint[] | null> {
+  try {
+    const resp = await fetch('https://regtest.subfrost.io/v4/subfrost', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        method: 'alkanes_protorunesbyaddress',
+        params: [{ address, protocolTag: '1' }],
+        id: 1,
+      }),
+    });
+    if (!resp.ok) return null;
+    const j = await resp.json();
+    const outpoints = j?.result?.outpoints;
+    if (!Array.isArray(outpoints)) return null;
+    return outpoints as ProtoruneOutpoint[];
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Returns an enriched response object iff the request is one of the broken
+ * espo endpoints AND the response is missing the alkane data we know exists.
+ * Returns null otherwise (caller should pass through the original response).
+ */
+async function enrichRegtestAlkaneData(
+  method: string | undefined,
+  body: any,
+  data: any,
+  segments: string[] | undefined,
+): Promise<any | null> {
+  // Path-based REST: /api/rpc/regtest/get-alkanes-utxo
+  const restPath = segments && segments.length > 1 ? segments.slice(1).join('/') : '';
+
+  if (restPath === 'get-alkanes-utxo' && body?.address && Array.isArray(data?.data)) {
+    return await enrichGetAlkanesUtxo(body.address as string, data);
+  }
+
+  // Path-based JSON-RPC: /api/rpc/regtest/espo  with method essentials.get_address_outpoints
+  if (restPath === 'espo' && body?.method === 'essentials.get_address_outpoints') {
+    const address = body?.params?.address as string | undefined;
+    if (!address) return null;
+
+    const result = data?.result;
+    const currentOutpoints = Array.isArray(result?.outpoints) ? result.outpoints : null;
+    if (currentOutpoints === null) return null;
+    if (currentOutpoints.length > 0) return null; // already populated, no enrichment needed
+
+    return await synthesizeAddressOutpoints(address, body?.id ?? 1);
+  }
+
+  return null;
+}
+
+/**
+ * Enrich the `get-alkanes-utxo` REST response by filling in `alkanes` per UTXO
+ * from `alkanes_protorunesbyaddress`. The original response already contains
+ * the correct UTXO list (txid/vout/satoshis/scriptPk) — we just need to fix
+ * the empty `alkanes: {}` field for outpoints that actually carry alkanes.
+ *
+ * Skips enrichment if every UTXO already has a populated `alkanes` map (which
+ * would indicate the index is healthy — preserves production behavior).
+ */
+async function enrichGetAlkanesUtxo(address: string, data: any): Promise<any | null> {
+  const utxos = data.data as Array<any>;
+  const allEmpty = utxos.every(
+    u => !u.alkanes || (typeof u.alkanes === 'object' && Object.keys(u.alkanes).length === 0),
+  );
+  if (!allEmpty) return null; // some entries have alkane data already — index is healthy, leave alone
+
+  const protorunes = await fetchProtorunesByAddress(address);
+  if (!protorunes || protorunes.length === 0) return null;
+
+  // Build {`txid:vout` → {alkaneId: amount}} map from protorune data
+  const balanceMap = new Map<string, Record<string, string>>();
+  for (const op of protorunes) {
+    const txid = op.outpoint?.txid;
+    const vout = op.outpoint?.vout;
+    if (!txid || vout === undefined) continue;
+    const balances = op.balance_sheet?.cached?.balances;
+    if (!Array.isArray(balances) || balances.length === 0) continue;
+    const alkanesField: Record<string, string> = {};
+    for (const b of balances) {
+      const id = `${b.block}:${b.tx}`;
+      alkanesField[id] = String(b.amount);
+    }
+    balanceMap.set(`${txid}:${vout}`, alkanesField);
+  }
+
+  if (balanceMap.size === 0) return null;
+
+  // Merge balance data into the original UTXO list. We also need to surface
+  // any outpoints from protorunes that aren't in the existing UTXO list (the
+  // SDK iterates through `data` looking for alkane carriers, so missing
+  // entries means missing alkanes from the SDK's view).
+  const seenOutpoints = new Set<string>();
+  const enrichedUtxos = utxos.map(u => {
+    const key = `${u.txId}:${u.outputIndex}`;
+    seenOutpoints.add(key);
+    const alkanes = balanceMap.get(key);
+    if (!alkanes) return u;
+    return { ...u, alkanes };
+  });
+
+  // Add any protorune-known outpoints that weren't in the esplora UTXO list.
+  // This shouldn't happen often (esplora usually has them), but it's the
+  // safety net that makes "Insufficient alkanes have 0" go away.
+  for (const [key, alkanes] of balanceMap) {
+    if (seenOutpoints.has(key)) continue;
+    const [txId, voutStr] = key.split(':');
+    const vout = parseInt(voutStr, 10);
+    // We don't know satoshis/scriptPk without an esplora lookup, but the
+    // SDK's UTXO selection only needs txid/vout/alkanes for alkane-input
+    // discovery. Fill with conservative defaults; if this synthetic entry is
+    // selected, the SDK will fetch the txout details separately.
+    enrichedUtxos.push({
+      address,
+      alkanes,
+      confirmations: 1,
+      indexed: true,
+      inscriptions: [],
+      outputIndex: vout,
+      runes: {},
+      satoshis: 546, // alkane dust default; SDK reads this from witnessUtxo separately
+      scriptPk: '',
+      txId,
+    });
+  }
+
+  console.log(
+    `[RPC Proxy] [regtest enrich get-alkanes-utxo] ${address.slice(0, 12)}…: ` +
+      `${utxos.length} UTXOs, ${balanceMap.size} carry alkanes (${enrichedUtxos.length - utxos.length} synthesized)`,
+  );
+
+  return { ...data, data: enrichedUtxos };
+}
+
+/**
+ * Synthesize an `essentials.get_address_outpoints` response from
+ * `alkanes_protorunesbyaddress` data. Mirrors the response shape espo would
+ * return if its essentials index were populated.
+ */
+async function synthesizeAddressOutpoints(address: string, id: any): Promise<any | null> {
+  const protorunes = await fetchProtorunesByAddress(address);
+  if (!protorunes || protorunes.length === 0) return null;
+
+  const outpoints: any[] = [];
+  for (const op of protorunes) {
+    const txid = op.outpoint?.txid;
+    const vout = op.outpoint?.vout;
+    if (!txid || vout === undefined) continue;
+    const balances = op.balance_sheet?.cached?.balances;
+    if (!Array.isArray(balances) || balances.length === 0) continue;
+    const entries = balances.map(b => ({
+      alkane: `${b.block}:${b.tx}`,
+      amount: String(b.amount),
+    }));
+    outpoints.push({
+      outpoint: `${txid}:${vout}`,
+      entries,
+    });
+  }
+
+  if (outpoints.length === 0) return null;
+
+  console.log(
+    `[RPC Proxy] [regtest enrich essentials.get_address_outpoints] ${address.slice(0, 12)}…: ` +
+      `synthesized ${outpoints.length} outpoints`,
+  );
+
+  return {
+    jsonrpc: '2.0',
+    result: { address, ok: true, outpoints },
+    id,
+  };
 }

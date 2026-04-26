@@ -527,9 +527,18 @@ async function fetchPoolsFromDirectSimulate(
   factoryId: string,
   network: string,
 ): Promise<PoolsListItem[]> {
-  const rpcUrl = network === 'qubitcoin-regtest' || network === 'regtest'
+  // [JOURNAL 2026-04-26] On hosted regtest, route through the dev-server proxy
+  // at `/api/rpc/regtest` so requests are forwarded to regtest.subfrost.io.
+  // The earlier conditional collapsed `regtest` and `qubitcoin-regtest` onto
+  // the same `/api/rpc/qubitcoin-regtest` path — that was wrong for hosted
+  // regtest where the proxy needs the network slug to match the endpoint map.
+  // Fixing this populates `usePools` data on hosted regtest, which makes swap
+  // quotes compute (otherwise quote = 0 and CONFIRM SWAP is disabled).
+  const rpcUrl = network === 'qubitcoin-regtest'
     ? `${typeof window !== 'undefined' ? window.location.origin : ''}/api/rpc/qubitcoin-regtest`
-    : 'http://localhost:18888';
+    : network === 'regtest'
+      ? `${typeof window !== 'undefined' ? window.location.origin : ''}/api/rpc/regtest`
+      : 'http://localhost:18888';
 
   // Factory opcode 3: GetAllPools — returns list of pool AlkaneIds
   const allPoolsHex = await simulateContract(rpcUrl, factoryId, 3);

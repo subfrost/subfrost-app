@@ -214,9 +214,13 @@ async function fetchPoolsFromSDK(
   // regtest-local: skip REST/SDK (503 or 30s timeout). Use direct metashrew_view simulate.
   if (network === 'regtest-local' || network === 'qubitcoin-regtest' || network === 'regtest') {
     try {
-      const simRpcUrl = network === 'qubitcoin-regtest' || network === 'regtest'
+      // [JOURNAL 2026-04-26] Hosted regtest needs `/api/rpc/regtest` (not the
+      // qubitcoin-regtest path). Fix is symmetric to usePools.ts:531.
+      const simRpcUrl = network === 'qubitcoin-regtest'
         ? `${typeof window !== 'undefined' ? window.location.origin : ''}/api/rpc/qubitcoin-regtest`
-        : 'http://localhost:18888';
+        : network === 'regtest'
+          ? `${typeof window !== 'undefined' ? window.location.origin : ''}/api/rpc/regtest`
+          : 'http://localhost:18888';
       return await fetchTokenPairsFromDirectSimulate(factoryId, simRpcUrl);
     } catch (e) {
       console.warn('[useAlkanesTokenPairs] Direct simulate failed (factory not deployed?):', (e as Error)?.message?.slice(0, 80));
