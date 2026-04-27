@@ -1083,6 +1083,95 @@ async function deployFullProtocol(
   const [poolBlock, poolTx] = poolId ? poolId.split(':').map(Number) : [2, 0];
 
   // -----------------------------------------------------------------------
+  // Phase 2b: Provision deeper AMM liquidity (DIESEL ↔ frBTC)
+  // -----------------------------------------------------------------------
+  // The Phase 2 pool creation only deposits DIESEL/3 + frBTC/2 from the
+  // initial mint, which leaves the pool shallow — large quotes hit huge
+  // price-impact and fail "insufficient output" on the matrix swaps.
+  //
+  // This phase mints additional DIESEL (4× free-mints of 10,000 each)
+  // and wraps an additional 0.05 BTC into frBTC, then adds it all to the
+  // pool via the factory router (opcode 11 AddLiquidity) so Phase 10d
+  // swaps and matrix QA both run against a realistic pool depth.
+  //
+  // Why factory.AddLiquidity (opcode 11) and not pool.AddLiquidity (opcode 1):
+  //   - Factory router handles the two-protostone pattern + slippage params
+  //   - Matches what hooks/useAddLiquidityMutation.ts dispatches in production
+  //   - Same code path the matrix exercises, so any breakage shows up here
+  //     during boot rather than mid-test.
+  //
+  // Phase 10d still does a small additional AddLiquidity to seed the
+  // Positions tab with a per-user LP position; Phase 2b is about pool depth
+  // for swap stability, not about the Positions UI.
+  // -----------------------------------------------------------------------
+  if (poolId) {
+    onProgress('Provisioning AMM liquidity...', 45);
+    console.log('[devnet-boot] Phase 2b: Provisioning DIESEL/frBTC AMM liquidity...');
+    try {
+      // Top up DIESEL — 4 free-mints × 10,000 = 40,000 raw DIESEL.
+      for (let i = 0; i < 4; i++) {
+        await executeCall(provider, harness, segwit, taproot,
+          '[2,0,77]:v0:v0', 'B:10000:v0', [taproot]);
+      }
+      // Top up frBTC — wrap an additional 0.05 BTC.
+      await executeCall(provider, harness, segwit, taproot,
+        '[32,0,77]:v1:v1', 'B:5000000:v0', [signerAddr, taproot]);
+      harness.mineBlocks(2);
+      await new Promise(r => setTimeout(r, 100));
+
+      const lpDieselBal = await getAlkaneBalance(provider, taproot, '2:0');
+      const lpFrbtcBal = await getAlkaneBalance(provider, taproot, '32:0');
+      console.log(
+        '[devnet-boot] Phase 2b balances pre-AddLiquidity: DIESEL=',
+        lpDieselBal.toString(),
+        'frBTC=',
+        lpFrbtcBal.toString(),
+      );
+
+      if (lpDieselBal > BigInt(0) && lpFrbtcBal > BigInt(0)) {
+        // Use 80% of available so we leave headroom for downstream phases
+        // that also need DIESEL/frBTC (FIRE bonding, dxBTC vault, etc.).
+        const liqDiesel = (lpDieselBal * BigInt(80)) / BigInt(100);
+        const liqFrbtc = (lpFrbtcBal * BigInt(80)) / BigInt(100);
+
+        // Factory opcode 11: AddLiquidity(token_a, token_b, amount_a_desired,
+        // amount_b_desired, amount_a_min, amount_b_min, deadline).
+        // amount_min = 0 on devnet (no front-running risk during boot).
+        // deadline = 999999999 — effectively unbounded for devnet.
+        const [fBlock, fTx] = factoryId.split(':');
+        await executeCall(provider, harness, segwit, taproot,
+          `[${fBlock},${fTx},11,2,0,32,0,${liqDiesel},${liqFrbtc},0,0,999999999]:v0:v0`,
+          `2:0:${liqDiesel},32:0:${liqFrbtc}`, [taproot]);
+        harness.mineBlocks(2);
+        await new Promise(r => setTimeout(r, 100));
+
+        // Read back pool reserves so the boot log records the resulting depth.
+        try {
+          const reserves = await simulate(poolId, ['97']);
+          const reservesData = reserves?.result?.execution?.data?.replace('0x', '') || '';
+          if (reservesData.length >= 64) {
+            const r0 = parseLeU128FromHex(reservesData, 0);
+            const r1 = parseLeU128FromHex(reservesData, 16);
+            console.log(
+              '[devnet-boot] Phase 2b pool reserves after AddLiquidity:',
+              `token0=${r0}`,
+              `token1=${r1}`,
+            );
+          }
+        } catch (e: any) {
+          console.warn('[devnet-boot] Phase 2b reserve readback failed:', e?.message?.slice(0, 80));
+        }
+      } else {
+        console.warn('[devnet-boot] Phase 2b skipped — no tokens minted');
+      }
+    } catch (e: any) {
+      console.warn('[devnet-boot] Phase 2b liquidity provisioning failed (non-fatal):', e?.message?.slice(0, 120));
+    }
+  } else {
+    console.warn('[devnet-boot] Phase 2b skipped — no poolId from Phase 2');
+  }
+
+  // -----------------------------------------------------------------------
   // Phase 3a: Carbine CLOB — deployed early so logs are visible before
   // console overflow from later phases. No dependency on FIRE/Fujin/bridges.
   // -----------------------------------------------------------------------
