@@ -221,7 +221,7 @@ describe('Browser wallet address handling', () => {
 
 describe('ordinalsStrategy setting', () => {
   describe.each(ACTIVE_HOOKS)('%s', (hookFile) => {
-    it("should set ordinalsStrategy to 'burn' in alkanesExecuteTyped call", () => {
+    it("should set ordinalsStrategy to 'exclude' in alkanesExecuteTyped call", () => {
       const src = readHook(hookFile);
       // useWrapMutation and useUnwrapMutation do not set ordinalsStrategy (use default)
       if (hookFile === 'useWrapMutation.ts' || hookFile === 'useUnwrapMutation.ts') {
@@ -229,7 +229,7 @@ describe('ordinalsStrategy setting', () => {
         expect(src).toContain('alkanesExecuteTyped');
         return;
       }
-      expect(src).toContain("ordinalsStrategy: 'burn'");
+      expect(src).toContain("ordinalsStrategy: 'exclude'");
     });
   });
 });

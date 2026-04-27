@@ -98,14 +98,17 @@ describe('WalletDashboardPage (page.tsx)', () => {
     expect(src).toMatch(/walletConnected\s*=.*connected.*isConnected/);
   });
 
-  it('has tab-based navigation including balances, transactions, and settings', () => {
-    expect(src).toContain("'balances'");
+  it('has tab-based navigation including transactions and settings', () => {
     expect(src).toContain("'transactions'");
     expect(src).toContain("'settings'");
   });
 
+  it('defaults to transactions tab', () => {
+    // Default is 'transactions' when no valid tab param
+    expect(src).toMatch(/useState<TabView>\(.*'transactions'/);
+  });
+
   it('conditionally renders tab content based on activeTab', () => {
-    expect(src).toMatch(/activeTab\s*===\s*['"]balances['"]\s*&&\s*<BalancesPanel/);
     expect(src).toMatch(/activeTab\s*===\s*['"]transactions['"]\s*&&\s*<TransactionHistory/);
     expect(src).toMatch(/activeTab\s*===\s*['"]settings['"]\s*&&\s*<WalletSettings/);
   });
@@ -148,8 +151,8 @@ describe('AlkanesBalancesCard', () => {
     expect(src).toMatch(/useEnrichedWalletData\(\)/);
   });
 
-  it('destructures balances, isLoading, error, refresh from useEnrichedWalletData', () => {
-    expect(src).toMatch(/\{\s*balances\s*,\s*isLoading\s*,\s*error\s*,\s*refresh\s*\}\s*=\s*useEnrichedWalletData\(\)/);
+  it('destructures balances, isAlkanesLoading, error, refreshAlkanes from useEnrichedWalletData', () => {
+    expect(src).toMatch(/\{\s*balances\s*,\s*isAlkanesLoading\s*,\s*error\s*,\s*refreshAlkanes\s*\}\s*=\s*useEnrichedWalletData\(\)/);
   });
 
   it('renders alkane list from balances.alkanes', () => {
@@ -255,12 +258,14 @@ describe('BitcoinBalanceCard', () => {
     expect(src).toMatch(/Native SegWit/);
   });
 
-  it('shows SegWit (p2wpkh) balance', () => {
-    expect(src).toMatch(/balances\.bitcoin\.p2wpkh/);
+  it('shows SegWit (p2wpkh) balance from btcFast or enriched fallback', () => {
+    expect(src).toMatch(/p2wpkh/);
+    expect(src).toMatch(/btcFast\.p2wpkh/);
   });
 
-  it('shows Taproot (p2tr) balance', () => {
-    expect(src).toMatch(/balances\.bitcoin\.p2tr/);
+  it('shows Taproot (p2tr) balance from btcFast or enriched fallback', () => {
+    expect(src).toMatch(/p2tr/);
+    expect(src).toMatch(/btcFast\.p2tr/);
   });
 
   it('has a refresh button using RefreshCw', () => {
@@ -283,13 +288,15 @@ describe('BitcoinBalanceCard', () => {
     expect(src).toMatch(/t\(['"]balances\.tryAgain['"]\)/);
   });
 
-  it('shows pending BTC differences when nonzero', () => {
-    expect(src).toMatch(/pendingDiff/);
-    expect(src).toMatch(/pending/);
+  it('uses btcFast for fast balance display with fallback to enriched', () => {
+    expect(src).toMatch(/btcFast/);
+    expect(src).toMatch(/isBtcFastLoading/);
+    expect(src).toMatch(/refreshBtcFast/);
   });
 
-  it('adjusts confirmed balance to account for pending outgoing', () => {
-    expect(src).toMatch(/adjustedConfirmed\s*=\s*balances\.bitcoin\.total\s*\+\s*balances\.bitcoin\.pendingOutgoingTotal/);
+  it('shows pending BTC when nonzero', () => {
+    expect(src).toMatch(/pendingIn/);
+    expect(src).toMatch(/pending/);
   });
 });
 
@@ -522,37 +529,6 @@ describe('WalletSettings', () => {
 describe('BalancesPanel', () => {
   const src = readSource(path.join(COMPONENTS_DIR, 'BalancesPanel.tsx'));
 
-  it('uses useDemoGate() for feature gating', () => {
-    expect(src).toMatch(/import\s+\{\s*useDemoGate\s*\}\s+from\s+['"]@\/hooks\/useDemoGate['"]/);
-    expect(src).toMatch(/useDemoGate\(\)/);
-  });
-
-  it('assigns isDemoGated from useDemoGate', () => {
-    expect(src).toMatch(/isDemoGated\s*=\s*useDemoGate\(\)/);
-  });
-
-  it('uses useWallet() for network info', () => {
-    expect(src).toMatch(/useWallet\(\)/);
-    expect(src).toMatch(/network/);
-  });
-
-  it('has tab structure for inscription asset types: brc20, runes, ordinals', () => {
-    expect(src).toContain("'brc20'");
-    expect(src).toContain("'runes'");
-    expect(src).toContain("'ordinals'");
-    expect(src).toMatch(/inscriptionFilter/);
-  });
-
-  it('uses useState for inscription filter state', () => {
-    expect(src).toMatch(/useState<['"]brc20['"] \| ['"]runes['"] \| ['"]ordinals['"]>/);
-  });
-
-  it('shows coming soon messages for runes and ordinals inscription tabs', () => {
-    // BRC20 tab renders Brc20BalancesCard, only runes and ordinals show coming soon
-    expect(src).toMatch(/runesComingSoon/);
-    expect(src).toMatch(/ordinalsComingSoon/);
-  });
-
   it('uses useFuelAllocation hook', () => {
     expect(src).toMatch(/import\s+\{\s*useFuelAllocation\s*\}\s+from\s+['"]@\/hooks\/useFuelAllocation['"]/);
     expect(src).toMatch(/useFuelAllocation\(\)/);
@@ -568,8 +544,9 @@ describe('BalancesPanel', () => {
     expect(src).toMatch(/<Flame/);
   });
 
-  it('uses useTranslation for i18n', () => {
-    expect(src).toMatch(/useTranslation\(\)/);
+  it('shows fallback message when not eligible for FUEL', () => {
+    expect(src).toMatch(/!fuelAllocation\.isEligible/);
+    expect(src).toMatch(/No additional balances to display/);
   });
 });
 
@@ -602,18 +579,16 @@ describe('Cross-component integration patterns', () => {
     expect(pageSrc).toMatch(/onSendAlkane=\{.*setSendAlkane.*setShowSendModal/s);
   });
 
-  it('all card components use useTranslation for i18n', () => {
+  it('all interactive card components use useTranslation for i18n', () => {
     const btcSrc = readSource(path.join(COMPONENTS_DIR, 'BitcoinBalanceCard.tsx'));
     const txSrc = readSource(path.join(COMPONENTS_DIR, 'TransactionHistory.tsx'));
     const receiveSrc = readSource(path.join(COMPONENTS_DIR, 'ReceiveModal.tsx'));
-    const balanceSrc = readSource(path.join(COMPONENTS_DIR, 'BalancesPanel.tsx'));
 
     for (const [name, src] of [
       ['AlkanesBalancesCard', alkanesSrc],
       ['BitcoinBalanceCard', btcSrc],
       ['TransactionHistory', txSrc],
       ['ReceiveModal', receiveSrc],
-      ['BalancesPanel', balanceSrc],
     ]) {
       expect(src).toMatch(/useTranslation\(\)/);
     }

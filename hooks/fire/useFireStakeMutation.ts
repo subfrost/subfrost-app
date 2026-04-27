@@ -10,9 +10,16 @@
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useWallet } from '@/context/WalletContext';
-import { getConfig, getRpcUrl } from '@/utils/getConfig';
+import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
+import { getConfig } from '@/utils/getConfig';
 import { FIRE_STAKING_OPCODES } from '@/constants';
 import { LOCK_TIERS } from '@/utils/fireCalculations';
+import { patchInputsOnly } from '@/lib/psbt-patching';
+import { extractPsbtBase64, getBitcoinNetwork } from '@/lib/alkanes/helpers';
+import * as bitcoin from 'bitcoinjs-lib';
+import * as ecc from '@bitcoinerlab/secp256k1';
+
+bitcoin.initEccLib(ecc);
 
 interface StakeParams {
   lpAmount: string; // LP token amount in base units
@@ -22,65 +29,88 @@ interface StakeParams {
 
 export function useFireStakeMutation() {
   const queryClient = useQueryClient();
-  const { network, account } = useWallet();
+  const { network, walletType, account, signTaprootPsbt, signSegwitPsbt } = useWallet();
+  const { provider, isInitialized } = useAlkanesSDK();
 
   const config = getConfig(network || 'mainnet');
   const stakingId = (config as any).FIRE_STAKING_ID as string | undefined;
 
   return useMutation({
     mutationFn: async ({ lpAmount, lockTierIndex, feeRate }: StakeParams) => {
-      if (!stakingId) throw new Error('FIRE staking contract not configured');
+      if (!provider || !isInitialized || !stakingId) {
+        throw new Error('Provider or FIRE staking contract not ready');
+      }
 
+      const isBrowserWallet = walletType === 'browser';
+      const useActualAddresses = isBrowserWallet || network === 'devnet' || network === 'regtest-local' || network === 'qubitcoin-regtest';
       const taprootAddress = account?.taproot?.address;
       const segwitAddress = account?.nativeSegwit?.address;
+
       if (!taprootAddress) throw new Error('Taproot address required');
 
       const tier = LOCK_TIERS[lockTierIndex];
       if (!tier) throw new Error('Invalid lock tier');
 
       const [stakingBlock, stakingTx] = stakingId.split(':').map(Number);
-      const protostoneStr = `[${stakingBlock},${stakingTx},${FIRE_STAKING_OPCODES.Stake},${tier.duration}]:v0:v0`;
+      const protostonesStr = `[${stakingBlock},${stakingTx},${FIRE_STAKING_OPCODES.Stake},${tier.duration}]:v0:v0`;
 
       const lpTokenId = (config as any).FIRE_LP_TOKEN_ID || '2:3';
       const inputReqStr = `${lpTokenId}:${lpAmount}`;
 
-      // Use alkanesExecuteFull directly (same pattern as FujinDifficultyPanel)
-      const wasm = await import('@alkanes/ts-sdk/wasm');
-      const LOCAL_NETWORKS = ['regtest-local', 'devnet'];
-      const isLocal = LOCAL_NETWORKS.includes(network || '');
-      const rpcUrl = isLocal ? 'http://localhost:18888' : getRpcUrl(network);
+      const toAddresses = useActualAddresses ? [taprootAddress] : ['p2tr:0'];
+      const changeAddr = useActualAddresses ? (segwitAddress || taprootAddress) : 'p2wpkh:0';
+      const alkanesChangeAddr = useActualAddresses ? taprootAddress : 'p2tr:0';
 
-      const execProvider = new wasm.WebProvider(
-        network === 'subfrost-regtest' ? 'subfrost-regtest' : 'regtest',
-        { jsonrpc_url: rpcUrl, data_api_url: rpcUrl },
-      );
-
-      const sessionMnemonic = typeof sessionStorage !== 'undefined'
-        ? sessionStorage.getItem('subfrost_session_mnemonic') : null;
-      const mnemonic = sessionMnemonic || 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
-      execProvider.walletLoadMnemonic(mnemonic, null);
-
-      const fromAddrs = [segwitAddress, taprootAddress].filter(Boolean);
-      const result = await execProvider.alkanesExecuteFull(
-        JSON.stringify([taprootAddress]),
-        inputReqStr,
-        protostoneStr,
+      const result = await (provider as any).alkanesExecuteTyped({
+        inputRequirements: inputReqStr,
+        protostones: protostonesStr,
         feeRate,
-        null,
-        JSON.stringify({
-          from: fromAddrs,
-          change_address: segwitAddress || taprootAddress,
-          alkanes_change_address: taprootAddress,
-          lock_alkanes: true,
-          mine_enabled: isLocal,
-          auto_confirm: true,
-        }),
-      );
+        autoConfirm: false,
+        toAddresses,
+        changeAddress: changeAddr,
+        alkanesChangeAddress: alkanesChangeAddr,
+        ordinalsStrategy: 'burn',
+      });
 
-      const parsed = typeof result === 'string' ? JSON.parse(result) : result;
-      const txId = parsed?.txid || parsed?.reveal_txid || '';
-      if (!txId) throw new Error('No txid in result');
-      return { success: true, transactionId: txId };
+      // Auto-completed by SDK
+      if (result?.txid || result?.reveal_txid) {
+        const txId = result.txid || result.reveal_txid;
+        return { success: true, transactionId: txId };
+      }
+
+      // Need manual signing
+      if (result?.readyToSign) {
+        const btcNetwork = getBitcoinNetwork(network || 'mainnet');
+        const psbtBase64 = extractPsbtBase64(result.readyToSign.psbt);
+
+        let finalPsbtBase64 = psbtBase64;
+        if (isBrowserWallet) {
+          const patched = patchInputsOnly({
+            psbtBase64,
+            taprootAddress: account?.taproot?.address || '',
+            segwitAddress: account?.nativeSegwit?.address,
+            paymentPubkeyHex: account?.nativeSegwit?.pubkey,
+            network: btcNetwork,
+          });
+          finalPsbtBase64 = patched.psbtBase64;
+        }
+
+        let signedPsbtBase64: string;
+        if (isBrowserWallet) {
+          signedPsbtBase64 = await signTaprootPsbt(finalPsbtBase64);
+        } else {
+          signedPsbtBase64 = await signSegwitPsbt(finalPsbtBase64);
+          signedPsbtBase64 = await signTaprootPsbt(signedPsbtBase64);
+        }
+
+        const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtBase64, { network: btcNetwork });
+        signedPsbt.finalizeAllInputs();
+        const txHex = signedPsbt.extractTransaction().toHex();
+        const txId = await provider.broadcastTransaction(txHex);
+        return { success: true, transactionId: txId };
+      }
+
+      throw new Error('Unexpected SDK response — no txid or readyToSign in result');
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['fireStakingStats'] });

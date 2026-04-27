@@ -198,8 +198,8 @@ describe('useLPPositions', () => {
     });
 
     const { result } = renderHook(() => useLPPositions());
-    // 123456789 / 10^8 = 1.23456789 -> "1.2345"
-    expect(result.current.positions[0].amount).toBe('1.2345');
+    // 123456789 / 10^8 = 1.23456789 -> "1.23456789" (8 decimal places)
+    expect(result.current.positions[0].amount).toBe('1.23456789');
   });
 
   it('formats large balance correctly', () => {
@@ -212,8 +212,8 @@ describe('useLPPositions', () => {
     });
 
     const { result } = renderHook(() => useLPPositions());
-    // 10000000000 / 10^8 = 100 -> "100.0000"
-    expect(result.current.positions[0].amount).toBe('100.0000');
+    // 10000000000 / 10^8 = 100 -> "100.00000000" (8 decimal places)
+    expect(result.current.positions[0].amount).toBe('100.00000000');
   });
 
   it('does not include non-LP, non-pool tokens', () => {

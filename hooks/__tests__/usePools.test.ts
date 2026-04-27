@@ -213,12 +213,12 @@ describe('usePools', () => {
   it('falls back to REST pools-details when Data API fails', async () => {
     mockProvider.dataApiGetAllPoolsDetails.mockRejectedValue(new Error('API down'));
 
-    // Mock the REST fallback fetch
+    // Mock the REST fallback fetch — now goes through /api/pools/cached
     mockFetch.mockImplementation(async (url: string) => {
-      if (typeof url === 'string' && url.includes('get-all-pools-details')) {
+      if (typeof url === 'string' && url.includes('/api/pools/cached')) {
         return {
           ok: true,
-          json: async () => makePoolApiResponse(),
+          json: async () => ({ data: makePoolApiResponse() }),
         };
       }
       // token-names

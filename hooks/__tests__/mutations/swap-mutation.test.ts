@@ -416,8 +416,8 @@ describe('ordinalsStrategy in swap hook', () => {
     src = fs.readFileSync(path.resolve(__dirname, '../../useSwapMutation.ts'), 'utf-8');
   });
 
-  it('should set ordinalsStrategy to burn', () => {
-    expect(src).toContain("ordinalsStrategy: 'burn'");
+  it('should set ordinalsStrategy to exclude', () => {
+    expect(src).toContain("ordinalsStrategy: 'exclude'");
   });
 
   it('should pass ordinalsStrategy to alkanesExecuteTyped', () => {

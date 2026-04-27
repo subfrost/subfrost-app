@@ -19,9 +19,9 @@ describe('getConfig', () => {
     expect(config.ALKANE_FACTORY_ID).toBe('4:65522');
   });
 
-  it('devnet returns factory ID 4:65522', () => {
+  it('devnet returns factory ID 4:65498', () => {
     const config = getConfig('devnet');
-    expect(config.ALKANE_FACTORY_ID).toBe('4:65522');
+    expect(config.ALKANE_FACTORY_ID).toBe('4:65498');
   });
 
   it('signet returns factory ID 4:65522', () => {
@@ -33,12 +33,12 @@ describe('getConfig', () => {
 
   it('returns correct API URL for regtest', () => {
     const config = getConfig('regtest');
-    expect(config.API_URL).toBe('https://regtest.subfrost.io/v4/subfrost');
+    expect(config.API_URL).toBe('https://regtest.subfrost.io/v4/5d37098b75581792a44b9d230d48aa75');
   });
 
   it('returns correct API URL for mainnet', () => {
     const config = getConfig('mainnet');
-    expect(config.API_URL).toBe('https://mainnet.subfrost.io/v4/subfrost');
+    expect(config.API_URL).toBe('https://mainnet.subfrost.io/v4/5d37098b75581792a44b9d230d48aa75');
   });
 
   it('returns correct API URL for devnet', () => {

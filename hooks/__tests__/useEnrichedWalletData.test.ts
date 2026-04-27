@@ -186,7 +186,8 @@ describe('useEnrichedWalletData', () => {
 
     it('has withTimeout helper for resilience against slow RPC', () => {
       expect(querySrc).toContain('withTimeout');
-      expect(querySrc).toContain('Request timed out');
+      // withTimeout resolves with a fallback value on timeout (no rejection)
+      expect(querySrc).toMatch(/withTimeout\s*[=<]/);
     });
 
     it('calls provider.getEnrichedBalances for UTXO data', () => {
@@ -718,9 +719,9 @@ describe('Cross-cutting: React Query caching', () => {
 });
 
 describe('Cross-cutting: timeout / resilience', () => {
-  it('enrichedWalletQueryOptions has 15s timeout on getEnrichedBalances', () => {
+  it('enrichedWalletQueryOptions has 25s timeout on getEnrichedBalances', () => {
     const querySrc = readSrc('queries/account.ts');
-    expect(querySrc).toContain('15000');
+    expect(querySrc).toContain('25_000');
     expect(querySrc).toContain('withTimeout(provider.getEnrichedBalances');
   });
 
