@@ -227,17 +227,56 @@ Do not assume a single grep caught everything.
 
 ## Core Principles
 
-Before adding queries, changing data flow, or debugging performance — read [docs/CORE_PRINCIPLES.md](docs/CORE_PRINCIPLES.md). These 6 rules are derived from root causes found in this codebase. Violate only deliberately with a clear reason. When reviewing code that touches data fetching or caching, verify it doesn't violate these principles.
+These 6 rules govern data flow, caching, and performance. Violate only deliberately with a clear reason. When reviewing code that touches data fetching or caching, verify it doesn't violate these.
+
+1. **One source, one query.** If data exists in a response you already have — use it. Never fetch the same data through a different endpoint. Before adding a query, check what's already in React Query cache.
+2. **Events, not timers.** Data changes when something happens (new block, user action), not when a clock ticks. Use `staleTime: Infinity` + event-driven invalidation. Timers are a workaround for missing events.
+3. **Finish what you disable.** Disabling a feature means removing its entire call chain. If the result is unused, the fetch must be removed too. Dead code that makes network calls is worse than dead code that doesn't.
+4. **Show what you have, fetch what you don't.** Never block the UI waiting for all data. Show cached/fast data immediately, let slow data arrive in the background. Independent data = independent loading states.
+5. **The proxy is not free.** Every call through Next.js proxy → RPC backend → indexer is 100–500ms minimum. Batch where possible. Cache aggressively. Skip entirely if the data doesn't change between blocks.
+6. **Prove it works end-to-end.** A fix is not complete until the console shows the correct call, the UI shows the correct data, and the old call is confirmed absent. Assumptions about what "should" work have cost more time than any bug.
 
 ## Data Architecture
 
-See [docs/DATA_ARCHITECTURE.md](docs/DATA_ARCHITECTURE.md) for complete endpoint reference: balance streams, swap flow, UTXO selection, pool data, wallet session, HeightPoller, RPC proxy routing, and optimization history.
+**Three independent React Query streams** for wallet balance display. All use `staleTime: Infinity` on mainnet — refetch only on HeightPoller block change.
+
+| Stream | Source | Speed | Used for |
+|---|---|---|---|
+| `btcFastQueryOptions` | UniSat `getBitcoinUtxos()` / esplora `esplora_address::utxo` | instant / ~200ms | BTC balance in header, dashboard, swap |
+| `alkaneBalanceQueryOptions` | `get-alkanes-by-address` REST (mainnet) / `alkanes_protorunesbyaddress` (regtest fallback) | ~1.5s | Token balances |
+| `enrichedWalletQueryOptions` (lua) | `lua_evalsaved` → `balances.lua` | 10–25s | Disabled on mainnet/regtest. Was: spendable/assets categorization |
+
+**Swap transaction flow.** When the user presses Swap:
+1. `ensureWalletSession()` — re-activate browser extension if auto-reconnected from cache
+2. SDK `alkanesExecuteTyped()` — build PSBT (calls `payment_utxos` from UniSat OR lua `spendable_utxos.lua`, then espo `essentials.get_address_outpoints` for alkane UTXOs)
+3. `patchInputsOnly()` — fix witnessUtxo scripts
+4. `patchTapInternalKeys()` — fix dummy tapInternalKey for browser wallet (MANDATORY — see Browser Wallet Safety Rules)
+5. `wallet.signPsbt()`
+6. `sendrawtransaction` via sandshrew RPC
+
+**HeightPoller** polls `get_espo_height` every 10s, invalidates queries only on height increase. Stores last height in `localStorage('subfrost_last_block_height')` to skip unnecessary invalidation on reload. Excluded from invalidation: `height`, `frbtc-premium`, `token-display`.
+
+**RPC proxy** (`/api/rpc/[[...segments]]`) routes by network: `mainnet` → `mainnet.subfrost.io`, `regtest` → `regtest.subfrost.io`, `qubitcoin-regtest` → `meta.lake.direct`, `devnet` → 503 (in-browser only). REST sub-paths (`/api/rpc/mainnet/get-alkanes-by-address`) forward to backend base URL. `essentials.*` JSON-RPC methods go to the `/espo` sub-path.
+
+**Wallet session** auto-reconnect from localStorage restores UI state but does NOT activate the browser extension. `ensureWalletSession()` in `lib/wallet/browserWalletSigning.ts` runs before every mutation. Per-wallet reconnect: UniSat `getAccounts()` → `requestAccounts()`, OKX `connect()`, Xverse `request('wallet_getAccount')`, OYL `getAddresses()`. Connected wallet ID stored in `localStorage('subfrost_browser_wallet_id')`.
+
+**SDK fork.** `@alkanes/ts-sdk` (Rust → WASM, runs in main thread) is vendored from [`Misha-btc/alkanes-rs`](https://github.com/Misha-btc/alkanes-rs) branch `feat/sdk-perf-and-coinselect`. After SDK rebuilds, sync `lib/oyl/alkanes/*` per "SDK Dependency Architecture" below. Known SDK limitations needing upstream fixes: `has_inscriptions` always false (uses `payment_utxos` bypass), `lua_evalsaved` fails on load-balanced servers (re-saves on every call), broadcast errors returned as strings not Error objects.
 
 ---
 
 ## UI Design System
 
-Glass morphism + top highlight. Use `.sf-*` CSS classes from `app/globals.css`, never raw Tailwind borders. See [docs/UI_DESIGN_SYSTEM.md](docs/UI_DESIGN_SYSTEM.md) for full class reference and rules.
+**Pattern:** Glass morphism + top highlight. Cards/panels use a frosted glass background with a single top-edge border that creates a subtle "lift" highlight. **Full box borders are forbidden on cards, panels, and inputs.** Use the named `.sf-*` CSS utility classes in `app/globals.css` — never compose raw Tailwind borders/rings.
+
+Most-used classes: `.sf-card` (standard, hover lift), `.sf-card-small` (non-interactive display), `.sf-card-clickable` (entire card is a click target), `.sf-panel` (nested inner sections), `.sf-input` (text/number/search — no border, blue glow on focus only), `.sf-row` (list/table rows, bottom border + hover tint), `.sf-tab-btn` / `.sf-tab-btn--active`, `.sf-btn-primary` / `.sf-btn-secondary` / `.sf-btn-ghost`, `.sf-alert` + colour modifier (`.sf-alert-green`/`-blue`/`-yellow`/`-orange`/`-red`/`-gray`).
+
+**Rules:**
+- Never add `border`, `border-gray-*`, `border-slate-*`, `ring-*` to a card.
+- Never use `focus:ring-*` / `focus:border-*` / `focus:outline-*` on an input — `.sf-input:focus` provides the blue glow.
+- Standard transition: `transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)]`. Shadow-only: `transition-shadow duration-[200ms]`.
+- Always use CSS variables (`text-[color:var(--sf-text)]`, `bg-[color:var(--sf-primary)]`, `hover:bg-[color:var(--sf-primary)]/10`). Both themes auto-switch via `--sf-*` tokens under `[data-theme="light"]`. Never hardcode dark-only hex colors.
+
+**Anti-patterns (do not replicate):** solid 4-side borders on cards, `focus:ring-2 focus:ring-blue-500` on inputs, opaque backgrounds without backdrop-blur.
 
 ---
 
@@ -395,7 +434,38 @@ If the edict in p0 has the wrong pointer (e.g., `v0` instead of `v1`), the token
 
 ## AMM Deployment, Diagnosing & Rate Limiting
 
-See [docs/AMM_DEPLOYMENT.md](docs/AMM_DEPLOYMENT.md) for full deployment procedure, diagnostics, and rate limiting reference.
+**Always build AMM WASMs from `https://github.com/Oyl-Wallet/oyl-amm` source — NEVER trust pre-built `prod_wasms/factory.wasm` or `pool.wasm`.** The shipped binaries are routinely incomplete builds (missing write opcodes 0/1/2 — Jan 2026 incident). Build with **Homebrew LLVM** — Apple system clang cannot target wasm32 (`secp256k1-sys` requires it):
+
+```bash
+CC_wasm32_unknown_unknown=/usr/local/opt/llvm/bin/clang \
+AR_wasm32_unknown_unknown=/usr/local/opt/llvm/bin/llvm-ar \
+cargo build --release -p factory --target wasm32-unknown-unknown
+# Same for: -p pool
+```
+
+**Deployment slots (regtest):** Beacon Proxy Template `[4:781000]`, Factory Logic `[4:65500]`, Pool Logic `[4:65496]`, Factory Proxy `[4:65498]` (delegates to logic), Upgradeable Beacon `[4:65499]` (points at pool logic). Init args: factory/beacon proxies use `[3,SLOT,32767,4,IMPL,1]`. After deployment, find the `[2:N]` auth tokens via `protorunes by-address` and call `[4,65498,0,781000,4,65499]:v0:v0` with the factory auth token to initialize the factory.
+
+**Rate limit on `regtest.subfrost.io`:** 20 req/min per IP. CLI deployments make 20–40+ RPC calls each. **Wait 90s between deployments.** Large WASM (>200K) may fail with "error decoding response body" — retry without `--trace`.
+
+**Diagnostic protocol — verify deployed WASMs by opcode probe:**
+
+```bash
+# Slot occupancy: query opcode 99 (GetName)
+# - "unexpected end of file" → empty slot
+# - "Unrecognized opcode"     → WASM exists but no opcode 99
+# - data returned             → opcode 99 works
+# Beacon → impl mapping: query opcode 32765 (0x7ffd) on beacon
+# Factory init check: query opcode 3 (GetAllPools) — should return 16 zero bytes for empty factory
+```
+
+**Common deployment errors:**
+- `Rate limit exceeded` → wait 60–90s
+- `error decoding response body` → drop `--trace` flag
+- `wasm unreachable instruction executed` → test-harness WASM deployed on-chain; rebuild from oyl-amm source
+- `Extcall failed: Unrecognized opcode` for opcodes that should exist → incomplete build; rebuild
+- `balance underflow` in simulation → expected (dry sim has no token inputs); real tx must supply tokens via `incomingAlkanes`
+
+**`subfrost-consensus` test WASMs** (hex-encoded in `alkanes_std_amm_factory_build.rs` etc.) compile for the test harness, use different host imports, and **crash with `unreachable` when deployed on-chain.** Never extract and deploy these.
 
 ---
 
@@ -504,21 +574,17 @@ See [docs/BACKEND_SETUP.md](docs/BACKEND_SETUP.md) for usage examples and local 
 
 ## Regtest Infrastructure
 
-For **regtest-local** (Docker) specifics — WASM UTXO discovery, coinType derivation, transaction patterns, contract IDs, known bugs — see [docs/REGTEST_LOCAL_ALMANAC.md](docs/REGTEST_LOCAL_ALMANAC.md).
+Three regtest variants — different stacks, different gotchas:
 
-### Service URLs (subfrost-regtest, remote)
-- **RPC endpoint:** `https://regtest.subfrost.io/v4/subfrost`
-- **Mining:** Use `bitcoind_generatetoaddress` RPC method
+| Network | Reaches | Notes |
+|---|---|---|
+| `regtest` / `subfrost-regtest` | `https://regtest.subfrost.io/v4/subfrost` | Public hosted endpoint, 20 req/min rate limit. Espo essentials INDEX IS BROKEN — see Workarounds below. |
+| `regtest-local` | `localhost:18888` (via SSH tunnel to metabot) | Docker stack on metabot. Tunnel must be active or all flows fall back to lua. |
+| `qubitcoin-regtest` | `meta.lake.direct` (method-specific routing) | Anvil + qubitcoin-jsonrpc. |
 
-### Kubernetes (regtest-alkanes namespace)
-| Service | Port | Purpose |
-|---------|------|---------|
-| jsonrpc | 18888 | Main RPC gateway (alkanes-jsonrpc) |
-| metashrew-0 | 8080 | Indexer (rockshrew-mono) |
-| esplora-0 | 50010 | Block explorer API |
-| subfrost-rpc | 8545 | FROST signing service |
+**K8s services on metabot regtest-alkanes namespace:** `jsonrpc:18888` (alkanes-jsonrpc), `metashrew-0:8080` (rockshrew-mono indexer), `esplora-0:50010`, `subfrost-rpc:8545` (FROST signing). NodePort map: `alkanes-jsonrpc-np 31945 → 18888`, `esplora-np 31050 → 50010`, `metashrew-nodeport 31080 → 8080`.
 
-### CLI for regtest
+**CLI for hosted regtest:**
 ```bash
 alkanes-cli -p subfrost-regtest \
   --wallet-file ~/.alkanes/wallet.json \
@@ -526,24 +592,160 @@ alkanes-cli -p subfrost-regtest \
   [command]
 ```
 
-### Key Wallet Addresses (regtest)
-- **CLI deployer (p2tr:0):** `bcrt1p0mrr2pfespj94knxwhccgsue38rgmc9yg6rcclj2e4g948t73vssj2j648`
-- **App user (taproot):** `bcrt1pqjwdlfg4lht3jwl0p5u58yn8fc2ksqx5v44g6ekcru5szdm2u32qum3gpe`
-- **App user (segwit):** `bcrt1qvjucyzgwjjkmgl5wg3fdeacgthmh29nv4pk82x`
+**Known wallet addresses (regtest):**
+- CLI deployer (p2tr:0): `bcrt1p0mrr2pfespj94knxwhccgsue38rgmc9yg6rcclj2e4g948t73vssj2j648`
+- App user (taproot): `bcrt1pqjwdlfg4lht3jwl0p5u58yn8fc2ksqx5v44g6ekcru5szdm2u32qum3gpe`
+- App user (segwit): `bcrt1qvjucyzgwjjkmgl5wg3fdeacgthmh29nv4pk82x`
 
-### Metabot SSH tunnel + hosted regtest funding
+### Metabot SSH tunnel (regtest-local)
 
-Operational recipes for both regtest backends are in their respective docs:
+Tunnel must be up before any `regtest-local` flow:
+```bash
+ssh -fN -L 18888:localhost:31945 -L 18889:localhost:31945 -L 50010:localhost:31050 \
+  -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=no -o ServerAliveInterval=30 \
+  ubuntu@192.168.10.140
+# Verify
+curl -s -m 5 http://localhost:18889 -X POST -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","method":"metashrew_height","params":[],"id":1}'
+```
 
-- **Metabot SSH tunnel checklist** (regtest-local): tunnel bring-up, mining, case-statement gotchas, and the `protorunesbyoutpoint` vs `protorunesbyaddress` index split — see [docs/REGTEST_LOCAL_ALMANAC.md](docs/REGTEST_LOCAL_ALMANAC.md).
-- **Hosted regtest funding recipe** (`regtest.subfrost.io`): `bitcoind_loadwallet` flow, dual-coinType derivation requirements, and the SDK unwrap-discovery blocker — see [docs/HOSTED_REGTEST_WORKAROUNDS.md](docs/HOSTED_REGTEST_WORKAROUNDS.md).
+**Diagnose-upstream-first rule.** When swap/wrap/send flows feel slow on `regtest-local` ("Building Transaction…" forever, `bad-txns-inputs-missingorspent`, `Can not sign for this input`), check the tunnel BEFORE touching code: `nc -zv 127.0.0.1 18888`. A dead tunnel makes the SDK fall back to lua paths and the public regtest endpoint, producing many symptoms that look like code bugs but are environmental.
 
-**Diagnose-upstream-first rule.** When swap/wrap/send flows feel slow on `regtest-local` ("Building Transaction…" forever, `bad-txns-inputs-missingorspent`, `Can not sign for this input`), check the SSH tunnel **before** touching code: `nc -zv 127.0.0.1 18888`. A dead tunnel makes the SDK fall back to lua paths and the public regtest endpoint, producing many symptoms that look like code bugs but are environmental.
+**Mining is manual on metabot.** bitcoind doesn't auto-mine and new mempool txs are flagged `unbroadcast=true` — `generatetoaddress` produces empty blocks that don't include them. After every state-mutating tx, mine via wallet/settings page Mine 1 Block button OR:
+```bash
+ssh ubuntu@192.168.10.140 \
+  "kubectl exec -n regtest-alkanes bitcoind-0 -- \
+   bitcoin-cli -regtest -rpcuser=bitcoinrpc -rpcpassword=bitcoinrpc \
+   prioritisetransaction <txid> 0 1000000 && \
+   bitcoin-cli -regtest -rpcuser=bitcoinrpc -rpcpassword=bitcoinrpc \
+   generatetoaddress 1 'bcrt1q6rz28mcfaxtmd6v789l9rrlrusdprr9pz3cppk'"
+```
+
+**`regtest-local` case-statement gotcha.** When adding flows or touching network-conditional code, grep for `regtest-local` and confirm it's listed wherever the other regtest variants are. Common gaps: `utils/getConfig.ts` factory IDs, `lib/alkanes/constants.ts` `SIGNER_ADDRESSES`, `useWrapMutation`/`useWrapSwapMutation` dynamic-signer trigger gate, `app/api/rpc/[[...segments]]/route.ts` (devnet returns 503 — `regtest-local` MUST NOT be conflated), `useActualAddresses` allowlist (canonical trio: `['devnet', 'regtest-local', 'qubitcoin-regtest']` — extend to include `'regtest'` and `'subfrost-regtest'` for keystore-on-hosted flows).
+
+**Two alkane indexes — different update semantics:**
+- `alkanes_protorunesbyoutpoint(txid, vout)` — outpoint-keyed; updates on every contract execution that mutates protorune state. Always reflects current chain state.
+- `alkanes_protorunesbyaddress({address})` — address-keyed; only updates when the alkane runtime's trace records a `Success` transfer event. Does NOT reflect a balance change if the trace shows a revert, even when the underlying outpoint has the balance.
+
+These can disagree. Concrete failure: re-broadcasting an in-flight wrap via `bitcoin-cli sendrawtransaction` triggers fr-btc's `/seen/<txid>` guard, which reverts the second invocation. The first invocation's mint already credited the outpoint, so `protorunesbyoutpoint` shows it — but `protorunesbyaddress` doesn't because the most-recent trace for that txid is a revert. **The SDK's UTXO discovery is address-index-based** (`dataApiGetAlkanesUtxo`, lua, `protorunesbyaddress`), so an alkane visible only via `protorunesbyoutpoint` is invisible to the SDK and effectively unspendable. Guidance: never `bitcoin-cli sendrawtransaction` to nudge an unbroadcast tx; mine via the wallet UI button (NOT `prioritisetransaction`); on zombie state, fresh-wallet-fresh-wrap is the recovery.
+
+### Hosted regtest workarounds (`network === 'regtest'`)
+
+Hosted regtest's espo essentials index is broken: `lib/balances/lib.rs` skips writing `/balances/<address>/...` entries when the trace return status isn't `Success`. fr-btc's `/seen/<txid>` guard makes EVERY wrap trace as a revert (metashrew invokes the protostone twice per block), so the address-keyed alkane index never populates. Fix is upstream (espo team must read balances from `protorunes_by_outpoint` instead of relying on trace events). Until then, the codebase carries these compensating workarounds:
+
+1. **`AlkanesSDKContext.tsx`** loads the session mnemonic on `regtest`/`subfrost-regtest` (otherwise WASM provider has a random dummy wallet, no esplora script-history, "Script not found for hash" on unwrap).
+2. **`useActualAddresses` allowlists** include `'regtest'`/`'subfrost-regtest'` in every mutation hook (otherwise symbolic `p2tr:0` resolves to dummy wallet → token loss).
+3. **Proxy enrichment** in `app/api/rpc/[[...segments]]/route.ts` synthesizes `essentials.get_address_outpoints` and `get-alkanes-utxo` responses from `protorunesbyoutpoint` data when espo returns empty.
+4. **`alkaneBalanceQueryOptions`** routes hosted regtest through `alkanes_protorunesbyaddress` JSON-RPC instead of the broken `dataApiGetAlkanesByAddress`.
+5. **Compile-time fr-btc capability gate** (`lib/alkanes/contractFeatures.ts`): `unwrap: false` for `mainnet`/`testnet`/`signet`/`regtest`/`regtest-local`/`qubitcoin-regtest`/`subfrost-regtest`/`oylnet`, only `devnet: { unwrap: true }`. The deployed `[32:0]` contract returns "Unrecognized opcode" for opcode 78. `useUnwrapMutation` throws synchronously before any PSBT build via `getFrBtcFeatures(network).unwrap` check. UI stays visible (synchronous gate is cheap; hiding requires SwapShell surgery; one-line flip on contract upgrade).
+6. **`buildAlkaneTransferPsbt`** (`fetchAlkaneOutpoints` / `fetchOrdOutputs`) routes through dev-server proxy `/api/rpc/<network>` to avoid CORS; direct `regtest.subfrost.io` calls were a universal correctness bug.
+
+**When NOT to add a regtest workaround:** if the bug also exists on mainnet → fix universally; if hosted regtest has stale state → redeploy/reset; if the fix is one line in espo/indexer source → push upstream, don't hardcode.
+
+**Hosted regtest funding recipe.** Use the `regtest` bitcoind wallet pre-loaded server-side. No API key needed for `bitcoind_*` JSON-RPC. Sequence: `bitcoind_loadwallet` → `bitcoind_sendtoaddress` (10 positional args, fee_rate is 10th) → `bitcoind_prioritisetransaction` → `bitcoind_generatetoaddress`. **Critical: fund BOTH coinType=0 AND coinType=1 derivations** — JS SDK uses coinType=0 (UI balance display), WASM provider uses coinType=1 (on-chain mints land here). Paths: `m/86'/0'/0'/0/0` + `m/84'/0'/0'/0/0` for UI; `m/86'/1'/0'/0/0` + `m/84'/1'/0'/0/0` for on-chain.
+
+**Mainnet contract slot status (snapshot 2026-04-26 at height 946780):** AMM factory `4:65522` ✅ alive, BUSD `2:56801` ✅, BUSD splitter `4:76` ✅, frBTC `32:0` ✅ (Wrap works, opcode 78 missing), DIESEL claim distributor `2:70003` ✅, FIRE `4:256–261` ❌ NOT DEPLOYED (slots return `unexpected end of file`). frZEC and frETH config keys are empty (already gated). FIRE UI is non-functional on mainnet today regardless of frontend work — flagged for visibility, contract team task.
+
 ---
 
 ## Devnet Testing & QA
 
-See [docs/DEVNET_TESTING.md](docs/DEVNET_TESTING.md) for full testing methodology, boot phases, vitest rules, browser-safe parsing, and opcode mapping reference.
+**Two-tier testing.** Vitest runs an in-process WASM indexer for fast contract-level verification. Browser devnet runs the full stack for human QA. Code changes must pass BOTH tiers — they can disagree (proxy delegatecall extcalls silently fail in vitest but work in browser; `Buffer.readBigUInt64LE` works in vitest but fails in browser polyfill).
+
+**Tier 1 — Vitest E2E:**
+```bash
+npx vitest run __tests__/devnet/e2e-vault-fire-gauge.test.ts --testTimeout=900000
+npx vitest run __tests__/devnet/e2e-fire.test.ts --testTimeout=900000
+npx vitest run __tests__/devnet/e2e-carbine-clob.test.ts --testTimeout=900000
+npx vitest run hooks/__tests__/vaultFullCoverage.vitest.test.ts
+```
+
+**Tier 2 — Browser devnet:** `pnpm dev` → open `localhost:3000` → boot runs automatically (2–3 min), or use `DevnetControlPanel "Clear & Reload"` for fresh state. All boot logs go to `/tmp/subfrost-boot.log` (the interceptor in `bootDevnetWithWasms()` captures `[devnet-boot]` console lines, batches up to 10 per POST every 300ms, relays to `/api/boot-log`). Diagnose with `grep -E "ERROR|WARN|failed|Insufficient|unexpected end|not found in keystore" /tmp/subfrost-boot.log`.
+
+**Browser-safe binary parsing.** boot.ts runs in the browser. **NEVER use** `Buffer.readBigUInt64LE()` / `readBigInt64LE()` / any Buffer method that returns `BigInt` — not in browser polyfill. **ALWAYS use** the helpers in boot.ts: `parseLeU128FromHex(hex, byteOffset)` (returns number, safe for < MAX_SAFE_INTEGER) or `parseLeU128BigInt(hex, byteOffset)` (returns bigint). The 2026-04-03 boot seeding failure was caused by `readBigUInt64LE` returning "not a function" — poolId came back empty, all seeding skipped.
+
+**Opcode mapping — read `alkanes.toml`, NOT WIT declaration order.** The code generator assigns opcodes from the toml's `[opcodes]` section. Example from `dx-btc/alkanes.toml`: `total-assets = 11` (NOT 7), `convert-to-shares = 12` (NOT 8), `get-twap-rate = 31` (NOT 15), `get-name = 99` (NOT 16). Before writing ANY contract call, read `reference/subfrost-alkanes/alkanes/{contract}/alkanes.toml`.
+
+**⚠️ Proxy & Beacon init opcodes — DO NOT CHANGE.** Standard alkanes WASMs require specific init opcodes; the wrong one causes ALL calls through the proxy/beacon to silently fail (transactions broadcast but protorune execution reverts; no error visible).
+
+| WASM | Init opcode | Effect |
+|---|---|---|
+| `alkanes_std_upgradeable.wasm` | `0x7fff` (32767) | Stores implementation pointer |
+| `alkanes_std_upgradeable_beacon.wasm` | `0x7fff` (32767) | Stores impl pointer + mints auth token |
+| `alkanes_std_beacon_proxy.wasm` | **`0x7fff` (32767)** | Stores beacon pointer. NOT `0x8fff` — that's `forward` (no-op) |
+
+In `boot.ts`, `deployWithProxy` / `deployWithBeacon` / `deployBeaconInstance` ALL use `0x7fff`. **Never change `deployBeaconInstance` to `0x8fff`** — the proxy "deploys" but the beacon pointer is never stored, every delegatecall fails with "unexpected end of file".
+
+**Auth token discovery.** Proxy deployments mint an auth token at `[2:N]`. `discoverAuthTokens(address)` scans `alkanes_protorunesbyaddress` for `block === 2` entries; the last token belongs to the most recent deployment. Auth tokens are checked but forwarded back to the caller — one token can authorize multiple admin operations in sequence.
+
+**UTXO bloat / `fromAddressesOverride`.** By Phase 9+, segwit has 300+ UTXOs from prior deploys. The WASM PSBT builder is O(n²) on UTXO count — passing both `[segwit, taproot]` as `from_addresses` can hang the JS thread. For late-boot operations not needing alkane tokens, pass `fromAddressesOverride: [taproot]` (taproot has ~5 UTXOs). For operations needing alkane tokens that may live on segwit UTXOs, omit the override so both addresses are searched.
+
+**Common boot seeding failures:**
+1. `poolId` empty → Phase 2 pool discovery used `readBigUInt64LE` (use `parseLeU128FromHex`)
+2. `DIESEL=0 frBTC=0` → alkane UTXOs consumed by `deployWasm` fee inputs (see "Alkane UTXO Model"); fix is re-mint in Phase 10a before seeding
+3. `Skipping CLOB seeding — could not determine AMM spot price` → reserves query empty
+4. `Insufficient alkanes: need X of Y, have 0` → tokens exist in contract state but NOT in wallet UTXOs (consumed as BTC fee inputs by prior txs)
+
+**Vitest devnet test authoring rules:**
+- **Never call `restoreSnapshot()` then `executeAlkanes()` in the same test** unless it's the very first test in the suite. `importState(blob)` restores indexer state to snapshot height N but NOT bitcoind chain height (still at N+k from prior tests). The WASM provider checks `metashrew_height == getblockcount` before broadcasting; divergence times out.
+- Run integration tests sequentially with cumulative state. Use delta-based assertions, not absolutes.
+- `simulate()` (read-only RPC) is safe after `restoreSnapshot()` — it doesn't trigger the sync check.
+- **Wallet options format matters:** `deployWasm` (envelope) uses `{ from, change_address, alkanes_change_address, mine_enabled: true }`; `executeAlkanes` (regular tx) uses `{ from_addresses, change_address, alkanes_change_address, ordinals_strategy: 'burn' }`. `mine_enabled: true` is REQUIRED for envelope deploys, NEVER for regular calls.
+- `simulate()` params: `transaction: '0x'` and `block: '0x'` as STRINGS, not arrays.
+
+---
+
+## Carbine CLOB
+
+**ALL frontend interaction goes through the controller proxy `[4:70000]`.** Never call the impl directly.
+
+**Contract IDs (devnet, `boot.ts PROTOCOL_SLOTS`):**
+- Controller proxy `[4:70000]` (CARBINE_CTRL_PROXY) — call here
+- Controller impl `[4:80000]` (CARBINE_CTRL_IMPL)
+- Template impl `[4:80001]` (CARBINE_TMPL_IMPL)
+- Template beacon `[4:90001]` (CARBINE_TMPL_BEACON)
+- Default instance `[4:70001]` (CARBINE_TEMPLATE)
+- Universal Router impl `[4:80002]` (UNIVERSAL_ROUTER_IMPL), proxy `[4:70002]` (UNIVERSAL_ROUTER_PROXY)
+
+Config: `getConfig(network).CARBINE_CONTROLLER_ID` → `"4:70000"` on devnet.
+
+**⚠️ Init opcode trap — Carbine contracts do NOT support opcode 50.** The default `deployWithProxy` / `deployWithBeacon` helpers init with opcode 50, which CREATERESERVED reverts atomically — WASM never stored, every future call fails "unexpected end of file". Use contract-specific safe opcodes:
+
+| Contract | Init args | Opcode meaning |
+|---|---|---|
+| Controller impl `[4:80000]` | `[0, 0, 0]` | Initialize(template_block=0, tx=0) — dummy |
+| Controller proxy `[4:70000]` | `[0x7fff, 4, 80000, 1]` | upgradeable proxy setup |
+| Template impl `[4:80001]` | `[3]` | query_metadata (read-only, safe) |
+| Template beacon `[4:90001]` | `[0x7fff, 4, 80001, 1]` | upgradeable beacon setup |
+| Router impl `[4:80002]` | `[0]` | Initialize — writes to impl storage, safe |
+
+After deploy, initialize controller through proxy: `[4,70000,0,4,70001]` (opcode 0 = Initialize, args = real template).
+
+**Controller opcodes (call proxy):**
+- `20` PlaceLimitOrder: `[20, base_block, base_tx, quote_block, quote_tx, side, price_scaled, amount_scaled]` where side=0/1=buy/sell, prices/amounts scaled ×1e8
+- `24` GetOrderbookDepth: `[24, base_block, base_tx, quote_block, quote_tx, depth]`
+- `25` GetOpenOrderCount: `[25]`
+- `21` Cancel order (used by `useCancelOrderMutation`)
+
+**`PlaceLimitOrder` inputRequirements:**
+- Sell (side=1): base token, `inputRequirements = "base_token_id:amount_scaled"`
+- Buy (side=0): quote token, `inputRequirements = "quote_token_id:(price_scaled * amount_scaled / 1e8)"`
+
+After broadcasting on devnet, **mine a block** or the order never executes.
+
+**`GetOrderbookDepth` binary response:** `u32 LE numBids` (4 bytes) → `[u128 LE price, u128 LE amount] × numBids` → `u32 LE numAsks` → `[u128 LE price, u128 LE amount] × numAsks`. Prices in 1e8 units (divide for display). **Ask prices ALREADY un-inverted by the contract** (lib.rs:760: `let real_price = u128::MAX - token_id`) — DO NOT un-invert in the parser. `useOrderbook.ts` is correct as-is. Filter `amount === 0` (empty padding); price=0 IS a valid order. No deduplication needed: buy/sell occupy separate trie halves.
+
+**⚠️ Pair ordering trap.** The controller hashes `(base, quote)` in the order provided to PlaceLimitOrder. Querying with the wrong order returns 8 zero bytes. Orders placed with DIESEL(2:0) base + frBTC(32:0) quote are stored under `(frBTC=32:0, DIESEL=2:0)` — quote becomes first key component. `useOrderbook.ts` tries BOTH pair orderings and uses whichever returns non-empty data.
+
+**"Insufficient alkanes" on Carbine sells = stale IndexedDB cache.** Not a code bug. Fix: `DevnetControlPanel → "Clear & Reload"` (wipes IndexedDB + re-runs full boot).
+
+**`useSandshrewProvider` (correct) vs `useAlkanesSDK` (wrong) on devnet.** `lib/alkanes/execute.ts` detects devnet (sandshrew_rpc_url contains `localhost:18888`) and auto-switches to `alkanesExecuteFull`. Only fires through `useSandshrewProvider()`. Going direct via `useAlkanesSDK().provider.alkanesExecuteTyped(...)` bypasses devnet detection — may fail "have 0".
+
+**`useActualAddresses` MANDATORY** on every Carbine mutation hook: `isBrowserWallet || network === 'devnet'`. Symbolic `p2tr:0` resolves to SDK dummy wallet on devnet → tokens to wrong addresses.
+
+**Universal Router opcodes** (source: `alkanes/universal-router/alkanes.toml`): 0 initialize, 1 swap, 2 quote, 3 add-route, 10 get-routes, **11 get-controller** (NOT 5), 99 get-name. Router init can hang boot.ts due to UTXO bloat — pass `fromAddressesOverride: [taproot]`.
+
+Source files: `hooks/useOrderbook.ts`, `hooks/useLimitOrderMutation.ts`, `hooks/useCancelOrderMutation.ts`, `app/swap/components/OrderbookPanel.tsx`, `app/swap/components/LimitOrderPanel.tsx`, `lib/devnet/boot.ts` Phase 3a.
 
 ---
 
@@ -661,9 +863,3 @@ All input alkanes automatically go to the FIRST protostone with matching `protoc
 - **Factory router for swaps**: Use factory opcode 13, not pool opcode 3 (pool's Swap is missing)
 - **WASM sync**: Always copy `lib/oyl/alkanes/` after SDK rebuild
 - **DUST_VALUE = 600 sats** (not 546) for relay compatibility
-
----
-
-## Carbine CLOB
-
-See [docs/CARBINE_CLOB.md](docs/CARBINE_CLOB.md) for full Carbine CLOB reference: contract IDs, opcodes, binary format, pair ordering, deployment, verification scripts, and test inventory.
