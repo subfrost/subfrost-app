@@ -31,6 +31,11 @@ export interface AlkanesExecuteTypedParams {
    *  Set to false for single-address wallets (UniSat, OKX) where taproot is the only address.
    */
   protectTaproot?: boolean;
+  /** Clean BTC UTXOs for fee funding from wallet API (e.g. UniSat getBitcoinUtxos).
+   *  Format: ["txid:vout:satoshis", ...]. When provided, SDK uses ONLY these for BTC fees —
+   *  skips lua get_utxos entirely. Alkane UTXOs still discovered via espo.
+   */
+  paymentUtxos?: string[];
   /** Network name — used to reliably detect devnet (instead of URL sniffing). */
   network?: string;
 }

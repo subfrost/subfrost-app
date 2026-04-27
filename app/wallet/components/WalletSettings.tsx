@@ -63,7 +63,7 @@ export default function WalletSettings() {
       case 'signet': return 'Signet';
       case 'regtest': return 'Local Regtest (localhost)';
       case 'regtest-local': return 'Local Docker (localhost:18888)';
-      case 'qubitcoin-regtest': return 'Qubitcoin Regtest (meta.lake.direct)';
+      case 'qubitcoin-regtest': return 'Qubitcoin Regtest (local)';
       case 'subfrost-regtest': return 'Subfrost Regtest (regtest.subfrost.io)';
       case 'devnet': return 'Devnet (in-browser)';
       default: return networkType;

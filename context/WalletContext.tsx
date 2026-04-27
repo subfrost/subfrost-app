@@ -723,7 +723,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       };
     }
 
-    let segwitInfo = wallet.deriveAddress(AddressType.P2WPKH, 0, 0);
+    let segwitInfo = { address: '', publicKey: '' };
     let taprootInfo = wallet.deriveAddress(AddressType.P2TR, 0, 0);
 
     // No coinType override needed — createWalletViaClient uses AlkanesClient.withMnemonic
@@ -748,9 +748,9 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
 
     return {
       nativeSegwit: {
-        address: segwitInfo.address,
-        pubkey: segwitInfo.publicKey,
-        hdPath: segwitInfo.path,
+        address: segwitInfo.address || '',
+        pubkey: segwitInfo.publicKey || '',
+        hdPath: (segwitInfo as any).path || '',
       },
       taproot: {
         address: taprootInfo.address,

@@ -25,10 +25,12 @@ export async function POST(request: NextRequest) {
     const LOCAL_NETWORKS = ['regtest-local', 'devnet'];
     const isLocal = LOCAL_NETWORKS.includes(network ?? '');
     const isQubitcoin = network === 'qubitcoin-regtest';
+    const QBC_HOST = process.env.QUBITCOIN_REGTEST_HOST || '127.0.0.1';
+    const QBC_LOCAL = QBC_HOST === '127.0.0.1' || QBC_HOST === 'localhost';
     const rpcUrl = isLocal
       ? 'http://localhost:18888'
       : isQubitcoin
-        ? 'https://meta.lake.direct'
+        ? (QBC_LOCAL ? `http://${QBC_HOST}:19443` : `http://${QBC_HOST}:31944`)
         : 'https://regtest.subfrost.io/v4/subfrost';
 
     // qubitcoin uses native bitcoin RPC method names (no bitcoind_ prefix)

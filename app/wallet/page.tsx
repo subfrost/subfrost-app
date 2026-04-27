@@ -26,11 +26,11 @@ export default function WalletDashboardPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const tabParam = searchParams.get('tab') as TabView | null;
-  const [activeTab, setActiveTab] = useState<TabView>(tabParam && ['balances', 'utxos', 'transactions', 'settings'].includes(tabParam) ? tabParam : 'balances');
+  const [activeTab, setActiveTab] = useState<TabView>(tabParam && ['utxos', 'transactions', 'settings'].includes(tabParam) ? tabParam : 'transactions');
 
   // Update activeTab when URL changes
   useEffect(() => {
-    if (tabParam && ['balances', 'utxos', 'transactions', 'settings'].includes(tabParam)) {
+    if (tabParam && ['utxos', 'transactions', 'settings'].includes(tabParam)) {
       setActiveTab(tabParam);
     }
   }, [tabParam]);
@@ -73,7 +73,6 @@ export default function WalletDashboardPage() {
 
   // Settings tab is rendered separately for responsive control
   const tabs = [
-    { id: 'balances' as TabView, label: 'Other Balances', shortLabel: 'Other Balances', mobileLabel: 'Others', icon: Wallet, disabled: false },
     { id: 'transactions' as TabView, label: t('walletDash.transactionHistory'), shortLabel: t('walletDash.history'), icon: Activity, disabled: false },
     { id: 'utxos' as TabView, label: t('walletDash.utxos'), shortLabel: t('walletDash.utxos'), mobileLabel: 'UTXOs', icon: BarChart2, disabled: true },
   ];
@@ -233,7 +232,7 @@ export default function WalletDashboardPage() {
 
               {/* Tab Content */}
               <div className="animate-fadeIn">
-                {activeTab === 'balances' && <BalancesPanel />}
+                {/* BalancesPanel removed — BRC20/Runes/Ordinals not supported yet */}
                 {activeTab === 'utxos' && <UTXOManagement />}
                 {activeTab === 'transactions' && <TransactionHistory ref={txHistoryRef} />}
                 {activeTab === 'settings' && <WalletSettings />}

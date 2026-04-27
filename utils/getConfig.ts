@@ -8,14 +8,14 @@
 
 // Subfrost API base URLs per network
 export const SUBFROST_API_URLS: Record<string, string> = {
-  mainnet: 'https://mainnet.subfrost.io/v4/subfrost',
-  testnet: 'https://testnet.subfrost.io/v4/subfrost',
-  signet: 'https://signet.subfrost.io/v4/subfrost',
-  regtest: 'https://regtest.subfrost.io/v4/subfrost',
+  mainnet: 'https://mainnet.subfrost.io/v4/5d37098b75581792a44b9d230d48aa75',
+  testnet: 'https://testnet.subfrost.io/v4/5d37098b75581792a44b9d230d48aa75',
+  signet: 'https://signet.subfrost.io/v4/5d37098b75581792a44b9d230d48aa75',
+  regtest: 'https://regtest.subfrost.io/v4/5d37098b75581792a44b9d230d48aa75',
   'regtest-local': 'http://localhost:18888',
   'qubitcoin-regtest': 'https://meta.lake.direct',
-  'subfrost-regtest': 'https://regtest.subfrost.io/v4/subfrost',
-  oylnet: 'https://regtest.subfrost.io/v4/subfrost',
+  'subfrost-regtest': 'https://regtest.subfrost.io/v4/5d37098b75581792a44b9d230d48aa75',
+  oylnet: 'https://regtest.subfrost.io/v4/5d37098b75581792a44b9d230d48aa75',
   devnet: 'http://localhost:18888', // Intercepted by DevnetProvider fetch interceptor
 };
 

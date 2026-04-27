@@ -147,9 +147,10 @@ export default function RegtestControls() {
         protostones: '[2,0,77]:v0:v0',
         feeRate: isQubitcoin ? 5 : 1,
         toAddresses: [taprootAddress],
-        fromAddresses: [segwitAddress, taprootAddress].filter(Boolean) as string[],
-        changeAddress: segwitAddress || taprootAddress,
+        fromAddresses: [taprootAddress],
+        changeAddress: taprootAddress,
         alkanesChangeAddress: taprootAddress,
+        protectTaproot: false,
       });
 
       const txId = result?.txid || result?.reveal_txid || '';
@@ -192,8 +193,8 @@ export default function RegtestControls() {
       const result = await execProvider.alkanesWrapBtc(JSON.stringify({
         amount: 10_000_000, // 0.1 BTC in sats
         to_address: taprootAddress,
-        from_addresses: [segwitAddress, taprootAddress].filter(Boolean),
-        change_address: segwitAddress || taprootAddress,
+        from_addresses: [taprootAddress],
+        change_address: taprootAddress,
         fee_rate: isQubitcoin ? 5 : 1,
         lock_alkanes: true,
         mine_enabled: true,

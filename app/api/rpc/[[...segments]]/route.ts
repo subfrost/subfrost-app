@@ -23,14 +23,14 @@ import { NextRequest, NextResponse } from 'next/server';
 
 // All RPC endpoints point to subfrost infrastructure
 const RPC_ENDPOINTS: Record<string, string> = {
-  mainnet: 'https://mainnet.subfrost.io/v4/subfrost',
-  testnet: 'https://testnet.subfrost.io/v4/subfrost',
-  signet: 'https://signet.subfrost.io/v4/subfrost',
-  regtest: 'https://regtest.subfrost.io/v4/subfrost',
+  mainnet: 'https://mainnet.subfrost.io/v4/5d37098b75581792a44b9d230d48aa75',
+  testnet: 'https://testnet.subfrost.io/v4/5d37098b75581792a44b9d230d48aa75',
+  signet: 'https://signet.subfrost.io/v4/5d37098b75581792a44b9d230d48aa75',
+  regtest: 'https://regtest.subfrost.io/v4/5d37098b75581792a44b9d230d48aa75',
   'regtest-local': 'http://localhost:18888',
   'qubitcoin-regtest': 'https://meta.lake.direct',
-  'subfrost-regtest': 'https://regtest.subfrost.io/v4/subfrost',
-  oylnet: 'https://regtest.subfrost.io/v4/subfrost',
+  'subfrost-regtest': 'https://regtest.subfrost.io/v4/5d37098b75581792a44b9d230d48aa75',
+  oylnet: 'https://regtest.subfrost.io/v4/5d37098b75581792a44b9d230d48aa75',
 };
 
 // Batch JSON-RPC requests are more reliably handled by the explicit /jsonrpc path
@@ -65,10 +65,13 @@ export async function POST(
 
     // Qubitcoin-regtest service URLs (VPN-only, from env)
     const QBC_HOST = process.env.QUBITCOIN_REGTEST_HOST || '127.0.0.1';
-    const QBC_METASHREW = `http://${QBC_HOST}:31080`;
-    const QBC_ESPLORA = `http://${QBC_HOST}:31050`;
-    const QBC_JSONRPC = `http://${QBC_HOST}:31944`;
-    const QBC_ESPO = `http://${QBC_HOST}:31578`;
+    const QBC_LOCAL = QBC_HOST === '127.0.0.1' || QBC_HOST === 'localhost';
+    // Local qubitcoind: all services on single port 19443 (built-in indexers)
+    // Remote k3s: separate services on NodePorts
+    const QBC_METASHREW = QBC_LOCAL ? `http://${QBC_HOST}:19443` : `http://${QBC_HOST}:31080`;
+    const QBC_ESPLORA = QBC_LOCAL ? `http://${QBC_HOST}:19443` : `http://${QBC_HOST}:31050`;
+    const QBC_JSONRPC = QBC_LOCAL ? `http://${QBC_HOST}:19443` : `http://${QBC_HOST}:31944`;
+    const QBC_ESPO = QBC_LOCAL ? `http://${QBC_HOST}:31578` : `http://${QBC_HOST}:31578`;
 
     if (segments && segments.length > 0) {
       // Path-based: /api/rpc/mainnet  or  /api/rpc/mainnet/get-alkanes-by-address
@@ -211,7 +214,14 @@ export async function POST(
     const method = Array.isArray(body) ? 'batch' : body?.method;
     console.log(`[RPC Proxy] ${method} -> ${targetUrl}`);
 
-    const response = await fetch(targetUrl, {
+    // Fallback endpoint for mainnet when primary hits metashrew-unwrap errors
+    const FALLBACK_ENDPOINTS: Record<string, string> = {
+      mainnet: 'https://mainnet.subfrost.io/v4/jsonrpc',
+      testnet: 'https://testnet.subfrost.io/v4/jsonrpc',
+      signet: 'https://signet.subfrost.io/v4/jsonrpc',
+    };
+
+    let response = await fetch(targetUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -219,7 +229,7 @@ export async function POST(
 
     // Read the response body once. Upstream is always JSON-RPC, but infrastructure
     // errors (nginx 502, rate limits, service unavailable) may return plain text or HTML.
-    const responseText = await response.text();
+    let responseText = await response.text();
     let data;
     try {
       data = JSON.parse(responseText);
@@ -232,6 +242,23 @@ export async function POST(
         { jsonrpc: '2.0', error: { code: -32603, message: `Upstream error (${response.status}): ${snippet}` }, id: body?.id ?? null },
         { status: 502 }
       );
+    }
+
+    // Retry on metashrew-unwrap errors — fallback to /v4/jsonrpc which routes correctly
+    if (data?.error?.message?.includes('metashrew-unwrap') && network && FALLBACK_ENDPOINTS[network]) {
+      console.log(`[RPC Proxy] metashrew-unwrap error, retrying via fallback: ${FALLBACK_ENDPOINTS[network]}`);
+      try {
+        const fallbackResp = await fetch(FALLBACK_ENDPOINTS[network], {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        const fallbackText = await fallbackResp.text();
+        const fallbackData = JSON.parse(fallbackText);
+        if (!fallbackData?.error) {
+          data = fallbackData;
+        }
+      } catch { /* fallback failed, use original error */ }
     }
 
     // Non-200 status with valid JSON body — forward the JSON-RPC error as-is

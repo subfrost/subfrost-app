@@ -97,6 +97,7 @@ export async function alkanesExecuteTyped(
   if (params.rawOutput !== undefined) options.raw_output = params.rawOutput;
   if (params.ordinalsStrategy !== undefined) options.ordinals_strategy = params.ordinalsStrategy;
   if (params.protectTaproot !== undefined) options.protect_taproot = params.protectTaproot;
+  if (params.paymentUtxos?.length) options.payment_utxos = params.paymentUtxos;
 
   const toAddressesJson = JSON.stringify(toAddresses);
   const optionsJson = JSON.stringify(options);

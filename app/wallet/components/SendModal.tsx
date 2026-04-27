@@ -255,7 +255,49 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
   const alkaneProvider = useSandshrewProvider();
   const { requestConfirmation } = useTransactionConfirm();
   const { t } = useTranslation();
-  const { utxos, balances, refresh } = useEnrichedWalletData();
+  const { balances, refresh } = useEnrichedWalletData();
+
+  // Fetch UTXOs via esplora when modal opens — no lua dependency.
+  const [esploraUtxos, setEsploraUtxos] = useState<any[]>([]);
+  useEffect(() => {
+    if (!isOpen) return;
+    const addresses = [account?.taproot?.address, account?.nativeSegwit?.address].filter(Boolean);
+    if (addresses.length === 0) return;
+    const rpcPath = network ? `/api/rpc/${network}` : '/api/rpc';
+
+    (async () => {
+    // Fetch current height for coinbase maturity filtering on regtest
+    const heightResp = await fetch(rpcPath, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', method: 'metashrew_height', params: [], id: 99 }),
+    }).then(r => r.json()).catch(() => ({ result: '0' }));
+    const currentHeight = parseInt(String(heightResp.result || '0'), 10);
+
+    await Promise.all(addresses.map(async (addr) => {
+      try {
+        const resp = await fetch(rpcPath, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ jsonrpc: '2.0', method: 'esplora_address::utxo', params: [addr], id: 1 }),
+        });
+        const json = await resp.json();
+        return (json.result || []).map((u: any) => {
+          const height = u.status?.block_height || 0;
+          const confirmations = currentHeight > 0 && height > 0 ? currentHeight - height + 1 : 0;
+          return {
+            txid: u.txid, vout: u.vout, value: u.value, address: addr,
+            status: { confirmed: u.status?.confirmed ?? true, block_height: height },
+            // Mark immature coinbase — regtest UTXOs are mostly coinbase
+            _immature: confirmations > 0 && confirmations < 100,
+          };
+        });
+      } catch { return []; }
+    })).then(results => setEsploraUtxos(results.flat().filter((u: any) => !u._immature)));
+    })();
+  }, [isOpen, account, network]);
+
+  const utxos = { p2wpkh: [] as any[], p2tr: esploraUtxos, all: esploraUtxos };
   const { selection: feeSelection, setSelection: setFeeSelection, custom: customFeeRate, setCustom: setCustomFeeRate, feeRate, presets } = useFeeRate({ storageKey: 'subfrost-send-fee-rate' });
 
   const [recipientAddress, setRecipientAddress] = useState('');
@@ -359,16 +401,8 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
     return true;
   });
 
-  // Debug: Log UTXO distribution
-  console.log('[SendModal] BTC addresses:', allBtcAddresses);
-  console.log('[SendModal] Total UTXOs:', utxos.all.length);
-  console.log('[SendModal] UTXOs by address:', {
-    segwit: utxos.all.filter(u => u.address === paymentAddress).length,
-    taproot: utxos.all.filter(u => u.address === taprootAddress).length,
-    other: utxos.all.filter(u => !allBtcAddresses.includes(u.address)).length,
-  });
-  console.log('[SendModal] Available UTXOs (both addresses, clean):', availableUtxos.length);
-  console.log('[SendModal] Total value available:', (availableUtxos.reduce((sum, u) => sum + u.value, 0) / 1e8).toFixed(8), 'BTC');
+  // UTXO distribution logged only in dev when data actually changes
+
 
   const totalSelectedValue = Array.from(selectedUtxos)
     .map((key) => {
@@ -912,17 +946,27 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
       console.log('[SendModal] Fee rate:', feeRate, 'sat/vB');
       console.log('[SendModal] From address:', btcSendAddress);
 
-      // Use WASM provider's walletSend method
-      const sendParams = {
-        address: normalizedRecipientAddress,
-        amount: amountSats,
-        fee_rate: feeRate,
-        from: [btcSendAddress],
-        lock_alkanes: true,
-        auto_confirm: true,
-      };
+      // Use alkanesExecuteTyped with payment_utxos for mature UTXO filtering
+      const matureUtxoStrings = esploraUtxos
+        .filter(u => u.status?.confirmed)
+        .map(u => `${u.txid}:${u.vout}:${u.value}`);
 
-      const result = await provider.walletSend(JSON.stringify(sendParams));
+      const { alkanesExecuteTyped } = await import('@/lib/alkanes/execute');
+      const execResult = await alkanesExecuteTyped(provider, {
+        inputRequirements: `B:${amountSats}:v0`,
+        protostones: '',
+        feeRate,
+        toAddresses: [normalizedRecipientAddress],
+        fromAddresses: [btcSendAddress],
+        changeAddress: btcSendAddress,
+        alkanesChangeAddress: btcSendAddress,
+        protectTaproot: false,
+        paymentUtxos: matureUtxoStrings,
+        autoConfirm: true,
+        network,
+      });
+
+      const result = execResult?.txid || execResult?.reveal_txid || execResult;
 
       console.log('[SendModal] Transaction broadcast result:', result);
 
