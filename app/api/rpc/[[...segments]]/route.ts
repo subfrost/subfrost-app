@@ -129,8 +129,8 @@ export async function POST(
     }
 
     // Devnet runs in-browser only — server-side API routes can't reach it.
-    // Return a JSON-RPC error so the browser fetch interceptor can handle it instead.
-    if (network === 'devnet' || network === 'regtest-local') {
+    // regtest-local is a real Docker stack at localhost:18888 — DO NOT block it here.
+    if (network === 'devnet') {
       return NextResponse.json({
         jsonrpc: '2.0',
         error: { code: -32603, message: 'Devnet is in-browser only; use fetch interceptor' },
