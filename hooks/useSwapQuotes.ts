@@ -238,19 +238,8 @@ export function useSwapQuotes(
   const { data: sellPairs, isFetching: fetchingSell, isError: sellError, error: sellErrorObj } = useAlkanesTokenPairs(sellCurrencyId);
   const { data: buyPairs, isFetching: fetchingBuy, isError: buyError, error: buyErrorObj } = useAlkanesTokenPairs(buyCurrencyId);
 
-  // DIAGNOSTIC: Log pool fetching status
-  console.log('[useSwapQuotes] Pool data status:', {
-    sellCurrencyId,
-    buyCurrencyId,
-    sellPairs: sellPairs?.length ?? 'undefined',
-    buyPairs: buyPairs?.length ?? 'undefined',
-    fetchingSell,
-    fetchingBuy,
-    sellError,
-    buyError,
-    sellErrorObj: sellErrorObj?.message,
-    buyErrorObj: buyErrorObj?.message,
-  });
+  // DIAGNOSTIC: Pool fetching status (disabled — causes re-render spam)
+  // console.log('[useSwapQuotes] Pool data status:', { sellCurrencyId, buyCurrencyId, sellPairs: sellPairs?.length, buyPairs: buyPairs?.length });
   
   // Fetch dynamic frBTC wrap/unwrap fees
   const { data: premiumData } = useFrbtcPremium();
@@ -383,20 +372,15 @@ export function useSwapQuotes(
       }
 
       // Log pool discovery for debugging
-      console.log('[useSwapQuotes] Looking for direct pool:', { sellCurrencyId, buyCurrencyId });
-      console.log('[useSwapQuotes] sellPairs count:', sellPairs.length);
-      console.log('[useSwapQuotes] sellPairs tokens:', sellPairs.map((p: any) => ({
-        token0: p.token0.id,
-        token1: p.token1.id,
-        poolId: p.poolId,
-      })));
+      // DIAGNOSTIC disabled — re-render spam
+      // console.log('[useSwapQuotes] Looking for direct pool:', { sellCurrencyId, buyCurrencyId });
 
       const direct = sellPairs.find(
         (p: any) =>
           (p.token0.id === sellCurrencyId && p.token1.id === buyCurrencyId) ||
           (p.token0.id === buyCurrencyId && p.token1.id === sellCurrencyId),
       );
-      console.log('[useSwapQuotes] Direct pool found:', direct ? { poolId: direct.poolId, token0: direct.token0.id, token1: direct.token1.id } : 'NONE');
+      // console.log('[useSwapQuotes] Direct pool found:', direct ? { poolId: direct.poolId, token0: direct.token0.id, token1: direct.token1.id } : 'NONE');
       if (direct) {
         const ammQuote = await calculateSwapPrice(
           sellCurrencyId,
@@ -429,13 +413,13 @@ export function useSwapQuotes(
               const routerOut = new BigNumber(routerResult.amountOut);
               const ammOut = new BigNumber(ammQuote.buyAmount);
 
-              console.log('[useSwapQuotes] Router quote:', routerResult.amountOut, 'via', routerResult.source);
-              console.log('[useSwapQuotes] AMM quote:', ammQuote.buyAmount);
+              // console.log('[useSwapQuotes] Router quote:', routerResult.amountOut, 'via', routerResult.source);
+              // console.log('[useSwapQuotes] AMM quote:', ammQuote.buyAmount);
 
               if (routerOut.gt(ammOut)) {
                 // Router found a better price (likely CLOB has a tighter spread)
                 const minReceived = calculateMinimumFromSlippage({ amount: routerResult.amountOut, maxSlippage });
-                console.log('[useSwapQuotes] Router wins — using', routerResult.source, 'route');
+                // console.log('[useSwapQuotes] Router wins — using', routerResult.source, 'route');
                 return {
                   ...ammQuote,
                   buyAmount: routerResult.amountOut,

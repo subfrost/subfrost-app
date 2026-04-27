@@ -26,7 +26,7 @@ export function useLPPositions() {
   const { data: btcPrice } = useBtcPrice();
   const positions = useMemo<LPPosition[]>(() => {
     if (!balances.alkanes) {
-      console.log('[useLPPositions] No alkanes data');
+      // console.log('[useLPPositions] No alkanes data');
       return [];
     }
 
@@ -38,15 +38,15 @@ export function useLPPositions() {
       }
     }
 
-    console.log('[useLPPositions] Pool IDs in map:', Array.from(poolMap.keys()));
-    console.log('[useLPPositions] User alkane IDs:', balances.alkanes.map(a => a.alkaneId));
+    // console.log('[useLPPositions] Pool IDs in map:', Array.from(poolMap.keys()));
+    // console.log('[useLPPositions] User alkane IDs:', balances.alkanes.map(a => a.alkaneId));
 
     const lpPositions: LPPosition[] = [];
 
     for (const alkane of balances.alkanes) {
       const pool = poolMap.get(alkane.alkaneId);
 
-      console.log('[useLPPositions] Checking alkane:', alkane.alkaneId, 'symbol:', alkane.symbol, 'matched pool:', !!pool);
+      // console.log('[useLPPositions] Checking alkane:', alkane.alkaneId, 'symbol:', alkane.symbol, 'matched pool:', !!pool);
 
       // Use the same filtering logic as AlkanesBalancesCard "Positions" tab:
       // An asset is an LP position if it matches a pool ID, has "LP" in name/symbol, or starts with "POS-"
@@ -123,11 +123,11 @@ export function useLPPositions() {
           gainLoss,
         });
 
-        console.log('[useLPPositions] Added LP position:', alkane.alkaneId, token0Symbol, token1Symbol, formattedBalance);
+        // console.log('[useLPPositions] Added LP position:', alkane.alkaneId, token0Symbol, token1Symbol, formattedBalance);
       }
     }
 
-    console.log('[useLPPositions] Total LP positions found:', lpPositions.length);
+    // console.log('[useLPPositions] Total LP positions found:', lpPositions.length);
     return lpPositions;
   }, [balances.alkanes, poolsData?.items, btcPrice]);
 
