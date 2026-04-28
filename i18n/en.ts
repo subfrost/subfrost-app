@@ -496,7 +496,7 @@ const en: Record<string, string> = {
   'activity.unwrap': 'Unwrap',
   'activity.viewAll': 'View all',
   'activity.back': 'Back',
-  'activity.txn': 'Txn',
+  'activity.txn': 'Type',
   'activity.pair': 'Pair',
   'activity.amounts': 'Amounts',
   'activity.address': 'Address',

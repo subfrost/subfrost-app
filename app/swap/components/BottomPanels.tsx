@@ -268,8 +268,8 @@ export default function BottomPanels({ baseToken, quoteToken, baseTokenId, quote
                 <div className="sf-table-header grid grid-cols-[1.4fr_0.9fr_0.7fr_0.7fr_0.7fr] gap-2 px-3 py-2">
                   <span>Pool</span>
                   <span className="text-right">Amount</span>
-                  <span className="text-right">Add</span>
-                  <span className="text-right">Close</span>
+                  <span className="text-center">Add</span>
+                  <span className="text-center">Close</span>
                   <span className="text-right">ID</span>
                 </div>
                 {lpPositions.map((pos) => (
@@ -290,7 +290,7 @@ export default function BottomPanels({ baseToken, quoteToken, baseTokenId, quote
                     <span className="text-[11px] text-right tabular-nums text-[color:var(--sf-text)]/60 truncate">
                       {pos.amount || '--'}
                     </span>
-                    <div className="flex justify-end">
+                    <div className="flex justify-center">
                       <button
                         onClick={() => onAddLiquidity?.({
                           token0Id: pos.token0Id,
@@ -304,7 +304,7 @@ export default function BottomPanels({ baseToken, quoteToken, baseTokenId, quote
                         <Plus size={10} className="inline mr-0.5" />Add
                       </button>
                     </div>
-                    <div className="flex justify-end">
+                    <div className="flex justify-center">
                       <button
                         onClick={() => handleClosePosition(pos)}
                         disabled={closingPositionId === pos.id}

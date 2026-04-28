@@ -88,8 +88,8 @@ const TransactionHistory = forwardRef<TransactionHistoryHandle>(function Transac
   }
 
   return (
-    <div className="lg:flex lg:flex-col lg:flex-1 lg:min-h-0">
-      <div ref={scrollRef} className="space-y-2 max-h-[308px] overflow-y-auto pr-1 lg:max-h-none lg:flex-1">
+    <div>
+      <div ref={scrollRef} className="space-y-2 max-h-[308px] lg:max-h-[752px] overflow-y-auto pr-1">
         {transactions.length > 0 ? (
           <>
             {transactions.map((tx) => (

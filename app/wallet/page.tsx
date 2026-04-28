@@ -170,8 +170,8 @@ export default function WalletDashboardPage() {
           </div>
 
           {/* Tabbed Panel - right column on lg, third on mobile */}
-          <div className="order-3 lg:order-none lg:col-start-2 lg:row-start-1 min-h-0 lg:flex lg:flex-col">
-            <div className="rounded-2xl bg-[color:var(--sf-glass-bg)] p-3 sm:p-4 lg:p-4 shadow-[0_4px_20px_rgba(0,0,0,0.2)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)] lg:flex-1 lg:flex lg:flex-col lg:min-h-0">
+          <div className="order-3 lg:order-none lg:col-start-2 lg:row-start-1 min-h-0">
+            <div className="rounded-2xl bg-[color:var(--sf-glass-bg)] p-3 sm:p-4 lg:p-4 shadow-[0_4px_20px_rgba(0,0,0,0.2)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)]">
               {/* Tab Navigation — compact on lg+ since panel is half-width */}
               <div className="border-b border-[color:var(--sf-outline)] mb-4 relative">
                 <div className="flex items-center gap-1 overflow-x-auto scrollbar-hide">
@@ -242,7 +242,7 @@ export default function WalletDashboardPage() {
               </div>
 
               {/* Tab Content */}
-              <div className="animate-fadeIn lg:flex-1 lg:flex lg:flex-col lg:min-h-0">
+              <div className="animate-fadeIn">
                 {/* BalancesPanel removed — BRC20/Runes/Ordinals not supported yet */}
                 {activeTab === 'utxos' && <UTXOManagement />}
                 {activeTab === 'transactions' && <TransactionHistory ref={txHistoryRef} />}

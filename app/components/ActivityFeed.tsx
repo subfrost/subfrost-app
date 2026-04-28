@@ -508,13 +508,13 @@ export default function ActivityFeed({
                 key={(row as any).transactionId + "-" + idx}
                 href={txExplorerHref}
                 target={txExplorerHref === '#' ? undefined : '_blank'}
-                className="block px-6 py-4 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-primary)]/10 border-b border-[color:var(--sf-row-border)]"
+                className="block px-6 py-2 text-[11px] leading-[20px] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-primary)]/10 border-b border-[color:var(--sf-row-border)]"
               >
                 {/* Mobile layout (xs only) - 2 rows */}
                 <div className="sm:hidden">
                   {/* Row 1: Txn, Pair, Amounts */}
                   <div className="grid grid-cols-[0.6fr_1fr_auto] items-center gap-2">
-                    <div className="text-sm text-[color:var(--sf-text)]/80">
+                    <div className="text-[color:var(--sf-text)]/80">
                       {typeLabel}
                     </div>
 
@@ -528,7 +528,7 @@ export default function ActivityFeed({
                       />
                       <div className="min-w-0">
                         {pairLoaded ? (
-                          <div className="truncate text-sm text-[color:var(--sf-text)]">
+                          <div className="truncate text-[color:var(--sf-text)]">
                             {row.type === "mint" || row.type === "burn"
                               ? `${pairNames.leftName} / ${pairNames.rightName}`
                               : row.type === "wrap" ||
@@ -543,7 +543,7 @@ export default function ActivityFeed({
                       </div>
                     </div>
 
-                    <div className="text-right text-xs text-[color:var(--sf-text)]">
+                    <div className="text-right text-[color:var(--sf-text)]">
                       {!pairLoaded ? (
                         <div className="space-y-1">
                           <LineSkeleton widthClass="w-20 ml-auto" />
@@ -650,10 +650,10 @@ export default function ActivityFeed({
 
                   {/* Row 2: Address (left) and Date (right) */}
                   <div className="flex justify-between items-center mt-1">
-                    <div className="text-xs text-[color:var(--sf-text)]/50">
+                    <div className="text-[color:var(--sf-text)]/50">
                       {truncateAddress(address || "", 6, 4)}
                     </div>
-                    <div className="text-xs text-[color:var(--sf-text)]/50">
+                    <div className="text-[color:var(--sf-text)]/50">
                       {timeLabel}
                     </div>
                   </div>
@@ -661,7 +661,7 @@ export default function ActivityFeed({
 
                 {/* Desktop layout (sm+) - single row with 5 columns */}
                 <div className="hidden sm:grid sm:grid-cols-[minmax(60px,0.8fr)_minmax(120px,1.2fr)_minmax(100px,1.2fr)_minmax(80px,1fr)_minmax(70px,0.8fr)] lg:grid-cols-[minmax(80px,1fr)_minmax(160px,1.5fr)_minmax(120px,1.2fr)_minmax(90px,1fr)_minmax(80px,1fr)] xl:grid-cols-[minmax(100px,1fr)_220px_150px_minmax(90px,1fr)_minmax(80px,1fr)] items-center gap-2 lg:gap-3 xl:gap-4">
-                  <div className="text-sm text-[color:var(--sf-text)]/80">
+                  <div className="text-[color:var(--sf-text)]/80">
                     {typeLabel}
                   </div>
 
@@ -675,7 +675,7 @@ export default function ActivityFeed({
                     />
                     <div className="min-w-0">
                       {pairLoaded ? (
-                        <div className="truncate text-sm text-[color:var(--sf-text)]">
+                        <div className="truncate text-[color:var(--sf-text)]">
                           {row.type === "mint" || row.type === "burn"
                             ? `${pairNames.leftName} / ${pairNames.rightName}`
                             : row.type === "wrap" ||
@@ -690,7 +690,7 @@ export default function ActivityFeed({
                     </div>
                   </div>
 
-                  <div className="text-right text-xs text-[color:var(--sf-text)]">
+                  <div className="text-right text-[color:var(--sf-text)]">
                     {!pairLoaded ? (
                       <div className="space-y-1">
                         <LineSkeleton widthClass="w-20 ml-auto" />
@@ -792,7 +792,7 @@ export default function ActivityFeed({
                     )}
                   </div>
 
-                  <div className="truncate text-right text-sm text-[color:var(--sf-text)]/60">
+                  <div className="truncate text-right text-[color:var(--sf-text)]/60">
                     <span className="lg:hidden">
                       {truncateAddress(address || "", 5, 3)}
                     </span>
@@ -800,7 +800,7 @@ export default function ActivityFeed({
                       {truncateAddress(address || "")}
                     </span>
                   </div>
-                  <div className="text-right text-sm text-[color:var(--sf-text)]/60">
+                  <div className="text-right text-[color:var(--sf-text)]/60">
                     <span className="lg:hidden">{dateLabel}</span>
                     <span className="hidden lg:inline">{timeLabel}</span>
                   </div>
@@ -809,7 +809,7 @@ export default function ActivityFeed({
             );
           })}
           {(isLoading || isFetchingNextPage) && (
-            <div className="px-4 py-3 text-center text-[color:var(--sf-text)]/60">
+            <div className="px-4 py-3 text-center text-[11px] leading-[20px] text-[color:var(--sf-text)]/60">
               {t("activity.loading")}
             </div>
           )}

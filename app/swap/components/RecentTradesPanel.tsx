@@ -208,7 +208,7 @@ export default function RecentTradesPanel({ baseToken, quoteToken }: Props) {
           </div>
         ))}
         {isFetchingNextPage && (
-          <div className="py-2 text-center text-[10px] text-[color:var(--sf-text)]/20">Loading...</div>
+          <div className="py-2 text-center text-xs text-[color:var(--sf-text)]/20">Loading...</div>
         )}
       </div>
     </div>

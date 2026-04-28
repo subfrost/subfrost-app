@@ -261,7 +261,7 @@ export default function MyWalletSwaps() {
               </>
             )}
             {(isLoading || isFetchingNextPage) && (
-              <div className="px-4 py-3 text-center text-[color:var(--sf-text)]/60">{t('activity.loading')}</div>
+              <div className="px-4 py-3 text-center text-xs text-[color:var(--sf-text)]/20">{t('activity.loading')}</div>
             )}
             <div ref={loadingRef} className="h-6" />
           </div>
