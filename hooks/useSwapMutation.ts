@@ -397,17 +397,30 @@ export function useSwapMutation() {
         // Single-address wallets (UniSat, OKX) only have taproot — must set false.
         const isDualAddress = Boolean(segwitAddress && taprootAddress);
 
-        // Get clean BTC UTXOs from wallet API (UniSat getBitcoinUtxos).
-        // These are wallet-verified: no inscriptions, no runes, no alkanes.
-        // SDK uses them directly for BTC fee inputs — skips lua get_utxos entirely.
+        // Get clean BTC UTXOs from wallet API.
+        // Single-address wallets (UniSat, OKX) MUST provide payment UTXOs —
+        // without them, SDK has no way to distinguish inscription UTXOs from clean ones.
+        // Dual-address wallets (Xverse, OYL) use protect_taproot=true which keeps
+        // inscription UTXOs (on taproot) safe by only spending segwit UTXOs for fees.
         let paymentUtxos: string[] | undefined;
-        if (isBrowserWallet && (window as any).unisat?.getBitcoinUtxos) {
+        if (isBrowserWallet && !isDualAddress) {
+          // Single-address: must get clean UTXOs from wallet API
+          const win = window as any;
           try {
-            const btcUtxos = await (window as any).unisat.getBitcoinUtxos();
-            if (btcUtxos?.length) {
-              paymentUtxos = btcUtxos.map((u: any) => `${u.txid}:${u.vout}:${u.satoshis}`);
+            let btcUtxos: any[] | null = null;
+            if (win.unisat?.getBitcoinUtxos) {
+              btcUtxos = await win.unisat.getBitcoinUtxos();
             }
-          } catch { /* wallet API unavailable — SDK falls back to lua */ }
+            if (btcUtxos && btcUtxos.length > 0) {
+              paymentUtxos = btcUtxos.map((u: any) => `${u.txid}:${u.vout}:${u.satoshis}`);
+            } else {
+              throw new Error('No clean BTC UTXOs available. Send some BTC to your wallet first — inscription/rune UTXOs cannot be used for fees.');
+            }
+          } catch (e: any) {
+            if (e?.message?.includes('No clean BTC')) throw e;
+            // Wallet API unavailable — cannot safely proceed for single-address wallets
+            throw new Error('Cannot determine safe UTXOs for single-address wallet. Please use a wallet that supports getBitcoinUtxos API.');
+          }
         }
 
         const isKeystoreWallet = walletType === 'keystore';

@@ -53,7 +53,6 @@ const LOCAL_WALLETS: BrowserWalletInfo[] = [
 // Desired display order (by wallet id)
 const WALLET_ORDER = [
   'oyl',
-  'okx',
   'unisat',
   'xverse',
   'phantom',
