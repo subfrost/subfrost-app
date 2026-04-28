@@ -39,7 +39,6 @@ export default function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="sf-bg min-h-dvh relative flex flex-col">
       <SplashScreen />
-      <div className="absolute inset-0 sf-snow" aria-hidden />
       <Header />
       <DemoBanner />
       <main className="relative flex-1 flex flex-col min-h-0">
