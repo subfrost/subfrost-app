@@ -21,7 +21,7 @@ import { useNotification } from '@/context/NotificationContext';
 type TabView = 'balances' | 'utxos' | 'transactions' | 'settings';
 
 export default function WalletDashboardPage() {
-  const { connected, isConnected, address, paymentAddress, network } = useWallet() as any;
+  const { connected, isConnected, address, paymentAddress, network, browserWallet, walletType } = useWallet() as any;
   const { t } = useTranslation();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -62,14 +62,17 @@ export default function WalletDashboardPage() {
     }
   };
 
+  const { isInitializing } = useWallet() as any;
   const walletConnected = typeof connected === 'boolean' ? connected : isConnected;
 
-  // Redirect if not connected (must be in useEffect to avoid setState during render)
+  // Redirect if not connected — but wait for wallet restore from localStorage first.
+  // Without this guard, refreshing the page would redirect to '/' before the
+  // cached browser wallet addresses are restored from localStorage.
   useEffect(() => {
-    if (!walletConnected) router.push('/');
-  }, [walletConnected, router]);
+    if (!isInitializing && !walletConnected) router.push('/');
+  }, [isInitializing, walletConnected, router]);
 
-  if (!walletConnected) return null;
+  if (isInitializing || !walletConnected) return null;
 
   // Settings tab is rendered separately for responsive control
   const tabs = [
@@ -109,7 +112,12 @@ export default function WalletDashboardPage() {
             {paymentAddress && (
               <div className="flex items-center gap-3">
                 <AddressAvatar address={paymentAddress} size={24} className="shrink-0" />
-                <span className="text-xs sm:text-sm text-[color:var(--sf-text)]/60 whitespace-nowrap">{t('walletDash.nativeSegwit')}</span>
+                <span className="flex items-center gap-1.5 text-xs sm:text-sm text-[color:var(--sf-text)]/60 whitespace-nowrap">
+                  {walletType === 'browser' && browserWallet?.info?.icon && (
+                    <img src={browserWallet.info.icon} alt="" width={14} height={14} className="rounded-sm" />
+                  )}
+                  {t('walletDash.nativeSegwit')}
+                </span>
                 <span className="text-xs sm:text-sm text-[color:var(--sf-text)]/80 truncate">{paymentAddress}</span>
                 <button
                   onClick={() => copyToClipboard(paymentAddress, 'segwit')}
@@ -127,7 +135,12 @@ export default function WalletDashboardPage() {
             {address && (
               <div className="flex items-center gap-3">
                 <AddressAvatar address={address} size={24} className="shrink-0" />
-                <span className="text-xs sm:text-sm text-[color:var(--sf-text)]/60 whitespace-nowrap">{t('walletDash.taproot')}</span>
+                <span className="flex items-center gap-1.5 text-xs sm:text-sm text-[color:var(--sf-text)]/60 whitespace-nowrap">
+                  {walletType === 'browser' && !paymentAddress && browserWallet?.info?.icon && (
+                    <img src={browserWallet.info.icon} alt="" width={14} height={14} className="rounded-sm" />
+                  )}
+                  {t('walletDash.taproot')}
+                </span>
                 <span className="text-xs sm:text-sm text-[color:var(--sf-text)]/80 truncate">{address}</span>
                 <button
                   onClick={() => copyToClipboard(address, 'taproot')}

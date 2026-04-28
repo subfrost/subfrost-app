@@ -39,7 +39,7 @@
  * The data API returns full token info including names from on-chain contract metadata.
  */
 
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useWallet } from '@/context/WalletContext';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
@@ -195,19 +195,29 @@ export function useEnrichedWalletData(): EnrichedWalletData {
   }, [btcFastQuery.refetch]);
 
   // Merge BTC data + alkane data into the unified WalletBalances shape.
-  // Show alkanes even if btcQuery hasn't resolved yet (e.g. regtest-local
-  // where enrichedBalances may fail but protobuf alkane query succeeds).
-  const balances: WalletBalances = btcQuery.data
-    ? {
+  // Memoized to prevent new object references on every render — both
+  // BitcoinBalanceCard and AlkanesBalancesCard consume this hook, so
+  // unstable refs cascade re-renders through the entire wallet page.
+  const balances: WalletBalances = useMemo(() => {
+    if (btcQuery.data) {
+      return {
         ...btcQuery.data.balances,
         alkanes: alkaneQuery.data ?? [],
-      }
-    : {
-        ...EMPTY_BALANCES,
-        alkanes: alkaneQuery.data ?? [],
       };
+    }
+    return {
+      ...EMPTY_BALANCES,
+      alkanes: alkaneQuery.data ?? [],
+    };
+  }, [btcQuery.data, alkaneQuery.data]);
 
-  return {
+  const errorMsg = btcQuery.error
+    ? (btcQuery.error instanceof Error ? btcQuery.error.message : 'Failed to fetch wallet data')
+    : alkaneQuery.error
+      ? (alkaneQuery.error instanceof Error ? alkaneQuery.error.message : 'Failed to fetch alkane balances')
+      : null;
+
+  return useMemo(() => ({
     balances,
     btcFast: btcFastQuery.data ?? null,
     utxos: btcQuery.data?.utxos ?? EMPTY_UTXOS,
@@ -215,13 +225,20 @@ export function useEnrichedWalletData(): EnrichedWalletData {
     isBtcLoading: btcQuery.isLoading,
     isBtcFastLoading: btcFastQuery.isLoading,
     isAlkanesLoading: alkaneQuery.isLoading,
-    error: btcQuery.error
-      ? (btcQuery.error instanceof Error ? btcQuery.error.message : 'Failed to fetch wallet data')
-      : alkaneQuery.error
-        ? (alkaneQuery.error instanceof Error ? alkaneQuery.error.message : 'Failed to fetch alkane balances')
-        : null,
+    error: errorMsg,
     refresh,
     refreshAlkanes,
     refreshBtcFast,
-  };
+  }), [
+    balances,
+    btcFastQuery.data,
+    btcQuery.data?.utxos,
+    btcQuery.isLoading,
+    alkaneQuery.isLoading,
+    btcFastQuery.isLoading,
+    errorMsg,
+    refresh,
+    refreshAlkanes,
+    refreshBtcFast,
+  ]);
 }

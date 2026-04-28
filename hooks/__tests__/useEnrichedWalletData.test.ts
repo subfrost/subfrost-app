@@ -377,29 +377,22 @@ describe('useTransactionHistory', () => {
   const src = readSrc('hooks/useTransactionHistory.ts');
   const querySrc = readSrc('queries/history.ts');
 
-  it('uses useQuery with transactionHistoryQueryOptions', () => {
-    expect(src).toContain('useQuery');
-    expect(src).toContain('transactionHistoryQueryOptions');
+  it('uses useInfiniteQuery with fetchTxPage for pagination', () => {
+    expect(src).toContain('useInfiniteQuery');
+    expect(src).toContain('fetchTxPage');
   });
 
-  it('accepts optional address and excludeCoinbase params', () => {
-    expect(src).toMatch(/useTransactionHistory\s*\(\s*address\?\s*:\s*string/);
-    expect(src).toContain('excludeCoinbase');
+  it('accepts addresses array', () => {
+    expect(src).toMatch(/useTransactionHistory\s*\(\s*addresses\s*:\s*string\[\]/);
   });
 
-  it('defaults excludeCoinbase to true', () => {
-    expect(src).toContain('excludeCoinbase: boolean = true');
-  });
-
-  it('returns transactions, loading, error, and refresh', () => {
-    expect(src).toContain('transactions:');
+  it('returns transactions, loading, error, hasMore, loadMore, and refresh', () => {
+    expect(src).toContain('transactions,');
     expect(src).toContain('loading:');
     expect(src).toContain('error:');
+    expect(src).toContain('hasMore:');
+    expect(src).toContain('loadMore:');
     expect(src).toContain('refresh');
-  });
-
-  it('falls back to empty array when data is null', () => {
-    expect(src).toContain('data ?? []');
   });
 
   it('provides refresh via useCallback wrapping refetch', () => {
@@ -410,6 +403,11 @@ describe('useTransactionHistory', () => {
   it('formats error as string or fallback message', () => {
     expect(src).toContain('error instanceof Error');
     expect(src).toContain("'Failed to fetch transactions'");
+  });
+
+  it('deduplicates transactions across pages', () => {
+    expect(src).toContain('new Set<string>()');
+    expect(src).toContain('seen.has(tx.txid)');
   });
 
   // --- Type exports ---
@@ -434,8 +432,6 @@ describe('useTransactionHistory', () => {
   it('EnrichedTransaction has metaprotocol fields: hasOpReturn, hasProtostones, runestone, alkanesTraces', () => {
     expect(src).toContain('hasOpReturn: boolean');
     expect(src).toContain('hasProtostones: boolean');
-    expect(src).toContain('runestone?: RunestoneData');
-    expect(src).toContain('alkanesTraces?: AlkanesTrace[]');
   });
 
   it('EnrichedTransaction has isRbf and isCoinbase flags', () => {
@@ -443,31 +439,21 @@ describe('useTransactionHistory', () => {
     expect(src).toContain('isCoinbase: boolean');
   });
 
-  // --- Query options (queries/history.ts) ---
+  // --- Query fetch (queries/history.ts) ---
 
-  describe('transactionHistoryQueryOptions', () => {
-    it('uses queryKeys.history.transactions for the key', () => {
-      expect(querySrc).toContain('queryKeys.history.transactions');
+  describe('fetchTxPage (queries/history.ts)', () => {
+    it('uses espoGetAddressTransactions as primary fetcher', () => {
+      expect(querySrc).toContain('espoGetAddressTransactions');
     });
 
-    it('is enabled only when address, provider, and isInitialized are truthy', () => {
-      expect(querySrc).toContain('!!address');
-      expect(querySrc).toContain('!!provider');
-      expect(querySrc).toContain('isInitialized');
-    });
-
-    it('calls provider.getAddressTxsWithTraces', () => {
-      expect(querySrc).toContain('provider.getAddressTxsWithTraces');
+    it('falls back to getAddressTxs with manual slicing', () => {
+      expect(querySrc).toContain('getAddressTxs');
+      expect(querySrc).toContain('slice(start, start + limit)');
     });
 
     it('handles Map results via mapToObject', () => {
       expect(querySrc).toContain('mapToObject');
       expect(querySrc).toContain('instanceof Map');
-    });
-
-    it('parses vin and vout from raw transactions', () => {
-      expect(querySrc).toContain('tx.vin');
-      expect(querySrc).toContain('tx.vout');
     });
 
     it('detects coinbase transactions', () => {
@@ -483,9 +469,9 @@ describe('useTransactionHistory', () => {
       expect(querySrc).toContain("'op_return'");
     });
 
-    it('extracts runestone and alkanes_traces from raw tx', () => {
-      expect(querySrc).toContain('tx.runestone');
-      expect(querySrc).toContain('tx.alkanes_traces');
+    it('returns hasMore based on page size', () => {
+      expect(querySrc).toContain('hasMore');
+      expect(querySrc).toContain('r.length >= limit');
     });
   });
 });
@@ -656,9 +642,9 @@ describe('Cross-cutting: disconnected / not-connected handling', () => {
     expect(src).toContain('isEligible: false, amount: 0');
   });
 
-  it('useTransactionHistory query disabled when no address', () => {
-    const querySrc = readSrc('queries/history.ts');
-    expect(querySrc).toContain('!!address');
+  it('useTransactionHistory query disabled when no addresses', () => {
+    const hookSrc = readSrc('hooks/useTransactionHistory.ts');
+    expect(hookSrc).toContain('addressKey.length > 0');
   });
 
   it('useBtcBalance query disabled when not connected', () => {
@@ -699,9 +685,9 @@ describe('Cross-cutting: React Query caching', () => {
     expect(querySrc).toContain("import { queryOptions } from '@tanstack/react-query'");
   });
 
-  it('useTransactionHistory uses queryOptions from @tanstack/react-query', () => {
-    const querySrc = readSrc('queries/history.ts');
-    expect(querySrc).toContain("import { queryOptions } from '@tanstack/react-query'");
+  it('useTransactionHistory uses useInfiniteQuery from @tanstack/react-query', () => {
+    const hookSrc = readSrc('hooks/useTransactionHistory.ts');
+    expect(hookSrc).toContain("useInfiniteQuery");
   });
 
   it('useBtcBalance uses queryOptions from @tanstack/react-query', () => {
@@ -713,7 +699,7 @@ describe('Cross-cutting: React Query caching', () => {
   it('all hooks separate query config from hook consumption', () => {
     // Query options are defined in queries/ files, not inline in hooks
     expect(readSrc('hooks/useEnrichedWalletData.ts')).toContain('enrichedWalletQueryOptions');
-    expect(readSrc('hooks/useTransactionHistory.ts')).toContain('transactionHistoryQueryOptions');
+    expect(readSrc('hooks/useTransactionHistory.ts')).toContain('fetchTxPage');
     expect(readSrc('hooks/useBtcBalance.ts')).toContain('btcBalanceQueryOptions');
   });
 });

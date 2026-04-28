@@ -20,6 +20,7 @@ import { DevnetControlPanel, DevnetNetworkBanner } from '@/components/DevnetCont
 import TransactionConfirmModal from '@/app/components/TransactionConfirmModal';
 import GlobalNotificationArea from '@/app/components/GlobalNotificationArea';
 
+
 // Define Network type locally
 import type { Network } from '@/utils/constants';
 

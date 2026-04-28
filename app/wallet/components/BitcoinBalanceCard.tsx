@@ -130,7 +130,8 @@ export default function BitcoinBalanceCard() {
         )}
       </div>
 
-      {/* Address Breakdown */}
+      {/* Address Breakdown — only show when wallet has both address types */}
+      {isDualAddress && (
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-4 border-t border-[color:var(--sf-outline)]">
         {account?.nativeSegwit?.address && (
           <a
@@ -165,6 +166,7 @@ export default function BitcoinBalanceCard() {
           </a>
         )}
       </div>
+      )}
     </div>
   );
 }

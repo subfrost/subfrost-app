@@ -1,8 +1,8 @@
 'use client';
 
-import { useMemo } from 'react';
-import { useInfiniteAmmTxHistory } from '@/hooks/useAmmHistory';
-import { useTokenDisplayMap } from '@/hooks/useTokenDisplayMap';
+import { useMemo, useRef, useCallback, useEffect } from 'react';
+import { useInfiniteQuery } from '@tanstack/react-query';
+import { usePools } from '@/hooks/usePools';
 import TokenIcon from '@/app/components/TokenIcon';
 import { useWallet } from '@/context/WalletContext';
 import type { Network } from '@/utils/constants';
@@ -17,7 +17,6 @@ interface Trade {
   toId: string;
   type: 'Market' | 'Limit';
   time: string;
-  side: 'buy' | 'sell';
 }
 
 interface Props {
@@ -47,78 +46,97 @@ function formatAmount(raw: string, decimals = 8, tokenSymbol?: string) {
 
 export default function RecentTradesPanel({ baseToken, quoteToken }: Props) {
   const { network } = useWallet() as { network: Network };
+  const { data: poolsData } = usePools();
 
-  const { data: historyData } = useInfiniteAmmTxHistory({
-    count: 20,
-    transactionType: 'swap',
+  // Find pool ID for the selected pair
+  const poolId = useMemo(() => {
+    if (!poolsData?.items || !baseToken || !quoteToken) return null;
+    const pool = poolsData.items.find(p =>
+      (p.token0.id === baseToken && p.token1.id === quoteToken) ||
+      (p.token0.id === quoteToken && p.token1.id === baseToken)
+    );
+    return pool?.id || null;
+  }, [poolsData, baseToken, quoteToken]);
+
+  const PAGE_SIZE = 30;
+
+  // Fetch swap history for this specific pool — paginated, direct REST
+  const { data: swapPages, hasNextPage, fetchNextPage, isFetchingNextPage } = useInfiniteQuery({
+    queryKey: ['pool-swap-history', network, poolId],
+    enabled: !!poolId && !!network,
+    staleTime: Infinity,
+    initialPageParam: 0,
+    getNextPageParam: (lastPage: any[], _all: any[][], lastPageParam: number) =>
+      lastPage.length >= PAGE_SIZE ? lastPageParam + PAGE_SIZE : undefined,
+    queryFn: async ({ pageParam }) => {
+      const rpcBase = `/api/rpc/${network || 'mainnet'}`;
+      const [b, t] = poolId!.split(':');
+      const resp = await fetch(`${rpcBase}/get-pool-swap-history`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(10000),
+        body: JSON.stringify({
+          poolId: { block: b, tx: t },
+          limit: PAGE_SIZE,
+          offset: pageParam,
+        }),
+      });
+      if (!resp.ok) return [];
+      const json = await resp.json();
+      const swaps = json?.data?.items?.swaps || json?.data?.swaps || json?.data?.items || json?.data || [];
+      return Array.isArray(swaps) ? swaps : [];
+    },
   });
 
-  // Collect all token IDs for display name resolution
-  const tokenIds = useMemo(() => {
-    const ids = new Set<string>();
-    const pages = historyData?.pages;
-    if (!pages) return [];
-    for (const page of pages) {
-      for (const item of (page.items || [])) {
-        if (item?.soldTokenBlockId && item?.soldTokenTxId) {
-          ids.add(`${item.soldTokenBlockId}:${item.soldTokenTxId}`);
-        }
-        if (item?.boughtTokenBlockId && item?.boughtTokenTxId) {
-          ids.add(`${item.boughtTokenBlockId}:${item.boughtTokenTxId}`);
-        }
-      }
-    }
-    return Array.from(ids);
-  }, [historyData]);
+  const swapItems = useMemo(() => swapPages?.pages?.flat() || [], [swapPages]);
 
-  const { data: displayMap } = useTokenDisplayMap(tokenIds);
+  // Get token names from pool data
+  const pairPool = useMemo(() => {
+    if (!poolsData?.items || !poolId) return null;
+    return poolsData.items.find(p => p.id === poolId) || null;
+  }, [poolsData, poolId]);
 
   const getName = (id: string) => {
-    const d = displayMap?.[id];
-    return d?.name || d?.symbol || KNOWN_TOKEN_NAMES[id] || id;
+    if (pairPool?.token0.id === id) return pairPool.token0.symbol || pairPool.token0.name || id;
+    if (pairPool?.token1.id === id) return pairPool.token1.symbol || pairPool.token1.name || id;
+    return KNOWN_TOKEN_NAMES[id] || id;
   };
 
   const trades: Trade[] = useMemo(() => {
-    const pages = historyData?.pages;
-    if (!pages || pages.length === 0) return [];
+    if (!swapItems?.length) return [];
 
-    const allItems = pages.flatMap((page) => page.items || []);
-    if (allItems.length === 0) return [];
+    return swapItems.map((item: any, idx: number) => {
+      // Handle both formats:
+      // Format 1 (get-pool-swap-history): { pay: { amount, tokenId: {block,tx} }, receive: { ... } }
+      // Format 2 (get-all-amm-tx-history): { soldAmount, soldTokenBlockId, soldTokenTxId, ... }
+      const pay = item.pay;
+      const receive = item.receive;
 
-    return allItems.slice(0, 20).map((item: any, idx: number) => {
-      const fromId = item.soldTokenBlockId && item.soldTokenTxId
-        ? `${item.soldTokenBlockId}:${item.soldTokenTxId}` : '';
-      const toId = item.boughtTokenBlockId && item.boughtTokenTxId
-        ? `${item.boughtTokenBlockId}:${item.boughtTokenTxId}` : '';
+      const fromId = pay?.tokenId
+        ? `${pay.tokenId.block}:${pay.tokenId.tx}`
+        : (item.soldTokenBlockId && item.soldTokenTxId)
+          ? `${item.soldTokenBlockId}:${item.soldTokenTxId}` : '';
+      const toId = receive?.tokenId
+        ? `${receive.tokenId.block}:${receive.tokenId.tx}`
+        : (item.boughtTokenBlockId && item.boughtTokenTxId)
+          ? `${item.boughtTokenBlockId}:${item.boughtTokenTxId}` : '';
 
       const fromSymbol = getName(fromId);
       const toSymbol = getName(toId);
 
-      const soldFormatted = formatAmount(item.soldAmount || '0', 8, fromSymbol);
-      const boughtFormatted = formatAmount(item.boughtAmount || '0', 8, toSymbol);
+      const soldFormatted = formatAmount(pay?.amount || item.soldAmount || '0', 8, fromSymbol);
+      const boughtFormatted = formatAmount(receive?.amount || item.boughtAmount || '0', 8, toSymbol);
 
-      // Determine side based on common base token position
-      const side: 'buy' | 'sell' = item.side === 'sell' ? 'sell'
-        : item.side === 'buy' ? 'buy'
-        : (item.amount0In && Number(item.amount0In) > 0) ? 'sell' : 'buy';
-
-      // Type: all AMM swaps are Market orders; carbine limit orders will be 'Limit'
       const type: 'Market' | 'Limit' = item.orderType === 'limit' ? 'Limit' : 'Market';
 
       let time = '--:--:--';
       if (item.timestamp) {
         const d = new Date(typeof item.timestamp === 'number' ? item.timestamp * 1000 : item.timestamp);
         time = d.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
-      } else if (item.blockHeight) {
-        time = `#${item.blockHeight}`;
       }
 
       return {
-        // JOURNAL (2026-03-31): Append idx to guarantee key uniqueness.
-        // A single txid can produce multiple trade rows (e.g., multi-hop swaps
-        // or both sides of a trade returned as separate API items). Using txid
-        // alone caused React "duplicate key" warnings in production.
-        id: `${item.txid || item.transactionId || item.id || 'trade'}-${idx}`,
+        id: `${item.transactionId || item.txid || item.transactionHash || 'trade'}-${idx}`,
         soldFormatted,
         boughtFormatted,
         fromSymbol,
@@ -127,14 +145,29 @@ export default function RecentTradesPanel({ baseToken, quoteToken }: Props) {
         toId,
         type,
         time,
-        side,
       };
     });
-  }, [historyData, displayMap]);
+  }, [swapItems, pairPool]);
+
+  // Infinite scroll
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const handleScroll = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el || !hasNextPage || isFetchingNextPage) return;
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 40) {
+      fetchNextPage();
+    }
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.addEventListener('scroll', handleScroll, { passive: true });
+    return () => el.removeEventListener('scroll', handleScroll);
+  }, [handleScroll]);
 
   return (
     <div>
-      {/* Column headers */}
       <div className="sf-table-header grid grid-cols-[0.5fr_0.7fr_0.7fr_1fr_0.6fr] gap-1 px-3 py-2">
         <span>Type</span>
         <span>From</span>
@@ -143,46 +176,40 @@ export default function RecentTradesPanel({ baseToken, quoteToken }: Props) {
         <span className="text-right">Time</span>
       </div>
 
-      <div className="max-h-[240px] overflow-y-auto">
+      <div ref={scrollRef} className="max-h-[240px] overflow-y-auto">
         {trades.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-8 text-[color:var(--sf-text)]/20">
-            <span className="text-xs">No recent trades</span>
+            <span className="text-xs">{poolId ? 'No recent trades for this pair' : 'Select a pair'}</span>
           </div>
         ) : trades.map(trade => (
           <div
             key={trade.id}
             className="sf-row grid grid-cols-[0.5fr_0.7fr_0.7fr_1fr_0.6fr] gap-1 text-[11px] leading-[20px] px-3 py-1.5 items-center"
           >
-            {/* Type */}
-            <span className="text-[color:var(--sf-text)]/40">
-              {trade.type}
-            </span>
+            <span className="text-[color:var(--sf-text)]/40">{trade.type}</span>
 
-            {/* From */}
             <div className="flex items-center gap-1 min-w-0">
               <TokenIcon symbol={trade.fromSymbol} id={trade.fromId} size="sm" network={network} />
               <span className="text-[color:var(--sf-text)]/60 truncate">{trade.fromSymbol}</span>
             </div>
 
-            {/* To */}
             <div className="flex items-center gap-1 min-w-0">
               <TokenIcon symbol={trade.toSymbol} id={trade.toId} size="sm" network={network} />
               <span className="text-[color:var(--sf-text)]/60 truncate">{trade.toSymbol}</span>
             </div>
 
-            {/* Amounts */}
             <span className="text-right tabular-nums truncate">
               <span className="text-[color:var(--sf-text)]/60">-{trade.soldFormatted} {trade.fromSymbol}</span>
               <span className="text-[color:var(--sf-text)]/25">{', '}</span>
               <span className="text-green-400">+{trade.boughtFormatted} {trade.toSymbol}</span>
             </span>
 
-            {/* Time */}
-            <span className="text-[color:var(--sf-text)]/25 tabular-nums text-right">
-              {trade.time}
-            </span>
+            <span className="text-[color:var(--sf-text)]/25 tabular-nums text-right">{trade.time}</span>
           </div>
         ))}
+        {isFetchingNextPage && (
+          <div className="py-2 text-center text-[10px] text-[color:var(--sf-text)]/20">Loading...</div>
+        )}
       </div>
     </div>
   );

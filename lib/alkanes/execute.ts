@@ -88,8 +88,7 @@ export async function alkanesExecuteTyped(
   options.change_address = params.changeAddress ?? 'p2wpkh:0';
   options.alkanes_change_address = params.alkanesChangeAddress ?? 'p2tr:0';
 
-  // lock_alkanes prevents spending alkane UTXOs as plain BTC
-  options.lock_alkanes = true;
+
 
   if (params.traceEnabled !== undefined) options.trace_enabled = params.traceEnabled;
   if (params.mineEnabled !== undefined) options.mine_enabled = params.mineEnabled;
@@ -132,14 +131,21 @@ export async function alkanesExecuteTyped(
     } catch { /* ignore */ }
   }
 
-  if (isLocalNetwork && typeof (provider as any).alkanesExecuteFull === 'function') {
-    // Force mine_enabled + auto_confirm for local networks so alkanesExecuteFull
-    // handles signing, broadcasting, and mining in one call.
-    options.mine_enabled = true;
+  // Use alkanesExecuteFull when:
+  // 1. Local networks (devnet/regtest) — needs mine_enabled for block confirmation
+  // 2. Keystore wallets (auto_confirm=true) on any network — mnemonic loaded in provider,
+  //    SDK signs + broadcasts internally. alkanesExecuteWithStrings only returns a PSBT
+  //    without signing, which is useless for keystore wallets.
+  const useFullExecution = (isLocalNetwork || params.autoConfirm) &&
+    typeof (provider as any).alkanesExecuteFull === 'function';
+
+  if (useFullExecution) {
+    if (isLocalNetwork) {
+      options.mine_enabled = true;
+    }
     options.auto_confirm = true;
-    const devnetOptionsJson = JSON.stringify(options);
-    console.log('[alkanesExecuteTyped] Devnet: using alkanesExecuteFull (auto_confirm + mine_enabled)');
-    // qubitcoin-regtest has higher min relay fee than standard regtest
+    const fullOptionsJson = JSON.stringify(options);
+    console.log(`[alkanesExecuteTyped] Using alkanesExecuteFull (auto_confirm=true, mine_enabled=${!!options.mine_enabled})`);
     const minFeeRate = params.network === 'qubitcoin-regtest' ? 5 : (params.feeRate ?? null);
     const feeRate = params.feeRate && params.feeRate >= (minFeeRate || 0) ? params.feeRate : minFeeRate;
     const result = await (provider as any).alkanesExecuteFull(
@@ -148,11 +154,12 @@ export async function alkanesExecuteTyped(
       params.protostones,
       feeRate,
       params.envelopeHex ?? null,
-      devnetOptionsJson
+      fullOptionsJson
     );
     return typeof result === 'string' ? JSON.parse(result) : result;
   }
 
+  // Browser wallets: return PSBT for external signing
   const result = await provider.alkanesExecuteWithStrings(
     toAddressesJson,
     params.inputRequirements,

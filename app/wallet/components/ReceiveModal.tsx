@@ -15,10 +15,19 @@ export default function ReceiveModal({ isOpen, onClose }: ReceiveModalProps) {
   const { t } = useTranslation();
   const { account } = useWallet() as any;
   const [copied, setCopied] = useState(false);
-  const [mode, setMode] = useState<'segwit' | 'taproot'>('segwit');
   const qrSize = 169; // ~56% of original 300
 
-  const displayAddress = mode === 'taproot'
+  const hasSegwit = !!account?.nativeSegwit?.address;
+  const hasTaproot = !!account?.taproot?.address;
+  const defaultMode = hasSegwit ? 'segwit' : 'taproot';
+  const [mode, setMode] = useState<'segwit' | 'taproot'>(defaultMode);
+
+  // Correct mode if current selection has no address (e.g. wallet changed)
+  const effectiveMode = (mode === 'segwit' && !hasSegwit) ? 'taproot'
+    : (mode === 'taproot' && !hasTaproot) ? 'segwit'
+    : mode;
+
+  const displayAddress = effectiveMode === 'taproot'
     ? account?.taproot?.address
     : account?.nativeSegwit?.address;
 
@@ -36,7 +45,8 @@ export default function ReceiveModal({ isOpen, onClose }: ReceiveModalProps) {
     }
   };
 
-  const isTaproot = mode === 'taproot';
+  const isTaproot = effectiveMode === 'taproot';
+  const showToggle = hasSegwit && hasTaproot;
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 px-4 backdrop-blur-sm">
@@ -70,22 +80,24 @@ export default function ReceiveModal({ isOpen, onClose }: ReceiveModalProps) {
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <label className="text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/60">{t('receive.yourAddress')}</label>
-              {/* SegWit / Taproot toggle */}
-              <div className="flex gap-4">
-                {(['segwit', 'taproot'] as const).map((tab) => (
-                  <button
-                    key={tab}
-                    onClick={() => { setMode(tab); setCopied(false); }}
-                    className={`pb-1 px-1 text-sm font-semibold ${
-                      mode === tab
-                        ? 'text-[color:var(--sf-primary)] border-b-2 border-[color:var(--sf-primary)]'
-                        : 'text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]'
-                    }`}
-                  >
-                    {tab === 'segwit' ? 'SegWit' : 'Taproot'}
-                  </button>
-                ))}
-              </div>
+              {/* SegWit / Taproot toggle — hidden for single-address wallets */}
+              {showToggle && (
+                <div className="flex gap-4">
+                  {(['segwit', 'taproot'] as const).map((tab) => (
+                    <button
+                      key={tab}
+                      onClick={() => { setMode(tab); setCopied(false); }}
+                      className={`pb-1 px-1 text-sm font-semibold ${
+                        effectiveMode === tab
+                          ? 'text-[color:var(--sf-primary)] border-b-2 border-[color:var(--sf-primary)]'
+                          : 'text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]'
+                      }`}
+                    >
+                      {tab === 'segwit' ? 'SegWit' : 'Taproot'}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
             <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] min-h-[4.5rem]">
               <span className="flex-1 text-sm break-all text-[color:var(--sf-text)]">
@@ -110,9 +122,9 @@ export default function ReceiveModal({ isOpen, onClose }: ReceiveModalProps) {
             <div className="text-sm text-[color:var(--sf-info-yellow-text)] space-y-2">
               <div className="font-bold text-[color:var(--sf-info-yellow-title)]">{t('receive.important')}</div>
               <ul className="list-disc list-inside space-y-1 text-xs">
-                <li>{isTaproot ? t('receive.onlySendAssets') : t('receive.onlySendBtc')}</li>
-                <li>{t('receive.otherCrypto')}</li>
-                <li>{t('receive.verifyAddress')}</li>
+                <li>{!showToggle ? 'Only send BTC or Alkane tokens to this address' : isTaproot ? 'Only send Alkane tokens to this address' : 'Only send BTC to this address'}</li>
+                <li>Sending other cryptocurrencies may result in permanent loss</li>
+                <li>Always verify the address before sending</li>
               </ul>
             </div>
           </div>

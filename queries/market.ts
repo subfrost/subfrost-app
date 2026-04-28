@@ -65,20 +65,18 @@ export function btcPriceQueryOptions(
         }
       } catch { /* fall through to SDK */ }
 
-      // Fallback: SDK data API
-      if (!provider) return 90000;
+      // Fallback: coingecko public API (no auth needed)
       try {
-        const response = await provider.dataApiGetBitcoinPrice();
-        const price =
-          typeof response === 'number'
-            ? response
-            : (response as { usd?: number; price?: number })?.usd ??
-              (response as { price?: number })?.price ??
-              0;
-        return price > 0 ? price : 90000;
-      } catch {
-        return 90000;
-      }
+        const resp = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd', {
+          signal: AbortSignal.timeout(5000),
+        });
+        if (resp.ok) {
+          const data = await resp.json();
+          const price = data?.bitcoin?.usd ?? 0;
+          if (price > 0) return price;
+        }
+      } catch { /* fall through */ }
+      return 90000;
     },
   });
 }
@@ -189,21 +187,34 @@ function mapToObject(value: any): any {
  * JOURNAL ENTRY (2026-02-10):
  * Replaced raw essentials.get_alkane_info batch fetch with individual
  * SDK espoGetAlkaneInfo() calls. Slightly more HTTP requests but uses
- * the typed SDK path instead of raw JSON-RPC through the proxy.
+ * Direct RPC fetch — no WASM overhead. Each call is a simple JSON-RPC
+ * to essentials.get_alkane_info which returns { name, symbol, ... }.
  */
 async function fetchAlkaneNamesBatch(
-  provider: WebProvider,
+  _provider: WebProvider,
   alkaneIds: string[],
+  network?: string,
 ): Promise<Record<string, TokenDisplay>> {
   const map: Record<string, TokenDisplay> = {};
   if (alkaneIds.length === 0) return map;
 
+  const rpcUrl = `/api/rpc/${network || 'mainnet'}/espo`;
+
   const results = await Promise.all(
     alkaneIds.map(async (id) => {
       try {
-        const raw = await provider.espoGetAlkaneInfo(id);
-        const info = mapToObject(raw);
-        const data = info?.result ?? info;
+        const resp = await fetch(rpcUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          signal: AbortSignal.timeout(5000),
+          body: JSON.stringify({
+            jsonrpc: '2.0', id: 1,
+            method: 'essentials.get_alkane_info',
+            params: { alkane: id },
+          }),
+        });
+        const json = await resp.json();
+        const data = json?.result;
         if (data?.name) {
           const name = (data.name as string).replace('SUBFROST BTC', 'frBTC');
           return { id, name, symbol: data.symbol || '' };
@@ -250,8 +261,8 @@ export function tokenDisplayMapQueryOptions(
           toFetch.push(id);
         }
       }
-      if (toFetch.length > 0 && provider) {
-        const batchResults = await fetchAlkaneNamesBatch(provider, toFetch);
+      if (toFetch.length > 0) {
+        const batchResults = await fetchAlkaneNamesBatch(provider as WebProvider, toFetch, network);
         Object.assign(map, batchResults);
       }
       return map;

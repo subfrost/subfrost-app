@@ -374,10 +374,10 @@ describe('fromAddresses browser wallet handling', () => {
       expect(browserBranch!).not.toContain("'p2tr:0'");
     });
 
-    it('should use symbolic addresses for keystore wallet fromAddresses', () => {
+    it('should use taproot-only symbolic addresses for keystore wallet fromAddresses', () => {
       const keystoreBranch = extractKeystoreBranch(src, 'const fromAddresses');
       expect(keystoreBranch).toBeTruthy();
-      expect(keystoreBranch!).toContain("'p2wpkh:0'");
+      // Keystore is taproot-only — no p2wpkh
       expect(keystoreBranch!).toContain("'p2tr:0'");
     });
   });

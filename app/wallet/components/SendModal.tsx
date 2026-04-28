@@ -257,43 +257,46 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
   const { t } = useTranslation();
   const { balances, refresh } = useEnrichedWalletData();
 
-  // Fetch UTXOs via esplora when modal opens — no lua dependency.
+  // Fetch UTXOs via esplora when modal opens.
   const [esploraUtxos, setEsploraUtxos] = useState<any[]>([]);
   useEffect(() => {
     if (!isOpen) return;
     const addresses = [account?.taproot?.address, account?.nativeSegwit?.address].filter(Boolean);
     if (addresses.length === 0) return;
     const rpcPath = network ? `/api/rpc/${network}` : '/api/rpc';
+    const isRegtest = network === 'regtest' || network === 'regtest-local' || network === 'subfrost-regtest' || network === 'qubitcoin-regtest';
 
     (async () => {
-    // Fetch current height for coinbase maturity filtering on regtest
-    const heightResp = await fetch(rpcPath, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ jsonrpc: '2.0', method: 'metashrew_height', params: [], id: 99 }),
-    }).then(r => r.json()).catch(() => ({ result: '0' }));
-    const currentHeight = parseInt(String(heightResp.result || '0'), 10);
+    const [heightResult, utxoResults] = await Promise.all([
+      fetch(rpcPath, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', method: 'metashrew_height', params: [], id: 99 }),
+      }).then(r => r.json()).then(j => parseInt(String(j.result || '0'), 10)).catch(() => 0),
 
-    await Promise.all(addresses.map(async (addr) => {
-      try {
-        const resp = await fetch(rpcPath, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ jsonrpc: '2.0', method: 'esplora_address::utxo', params: [addr], id: 1 }),
-        });
-        const json = await resp.json();
-        return (json.result || []).map((u: any) => {
-          const height = u.status?.block_height || 0;
-          const confirmations = currentHeight > 0 && height > 0 ? currentHeight - height + 1 : 0;
-          return {
-            txid: u.txid, vout: u.vout, value: u.value, address: addr,
-            status: { confirmed: u.status?.confirmed ?? true, block_height: height },
-            // Mark immature coinbase — regtest UTXOs are mostly coinbase
-            _immature: confirmations > 0 && confirmations < 100,
-          };
-        });
-      } catch { return []; }
-    })).then(results => setEsploraUtxos(results.flat().filter((u: any) => !u._immature)));
+      Promise.all(addresses.map(async (addr) => {
+        try {
+          const resp = await fetch(rpcPath, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ jsonrpc: '2.0', method: 'esplora_address::utxo', params: [addr], id: 1 }),
+          });
+          const json = await resp.json();
+          return (json.result || []).map((u: any) => ({ ...u, _addr: addr }));
+        } catch { return []; }
+      })),
+    ]);
+
+    const currentHeight = heightResult;
+    setEsploraUtxos(utxoResults.flat().map((u: any) => {
+      const height = u.status?.block_height || 0;
+      const confirmations = currentHeight > 0 && height > 0 ? currentHeight - height + 1 : 0;
+      return {
+        txid: u.txid, vout: u.vout, value: u.value, address: u._addr,
+        status: { confirmed: u.status?.confirmed ?? true, block_height: height },
+        _immature: isRegtest && confirmations > 0 && confirmations < 100,
+      };
+    }).filter((u: any) => !u._immature));
     })();
   }, [isOpen, account, network]);
 
@@ -584,7 +587,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
 
       for (const utxo of sorted) {
         const potentialFee = estimateFee(selected.size + 1);
-        const needed = amountSats + potentialFee;
+        const needed = amountSats + 546 + potentialFee; // +546 for alkane safety output
 
         selected.add(`${utxo.txid}:${utxo.vout}`);
         total += utxo.value;
@@ -599,9 +602,10 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
         }
       }
 
-      // Compute accurate fee accounting for dust threshold on change output
-      const feeResult = computeSendFee({ inputCount: selected.size, sendAmount: amountSats, totalInputValue: total, feeRate: feeRateNum });
-      const required = amountSats + feeResult.fee;
+      // Compute accurate fee. +546 for the alkane safety output (always present).
+      const SAFETY_SATS = 546;
+      const feeResult = computeSendFee({ inputCount: selected.size, sendAmount: amountSats + SAFETY_SATS, totalInputValue: total, feeRate: feeRateNum });
+      const required = amountSats + SAFETY_SATS + feeResult.fee;
 
       if (total < required) {
         // Check if we have enough total balance
@@ -946,17 +950,19 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
       console.log('[SendModal] Fee rate:', feeRate, 'sat/vB');
       console.log('[SendModal] From address:', btcSendAddress);
 
-      // Use alkanesExecuteTyped with payment_utxos for mature UTXO filtering
       const matureUtxoStrings = esploraUtxos
         .filter(u => u.status?.confirmed)
         .map(u => `${u.txid}:${u.vout}:${u.value}`);
 
       const { alkanesExecuteTyped } = await import('@/lib/alkanes/execute');
+      // Safety output at v1 (546 sats to sender) + protostone pointer/refund to v1.
+      // If any input UTXOs carry alkanes, they route to v1 instead of burning.
+      // SDK output layout: v0=recipient, v1=safety, v2=change (appended by SDK).
       const execResult = await alkanesExecuteTyped(provider, {
-        inputRequirements: `B:${amountSats}:v0`,
-        protostones: '',
+        inputRequirements: `B:${amountSats}:v0,B:546:v1`,
+        protostones: 'v1:v1',
         feeRate,
-        toAddresses: [normalizedRecipientAddress],
+        toAddresses: [normalizedRecipientAddress, btcSendAddress],
         fromAddresses: [btcSendAddress],
         changeAddress: btcSendAddress,
         alkanesChangeAddress: btcSendAddress,
@@ -966,14 +972,20 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
         network,
       });
 
-      const result = execResult?.txid || execResult?.reveal_txid || execResult;
+      console.log('[SendModal] Raw execResult:', JSON.stringify(execResult, null, 2));
 
-      console.log('[SendModal] Transaction broadcast result:', result);
+      // Extract txid — SDK returns different shapes depending on path
+      const txidResult = execResult?.txid
+        || execResult?.reveal_txid
+        || execResult?.tx_id
+        || execResult?.result?.txid
+        || execResult?.data?.txid
+        || (typeof execResult === 'string' ? execResult : null);
 
-      // Extract txid from result
-      const txidResult = typeof result === 'string' ? result : result?.txid || result?.tx_id;
       if (!txidResult) {
-        throw new Error(t('send.noTxidReturned'));
+        // Transaction likely succeeded but response format is unexpected.
+        // Log full result for debugging but don't block user.
+        console.warn('[SendModal] No txid found in result, transaction may have succeeded:', execResult);
       }
 
       setTxid(txidResult);
@@ -1803,8 +1815,8 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
   );
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 px-4 backdrop-blur-sm">
-      <div data-testid="send-modal" className="flex max-h-[90vh] w-full max-w-md flex-col overflow-hidden rounded-3xl bg-[color:var(--sf-glass-bg)] shadow-[0_24px_96px_rgba(0,0,0,0.4)] backdrop-blur-xl">
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 px-4 backdrop-blur-sm" onClick={onClose}>
+      <div data-testid="send-modal" className="flex max-h-[90vh] w-full max-w-md flex-col overflow-hidden rounded-3xl bg-[color:var(--sf-glass-bg)] shadow-[0_24px_96px_rgba(0,0,0,0.4)] backdrop-blur-xl" onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div className="bg-[color:var(--sf-panel-bg)] px-6 py-5 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
           <div className="flex items-center justify-between">

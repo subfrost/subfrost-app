@@ -372,21 +372,19 @@ export function useSwapMutation() {
       // For keystore wallets, symbolic addresses work because the user's mnemonic
       // is loaded into the provider, so p2tr:0 resolves to their actual address.
       // ============================================================================
+      // Keystore is taproot-only — all addresses resolve to p2tr:0.
+      // Browser wallets use actual addresses (SDK has no mnemonic to resolve symbolic).
       const fromAddresses = useActualAddresses
         ? [segwitAddress, taprootAddress].filter(Boolean) as string[]
-        : ['p2wpkh:0', 'p2tr:0'];
+        : ['p2tr:0'];
 
-      // Output addresses: where swapped tokens and BTC change should go
-      // JOURNAL ENTRY (2026-03-01): For single-address wallets (UniSat, OKX), use
-      // the available address. Prefer taproot for alkane outputs but fall back to segwit.
-      // TypeScript can't infer from the early return that primaryAddress is defined, use assertion
       const toAddresses = useActualAddresses
         ? [primaryAddress!]
         : ['p2tr:0'];
 
       const changeAddr = useActualAddresses
         ? (segwitAddress || taprootAddress)
-        : 'p2wpkh:0';
+        : 'p2tr:0';
 
       const alkanesChangeAddr = useActualAddresses
         ? primaryAddress
@@ -412,11 +410,12 @@ export function useSwapMutation() {
           } catch { /* wallet API unavailable — SDK falls back to lua */ }
         }
 
+        const isKeystoreWallet = walletType === 'keystore';
         const result = await provider.alkanesExecuteTyped({
           inputRequirements,
           protostones: protostone,
           feeRate: swapData.feeRate,
-          autoConfirm: false,
+          autoConfirm: isKeystoreWallet,
           fromAddresses,
           toAddresses,
           changeAddress: changeAddr,
