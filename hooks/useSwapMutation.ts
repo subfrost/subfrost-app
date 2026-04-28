@@ -397,19 +397,17 @@ export function useSwapMutation() {
         // Single-address wallets (UniSat, OKX) only have taproot — must set false.
         const isDualAddress = Boolean(segwitAddress && taprootAddress);
 
-        // Clean BTC UTXOs (no inscriptions, no runes, no alkanes) — wallet-verified.
-        // Routed through the wallet capability registry so the call only fires for
-        // wallets that actually expose this API. Reaching into `window.<provider>`
-        // directly was unsafe: e.g. `window.unisat` exists whenever the UniSat
-        // extension is installed, even if the user is connected via Xverse, and
-        // calling its API triggered a stray UniSat "connect site" popup before
-        // the real Xverse signing prompt (regression caught 2026-04-28).
-        // Returns `null` for wallets without the capability — SDK then falls back
-        // to its own lua/esplora UTXO selection (still safe, just slower).
+        // Clean BTC UTXOs via wallet capability registry (routes to the correct
+        // wallet API by ID — never touches window.<other_provider> globals).
+        // For single-address wallets without clean UTXOs: abort rather than
+        // falling back to lua which has no ordinal protection on mainnet.
         const { getCleanBtcUtxosForWallet } = await import('@/lib/wallet/walletCapabilities');
         const cleanUtxos = isBrowserWallet
           ? await getCleanBtcUtxosForWallet(browserWallet?.info?.id)
           : null;
+        if (isBrowserWallet && !isDualAddress && !cleanUtxos?.length) {
+          throw new Error('No clean BTC UTXOs available. Send some BTC to your wallet first — inscription/rune UTXOs cannot be used for fees.');
+        }
         const paymentUtxos: string[] | undefined = cleanUtxos ?? undefined;
 
         const isKeystoreWallet = walletType === 'keystore';
