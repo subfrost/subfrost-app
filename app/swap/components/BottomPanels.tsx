@@ -21,7 +21,7 @@
 // Source: hooks/useUserOrders.ts, hooks/useCancelOrderMutation.ts
 
 import { useState, lazy, Suspense } from 'react';
-import { BarChart3, Layers, Clock, Activity, X, LogOut } from 'lucide-react';
+import { BarChart3, Layers, Clock, Activity, X, LogOut, Plus } from 'lucide-react';
 import { useLPPositions } from '@/hooks/useLPPositions';
 import { useWallet } from '@/context/WalletContext';
 import { useUserOrders } from '@/hooks/useUserOrders';
@@ -40,6 +40,14 @@ interface Props {
   quoteToken: string;
   baseTokenId?: string;
   quoteTokenId?: string;
+  poolId?: string;
+  isWrapPair?: boolean;
+  onAddLiquidity?: (pair: {
+    token0Id?: string;
+    token0Symbol: string;
+    token1Id?: string;
+    token1Symbol: string;
+  }) => void;
 }
 
 function EmptyState({ icon: Icon, message }: { icon: any; message: string }) {
@@ -51,7 +59,7 @@ function EmptyState({ icon: Icon, message }: { icon: any; message: string }) {
   );
 }
 
-export default function BottomPanels({ baseToken, quoteToken, baseTokenId, quoteTokenId }: Props) {
+export default function BottomPanels({ baseToken, quoteToken, baseTokenId, quoteTokenId, poolId, isWrapPair, onAddLiquidity }: Props) {
   const [activeTab, setActiveTab] = useState<PanelTab>('trades');
   const { isConnected, network } = useWallet() as any;
   const { positions: allPositions, isLoading: isLoadingPositions } = useLPPositions();
@@ -258,15 +266,16 @@ export default function BottomPanels({ baseToken, quoteToken, baseTokenId, quote
               <EmptyState icon={BarChart3} message="No LP positions" />
             ) : (
               <div>
-                {/* Header */}
-                <div className="sf-table-header grid grid-cols-[1fr_auto_auto_auto] gap-3 px-3 py-2">
+                {/* Header — column layout: Pool | Amount | Add | Close | ID */}
+                <div className="sf-table-header grid grid-cols-[1.4fr_0.9fr_0.7fr_0.7fr_0.7fr] gap-2 px-3 py-2">
                   <span>Pool</span>
                   <span className="text-right">Amount</span>
-                  <span className="text-right w-[52px]">ID</span>
-                  <span className="text-right w-[56px]">Close</span>
+                  <span className="text-center">Add</span>
+                  <span className="text-center">Close</span>
+                  <span className="text-right">ID</span>
                 </div>
                 {lpPositions.map((pos) => (
-                  <div key={pos.id} className="sf-row grid grid-cols-[1fr_auto_auto_auto] gap-3 px-3 py-2.5 items-center">
+                  <div key={pos.id} className="sf-row grid grid-cols-[1.4fr_0.9fr_0.7fr_0.7fr_0.7fr] gap-2 px-3 py-2.5 items-center">
                     <div className="flex items-center gap-2 min-w-0">
                       <div className="flex -space-x-2 shrink-0">
                         <div className="relative z-10">
@@ -280,13 +289,24 @@ export default function BottomPanels({ baseToken, quoteToken, baseTokenId, quote
                         {pos.token0Symbol}/{pos.token1Symbol} LP
                       </span>
                     </div>
-                    <span className="text-[11px] text-right tabular-nums text-[color:var(--sf-text)]/60">
+                    <span className="text-[11px] text-right tabular-nums text-[color:var(--sf-text)]/60 truncate">
                       {pos.amount || '--'}
                     </span>
-                    <span className="text-[10px] text-right tabular-nums text-[color:var(--sf-text)]/40 w-[52px] truncate">
-                      {pos.id}
-                    </span>
-                    <div className="w-[56px] flex justify-end">
+                    <div className="flex justify-center">
+                      <button
+                        onClick={() => onAddLiquidity?.({
+                          token0Id: pos.token0Id,
+                          token0Symbol: pos.token0Symbol,
+                          token1Id: pos.token1Id,
+                          token1Symbol: pos.token1Symbol,
+                        })}
+                        disabled={!onAddLiquidity || !pos.token0Id || !pos.token1Id}
+                        className="sf-btn-ghost text-[10px] px-2 py-1 text-green-400 hover:text-green-300 disabled:opacity-50"
+                      >
+                        <Plus size={10} className="inline mr-0.5" />Add
+                      </button>
+                    </div>
+                    <div className="flex justify-center">
                       <button
                         onClick={() => handleClosePosition(pos)}
                         disabled={closingPositionId === pos.id}
@@ -295,6 +315,9 @@ export default function BottomPanels({ baseToken, quoteToken, baseTokenId, quote
                         {closingPositionId === pos.id ? '...' : <><LogOut size={10} className="inline mr-0.5" />Close</>}
                       </button>
                     </div>
+                    <span className="text-[10px] text-right tabular-nums text-[color:var(--sf-text)]/40 truncate">
+                      {pos.id}
+                    </span>
                   </div>
                 ))}
               </div>
@@ -303,7 +326,12 @@ export default function BottomPanels({ baseToken, quoteToken, baseTokenId, quote
 
           {/* Trades */}
           {activeTab === 'trades' && (
-            <RecentTradesPanel baseToken={baseTokenId || baseToken} quoteToken={quoteTokenId || quoteToken} />
+            <RecentTradesPanel
+              baseToken={baseTokenId || baseToken}
+              quoteToken={quoteTokenId || quoteToken}
+              poolId={poolId}
+              isWrapPair={isWrapPair}
+            />
           )}
 
           {/* Activity */}

@@ -34,12 +34,29 @@ function buildProtorunesPayload(address: string): string {
 }
 
 function pbVarint(data: Uint8Array, pos: number): [number, number] {
-  let val = 0, shift = 0;
+  // Multiplication-based assembly avoids JS's 32-bit signed bitwise ops.
+  // `<<` and `|=` coerce to Int32, so any varint with bit 31 set (values
+  // > 2^31, e.g. a DIESEL amount of 2.5B) flipped negative and surfaced as
+  // "-25.-1" in the balances UI.
+  let val = 0;
+  let mult = 1;
   while (pos < data.length) {
     const b = data[pos++];
-    val |= (b & 0x7f) << shift;
+    val += (b & 0x7f) * mult;
     if (!(b & 0x80)) break;
-    shift += 7;
+    mult *= 128;
+  }
+  return [val, pos];
+}
+
+function pbVarintBig(data: Uint8Array, pos: number): [bigint, number] {
+  let val = 0n;
+  let shift = 0n;
+  while (pos < data.length) {
+    const b = data[pos++];
+    val |= BigInt(b & 0x7f) << shift;
+    if (!(b & 0x80)) break;
+    shift += 7n;
   }
   return [val, pos];
 }
@@ -111,8 +128,8 @@ export function parseProtorunesResponse(hex: string): Map<string, bigint> {
       if (fn === 2 && wt === 2) {
         const amtBuf = val as Uint8Array;
         if (amtBuf.length > 0 && amtBuf[0] === 0x08) {
-          const [v] = pbVarint(amtBuf, 1);
-          amount = BigInt(v);
+          const [v] = pbVarintBig(amtBuf, 1);
+          amount = v;
         } else {
           for (let i = 0; i < amtBuf.length; i++) amount |= BigInt(amtBuf[i]) << (BigInt(i) * 8n);
         }

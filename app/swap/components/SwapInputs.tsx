@@ -196,35 +196,6 @@ export default function SwapInputs({
     };
   }, [bridgeActive]);
 
-  // Calculate balance usage percentage
-  const calculateBalanceUsage = (): number => {
-    if (!fromAmount || !resolvedFromBalanceText) return 0;
-
-    // Extract balance from text like "Balance 8.908881"
-    const balanceMatch = resolvedFromBalanceText.match(/[\d.]+/);
-    if (!balanceMatch) return 0;
-
-    const balance = parseFloat(balanceMatch[0]);
-    const amount = parseFloat(fromAmount);
-
-    if (!balance || balance === 0 || !amount) return 0;
-
-    const percentage = (amount / balance) * 100;
-    return Math.min(100, Math.max(0, percentage)); // Clamp between 0-100
-  };
-
-  const balanceUsage = calculateBalanceUsage();
-
-  // Color based on usage - green gradient from light to full opacity
-  const getBalanceColor = () => {
-    if (balanceUsage === 0) return "bg-green-500/20";
-    if (balanceUsage < 25) return "bg-green-500/40";
-    if (balanceUsage < 50) return "bg-green-500/60";
-    if (balanceUsage < 75) return "bg-green-500/80";
-    if (balanceUsage < 95) return "bg-green-500/90";
-    return "bg-green-500";
-  };
-
   // Check if current amount matches a specific percentage of balance
   const getActivePercent = (): number | null => {
     if (!fromAmount || !resolvedFromBalanceText) return null;
@@ -366,26 +337,12 @@ export default function SwapInputs({
                 )}
               </div>
 
-              {/* Fill bar + Percentage Buttons (hidden for bridge tokens) */}
+              {/* Percentage Buttons (hidden for bridge tokens) */}
               {!isFromBridgeToken && (
                 <div
-                  className="flex items-center justify-between w-full"
+                  className="flex items-center justify-end w-full"
                   onClick={(e) => e.stopPropagation()}
                 >
-                    <div
-                      className={`max-w-[45%] flex-1 mr-3 h-1 rounded-full overflow-hidden ${
-                        balanceUsage > 0
-                          ? theme === "dark" ? "bg-gray-700" : "bg-gray-200"
-                          : ""
-                      }`}
-                    >
-                      {balanceUsage > 0 && (
-                        <div
-                          className={`h-full ${getBalanceColor()} transition-all duration-[200ms]`}
-                          style={{ width: `${balanceUsage}%` }}
-                        />
-                      )}
-                    </div>
                     <div className={`flex items-center gap-1.5 transition-opacity duration-300 ${
                       fromFocused ? "opacity-100" : "opacity-0 group-hover:opacity-100"
                     }`}>

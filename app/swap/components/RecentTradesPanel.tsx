@@ -15,13 +15,15 @@ interface Trade {
   fromId: string;
   toSymbol: string;
   toId: string;
-  type: 'Market' | 'Limit';
+  type: 'Market' | 'Limit' | 'Wrap' | 'Unwrap';
   time: string;
 }
 
 interface Props {
   baseToken: string;
   quoteToken: string;
+  poolId?: string;
+  isWrapPair?: boolean;
 }
 
 const KNOWN_TOKEN_NAMES: Record<string, string> = {
@@ -44,26 +46,28 @@ function formatAmount(raw: string, decimals = 8, tokenSymbol?: string) {
   }).format(scaled);
 }
 
-export default function RecentTradesPanel({ baseToken, quoteToken }: Props) {
+export default function RecentTradesPanel({ baseToken, quoteToken, poolId: poolIdProp, isWrapPair }: Props) {
   const { network } = useWallet() as { network: Network };
-  const { data: poolsData } = usePools();
+  const { data: poolsData, isLoading: isPoolsLoading } = usePools();
 
-  // Find pool ID for the selected pair
+  // Prefer the pool ID provided by the swap shell (always reflects the active pair).
+  // Fall back to looking it up from baseToken/quoteToken token IDs.
   const poolId = useMemo(() => {
+    if (poolIdProp) return poolIdProp;
     if (!poolsData?.items || !baseToken || !quoteToken) return null;
     const pool = poolsData.items.find(p =>
       (p.token0.id === baseToken && p.token1.id === quoteToken) ||
       (p.token0.id === quoteToken && p.token1.id === baseToken)
     );
     return pool?.id || null;
-  }, [poolsData, baseToken, quoteToken]);
+  }, [poolIdProp, poolsData, baseToken, quoteToken]);
 
   const PAGE_SIZE = 30;
 
-  // Fetch swap history for this specific pool — paginated, direct REST
-  const { data: swapPages, hasNextPage, fetchNextPage, isFetchingNextPage } = useInfiniteQuery({
+  // Pool swap history — used for AMM pairs (active when not in wrap mode)
+  const swapQuery = useInfiniteQuery({
     queryKey: ['pool-swap-history', network, poolId],
-    enabled: !!poolId && !!network,
+    enabled: !isWrapPair && !!poolId && !!network,
     staleTime: Infinity,
     initialPageParam: 0,
     getNextPageParam: (lastPage: any[], _all: any[][], lastPageParam: number) =>
@@ -88,9 +92,51 @@ export default function RecentTradesPanel({ baseToken, quoteToken }: Props) {
     },
   });
 
-  const swapItems = useMemo(() => swapPages?.pages?.flat() || [], [swapPages]);
+  // Wrap/unwrap history — used when the swap shell is on a BTC↔frBTC wrap pair.
+  // BTC↔frBTC has no AMM pool, so trades come from the global wrap/unwrap stream.
+  // Each page fetches both categories in parallel and merges by timestamp.
+  const wrapQuery = useInfiniteQuery({
+    queryKey: ['wrap-unwrap-history', network],
+    enabled: !!isWrapPair && !!network,
+    staleTime: Infinity,
+    initialPageParam: 0,
+    getNextPageParam: (lastPage: any[], _all: any[][], lastPageParam: number) =>
+      lastPage.length >= PAGE_SIZE ? lastPageParam + PAGE_SIZE : undefined,
+    queryFn: async ({ pageParam }) => {
+      const rpcBase = `/api/rpc/${network || 'mainnet'}`;
+      const fetchCategory = async (category: 'wrap' | 'unwrap') => {
+        const resp = await fetch(`${rpcBase}/get-all-amm-tx-history`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          signal: AbortSignal.timeout(10000),
+          body: JSON.stringify({ limit: PAGE_SIZE, offset: pageParam, category }),
+        });
+        if (!resp.ok) return [];
+        const json = await resp.json();
+        const items = json?.data?.items || json?.data || [];
+        return Array.isArray(items) ? items : [];
+      };
+      const [wraps, unwraps] = await Promise.all([fetchCategory('wrap'), fetchCategory('unwrap')]);
+      const tagged = [
+        ...wraps.map((w: any) => ({ ...w, type: w.type || 'wrap' })),
+        ...unwraps.map((u: any) => ({ ...u, type: u.type || 'unwrap' })),
+      ];
+      const tsOf = (it: any) => {
+        const ts = it.timestamp;
+        if (typeof ts === 'number') return ts > 1e12 ? ts : ts * 1000;
+        const parsed = ts ? Date.parse(ts) : 0;
+        return Number.isFinite(parsed) ? parsed : 0;
+      };
+      return tagged.sort((a, b) => tsOf(b) - tsOf(a));
+    },
+  });
 
-  // Get token names from pool data
+  const { hasNextPage, fetchNextPage, isFetchingNextPage } = isWrapPair ? wrapQuery : swapQuery;
+
+  const swapItems = useMemo(() => swapQuery.data?.pages?.flat() || [], [swapQuery.data]);
+  const wrapItems = useMemo(() => wrapQuery.data?.pages?.flat() || [], [wrapQuery.data]);
+
+  // Get token names from pool data (only relevant for AMM pair view)
   const pairPool = useMemo(() => {
     if (!poolsData?.items || !poolId) return null;
     return poolsData.items.find(p => p.id === poolId) || null;
@@ -103,8 +149,39 @@ export default function RecentTradesPanel({ baseToken, quoteToken }: Props) {
   };
 
   const trades: Trade[] = useMemo(() => {
-    if (!swapItems?.length) return [];
+    const fmtTime = (ts: any) => {
+      if (!ts) return '--:--:--';
+      const ms = typeof ts === 'number' ? (ts > 1e12 ? ts : ts * 1000) : Date.parse(ts);
+      if (!Number.isFinite(ms)) return '--:--:--';
+      return new Date(ms).toLocaleTimeString('en-US', {
+        hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit',
+      });
+    };
 
+    if (isWrapPair) {
+      if (!wrapItems.length) return [];
+      return wrapItems.map((item: any, idx: number) => {
+        const isWrap = item.type === 'wrap';
+        const fromSymbol = isWrap ? 'BTC' : 'frBTC';
+        const toSymbol = isWrap ? 'frBTC' : 'BTC';
+        const fromId = isWrap ? 'btc' : '32:0';
+        const toId = isWrap ? '32:0' : 'btc';
+        const amount = item.amount || item.value || '0';
+        return {
+          id: `${item.transactionId || item.txid || 'wrap'}-${idx}`,
+          soldFormatted: formatAmount(amount, 8, fromSymbol),
+          boughtFormatted: formatAmount(amount, 8, toSymbol),
+          fromSymbol,
+          fromId,
+          toSymbol,
+          toId,
+          type: isWrap ? 'Wrap' : 'Unwrap',
+          time: fmtTime(item.timestamp),
+        };
+      });
+    }
+
+    if (!swapItems?.length) return [];
     return swapItems.map((item: any, idx: number) => {
       // Handle both formats:
       // Format 1 (get-pool-swap-history): { pay: { amount, tokenId: {block,tx} }, receive: { ... } }
@@ -129,12 +206,6 @@ export default function RecentTradesPanel({ baseToken, quoteToken }: Props) {
 
       const type: 'Market' | 'Limit' = item.orderType === 'limit' ? 'Limit' : 'Market';
 
-      let time = '--:--:--';
-      if (item.timestamp) {
-        const d = new Date(typeof item.timestamp === 'number' ? item.timestamp * 1000 : item.timestamp);
-        time = d.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
-      }
-
       return {
         id: `${item.transactionId || item.txid || item.transactionHash || 'trade'}-${idx}`,
         soldFormatted,
@@ -144,10 +215,10 @@ export default function RecentTradesPanel({ baseToken, quoteToken }: Props) {
         toSymbol,
         toId,
         type,
-        time,
+        time: fmtTime(item.timestamp),
       };
     });
-  }, [swapItems, pairPool]);
+  }, [isWrapPair, wrapItems, swapItems, pairPool]);
 
   // Infinite scroll
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -166,6 +237,10 @@ export default function RecentTradesPanel({ baseToken, quoteToken }: Props) {
     return () => el.removeEventListener('scroll', handleScroll);
   }, [handleScroll]);
 
+  const emptyMessage = isWrapPair
+    ? 'No recent wraps or unwraps'
+    : (!poolId && (isPoolsLoading || !poolsData) ? 'Loading...' : 'No recent trades for this pair');
+
   return (
     <div>
       <div className="sf-table-header grid grid-cols-[0.5fr_0.7fr_0.7fr_1fr_0.6fr] gap-1 px-3 py-2">
@@ -179,7 +254,7 @@ export default function RecentTradesPanel({ baseToken, quoteToken }: Props) {
       <div ref={scrollRef} className="max-h-[240px] overflow-y-auto">
         {trades.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-8 text-[color:var(--sf-text)]/20">
-            <span className="text-xs">{poolId ? 'No recent trades for this pair' : 'Select a pair'}</span>
+            <span className="text-xs">{emptyMessage}</span>
           </div>
         ) : trades.map(trade => (
           <div
@@ -208,7 +283,7 @@ export default function RecentTradesPanel({ baseToken, quoteToken }: Props) {
           </div>
         ))}
         {isFetchingNextPage && (
-          <div className="py-2 text-center text-[10px] text-[color:var(--sf-text)]/20">Loading...</div>
+          <div className="py-2 text-center text-xs text-[color:var(--sf-text)]/20">Loading...</div>
         )}
       </div>
     </div>

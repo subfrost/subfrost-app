@@ -2281,6 +2281,18 @@ export default function SwapShell() {
         quoteToken={toToken?.symbol || 'frBTC'}
         baseTokenId={fromToken?.id || '2:0'}
         quoteTokenId={toToken?.id || '32:0'}
+        poolId={chartPool?.id}
+        isWrapPair={isWrapPair || isUnwrapPair}
+        onAddLiquidity={(pair) => {
+          if (pair.token0Id) {
+            setPoolToken0({ id: pair.token0Id, symbol: pair.token0Symbol, name: pair.token0Symbol });
+          }
+          if (pair.token1Id) {
+            setPoolToken1({ id: pair.token1Id, symbol: pair.token1Symbol, name: pair.token1Symbol });
+          }
+          setLiquidityMode('provide');
+          setIsLiquidityModalOpen(true);
+        }}
       />
 
       {/* Liquidity Modal */}
@@ -2312,8 +2324,8 @@ export default function SwapShell() {
             isRemoveLoading={removeLiquidityMutation.isPending}
             token0BalanceText={formatBalance(poolToken0?.id)}
             token1BalanceText={formatBalance(poolToken1?.id)}
-            token0FiatText="$0.00"
-            token1FiatText="$0.00"
+            token0FiatText={calculateUsdValue(poolToken0?.id, poolToken0Amount)}
+            token1FiatText={calculateUsdValue(poolToken1?.id, poolToken1Amount)}
             onPercentToken0={poolToken0 ? handlePercentToken0 : undefined}
             onPercentToken1={poolToken1 ? handlePercentToken1 : undefined}
             minimumToken0={poolToken0Amount ? (parseFloat(poolToken0Amount) * 0.995).toFixed(

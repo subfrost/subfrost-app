@@ -441,6 +441,12 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
   // on dependency changes (e.g., sdkInitialized going from false→true)
   const hasInitializedRef = useRef(false);
 
+  // Track whether the user explicitly disconnected on the current network.
+  // Without this, the devnet auto-connect effect below immediately re-creates
+  // the boot wallet the moment `wallet` goes null, making disconnect a no-op.
+  // Reset on network change so switching back to devnet still auto-connects.
+  const userDisconnectedRef = useRef(false);
+
   // Check for stored keystore and restore session on mount
   // Only runs once per mount — uses hasInitializedRef to prevent re-triggering
   // when sdkInitialized/loadWallet change after the initial run.
@@ -583,7 +589,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
     // Positions + My Activity only show user-initiated actions.
     // DO NOT change boot.ts to coinType=0 — breaks WASM keystore.
     // See CLAUDE.md "Address Derivation — Two CoinType Systems" for full history.
-    if (network === 'devnet' && !wallet) {
+    if (network === 'devnet' && !wallet && !userDisconnectedRef.current) {
       const BOOT_MNEMONIC = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
       try {
         const bootWallet = createWalletViaClient(BOOT_MNEMONIC, toSdkNetwork(network));
@@ -619,6 +625,10 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
     // Only handle network changes for keystore wallets
     if (prevNetworkRef.current === network) return;
     prevNetworkRef.current = network;
+
+    // Network change is a fresh context — clear the explicit-disconnect flag so
+    // the devnet auto-connect can fire again when the user switches back.
+    userDisconnectedRef.current = false;
 
     const sessionMnemonic = sessionStorage.getItem(STORAGE_KEYS.SESSION_MNEMONIC);
     const storedWalletType = localStorage.getItem(STORAGE_KEYS.WALLET_TYPE);
@@ -922,6 +932,10 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
 
   // Disconnect (lock) wallet - works for both keystore and browser wallets
   const disconnect = useCallback(async () => {
+    // Mark explicit disconnect so the devnet auto-connect effect doesn't
+    // immediately re-create the boot wallet. Cleared on network change.
+    userDisconnectedRef.current = true;
+
     // Clear keystore session
     sessionStorage.removeItem(STORAGE_KEYS.SESSION_MNEMONIC);
     setWallet(null);

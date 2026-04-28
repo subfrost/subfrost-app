@@ -28,6 +28,11 @@ interface Stats {
   }>;
   allParentRedemptions: number[];
   allCodeRedemptions: number[];
+  topCodesByRedemptions: Array<{
+    code: string;
+    redemptions: number;
+    isParent: boolean;
+  }>;
 }
 
 function formatLabel(dateStr: string): string {
@@ -305,9 +310,24 @@ const PIE_COLORS = [
 ];
 
 function CommunityFuelPie({ data, showValues, sizeScale = 1 }: { data: CommunityFuel[]; showValues?: boolean; sizeScale?: number }) {
-  const sorted = [...data].sort((a, b) => b.total - a.total);
-  const grandTotal = sorted.reduce((s, d) => s + d.total, 0);
+  const allSorted = [...data].sort((a, b) => b.total - a.total);
+  const grandTotal = allSorted.reduce((s, d) => s + d.total, 0);
   if (grandTotal === 0) return null;
+
+  // Top 5 communities + "Other" bucket aggregating the rest
+  const top5 = allSorted.slice(0, 5);
+  const rest = allSorted.slice(5);
+  const sorted: CommunityFuel[] = rest.length > 0
+    ? [
+        ...top5,
+        {
+          community: 'Other',
+          total: Math.round(rest.reduce((s, d) => s + d.total, 0) * 100) / 100,
+          addressCount: rest.reduce((s, d) => s + d.addressCount, 0),
+          amounts: rest.flatMap((d) => d.amounts),
+        },
+      ]
+    : top5;
 
   const size = Math.round(200 * sizeScale);
   const cx = size / 2;
@@ -497,6 +517,148 @@ function TopParentsBarChart({ data, heightScale = 1 }: { data: Stats['topParents
             );
           })}
         </svg>
+      )}
+    </div>
+  );
+}
+
+function Top25CodesChart({
+  data,
+  heightScale = 1,
+}: {
+  data: Stats['topCodesByRedemptions'];
+  heightScale?: number;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(0);
+
+  const updateWidth = useCallback(() => {
+    if (containerRef.current) {
+      setWidth(containerRef.current.clientWidth);
+    }
+  }, []);
+
+  useEffect(() => {
+    updateWidth();
+    const observer = new ResizeObserver(updateWidth);
+    if (containerRef.current) observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, [updateWidth]);
+
+  const sorted = [...data].sort((a, b) => b.redemptions - a.redemptions).slice(0, 25);
+  const maxVal = sorted.length > 0 ? sorted[0].redemptions : 1;
+
+  const PARENT_COLOR = 'rgb(59,130,246)';
+  const CHILD_COLOR = 'rgb(168,85,247)';
+
+  const height = Math.round(360 * heightScale);
+  const padLeft = 56;
+  const padRight = 12;
+  const padTop = 20;
+  const padBottom = 100;
+  const chartW = Math.max(width - padLeft - padRight, 1);
+  const chartH = height - padTop - padBottom;
+
+  const barCount = sorted.length;
+  const gap = Math.max(4, chartW * 0.008);
+  const barWidth = barCount > 0 ? Math.max(8, (chartW - gap * (barCount + 1)) / barCount) : 0;
+
+  const yTicks: number[] = [];
+  if (maxVal <= 5) {
+    for (let i = 0; i <= maxVal; i++) yTicks.push(i);
+  } else {
+    const step = Math.ceil(maxVal / 4);
+    for (let v = 0; v <= maxVal; v += step) yTicks.push(v);
+    if (yTicks[yTicks.length - 1] !== maxVal) yTicks.push(maxVal);
+  }
+
+  return (
+    <div ref={containerRef} className="w-full">
+      {width > 0 && (
+        <>
+          <svg width={width} height={height} className="overflow-visible">
+            {yTicks.map((v) => {
+              const y = padTop + chartH - (maxVal > 0 ? (v / maxVal) * chartH : 0);
+              return (
+                <line
+                  key={v}
+                  x1={padLeft}
+                  y1={y}
+                  x2={padLeft + chartW}
+                  y2={y}
+                  stroke="var(--sf-glass-border)"
+                  strokeDasharray="3,3"
+                />
+              );
+            })}
+            {yTicks.map((v) => {
+              const y = padTop + chartH - (maxVal > 0 ? (v / maxVal) * chartH : 0);
+              return (
+                <text
+                  key={v}
+                  x={padLeft - 8}
+                  y={y}
+                  textAnchor="end"
+                  dominantBaseline="middle"
+                  fill="var(--sf-muted)"
+                  fontSize={11}
+                >
+                  {v.toLocaleString()}
+                </text>
+              );
+            })}
+            {sorted.map((item, i) => {
+              const barH = maxVal > 0 ? (item.redemptions / maxVal) * chartH : 0;
+              const x = padLeft + gap + i * (barWidth + gap);
+              const y = padTop + chartH - barH;
+              const color = item.isParent ? PARENT_COLOR : CHILD_COLOR;
+              return (
+                <g key={`${item.code}-${i}`}>
+                  <rect
+                    x={x}
+                    y={y}
+                    width={barWidth}
+                    height={barH}
+                    fill={color}
+                    rx={3}
+                  />
+                  <text
+                    x={x + barWidth / 2}
+                    y={y - 5}
+                    textAnchor="middle"
+                    fill="var(--sf-text)"
+                    fontSize={10}
+                    fontWeight="bold"
+                  >
+                    {item.redemptions}
+                  </text>
+                  <text
+                    x={x + barWidth / 2}
+                    y={padTop + chartH + 8}
+                    textAnchor="end"
+                    dominantBaseline="middle"
+                    fill="var(--sf-muted)"
+                    fontSize={10}
+                    transform={`rotate(-45, ${x + barWidth / 2}, ${padTop + chartH + 8})`}
+                  >
+                    {item.code.toUpperCase()}
+                  </text>
+                </g>
+              );
+            })}
+          </svg>
+          {/* Legend */}
+          <div className="mt-2 flex items-center justify-center gap-6">
+            <div className="flex items-center gap-2 text-xs text-[color:var(--sf-muted)]">
+              <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: PARENT_COLOR }} />
+              Parent
+            </div>
+            <div className="flex items-center gap-2 text-xs text-[color:var(--sf-muted)]">
+              <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: CHILD_COLOR }} />
+              Child
+            </div>
+          </div>
+        </>
       )}
     </div>
   );
@@ -740,6 +902,18 @@ export default function DashboardTab() {
                 <CumulativeRedemptionsGraph data={stats.redemptionsByDay} heightScale={dashboardView === 'BOTH' ? 1.5 : 1.875} />
               )}
             </div>
+          </div>
+
+          {/* Top 25 Codes by Redemptions */}
+          <div className="rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-6">
+            <h3 className="mb-4 text-sm font-semibold text-[color:var(--sf-text)]">
+              Top 25 Codes by Redemptions
+            </h3>
+            {!stats.topCodesByRedemptions || stats.topCodesByRedemptions.length === 0 ? (
+              <div className="text-sm text-[color:var(--sf-muted)]">No redemptions yet</div>
+            ) : (
+              <Top25CodesChart data={stats.topCodesByRedemptions} />
+            )}
           </div>
         </>
       )}
