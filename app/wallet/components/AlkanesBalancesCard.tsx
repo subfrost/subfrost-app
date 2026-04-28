@@ -5,10 +5,11 @@ import { useWallet } from '@/context/WalletContext';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { useEnrichedWalletData } from '@/hooks/useEnrichedWalletData';
 import { usePools } from '@/hooks/usePools';
-import { RefreshCw, Send, ArrowUpFromLine, ArrowLeftRight } from 'lucide-react';
+import { RefreshCw, Send, ArrowUpFromLine, ArrowLeftRight, Flame } from 'lucide-react';
 import TokenIcon from '@/app/components/TokenIcon';
 import { useTranslation } from '@/hooks/useTranslation';
 import { usePositionMetadata, isEnrichablePosition } from '@/hooks/usePositionMetadata';
+import { useFuelAllocation } from '@/hooks/useFuelAllocation';
 
 import type { AlkaneAsset } from '@/hooks/useEnrichedWalletData';
 
@@ -25,9 +26,10 @@ export default function AlkanesBalancesCard({ onSendAlkane }: AlkanesBalancesCar
   const { balances, isAlkanesLoading, error, refreshAlkanes } = useEnrichedWalletData();
   const { data: poolsData } = usePools();
   const { data: positionMeta } = usePositionMetadata(balances.alkanes);
+  const fuelAllocation = useFuelAllocation();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [expandedAlkaneId, setExpandedAlkaneId] = useState<string | null>(null);
-  const [alkaneFilter, setAlkaneFilter] = useState<'tokens' | 'nfts' | 'positions'>('tokens');
+  const [alkaneFilter, setAlkaneFilter] = useState<'tokens' | 'nfts' | 'positions' | 'fuel'>('tokens');
   const hasAutoRefreshed = useRef(false);
 
   const poolMap = useMemo(() => {
@@ -209,9 +211,9 @@ export default function AlkanesBalancesCard({ onSendAlkane }: AlkanesBalancesCar
         </button>
       </div>
 
-      {/* Tokens / NFTs / Positions tabs */}
+      {/* Tokens / Positions / NFTs / FUEL tabs (FUEL only shown to allocated wallets) */}
       <div className="flex gap-4 mb-4 border-b border-[color:var(--sf-outline)]">
-        {(['tokens', 'positions', 'nfts'] as const).map((tab) => (
+        {((['tokens', 'positions', 'nfts', ...(fuelAllocation.isEligible ? ['fuel'] : [])] as const) as readonly ('tokens' | 'positions' | 'nfts' | 'fuel')[]).map((tab) => (
           <button
             key={tab}
             onClick={() => setAlkaneFilter(tab)}
@@ -221,13 +223,37 @@ export default function AlkanesBalancesCard({ onSendAlkane }: AlkanesBalancesCar
                 : 'text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]'
             }`}
           >
-            {tab === 'tokens' ? t('balances.tabTokens') : tab === 'nfts' ? t('balances.tabNfts') : t('balances.tabPositions')}
+            {tab === 'tokens' ? t('balances.tabTokens')
+              : tab === 'nfts' ? t('balances.tabNfts')
+              : tab === 'fuel' ? t('balances.tabFuel')
+              : t('balances.tabPositions')}
           </button>
         ))}
       </div>
 
-      {/* Token List */}
-      {(() => {
+      {/* FUEL allocation tab — visible only to wallets on the allocation list */}
+      {alkaneFilter === 'fuel' ? (
+        <div className="overflow-y-auto flex-1 no-scrollbar">
+          <div className="rounded-lg bg-[color:var(--sf-primary)]/5 p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-amber-500/20 border border-amber-500/30">
+                <Flame size={20} className="text-amber-400" />
+              </div>
+              <div>
+                <div className="text-sm text-[color:var(--sf-text)]/60 mb-1">{t('balances.fuelAllocation')}</div>
+                <div className="text-lg sm:text-xl font-bold text-[color:var(--sf-text)]">
+                  {fuelAllocation.amount.toLocaleString()} FUEL
+                </div>
+              </div>
+            </div>
+            <div className="mt-4 pt-4 border-t border-amber-500/20">
+              <p className="text-xs text-[color:var(--sf-text)]/60 leading-relaxed">
+                {t('balances.fuelNote')}
+              </p>
+            </div>
+          </div>
+        </div>
+      ) : (() => {
         let filtered = balances.alkanes.filter((a) => {
           if (alkaneFilter === 'positions') return isPosition(a);
           if (alkaneFilter === 'nfts') return isNft(a.balance) && !isPosition(a);

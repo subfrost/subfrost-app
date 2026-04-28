@@ -88,8 +88,8 @@ const TransactionHistory = forwardRef<TransactionHistoryHandle>(function Transac
   }
 
   return (
-    <div>
-      <div ref={scrollRef} className="space-y-2 max-h-[232px] overflow-y-auto pr-1">
+    <div className="lg:flex lg:flex-col lg:flex-1 lg:min-h-0">
+      <div ref={scrollRef} className="space-y-2 max-h-[308px] overflow-y-auto pr-1 lg:max-h-none lg:flex-1">
         {transactions.length > 0 ? (
           <>
             {transactions.map((tx) => (
@@ -124,13 +124,11 @@ const TransactionHistory = forwardRef<TransactionHistoryHandle>(function Transac
                   </span>
                 </div>
                 <div className="text-xs text-[color:var(--sf-text)]/60 mt-2">
-                  {tx.blockTime ? formatDate(tx.blockTime) : t('txHistory.pending')}
-                  {tx.blockHeight && (
-                    <span className="ml-2">• {t('txHistory.block')} {tx.blockHeight}</span>
-                  )}
-                  {tx.fee && (
-                    <span className="ml-2">• {t('txHistory.fee')} {tx.fee.toLocaleString()} {t('txHistory.sats')}</span>
-                  )}
+                  {[
+                    tx.blockTime ? formatDate(tx.blockTime) : (!tx.confirmed ? t('txHistory.pending') : null),
+                    tx.blockHeight ? `${t('txHistory.block')} ${tx.blockHeight}` : null,
+                    tx.fee ? `${t('txHistory.fee')} ${tx.fee.toLocaleString()} ${t('txHistory.sats')}` : null,
+                  ].filter(Boolean).join(' • ')}
                 </div>
               </a>
             ))}

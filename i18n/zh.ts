@@ -224,6 +224,7 @@ const zh: Record<string, string> = {
   'balances.tabTokens': '\u4ee3\u5e01',
   'balances.tabNfts': 'NFTs',
   'balances.tabPositions': '\u4ed3\u4f4d',
+  'balances.tabFuel': 'FUEL',
   'balances.tabBrc20': 'BRC20 \u4ee3\u5e01',
   'balances.tabOrdinals': 'Ordinals',
   'balances.noNfts': '\u672a\u627e\u5230 NFT',

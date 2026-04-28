@@ -12,7 +12,7 @@ import type { Network } from '@/utils/constants';
 /**
  * Format alkane token balance for display
  * Handles large numbers with proper decimal precision
- * Matches the formatting logic in BalancesPanel.tsx
+ * Matches the formatting logic in AlkanesBalancesCard.tsx
  */
 function formatAlkaneBalance(balance: string, decimals: number = 8): string {
   if (!balance || balance === '0') return '0';

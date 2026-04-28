@@ -223,6 +223,7 @@ const en: Record<string, string> = {
   'balances.tabTokens': 'Tokens',
   'balances.tabNfts': 'NFTs',
   'balances.tabPositions': 'Positions',
+  'balances.tabFuel': 'FUEL',
   'balances.tabBrc20': 'BRC20',
   'balances.tabRunes': 'Runes',
   'balances.tabOrdinals': 'Ordinals',

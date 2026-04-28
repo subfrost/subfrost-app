@@ -307,7 +307,7 @@ export default function SplashScreen() {
         ref={canvasRef}
         width={160}
         height={160}
-        style={{ width: 160, height: 160 }}
+        style={{ width: 80, height: 80 }}
       />
       <div
         style={{

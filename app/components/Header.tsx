@@ -215,8 +215,7 @@ export default function Header() {
                   <div className="absolute right-0 z-50 mt-2 w-64 overflow-hidden rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-surface)]/95 backdrop-blur-xl shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
                     {account?.nativeSegwit?.address && (
                       <div className="px-4 py-3 border-b border-[color:var(--sf-glass-border)]">
-                        <div className="flex items-center gap-1.5 text-xs text-[color:var(--sf-text)]/60 mb-1">
-                          {walletIcon && <img src={walletIcon} alt="" width={12} height={12} className="rounded-sm" />}
+                        <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">
                           {t("header.nativeSegwit")}
                         </div>
                         <div className="flex items-center justify-between gap-2">
@@ -426,8 +425,7 @@ export default function Header() {
                   <div className="absolute right-0 z-50 mt-2 w-64 overflow-hidden rounded-xl border-none bg-[color:var(--sf-surface)] backdrop-blur-xl shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
                     {account?.nativeSegwit?.address && (
                       <div className="px-4 py-3 border-b border-[color:var(--sf-glass-border)]">
-                        <div className="flex items-center gap-1.5 text-xs text-[color:var(--sf-text)]/60 mb-1">
-                          {walletIcon && <img src={walletIcon} alt="" width={12} height={12} className="rounded-sm" />}
+                        <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">
                           {t("header.nativeSegwit")}
                         </div>
                         <div className="flex items-center justify-between gap-2">

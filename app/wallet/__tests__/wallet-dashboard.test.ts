@@ -45,10 +45,6 @@ describe('WalletDashboardPage (page.tsx)', () => {
     expect(src).toMatch(/import\s+TransactionHistory/);
   });
 
-  it('imports BalancesPanel component', () => {
-    expect(src).toMatch(/import\s+BalancesPanel\s+from\s+['"]\.\/components\/BalancesPanel['"]/);
-  });
-
   it('imports WalletSettings component', () => {
     expect(src).toMatch(/import\s+WalletSettings\s+from\s+['"]\.\/components\/WalletSettings['"]/);
   });
@@ -520,29 +516,26 @@ describe('WalletSettings', () => {
 });
 
 // ---------------------------------------------------------------------------
-// BalancesPanel.tsx
+// AlkanesBalancesCard.tsx — FUEL tab integration
 // ---------------------------------------------------------------------------
-describe('BalancesPanel', () => {
-  const src = readSource(path.join(COMPONENTS_DIR, 'BalancesPanel.tsx'));
+describe('AlkanesBalancesCard FUEL tab', () => {
+  const src = readSource(path.join(COMPONENTS_DIR, 'AlkanesBalancesCard.tsx'));
 
   it('uses useFuelAllocation hook', () => {
     expect(src).toMatch(/import\s+\{\s*useFuelAllocation\s*\}\s+from\s+['"]@\/hooks\/useFuelAllocation['"]/);
     expect(src).toMatch(/useFuelAllocation\(\)/);
   });
 
-  it('conditionally renders FUEL allocation section for eligible wallets', () => {
+  it('conditionally adds FUEL tab when wallet is eligible', () => {
     expect(src).toMatch(/fuelAllocation\.isEligible/);
-    expect(src).toMatch(/FUEL/);
+    expect(src).toMatch(/'fuel'/);
   });
 
-  it('uses Flame icon for FUEL allocation display', () => {
+  it('renders FUEL allocation card content for the FUEL tab', () => {
+    expect(src).toMatch(/alkaneFilter\s*===\s*'fuel'/);
     expect(src).toMatch(/import.*Flame/);
     expect(src).toMatch(/<Flame/);
-  });
-
-  it('shows fallback message when not eligible for FUEL', () => {
-    expect(src).toMatch(/!fuelAllocation\.isEligible/);
-    expect(src).toMatch(/No additional balances to display/);
+    expect(src).toMatch(/balances\.fuelAllocation/);
   });
 });
 
@@ -611,7 +604,6 @@ describe('Cross-component integration patterns', () => {
       path.join(COMPONENTS_DIR, 'BitcoinBalanceCard.tsx'),
       path.join(COMPONENTS_DIR, 'TransactionHistory.tsx'),
       path.join(COMPONENTS_DIR, 'ReceiveModal.tsx'),
-      path.join(COMPONENTS_DIR, 'BalancesPanel.tsx'),
     ];
     for (const f of files) {
       const s = readSource(f);

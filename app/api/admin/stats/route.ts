@@ -90,6 +90,24 @@ export async function GET(request: NextRequest) {
       ...parent.childCodes.map((c) => c._count.redemptions),
     ]);
 
+    // Top 25 codes (parent + child mixed) by individual redemption count
+    const allCodesWithCounts = await prisma.inviteCode.findMany({
+      select: {
+        code: true,
+        parentCodeId: true,
+        _count: { select: { redemptions: true } },
+      },
+    });
+    const topCodesByRedemptions = allCodesWithCounts
+      .map((c) => ({
+        code: c.code,
+        redemptions: c._count.redemptions,
+        isParent: c.parentCodeId === null,
+      }))
+      .filter((c) => c.redemptions > 0)
+      .sort((a, b) => b.redemptions - a.redemptions)
+      .slice(0, 25);
+
     const stats = {
       totalCodes,
       activeCodes,
@@ -101,6 +119,7 @@ export async function GET(request: NextRequest) {
       redemptionsByDay,
       allParentRedemptions: allParents.map((p) => p.totalRedemptions),
       allCodeRedemptions,
+      topCodesByRedemptions,
     };
 
     await cache.set(CACHE_KEY, stats, CACHE_TTL);
