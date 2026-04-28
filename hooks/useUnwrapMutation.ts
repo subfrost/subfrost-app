@@ -251,9 +251,21 @@ export function useUnwrapMutation() {
           signedPsbtBase64 = await signTaprootPsbt(signedPsbtBase64);
         }
 
-        // Finalize and extract transaction
+        // Finalize and extract transaction. Some wallets (UniSat with
+        // autoFinalized: true) return PSBTs that are already finalized —
+        // calling finalizeAllInputs() on those is at best wasteful and at
+        // worst throws because there's nothing left to finalize. Match the
+        // pattern used by useSwapMutation / useWrapMutation: only finalize
+        // if no input has finalScriptWitness or finalScriptSig set.
         const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtBase64, { network: btcNetwork });
-        signedPsbt.finalizeAllInputs();
+        const alreadyFinalized = signedPsbt.data.inputs.every(
+          input => input.finalScriptWitness || input.finalScriptSig,
+        );
+        if (alreadyFinalized) {
+          console.log('[useUnwrapMutation] PSBT already finalized by wallet, skipping finalizeAllInputs');
+        } else {
+          signedPsbt.finalizeAllInputs();
+        }
 
         const tx = signedPsbt.extractTransaction();
         const txHex = tx.toHex();
