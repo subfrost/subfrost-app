@@ -191,17 +191,20 @@ export function useWrapMutation() {
       console.log('[WRAP] ===================================================');
 
       try {
-        // Get inscription outpoints from UniSat wallet API to protect inscriptions during wrap.
-        // Get clean BTC UTXOs from wallet API (UniSat getBitcoinUtxos).
-        let paymentUtxos: string[] | undefined;
-        if (isBrowserWallet && (window as any).unisat?.getBitcoinUtxos) {
-          try {
-            const btcUtxos = await (window as any).unisat.getBitcoinUtxos();
-            if (btcUtxos?.length) {
-              paymentUtxos = btcUtxos.map((u: any) => `${u.txid}:${u.vout}:${u.satoshis}`);
-            }
-          } catch { /* wallet API unavailable — SDK falls back to lua */ }
-        }
+        // Clean BTC UTXOs (no inscriptions, no runes, no alkanes) — wallet-verified.
+        // Routed through the wallet capability registry so the call only fires for
+        // wallets that actually expose this API. Reaching into `window.<provider>`
+        // directly was unsafe: e.g. `window.unisat` exists whenever the UniSat
+        // extension is installed, even if the user is connected via Xverse, and
+        // calling its API triggered a stray UniSat "connect site" popup before
+        // the real Xverse signing prompt (regression caught 2026-04-28).
+        // Returns `null` for wallets without the capability — SDK then falls back
+        // to its own lua/esplora UTXO selection.
+        const { getCleanBtcUtxosForWallet } = await import('@/lib/wallet/walletCapabilities');
+        const cleanUtxos = isBrowserWallet
+          ? await getCleanBtcUtxosForWallet(browserWallet?.info?.id)
+          : null;
+        const paymentUtxos: string[] | undefined = cleanUtxos ?? undefined;
 
         const result = await provider.alkanesExecuteTyped({
           toAddresses,
