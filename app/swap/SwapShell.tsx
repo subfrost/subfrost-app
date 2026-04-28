@@ -2281,6 +2281,8 @@ export default function SwapShell() {
         quoteToken={toToken?.symbol || 'frBTC'}
         baseTokenId={fromToken?.id || '2:0'}
         quoteTokenId={toToken?.id || '32:0'}
+        poolId={chartPool?.id}
+        isWrapPair={isWrapPair || isUnwrapPair}
         onAddLiquidity={(pair) => {
           if (pair.token0Id) {
             setPoolToken0({ id: pair.token0Id, symbol: pair.token0Symbol, name: pair.token0Symbol });

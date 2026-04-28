@@ -54,17 +54,7 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
   };
   
   const balanceUsage = calculateBalanceUsage();
-  
-  // Color based on usage
-  const getBalanceColor = () => {
-    const isDark = theme === 'dark';
-    if (balanceUsage === 0) return isDark ? 'bg-gray-700' : 'bg-gray-200';
-    if (balanceUsage < 50) return isDark ? 'bg-green-700' : 'bg-green-500';
-    if (balanceUsage < 80) return isDark ? 'bg-yellow-700' : 'bg-yellow-500';
-    if (balanceUsage < 100) return isDark ? 'bg-orange-700' : 'bg-orange-500';
-    return isDark ? 'bg-red-700' : 'bg-red-500';
-  };
-  
+
   // Handle percentage clicks
   const handlePercent = (percent: number) => {
     const amount = (btcBalance * percent).toFixed(8);
@@ -353,14 +343,6 @@ export default function OpenPositionForm({ contracts, onContractSelect }: OpenPo
                         </span>
                       )}
                     </div>
-                    {balanceUsage > 0 && (
-                      <div className={`w-16 h-1.5 ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-200'} rounded-full overflow-hidden`}>
-                        <div
-                          className={`h-full ${getBalanceColor()} transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none`}
-                          style={{ width: `${balanceUsage}%` }}
-                        />
-                      </div>
-                    )}
                   </div>
                   <div className={`flex items-center gap-1.5 transition-opacity duration-300 ${inputFocused ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`} onClick={(e) => e.stopPropagation()}>
                     <button

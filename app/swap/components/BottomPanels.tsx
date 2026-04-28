@@ -40,6 +40,8 @@ interface Props {
   quoteToken: string;
   baseTokenId?: string;
   quoteTokenId?: string;
+  poolId?: string;
+  isWrapPair?: boolean;
   onAddLiquidity?: (pair: {
     token0Id?: string;
     token0Symbol: string;
@@ -57,7 +59,7 @@ function EmptyState({ icon: Icon, message }: { icon: any; message: string }) {
   );
 }
 
-export default function BottomPanels({ baseToken, quoteToken, baseTokenId, quoteTokenId, onAddLiquidity }: Props) {
+export default function BottomPanels({ baseToken, quoteToken, baseTokenId, quoteTokenId, poolId, isWrapPair, onAddLiquidity }: Props) {
   const [activeTab, setActiveTab] = useState<PanelTab>('trades');
   const { isConnected, network } = useWallet() as any;
   const { positions: allPositions, isLoading: isLoadingPositions } = useLPPositions();
@@ -324,7 +326,12 @@ export default function BottomPanels({ baseToken, quoteToken, baseTokenId, quote
 
           {/* Trades */}
           {activeTab === 'trades' && (
-            <RecentTradesPanel baseToken={baseTokenId || baseToken} quoteToken={quoteTokenId || quoteToken} />
+            <RecentTradesPanel
+              baseToken={baseTokenId || baseToken}
+              quoteToken={quoteTokenId || quoteToken}
+              poolId={poolId}
+              isWrapPair={isWrapPair}
+            />
           )}
 
           {/* Activity */}
