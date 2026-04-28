@@ -85,15 +85,20 @@ describe('Wallet detection (isWalletInstalled)', () => {
     expect(isWalletInstalled(unisatWallet)).toBe(true);
   });
 
-  it('detects OKX via window.okxwallet', async () => {
-    const { isWalletInstalled, BROWSER_WALLETS } = await import('../../constants/wallets');
-    const okxWallet = BROWSER_WALLETS.find(w => w.id === 'okx')!;
-    expect(okxWallet).toBeDefined();
-
-    expect(isWalletInstalled(okxWallet)).toBe(false);
-
-    (globalThis.window as any).okxwallet = { bitcoin: { connect: vi.fn() } };
-    expect(isWalletInstalled(okxWallet)).toBe(true);
+  it('OKX is intentionally NOT in BROWSER_WALLETS (removed for inscription safety)', async () => {
+    // OKX was deliberately removed from the supported-wallet list in commit
+    // 5d8bc5f3 (`fix: prevent spending inscription UTXOs as swap fees`).
+    // Reason: OKX is single-address (taproot only) and exposes no
+    // `getBitcoinUtxos` API for clean-UTXO selection. Without that, swaps
+    // and wraps fall back to lua-fetched UTXOs which have no ordinal
+    // protection — exposing inscription/rune UTXOs to be spent as fees.
+    //
+    // If you re-add OKX here, you MUST first add a clean-UTXO source
+    // (capability registry entry) so single-address selection won't sweep
+    // collateral assets.
+    const { BROWSER_WALLETS } = await import('../../constants/wallets');
+    const okxWallet = BROWSER_WALLETS.find(w => w.id === 'okx');
+    expect(okxWallet).toBeUndefined();
   });
 });
 

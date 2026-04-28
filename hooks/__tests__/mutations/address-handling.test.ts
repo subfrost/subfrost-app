@@ -28,6 +28,34 @@ function readHook(filename: string): string {
 }
 
 /**
+ * Strip JS line comments and block comments from a source string.
+ *
+ * Used by the "no deprecated patterns" tests below: those tests assert that
+ * mutation hooks don't *call* `window.unisat`, `window.oyl`, etc. directly —
+ * they should route through the wallet-capability registry / signing helpers
+ * instead. Without this stripping, a comment that *explains* why direct
+ * access was unsafe (e.g. the capability-registry comment in useWrapMutation
+ * that mentions `window.unisat exists whenever the UniSat extension is
+ * installed`) would fail the assertion even though no real code makes that
+ * call.
+ *
+ * Conservative implementation:
+ *   - Removes `// ...` to end of line.
+ *   - Removes `/* ... *\/` (multi-line).
+ *   - Doesn't try to handle every edge case (comment-like content inside
+ *     strings, regex literals, JSX, etc.) because mutation hooks don't have
+ *     `window.X` substrings inside string/regex literals — only in code or
+ *     comments.
+ */
+function stripComments(src: string): string {
+  return src
+    // Block comments: /* ... */ across multiple lines
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    // Line comments: // to end of line
+    .replace(/\/\/[^\n]*/g, '');
+}
+
+/**
  * Extract the browser (truthy) branch from a ternary using isBrowserWallet.
  * Handles two patterns:
  *   1. const x = isBrowserWallet\n  ? [value]\n  : [fallback];
@@ -317,25 +345,31 @@ describe('Single-address wallet support (UniSat, OKX)', () => {
 describe('No deprecated patterns', () => {
   describe.each(ALL_HOOKS)('%s', (hookFile) => {
     let src: string;
+    let codeOnly: string;
 
     beforeAll(() => {
       src = readHook(hookFile);
+      // Test intent: no *real code* in mutation hooks reaches into wallet
+      // extension globals like `window.unisat` directly. Comments that
+      // explain why direct access is unsafe (e.g. capability-registry
+      // documentation) are fine and shouldn't fail the assertion.
+      codeOnly = stripComments(src);
     });
 
     it('should not directly access window.oyl', () => {
-      expect(src).not.toContain('window.oyl');
+      expect(codeOnly).not.toContain('window.oyl');
     });
 
     it('should not directly access window.unisat', () => {
-      expect(src).not.toContain('window.unisat');
+      expect(codeOnly).not.toContain('window.unisat');
     });
 
     it('should not directly access window.okxwallet', () => {
-      expect(src).not.toContain('window.okxwallet');
+      expect(codeOnly).not.toContain('window.okxwallet');
     });
 
     it('should not directly access window.xverse', () => {
-      expect(src).not.toContain('window.xverse');
+      expect(codeOnly).not.toContain('window.xverse');
     });
 
     it('should not call patchPsbtForBrowserWallet (removed/deprecated)', () => {
@@ -343,7 +377,7 @@ describe('No deprecated patterns', () => {
         // Wrap imports it but the call site was removed; skip this check
         return;
       }
-      expect(src).not.toMatch(/patchPsbtForBrowserWallet\s*\(/);
+      expect(codeOnly).not.toMatch(/patchPsbtForBrowserWallet\s*\(/);
     });
   });
 });
