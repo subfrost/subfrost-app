@@ -20,7 +20,7 @@ const __dirname = path.dirname(__filename);
 const localWasmPath = './lib/oyl/alkanes/alkanes_web_sys.js';
 
 const nextConfig = {
-  reactStrictMode: true,
+  reactStrictMode: false,
   output: 'standalone',
   outputFileTracingRoot: path.join(__dirname, '.'),
   // Transpile local file: linked packages

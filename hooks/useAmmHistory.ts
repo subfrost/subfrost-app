@@ -300,25 +300,22 @@ export function useInfiniteAmmTxHistory({
       const offset = pageParam * count;
 
       try {
-        let raw: any;
+        // Direct REST fetch — no WASM overhead. Same espo endpoint the SDK calls internally.
+        const rpcBase = `/api/rpc/${network || 'mainnet'}`;
+        const endpoint = address ? 'get-all-address-amm-tx-history' : 'get-all-amm-tx-history';
+        const body = address
+          ? { address, limit: count, offset }
+          : { limit: count, offset };
 
-        // On devnet, the data API calls route to quspo (deprecated) which can hang
-        // for 2+ minutes, freezing the entire UI. Wrap in a 3-second timeout.
-        // If the call times out, return empty — the user can still see trades after
-        // manually executing a swap (which triggers a refetch with fresh data).
-        const dataApiCall = address
-          ? provider.dataApiGetAllAddressAmmTxHistory(address, BigInt(count), BigInt(offset))
-          : provider.dataApiGetAllAmmTxHistory(BigInt(count), BigInt(offset));
+        const resp = await fetch(`${rpcBase}/${endpoint}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          signal: AbortSignal.timeout(10000),
+          body: JSON.stringify(body),
+        });
+        if (!resp.ok) throw new Error(`AMM history HTTP ${resp.status}`);
+        const result = await resp.json();
 
-        raw = await Promise.race([
-          dataApiCall,
-          new Promise((_, reject) => setTimeout(() => reject(new Error('dataApi timeout (10s)')), 10000)),
-        ]);
-
-        const result = mapToObject(raw);
-
-        // API may return { data: { items, total, count, offset } } or { items, ... } directly
-        // Also handle { statusCode, data: [...items] } from devnet server
         const payload = result?.data ?? result;
         const rawItemsRaw = Array.isArray(payload?.items) ? payload.items
           : Array.isArray(payload) ? payload

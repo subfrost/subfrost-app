@@ -38,6 +38,8 @@ type PanelTab = 'orders' | 'positions' | 'trades' | 'activity';
 interface Props {
   baseToken: string;
   quoteToken: string;
+  baseTokenId?: string;
+  quoteTokenId?: string;
 }
 
 function EmptyState({ icon: Icon, message }: { icon: any; message: string }) {
@@ -49,7 +51,7 @@ function EmptyState({ icon: Icon, message }: { icon: any; message: string }) {
   );
 }
 
-export default function BottomPanels({ baseToken, quoteToken }: Props) {
+export default function BottomPanels({ baseToken, quoteToken, baseTokenId, quoteTokenId }: Props) {
   const [activeTab, setActiveTab] = useState<PanelTab>('trades');
   const { isConnected, network } = useWallet() as any;
   const { positions: allPositions, isLoading: isLoadingPositions } = useLPPositions();
@@ -301,7 +303,7 @@ export default function BottomPanels({ baseToken, quoteToken }: Props) {
 
           {/* Trades */}
           {activeTab === 'trades' && (
-            <RecentTradesPanel baseToken={baseToken} quoteToken={quoteToken} />
+            <RecentTradesPanel baseToken={baseTokenId || baseToken} quoteToken={quoteTokenId || quoteToken} />
           )}
 
           {/* Activity */}

@@ -79,14 +79,9 @@ export function espoHeightQueryOptions(network: string, provider?: WebProvider |
   return queryOptions({
     queryKey: queryKeys.height.espo(network),
     queryFn: async () => {
-      // Prefer SDK provider when available
-      if (provider) {
-        try {
-          return await fetchHeightViaSDK(provider);
-        } catch {
-          // Fall back to raw RPC
-        }
-      }
+      // Direct RPC fetch — no WASM overhead. SDK route (espoGetHeight) adds
+      // WASM bridge serialization + 4 console.log lines per call, which is
+      // unnecessary for a single integer polled every 10s.
       return fetchHeightViaRPC(network);
     },
     // This is the ONE query that polls

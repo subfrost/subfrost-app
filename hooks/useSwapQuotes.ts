@@ -30,13 +30,14 @@
  * @see useAlkanesTokenPairs.ts - Pool data fetching
  * @see constants/index.ts - Documentation on factory vs pool opcodes
  */
+import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import BigNumber from 'bignumber.js';
 import { useDebounce } from 'use-debounce';
 import { useWallet } from '@/context/WalletContext';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { getConfig } from '@/utils/getConfig';
-import { useAlkanesTokenPairs, type AlkanesTokenPair } from '@/hooks/useAlkanesTokenPairs';
+import { usePools, type PoolsListItem } from '@/hooks/usePools';
 import { queryPoolFeeWithProvider } from '@/hooks/usePoolFee';
 import { FRBTC_UNWRAP_FEE_PER_1000, FRBTC_WRAP_FEE_PER_1000 } from '@/constants/alkanes';
 import { calculateMaximumFromSlippage, calculateMinimumFromSlippage } from '@/utils/amm';
@@ -142,7 +143,7 @@ async function calculateSwapPrice(
   amount: string,
   direction: Direction,
   maxSlippage: string,
-  pool: AlkanesTokenPair,
+  pool: PoolsListItem,
   provider: WebProvider | null,
   wrapFee: number = FRBTC_WRAP_FEE_PER_1000,
   unwrapFee: number = FRBTC_UNWRAP_FEE_PER_1000,
@@ -151,7 +152,8 @@ async function calculateSwapPrice(
 ) {
   const effectiveSell = originalSellCurrency ?? sellCurrency;
   const effectiveBuy = originalBuyCurrency ?? buyCurrency;
-  const poolFee = await queryPoolFeeWithProvider(provider, pool.poolId);
+  const [pBlock, pTx] = pool.id.split(':');
+  const poolFee = await queryPoolFeeWithProvider(provider, { block: pBlock, tx: pTx });
   let buyAmount: string;
   let sellAmount: string;
   const amountInAlks = toAlks(amount);
@@ -173,8 +175,8 @@ async function calculateSwapPrice(
   }
 
   const isSellToken0 = pool?.token0.id === sellCurrency;
-  const reserveIn = isSellToken0 ? Number(pool?.token0.token0Amount) : Number(pool?.token1.token1Amount);
-  const reserveOut = isSellToken0 ? Number(pool?.token1.token1Amount) : Number(pool?.token0.token0Amount);
+  const reserveIn = isSellToken0 ? Number(pool?.token0Amount) : Number(pool?.token1Amount);
+  const reserveOut = isSellToken0 ? Number(pool?.token1Amount) : Number(pool?.token0Amount);
 
   if (direction === 'sell') {
     let amountIn = Number(amountInAlks);
@@ -217,7 +219,7 @@ async function calculateSwapPrice(
     displayMinimumReceived: fromAlks(minReceivedInAlks),
     displayMaximumSent: fromAlks(maxSentInAlks),
     // Include poolId for the swap mutation to use
-    poolId: pool.poolId,
+    poolId: (() => { const [b, t] = pool.id.split(':'); return { block: b, tx: t }; })(),
   } as SwapQuote;
 }
 
@@ -235,11 +237,23 @@ export function useSwapQuotes(
   const sellCurrencyId = sellCurrency === 'btc' ? FRBTC_ALKANE_ID : sellCurrency;
   const buyCurrencyId = buyCurrency === 'btc' ? FRBTC_ALKANE_ID : buyCurrency;
 
-  const { data: sellPairs, isFetching: fetchingSell, isError: sellError, error: sellErrorObj } = useAlkanesTokenPairs(sellCurrencyId);
-  const { data: buyPairs, isFetching: fetchingBuy, isError: buyError, error: buyErrorObj } = useAlkanesTokenPairs(buyCurrencyId);
-
-  // DIAGNOSTIC: Pool fetching status (disabled — causes re-render spam)
-  // console.log('[useSwapQuotes] Pool data status:', { sellCurrencyId, buyCurrencyId, sellPairs: sellPairs?.length, buyPairs: buyPairs?.length });
+  // Use usePools (cached /api/pools/cached, ~200ms) instead of useAlkanesTokenPairs
+  // (cascading fallback chain, 15-30s timeouts). Same data, same espo source.
+  const { data: poolsData, isFetching: fetchingPools, isError: poolsError, error: poolsErrorObj } = usePools();
+  const sellPairs = useMemo(() =>
+    poolsData?.items?.filter(p => p.token0.id === sellCurrencyId || p.token1.id === sellCurrencyId),
+    [poolsData, sellCurrencyId]
+  );
+  const buyPairs = useMemo(() =>
+    poolsData?.items?.filter(p => p.token0.id === buyCurrencyId || p.token1.id === buyCurrencyId),
+    [poolsData, buyCurrencyId]
+  );
+  const fetchingSell = fetchingPools;
+  const fetchingBuy = fetchingPools;
+  const sellError = poolsError;
+  const buyError = poolsError;
+  const sellErrorObj = poolsErrorObj;
+  const buyErrorObj = poolsErrorObj;
   
   // Fetch dynamic frBTC wrap/unwrap fees
   const { data: premiumData } = useFrbtcPremium();

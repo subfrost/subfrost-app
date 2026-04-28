@@ -282,6 +282,36 @@ async function fetchAddressBalance(rpcPath: string, address: string) {
   return utxos.reduce((sum: number, u: any) => sum + (u.value || 0), 0);
 }
 
+const BTC_BALANCE_CACHE_KEY = 'subfrost_btc_balance_cache';
+
+/** Read last known BTC balance from localStorage — shown instantly while query loads. */
+function getCachedBtcBalance(network: string, addressKey: string): BtcBalanceFast | undefined {
+  if (typeof window === 'undefined') return undefined;
+  try {
+    const raw = localStorage.getItem(BTC_BALANCE_CACHE_KEY);
+    if (!raw) return undefined;
+    const cached = JSON.parse(raw);
+    // Only use cache if it's for the same network + addresses
+    if (cached?.network === network && cached?.addressKey === addressKey) {
+      return cached.balance as BtcBalanceFast;
+    }
+  } catch { /* corrupt cache, ignore */ }
+  return undefined;
+}
+
+/** Persist BTC balance to localStorage for instant display on next load. */
+function cacheBtcBalance(network: string, addressKey: string, balance: BtcBalanceFast) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(BTC_BALANCE_CACHE_KEY, JSON.stringify({
+      network,
+      addressKey,
+      balance,
+      ts: Date.now(),
+    }));
+  } catch { /* quota exceeded, ignore */ }
+}
+
 export function btcBalanceFastQueryOptions(deps: BtcBalanceFastDeps) {
   const addresses: string[] = [];
   if (deps.account?.nativeSegwit?.address) addresses.push(deps.account.nativeSegwit.address);
@@ -290,18 +320,25 @@ export function btcBalanceFastQueryOptions(deps: BtcBalanceFastDeps) {
 
   const isLocal = ['devnet', 'regtest-local', 'qubitcoin-regtest'].includes(deps.network);
 
+  // Show cached balance instantly while the real query loads (eliminates LCP wait)
+  const cached = getCachedBtcBalance(deps.network, addressKey);
+
   return queryOptions<BtcBalanceFast>({
     queryKey: queryKeys.account.btcBalanceFast(deps.network, addressKey, deps.walletType),
     enabled: !!deps.account && deps.isConnected && addresses.length > 0,
     staleTime: isLocal ? 2_000 : Infinity,
     refetchOnMount: true,
+    placeholderData: cached,
     retry: 3,
     retryDelay: (attempt: number) => Math.min(1000 * 2 ** attempt, 5000),
     queryFn: async () => {
       // Browser wallet: get balance directly from wallet API (instant)
       if (deps.walletType === 'browser' && typeof window !== 'undefined') {
         const walletBal = await fetchBalanceFromWalletApi();
-        if (walletBal) return walletBal;
+        if (walletBal) {
+          cacheBtcBalance(deps.network, addressKey, walletBal);
+          return walletBal;
+        }
       }
 
       // Fallback: esplora UTXOs
@@ -317,7 +354,9 @@ export function btcBalanceFastQueryOptions(deps: BtcBalanceFastDeps) {
         if (addresses[i] === deps.account.taproot?.address) p2tr = results[i];
       }
 
-      return { p2wpkh, p2tr, total: p2wpkh + p2tr, pendingIn: 0, pendingOut: 0 };
+      const balance: BtcBalanceFast = { p2wpkh, p2tr, total: p2wpkh + p2tr, pendingIn: 0, pendingOut: 0 };
+      cacheBtcBalance(deps.network, addressKey, balance);
+      return balance;
     },
   });
 }
@@ -664,7 +703,15 @@ export function alkaneBalanceQueryOptions(deps: AlkaneBalanceDeps) {
         } else if (deps.network === 'qubitcoin-regtest') {
           return fetchAlkaneBalancesViaProtobuf(`${window.location.origin}/api/rpc/qubitcoin-regtest`, address);
         } else {
-          const result = await (provider as any).dataApiGetAlkanesByAddress(address);
+          // Direct REST — no WASM overhead. Same espo endpoint the SDK wraps.
+          const resp = await fetch(`/api/rpc/${deps.network || 'mainnet'}/get-alkanes-by-address`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            signal: AbortSignal.timeout(10000),
+            body: JSON.stringify({ address }),
+          });
+          if (!resp.ok) return [];
+          const result = await resp.json();
           return result?.data || [];
         }
       };

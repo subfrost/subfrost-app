@@ -88,6 +88,8 @@ export default function Header() {
     onConnectModalOpenChange,
     disconnect,
     account,
+    browserWallet,
+    walletType,
   } = useWallet() as any;
   const { theme } = useTheme();
   const { t } = useTranslation();
@@ -101,6 +103,8 @@ export default function Header() {
   const truncate = (a: string) => (a ? `${a.slice(0, 6)}…${a.slice(-4)}` : "");
   const walletConnected =
     typeof connected === "boolean" ? connected : isConnected;
+  // Wallet icon: browser wallet icon from SDK/constants, keystore gets a generic key icon
+  const walletIcon = walletType === 'browser' ? (browserWallet?.info?.icon || null) : null;
   const isDualAddress = !!account?.nativeSegwit?.address && !!account?.taproot?.address;
   const hasFast = btcFast && btcFast.total > 0;
   const fastSats = isDualAddress ? (btcFast?.p2wpkh ?? 0) : (btcFast?.total ?? 0);
@@ -202,11 +206,7 @@ export default function Header() {
                   onClick={() => setMenuOpen((v) => !v)}
                   className="flex items-center gap-1.5 rounded-full bg-[color:var(--sf-panel-bg)] px-2 py-2 shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]"
                 >
-                  <AddressAvatar
-                    address={address}
-                    size={20}
-                    className="shrink-0"
-                  />
+                  <AddressAvatar address={address} size={20} className="shrink-0" />
                   <span className="text-sm font-semibold text-[color:var(--sf-text)] whitespace-nowrap">
                     {isBalanceLoading ? "..." : btcBalance} BTC
                   </span>
@@ -215,7 +215,8 @@ export default function Header() {
                   <div className="absolute right-0 z-50 mt-2 w-64 overflow-hidden rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-surface)]/95 backdrop-blur-xl shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
                     {account?.nativeSegwit?.address && (
                       <div className="px-4 py-3 border-b border-[color:var(--sf-glass-border)]">
-                        <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">
+                        <div className="flex items-center gap-1.5 text-xs text-[color:var(--sf-text)]/60 mb-1">
+                          {walletIcon && <img src={walletIcon} alt="" width={12} height={12} className="rounded-sm" />}
                           {t("header.nativeSegwit")}
                         </div>
                         <div className="flex items-center justify-between gap-2">
@@ -243,7 +244,8 @@ export default function Header() {
                     )}
                     {account?.taproot?.address && (
                       <div className="px-4 py-3 border-b border-[color:var(--sf-glass-border)]">
-                        <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">
+                        <div className="flex items-center gap-1.5 text-xs text-[color:var(--sf-text)]/60 mb-1">
+                          {walletIcon && !account?.nativeSegwit?.address && <img src={walletIcon} alt="" width={12} height={12} className="rounded-sm" />}
                           {t("header.taproot")}
                         </div>
                         <div className="flex items-center justify-between gap-2">
@@ -424,7 +426,8 @@ export default function Header() {
                   <div className="absolute right-0 z-50 mt-2 w-64 overflow-hidden rounded-xl border-none bg-[color:var(--sf-surface)] backdrop-blur-xl shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
                     {account?.nativeSegwit?.address && (
                       <div className="px-4 py-3 border-b border-[color:var(--sf-glass-border)]">
-                        <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">
+                        <div className="flex items-center gap-1.5 text-xs text-[color:var(--sf-text)]/60 mb-1">
+                          {walletIcon && <img src={walletIcon} alt="" width={12} height={12} className="rounded-sm" />}
                           {t("header.nativeSegwit")}
                         </div>
                         <div className="flex items-center justify-between gap-2">
@@ -452,7 +455,8 @@ export default function Header() {
                     )}
                     {account?.taproot?.address && (
                       <div className="px-4 py-3 border-b border-[color:var(--sf-glass-border)]">
-                        <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">
+                        <div className="flex items-center gap-1.5 text-xs text-[color:var(--sf-text)]/60 mb-1">
+                          {walletIcon && !account?.nativeSegwit?.address && <img src={walletIcon} alt="" width={12} height={12} className="rounded-sm" />}
                           {t("header.taproot")}
                         </div>
                         <div className="flex items-center justify-between gap-2">

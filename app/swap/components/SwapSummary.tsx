@@ -2,7 +2,7 @@
 
 import { FRBTC_WRAP_FEE_PER_1000 } from '@/constants/alkanes';
 import { usePoolFee } from '@/hooks/usePoolFee';
-import { useAlkanesTokenPairs } from '@/hooks/useAlkanesTokenPairs';
+import { usePools } from '@/hooks/usePools';
 import { useFrbtcPremium } from '@/hooks/useFrbtcPremium';
 import { useTokenDisplayMap } from '@/hooks/useTokenDisplayMap';
 import type { SwapQuote } from '../types';
@@ -65,13 +65,14 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
   }, [quote?.route, normalizedSell, normalizedBuy]);
   const { data: tokenDisplayMap } = useTokenDisplayMap(routeTokenIds);
 
-  const { data: sellPairs } = useAlkanesTokenPairs(normalizedSell);
-  const directPair = sellPairs?.find(
-    (p: any) =>
+  const { data: poolsData } = usePools();
+  const directPair = poolsData?.items?.find(
+    (p) =>
       (p.token0.id === normalizedSell && p.token1.id === normalizedBuy) ||
       (p.token0.id === normalizedBuy && p.token1.id === normalizedSell),
   );
-  const { data: poolFee } = usePoolFee(directPair?.poolId);
+  const directPairPoolId = directPair ? (() => { const [b, t] = directPair.id.split(':'); return { block: b, tx: t }; })() : undefined;
+  const { data: poolFee } = usePoolFee(directPairPoolId);
 
   let poolFeeText: string | null = null;
   if (quote && poolFee && directPair) {

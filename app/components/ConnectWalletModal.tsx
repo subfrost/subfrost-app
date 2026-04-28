@@ -154,14 +154,13 @@ export default function ConnectWalletModal() {
   };
 
   const handleCloseAndNavigate = () => {
-    // startTransition defers the close + reset to a non-blocking pass so React
-    // finishes the current render cycle before unmounting. router.push is kept
-    // outside the transition because navigation is always urgent.
+    // Close modal and reset form — stay on current page.
+    // The old behavior (router.push('/wallet')) was disruptive when connecting
+    // from the swap page or any non-wallet page.
     startTransition(() => {
       onConnectModalOpenChange(false);
       resetForm();
     });
-    router.push('/wallet');
   };
 
   const handleCreateWallet = async () => {

@@ -358,6 +358,8 @@ type WalletContextType = {
 
   // Wallet type
   walletType: WalletType | null;
+  /** Human-readable name of the connected wallet (e.g. "UniSat", "Oyl Wallet", "Keystore") */
+  connectedWalletName: string | null;
 
   // Wallet data
   address: string;
@@ -2347,6 +2349,9 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
 
       // Wallet type
       walletType,
+      connectedWalletName: walletType === 'browser'
+        ? (browserWallet?.info?.name || BROWSER_WALLETS.find(w => w.id === localStorage.getItem(STORAGE_KEYS.BROWSER_WALLET_ID))?.name || 'Browser Wallet')
+        : walletType === 'keystore' ? 'Keystore' : null,
 
       address: addresses.taproot.address || addresses.nativeSegwit.address,
       paymentAddress: addresses.nativeSegwit.address,

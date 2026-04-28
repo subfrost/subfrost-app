@@ -1,20 +1,19 @@
 /**
- * Hook for fetching transaction history using WASM WebProvider
- * Uses getAddressTxsWithTraces for enriched data including runestone/alkanes traces
+ * Hook for fetching paginated transaction history.
  *
- * NOTE: Trace data availability depends on backend support.
- * The trace fields (runestone, runestone_trace, alkanes_traces) will only be
- * populated if the backend supports the --runestone-trace option.
- * On regtest, traces may not be available.
+ * Uses espoGetAddressTransactions (page + limit) instead of the old
+ * getAddressTxsWithTraces which loaded ALL transactions at once.
  *
- * JOURNAL ENTRY (2026-02-02):
- * Converted from useEffect+useState to useQuery. Data is now invalidated by HeightPoller.
+ * JOURNAL (2026-04-27): Rewrote from two separate useQuery calls (one per
+ * address, full history each) to a single useInfiniteQuery that fetches
+ * both addresses per page and merges/dedupes them. Initial load: 25 txs
+ * instead of hundreds. More pages loaded on scroll.
  */
 
-import { useCallback } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMemo, useCallback } from 'react';
+import { useInfiniteQuery } from '@tanstack/react-query';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
-import { transactionHistoryQueryOptions } from '@/queries/history';
+import { fetchTxPage, TX_PAGE_SIZE, type TxPage } from '@/queries/history';
 
 export interface TransactionInput {
   txid: string;
@@ -64,21 +63,64 @@ export interface EnrichedTransaction {
   alkanesTraces?: AlkanesTrace[];
 }
 
-export function useTransactionHistory(address?: string, excludeCoinbase: boolean = true) {
+/**
+ * Paginated transaction history for multiple addresses (merged + deduped).
+ * Uses useInfiniteQuery — call `loadMore()` to fetch the next page.
+ */
+export function useTransactionHistory(addresses: string[]) {
   const { provider, isInitialized, network } = useAlkanesSDK();
 
-  const { data, isLoading, error, refetch } = useQuery(
-    transactionHistoryQueryOptions(network, address, provider, isInitialized, excludeCoinbase),
+  const addressKey = useMemo(
+    () => addresses.filter(Boolean).sort().join(','),
+    [addresses],
   );
 
-  const refresh = useCallback(() => {
-    refetch();
-  }, [refetch]);
+  const query = useInfiniteQuery<TxPage, Error, { pages: TxPage[] }, string[], number>({
+    queryKey: ['tx-history', network, addressKey],
+    enabled: addressKey.length > 0 && !!provider && isInitialized,
+    initialPageParam: 1,
+    getNextPageParam: (lastPage, _allPages, lastPageParam) =>
+      lastPage.hasMore ? lastPageParam + 1 : undefined,
+    queryFn: async ({ pageParam }) => {
+      if (!provider) return { transactions: [], hasMore: false };
+      return fetchTxPage(
+        provider,
+        addresses.filter(Boolean),
+        pageParam,
+        TX_PAGE_SIZE,
+      );
+    },
+  });
+
+  // Flatten all pages into a single deduped, sorted list
+  const transactions = useMemo(() => {
+    if (!query.data?.pages) return [];
+    const seen = new Set<string>();
+    const all: EnrichedTransaction[] = [];
+    for (const page of query.data.pages) {
+      for (const tx of page.transactions) {
+        if (!seen.has(tx.txid)) {
+          seen.add(tx.txid);
+          all.push(tx);
+        }
+      }
+    }
+    return all.sort((a, b) => (b.blockTime || 0) - (a.blockTime || 0));
+  }, [query.data?.pages]);
+
+  const refresh = useCallback(async () => {
+    await query.refetch();
+  }, [query.refetch]);
 
   return {
-    transactions: data ?? [],
-    loading: isLoading,
-    error: error ? (error instanceof Error ? error.message : 'Failed to fetch transactions') : null,
+    transactions,
+    loading: query.isLoading,
+    error: query.error
+      ? (query.error instanceof Error ? query.error.message : 'Failed to fetch transactions')
+      : null,
+    hasMore: query.hasNextPage ?? false,
+    loadMore: query.fetchNextPage,
+    isLoadingMore: query.isFetchingNextPage,
     refresh,
   };
 }
