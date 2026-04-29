@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { ChevronDown, LogOut, Gift } from 'lucide-react';
+import { ChevronDown, LogOut, Gift, Settings } from 'lucide-react';
 import LockTierSelector from '../widgets/LockTierSelector';
 import RewardsProjector from '../widgets/RewardsProjector';
 import { useFireStakingStats } from '@/hooks/fire/useFireStakingStats';
@@ -193,7 +193,7 @@ export default function FireStakingPanel({ vaultDetailsSlot }: FireStakingPanelP
               className="sf-collapsible-trigger"
             >
               <span>{t('vaultDeposit.transactionDetails')}</span>
-              <ChevronDown
+              <Settings
                 size={14}
                 className={`transition-transform duration-300 ${detailsOpen ? 'rotate-180' : ''}`}
               />

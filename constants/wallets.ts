@@ -58,9 +58,6 @@ const WALLET_ORDER = [
   'phantom',
   'leather',
   'tokeo',
-  'magic-eden',
-  'orange',
-  'wizz',
   'keplr',
 ];
 

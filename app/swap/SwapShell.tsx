@@ -998,27 +998,31 @@ export default function SwapShell() {
   // Convert raw SDK error string to user-readable message
   const humanizeError = (raw: string): string => {
     if (raw.includes('User rejected') || raw.includes('User denied') || raw.includes('cancelled')) {
-      return 'Transaction was cancelled.';
+      return t('errors.userCancelled');
     } else if (raw.includes('Insufficient alkanes')) {
       const match = raw.match(/need (\d+) of ([\d:]+), have (\d+)/);
       if (match) {
         const [, needed, tokenId, available] = match;
-        return `Insufficient spendable balance for ${tokenId}. Need ${(Number(needed) / 1e8).toFixed(4)}, have ${(Number(available) / 1e8).toFixed(4)}. Some tokens may be on UTXOs with inscriptions and are excluded for safety.`;
+        return t('errors.insufficientBalance', {
+          tokenId,
+          needed: (Number(needed) / 1e8).toFixed(4),
+          available: (Number(available) / 1e8).toFixed(4),
+        });
       }
     } else if (raw.includes('Insufficient funds')) {
       const fundsMatch = raw.match(/need (\d+) sats/);
       const needed = fundsMatch ? (Number(fundsMatch[1]) / 1e8).toFixed(6) : null;
       return needed
-        ? `Insufficient BTC balance. Need ${needed} BTC for this transaction. Please add funds to your payment address.`
-        : 'Insufficient BTC for transaction fees. Please add funds to your payment address.';
+        ? t('errors.insufficientBtcWithAmount', { needed })
+        : t('errors.insufficientBtcGeneric');
     } else if (raw.includes('Pool not found') || raw.includes('Unable to find pool')) {
-      return 'Pool not found for this pair. Please try again.';
+      return t('errors.poolNotFound');
     } else if (raw.includes('dust limit')) {
-      return 'Transaction amount too small. Try a larger amount.';
+      return t('errors.dustAmount');
     } else if (raw.includes('EXPIRED')) {
-      return 'Transaction deadline expired. Please try again.';
+      return t('errors.deadlineExpired');
     } else if (raw.includes('timeout') || raw.includes('Timeout')) {
-      return 'Request timed out. Please try again.';
+      return t('errors.requestTimeout');
     }
     return raw;
   };
@@ -1166,7 +1170,7 @@ export default function SwapShell() {
     if (isBtcToTokenSwap) {
       if (!quote || !quote.poolId) {
         console.error('[SWAP] BTC → Token swap requires quote with poolId');
-        showSwapError('Unable to find pool for this swap. Please try again.');
+        showSwapError(t('errors.poolNotFoundForSwap'));
         return;
       }
 
@@ -1292,28 +1296,28 @@ export default function SwapShell() {
         }
       } catch (e: any) {
         console.error('[SWAP] BTC → Token swap failed:', e);
-        const msg = humanizeError(extractErrorMessage(e));
+        const raw = extractErrorMessage(e);
+        const msg = humanizeError(raw);
         // Only update state if not already in error state (wrap error)
         if (swapFlowStep.type !== 'error') {
           setSwapFlowStep({ type: 'error', step: 'swap', message: msg });
         }
-        if (msg.includes('Insufficient alkanes')) {
-          const match = msg.match(/need (\d+) of ([\d:]+), have (\d+)/);
+        if (raw.includes('Insufficient alkanes')) {
+          const match = raw.match(/need (\d+) of ([\d:]+), have (\d+)/);
           if (match) {
             const [, needed, tokenId, available] = match;
             const neededDisplay = (Number(needed) / 1e8).toFixed(4);
             const availableDisplay = (Number(available) / 1e8).toFixed(4);
-            showSwapError(
-              `Insufficient spendable balance for ${tokenId}.\n\n` +
-              `Requested: ${neededDisplay}\nSpendable: ${availableDisplay}\n\n` +
-              `Some tokens may be on UTXOs with inscriptions/other assets and are excluded from swaps. ` +
-              `Try a smaller amount (up to ${availableDisplay}).`
-            );
+            showSwapError(t('errors.insufficientSpendableDetailed', {
+              tokenId,
+              requested: neededDisplay,
+              spendable: availableDisplay,
+            }));
           } else {
-            showSwapError(`Swap failed: ${msg}`);
+            showSwapError(t('errors.swapFailed', { message: msg }));
           }
         } else {
-          showSwapError(`Swap failed: ${msg}`);
+          showSwapError(t('errors.swapFailed', { message: msg }));
         }
       }
       return;
@@ -1328,7 +1332,7 @@ export default function SwapShell() {
     if (isTokenToBtcSwap) {
       if (!quote || !quote.poolId) {
         console.error('[SWAP] Token → BTC swap requires quote with poolId');
-        showSwapError('Unable to find pool for this swap. Please try again.');
+        showSwapError(t('errors.poolNotFoundForSwap'));
         return;
       }
 
@@ -1486,28 +1490,28 @@ export default function SwapShell() {
         }
       } catch (e: any) {
         console.error('[SWAP] Token → BTC swap failed:', e);
-        const msg = humanizeError(extractErrorMessage(e));
+        const raw = extractErrorMessage(e);
+        const msg = humanizeError(raw);
         // Only update state if not already in error state
         if (swapFlowStep.type !== 'error') {
           setSwapFlowStep({ type: 'error', step: 'swap', message: msg });
         }
-        if (msg.includes('Insufficient alkanes')) {
-          const match = msg.match(/need (\d+) of ([\d:]+), have (\d+)/);
+        if (raw.includes('Insufficient alkanes')) {
+          const match = raw.match(/need (\d+) of ([\d:]+), have (\d+)/);
           if (match) {
             const [, needed, tokenId, available] = match;
             const neededDisplay = (Number(needed) / 1e8).toFixed(4);
             const availableDisplay = (Number(available) / 1e8).toFixed(4);
-            showSwapError(
-              `Insufficient spendable balance for ${tokenId}.\n\n` +
-              `Requested: ${neededDisplay}\nSpendable: ${availableDisplay}\n\n` +
-              `Some tokens may be on UTXOs with inscriptions/other assets and are excluded from swaps. ` +
-              `Try a smaller amount (up to ${availableDisplay}).`
-            );
+            showSwapError(t('errors.insufficientSpendableDetailed', {
+              tokenId,
+              requested: neededDisplay,
+              spendable: availableDisplay,
+            }));
           } else {
-            showSwapError(`Swap failed: ${msg}`);
+            showSwapError(t('errors.swapFailed', { message: msg }));
           }
         } else {
-          showSwapError(`Swap failed: ${msg}`);
+          showSwapError(t('errors.swapFailed', { message: msg }));
         }
       }
       return;
@@ -1523,7 +1527,7 @@ export default function SwapShell() {
     if (!quote.poolId && !hasValidRoute) {
       console.error('[SWAP] No poolId or route in quote - cannot execute swap');
       console.error('[SWAP] Full quote object:', JSON.stringify(quote, null, 2));
-      showSwapError('Swap failed: Pool not found. Please try again.');
+      showSwapError(t('errors.swapFailedPoolNotFound'));
       return;
     }
 
@@ -1587,23 +1591,20 @@ export default function SwapShell() {
   const handleAddLiquidity = async () => {
 
     if (!poolToken0 || !poolToken1) {
-      showSwapError('Please select both tokens');
+      showSwapError(t('errors.selectBothTokens'));
       return;
     }
 
     if (!poolToken0Amount || !poolToken1Amount ||
         parseFloat(poolToken0Amount) <= 0 || parseFloat(poolToken1Amount) <= 0) {
-      showSwapError('Please enter valid amounts for both tokens');
+      showSwapError(t('errors.enterValidAmounts'));
       return;
     }
 
     // Handle BTC: requires wrap to frBTC first
     const hasBtc = poolToken0.id === 'btc' || poolToken1.id === 'btc';
     if (hasBtc) {
-      showSwapError(
-        'Adding liquidity with BTC requires wrapping to frBTC first.\n\n' +
-        'Please wrap your BTC to frBTC using the Swap tab, then add liquidity with frBTC.'
-      );
+      showSwapError(t('errors.btcRequiresWrap'));
       return;
     }
 
@@ -1637,24 +1638,24 @@ export default function SwapShell() {
       }
     } catch (e: any) {
       console.error('[handleAddLiquidity] Error:', e);
-      showSwapError(`Add liquidity failed: ${extractErrorMessage(e)}`);
+      showSwapError(t('errors.addLiquidityFailed', { message: extractErrorMessage(e) }));
     }
   };
 
   const handleRemoveLiquidity = async () => {
 
     if (!selectedLPPosition) {
-      showSwapError('Please select an LP position to remove');
+      showSwapError(t('errors.selectLpPosition'));
       return;
     }
 
     if (!removeAmount || parseFloat(removeAmount) <= 0) {
-      showSwapError('Please enter a valid amount to remove');
+      showSwapError(t('errors.enterValidRemoveAmount'));
       return;
     }
 
     if (parseFloat(removeAmount) > parseFloat(selectedLPPosition.amount)) {
-      showSwapError('Amount exceeds your LP position balance');
+      showSwapError(t('errors.removeExceedsBalance'));
       return;
     }
 
@@ -1679,7 +1680,7 @@ export default function SwapShell() {
       }
     } catch (e: any) {
       console.error('[handleRemoveLiquidity] Error:', e);
-      showSwapError(`Remove liquidity failed: ${extractErrorMessage(e)}`);
+      showSwapError(t('errors.removeLiquidityFailed', { message: extractErrorMessage(e) }));
     }
   };
 
@@ -2213,6 +2214,7 @@ export default function SwapShell() {
                 toBalanceText: formatBalance(toToken?.id),
                 fromFiatText: calculateUsdValue(fromToken?.id, fromAmount),
                 toFiatText: calculateUsdValue(toToken?.id, toAmount),
+                calculateUsdValue,
                 onMaxFrom: fromToken ? handleMaxFrom : undefined,
                 onPercentFrom: fromToken ? handlePercentFrom : undefined,
                 ethereumAddress,

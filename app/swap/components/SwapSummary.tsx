@@ -15,7 +15,7 @@ import type { SlippageSelection } from '@/stores/global';
 
 import type { FeeSelection } from '@/hooks/useFeeRate';
 import { useState, useRef, useEffect } from 'react';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, Settings } from 'lucide-react';
 import { useTranslation } from '@/hooks/useTranslation';
 
 type Props = {
@@ -197,7 +197,7 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
                   ? '1 frBTC = 1 BTC'
                   : `1 ${sellName ?? sellId} = ${formatRate(quote.exchangeRate, buyId, buyName)} ${buyName ?? buyId}`}
             </span>
-            <ChevronDown
+            <Settings
               size={14}
               className={`transition-transform duration-300 ${detailsOpen ? 'rotate-180' : ''}`}
             />

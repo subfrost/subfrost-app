@@ -57,13 +57,15 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import { useWallet } from '@/context/WalletContext';
 import { useTheme } from '@/context/ThemeContext';
 import { useModalStore } from '@/stores/modals';
-import { TrendingUp, TrendingDown, Loader2, ChevronDown } from 'lucide-react';
+import { TrendingUp, TrendingDown, Loader2, ChevronDown, Settings } from 'lucide-react';
 import NumberField from '@/app/components/NumberField';
 import TokenIcon from '@/app/components/TokenIcon';
 import { useGlobalStore } from '@/stores/global';
 import { useFeeRate, type FeeSelection } from '@/hooks/useFeeRate';
 import { useNotification } from '@/context/NotificationContext';
 import { useLimitOrderMutation } from '@/hooks/useLimitOrderMutation';
+import { useOrderbook } from '@/hooks/useOrderbook';
+import { useTranslation } from '@/hooks/useTranslation';
 import { getConfig } from '@/utils/getConfig';
 import type { TokenMeta } from '../types';
 import type { Network } from '@/utils/constants';
@@ -73,8 +75,10 @@ interface Props {
   quoteToken: string;
   selectedPrice?: string;
   fromToken?: TokenMeta;
+  toToken?: TokenMeta;
   fromBalanceText?: string;
   fromFiatText?: string;
+  calculateUsdValue?: (tokenId?: string, amount?: string) => string;
   onPercentFrom?: (percent: number) => void;
   onMaxFrom?: () => void;
   network?: Network;
@@ -85,17 +89,20 @@ export default function LimitOrderPanel({
   quoteToken,
   selectedPrice,
   fromToken,
+  toToken,
   fromBalanceText,
   fromFiatText = '$0.00',
+  calculateUsdValue,
   onPercentFrom,
   onMaxFrom,
   network,
 }: Props) {
-  const { isConnected } = useWallet();
+  const { isConnected, onConnectModalOpenChange } = useWallet();
   const { theme } = useTheme();
   const { openTokenSelector } = useModalStore();
   const { deadlineBlocks, setDeadlineBlocks } = useGlobalStore();
   const fee = useFeeRate();
+  const { t } = useTranslation();
   const [side, setSide] = useState<'buy' | 'sell'>('buy');
   const [price, setPrice] = useState('');
   const [amount, setAmount] = useState('');
@@ -111,6 +118,14 @@ export default function LimitOrderPanel({
     if (selectedPrice) setPrice(selectedPrice);
   }, [selectedPrice]);
 
+  // Last traded price source — orderbook midpoint (best bid/ask average).
+  const { data: orderbook } = useOrderbook(fromToken?.id, toToken?.id);
+  const lastPrice = useMemo(() => {
+    const raw = orderbook?.midPrice?.replace(/,/g, '') ?? '';
+    const n = parseFloat(raw);
+    return isFinite(n) && n > 0 ? raw : '';
+  }, [orderbook?.midPrice]);
+
   const total = useMemo(() => {
     if (!price || !amount) return '';
     const p = parseFloat(price);
@@ -118,6 +133,19 @@ export default function LimitOrderPanel({
     if (isNaN(p) || isNaN(a)) return '';
     return (p * a).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }, [price, amount]);
+
+  const amountFiatText = useMemo(() => {
+    if (calculateUsdValue) return calculateUsdValue(fromToken?.id, amount);
+    return fromFiatText;
+  }, [calculateUsdValue, fromToken?.id, amount, fromFiatText]);
+
+  const priceFiatText = useMemo(() => {
+    if (!calculateUsdValue) return '$0.00';
+    const p = parseFloat(price);
+    const a = parseFloat(amount);
+    if (!isFinite(p) || !isFinite(a) || p <= 0 || a <= 0) return '$0.00';
+    return calculateUsdValue(toToken?.id, String(p * a));
+  }, [calculateUsdValue, toToken?.id, price, amount]);
 
   const limitOrderMutation = useLimitOrderMutation();
   const isSubmitting = limitOrderMutation.isPending;
@@ -256,7 +284,7 @@ export default function LimitOrderPanel({
             {/* Fiat value + Balance */}
             <div className="flex items-center justify-between">
               <div className="text-xs font-medium text-[color:var(--sf-text)]/50">
-                {fromFiatText}
+                Market: {amountFiatText}
               </div>
               <div className="text-xs font-medium text-[color:var(--sf-text)]/60">
                 {resolvedBalanceText}
@@ -317,7 +345,7 @@ export default function LimitOrderPanel({
         </div>
 
       {/* Price input — sf-input card style */}
-      <div className={`relative mb-2 ${priceFocused ? 'z-30' : ''}`}>
+      <div className={`relative mb-3 ${priceFocused ? 'z-30' : ''}`}>
         <div
           className="sf-input group relative z-20 px-4 pt-4 pb-3 cursor-text"
           onClick={() => priceInputRef.current?.focus()}
@@ -325,11 +353,12 @@ export default function LimitOrderPanel({
           {/* "Last" button - floating top-right */}
           <button
             type="button"
+            disabled={!lastPrice}
             onClick={(e) => {
               e.stopPropagation();
-              // TODO: set price to last traded price
+              if (lastPrice) setPrice(lastPrice);
             }}
-            className="absolute right-4 top-4 text-[10px] font-semibold text-[color:var(--sf-primary)] hover:text-[color:var(--sf-primary)]/80 transition-colors"
+            className="absolute right-4 top-4 text-[10px] font-semibold text-[color:var(--sf-primary)] hover:text-[color:var(--sf-primary)]/80 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
             Last
           </button>
@@ -355,20 +384,24 @@ export default function LimitOrderPanel({
                 {quoteToken} per {baseToken}
               </span>
             </div>
+
+            <div className="text-xs font-medium text-[color:var(--sf-text)]/50">
+              {priceFiatText}
+            </div>
           </div>
         </div>
       </div>
 
       {/* Transaction Details — collapsible panel matching SwapSummary */}
-      <div className="sf-panel overflow-visible mt-3 mb-3">
+      <div className="sf-panel overflow-visible mt-3 mb-6">
         {/* Toggle button */}
         <button
           type="button"
           onClick={() => setDetailsOpen(!detailsOpen)}
           className="sf-collapsible-trigger"
         >
-          <span>Transaction details</span>
-          <ChevronDown
+          <span>{t('vaultDeposit.transactionDetails')}</span>
+          <Settings
             size={14}
             className={`transition-transform duration-300 ${detailsOpen ? 'rotate-180' : ''}`}
           />
@@ -380,7 +413,7 @@ export default function LimitOrderPanel({
             {/* Deadline (blocks) */}
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60">
-                Deadline (blocks)
+                {t('swapSummary.deadlineBlocks')}
               </span>
               <div className="relative">
                 <input
@@ -409,7 +442,7 @@ export default function LimitOrderPanel({
             {/* Miner Fee Rate */}
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60">
-                Miner Fee Rate
+                {t('swapSummary.minerFeeRate')}
               </span>
               <div className="flex items-center gap-2">
                 {fee.selection === 'custom' ? (
@@ -471,23 +504,35 @@ export default function LimitOrderPanel({
         </div>
       </div>
 
-      {/* Spacer */}
-      <div className="flex-1" />
-
       {/* Submit */}
       <button
-        onClick={handleSubmit}
-        disabled={!isConnected || !price || !amount || isSubmitting}
-        className={`w-full py-3 text-sm font-bold rounded-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
-          side === 'buy'
-            ? 'bg-green-600 hover:bg-green-500 text-white shadow-lg shadow-green-900/20'
-            : 'bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-900/20'
-        }`}
+        onClick={() => {
+          if (isSubmitting) return;
+          if (!isConnected) {
+            onConnectModalOpenChange(true);
+            return;
+          }
+          handleSubmit();
+        }}
+        disabled={isSubmitting || (isConnected && (!price || !amount))}
+        className={
+          !isConnected
+            ? `mt-2 h-12 w-full rounded-xl font-bold text-sm uppercase tracking-wider transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none focus:outline-none text-white shadow-[0_4px_16px_rgba(0,0,0,0.3)] hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed ${
+                side === 'sell'
+                  ? 'bg-gradient-to-r from-[#ef4444] to-[#b91c1c]'
+                  : 'bg-gradient-to-r from-[#22c55e] to-[#15803d]'
+              }`
+            : `mt-2 w-full py-3 text-sm font-bold rounded-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed text-white ${
+                side === 'buy'
+                  ? 'bg-[#22c55e] hover:bg-[#16a34a] shadow-lg shadow-green-900/20'
+                  : 'bg-[#ef4444] hover:bg-[#dc2626] shadow-lg shadow-red-900/20'
+              }`
+        }
       >
         {isSubmitting ? (
           <Loader2 className="h-4 w-4 animate-spin mx-auto" />
         ) : !isConnected ? (
-          'Connect Wallet'
+          t('swap.connectWallet')
         ) : !price || !amount ? (
           'Enter Amount & Price'
         ) : (
