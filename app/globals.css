@@ -1345,15 +1345,11 @@ input[type="number"] {
   flex-direction: column;
   overflow: hidden;
   border-radius: 1.5rem;
-  background: rgba(15, 28, 48, 0.97);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
-  box-shadow: 0 24px 96px rgba(0, 0, 0, 0.4);
-  width: 100%;
+  background: rgb(15, 28, 48);
 }
 
 [data-theme="light"] .sf-popup {
-  background: rgba(235, 244, 255, 0.98);
+  background: rgb(235, 244, 255);
 }
 
 /* --- sf-popup-header -------------------------------------

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useEffect, useMemo, useRef, useState, useCallback, memo } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { usePathname } from "next/navigation";
 import { useWallet } from "@/context/WalletContext";
 import { useTheme } from "@/context/ThemeContext";
@@ -13,72 +13,6 @@ import ThemeToggle from "./ThemeToggle";
 import LanguageToggle from "./LanguageToggle";
 import { useTranslation } from "@/hooks/useTranslation";
 
-const FallingSnowflakes = memo(function FallingSnowflakes({
-  white = false,
-}: {
-  white?: boolean;
-}) {
-  const snowflakes = useMemo(() => {
-    const positions = [15, 30, 45, 60, 75, 90];
-    const delays = [0, 1, 2, 3, 4, 5];
-    const durations = [5.5, 6.5, 7, 6, 5.8, 6.2];
-    const sizes = [12, 14, 11, 13, 12, 10];
-
-    return Array.from({ length: 6 }, (_, i) => ({
-      id: i,
-      left: positions[i],
-      delay: delays[i],
-      duration: durations[i],
-      size: sizes[i],
-    }));
-  }, []);
-
-  return (
-    <>
-      <style
-        dangerouslySetInnerHTML={{
-          __html: `
-           @keyframes snowfall {
-             0% {
-               transform: translateY(-30px) rotate(0deg);
-               opacity: 0;
-             }
-             10% {
-               opacity: 1;
-             }
-             90% {
-               opacity: 1;
-             }
-             100% {
-               transform: translateY(80px) rotate(360deg);
-               opacity: 0;
-             }
-           }
-         `,
-        }}
-      />
-      {snowflakes.map((flake) => (
-        <Image
-          key={flake.id}
-          src="/brand/snowflake-mark.svg"
-          alt=""
-          width={flake.size}
-          height={flake.size}
-          className="pointer-events-none absolute"
-          style={{
-            left: `${flake.left}%`,
-            top: "-10px",
-            opacity: 0,
-            animation: `snowfall ${flake.duration}s linear ${flake.delay}s infinite`,
-            filter: white
-              ? "brightness(0) invert(1)"
-              : "drop-shadow(0 0 2px rgba(255,255,255,0.8)) brightness(1.5)",
-          }}
-        />
-      ))}
-    </>
-  );
-});
 
 export default function Header() {
   const {
@@ -318,9 +252,6 @@ export default function Header() {
                 <span className="relative z-10">
                   {t("header.connectWallet")}
                 </span>
-                <div className="absolute inset-0 pointer-events-none">
-                  <FallingSnowflakes white={theme === "dark"} />
-                </div>
               </button>
             )}
           </div>
@@ -529,9 +460,6 @@ export default function Header() {
                   <span className="relative z-10">
                     {t("header.connectWallet")}
                   </span>
-                  <div className="absolute inset-0 pointer-events-none">
-                    <FallingSnowflakes white={theme === "dark"} />
-                  </div>
                 </button>
               </div>
             )}

@@ -407,11 +407,11 @@ export default function ConnectWalletModal() {
 
   return (
     <div
-      className={`fixed inset-0 z-50 grid place-items-center px-4 backdrop-blur-sm transition-colors ${connectingWallet ? 'bg-black/30' : 'bg-black/50'}`}
+      className="sf-popup-overlay p-4"
       onClick={connectingWallet ? undefined : handleClose}
     >
       <div
-        className="w-[480px] max-w-[92vw] overflow-hidden rounded-3xl bg-[color:var(--sf-glass-bg)] shadow-[0_24px_96px_rgba(0,0,0,0.4)] backdrop-blur-xl"
+        className="sf-popup w-[480px] max-w-[92vw] max-h-[90vh]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}

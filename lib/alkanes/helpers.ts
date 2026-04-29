@@ -9,6 +9,19 @@ import * as bitcoin from 'bitcoinjs-lib';
 import { SIGNER_ADDRESSES } from './constants';
 
 /**
+ * Static signer address lookup — kept for tests only.
+ * Production code uses getSignerAddressDynamic() which applies BIP341 tweak.
+ * @deprecated Use getSignerAddressDynamic instead
+ */
+export function getSignerAddress(network: string): string {
+  const signer = SIGNER_ADDRESSES[network];
+  if (!signer) {
+    throw new Error(`No signer address configured for network: ${network}`);
+  }
+  return signer;
+}
+
+/**
  * Convert Uint8Array to base64 string.
  * Works in both browser and Node.js environments.
  */
@@ -45,13 +58,6 @@ export function getBitcoinNetwork(network: string): bitcoin.Network {
  * Get the frBTC signer address for a given network.
  * Throws if no signer address is configured.
  */
-export function getSignerAddress(network: string): string {
-  const signer = SIGNER_ADDRESSES[network];
-  if (!signer) {
-    throw new Error(`No signer address configured for network: ${network}`);
-  }
-  return signer;
-}
 
 /**
  * Dynamically query the frBTC signer address from the contract via opcode 103.
@@ -97,9 +103,9 @@ export async function getSignerAddressDynamic(network: string): Promise<string> 
       if (payment.address) return payment.address;
     }
   } catch (e: any) {
-    console.warn('[getSignerAddressDynamic] Failed, using static fallback:', e?.message);
+    throw new Error(`Failed to query frBTC signer address: ${e?.message}`);
   }
-  return getSignerAddress(network);
+  throw new Error('Failed to derive frBTC signer address from opcode 103');
 }
 
 /**

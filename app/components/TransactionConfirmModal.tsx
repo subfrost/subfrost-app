@@ -276,15 +276,8 @@ export default function TransactionConfirmModal() {
   const { details } = pendingTransaction;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center">
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-        onClick={reject}
-      />
-
-      {/* Modal */}
-      <div className="relative z-10 w-full max-w-md mx-4 rounded-3xl bg-[color:var(--sf-glass-bg)] shadow-[0_24px_96px_rgba(0,0,0,0.4)] backdrop-blur-xl overflow-hidden">
+    <div className="sf-popup-overlay p-4" style={{ zIndex: 100 }} onClick={reject}>
+      <div className="sf-popup w-full max-w-md max-h-[90vh]" onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div className="bg-[color:var(--sf-panel-bg)] px-6 py-5 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
           <div className="flex items-center justify-between">

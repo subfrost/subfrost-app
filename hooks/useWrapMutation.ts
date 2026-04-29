@@ -83,8 +83,10 @@ import { useSandshrewProvider } from './useSandshrewProvider';
 import { getConfig } from '@/utils/getConfig';
 import * as bitcoin from 'bitcoinjs-lib';
 import * as ecc from '@bitcoinerlab/secp256k1';
-import { getBitcoinNetwork, getSignerAddress, getSignerAddressDynamic, extractPsbtBase64 } from '@/lib/alkanes/helpers';
+import { getBitcoinNetwork, getSignerAddressDynamic, extractPsbtBase64 } from '@/lib/alkanes/helpers';
 import { buildWrapProtostone } from '@/lib/alkanes/builders';
+import { useFrbtcPremium } from '@/hooks/useFrbtcPremium';
+import { FRBTC_WRAP_FEE_PER_1000 } from '@/constants/alkanes';
 
 bitcoin.initEccLib(ecc);
 
@@ -99,6 +101,7 @@ export function useWrapMutation() {
   const queryClient = useQueryClient();
   const { requestConfirmation } = useTransactionConfirm();
   const { FRBTC_ALKANE_ID } = getConfig(network);
+  const { data: premiumData } = useFrbtcPremium();
 
   return useMutation({
     mutationFn: async (wrapData: WrapTransactionBaseData) => {
@@ -141,11 +144,10 @@ export function useWrapMutation() {
       // Get bitcoin network for PSBT parsing
       const btcNetwork = getBitcoinNetwork(network);
 
-      // Get the signer address — on devnet, query dynamically since each boot
-      // generates a new frBTC contract with a different signer key.
-      const signerAddress = (network === 'devnet')
-        ? await getSignerAddressDynamic(network)
-        : getSignerAddress(network);
+      // Always query signer dynamically — applies BIP341 taproot tweak to the
+      // internal key from opcode 103. The hardcoded fallback in constants.ts
+      // is a safety net only (already tweaked).
+      const signerAddress = await getSignerAddressDynamic(network);
 
       const isBrowserWallet = walletType === 'browser';
       const useActualAddresses = isBrowserWallet || network === 'devnet' || network === 'regtest-local' || network === 'qubitcoin-regtest';
@@ -153,9 +155,10 @@ export function useWrapMutation() {
       // For browser wallets, use actual addresses for UTXO discovery (passed as
       // opaque strings to esplora — no Address parsing, no LegacyAddressTooLong).
       // For keystore wallets, symbolic addresses resolve correctly via loaded mnemonic.
+      // Keystore is taproot-only — no segwit.
       const fromAddresses = useActualAddresses
         ? [userSegwitAddress, userTaprootAddress].filter(Boolean) as string[]
-        : ['p2wpkh:0', 'p2tr:0'];
+        : ['p2tr:0'];
 
       // toAddresses: [signer (actual), user (actual/symbolic)]
       // Matches CLI wrap_btc.rs output ordering:
@@ -201,9 +204,13 @@ export function useWrapMutation() {
         // Returns `null` for wallets without the capability — SDK then falls back
         // to its own lua/esplora UTXO selection.
         const { getCleanBtcUtxosForWallet } = await import('@/lib/wallet/walletCapabilities');
+        const isDualAddress = Boolean(userSegwitAddress && userTaprootAddress);
         const cleanUtxos = isBrowserWallet
           ? await getCleanBtcUtxosForWallet(browserWallet?.info?.id)
           : null;
+        if (isBrowserWallet && !isDualAddress && !cleanUtxos?.length) {
+          throw new Error('No clean BTC UTXOs available. Send some BTC to your wallet first — inscription/rune UTXOs cannot be used for fees.');
+        }
         const paymentUtxos: string[] | undefined = cleanUtxos ?? undefined;
 
         const result = await provider.alkanesExecuteTyped({
@@ -212,10 +219,10 @@ export function useWrapMutation() {
           protostones: protostone,
           feeRate: wrapData.feeRate,
           fromAddresses,
-          changeAddress: useActualAddresses ? (userSegwitAddress || userTaprootAddress) : 'p2wpkh:0',
+          changeAddress: useActualAddresses ? (userSegwitAddress || userTaprootAddress) : 'p2tr:0',
           alkanesChangeAddress: useActualAddresses ? userTaprootAddress : 'p2tr:0',
-          autoConfirm: false,
-          traceEnabled: true,
+          autoConfirm: walletType === 'keystore',
+          traceEnabled: walletType !== 'keystore',
           mineEnabled: false,
           ordinalsStrategy: 'exclude' as const,
           protectTaproot: Boolean(userSegwitAddress && userTaprootAddress),
@@ -399,12 +406,15 @@ export function useWrapMutation() {
           // Browser wallets have their own confirmation UI from the wallet extension
           if (walletType === 'keystore') {
             console.log('[WRAP] Keystore wallet - requesting user confirmation...');
+            const wrapFee = premiumData?.wrapFeePerThousand ?? FRBTC_WRAP_FEE_PER_1000;
+            const amountSats = Math.round(parseFloat(wrapData.amount) * 1e8);
+            const receiveAfterFee = Math.floor((amountSats * (1000 - wrapFee)) / 1000);
             const approved = await requestConfirmation({
               type: 'wrap',
               title: 'Confirm Wrap',
               fromAmount: wrapData.amount,
               fromSymbol: 'BTC',
-              toAmount: wrapData.amount,
+              toAmount: (receiveAfterFee / 1e8).toFixed(8),
               toSymbol: 'frBTC',
               feeRate: wrapData.feeRate,
             });
