@@ -33,6 +33,34 @@
  * there is an older build missing this opcode. The regtest contract returns:
  *   "ALKANES: revert: Error: Unrecognized opcode" (status: 1)
  * The tier1/unwrap-frbtc.test.ts skip comment applies to REGTEST only.
+ *
+ * ## Calldata Bug Fix (2026-04-29) — `Cannot burn less than dust amount`
+ *
+ * Pre-fix this hook built `buildUnwrapProtostone({ frbtcId })` which produced
+ * the cellpack `[32, 0, 78]` with NO arguments. The contract's signature is
+ * `unwrap(vout: u128, amount_requested: u128)` (see `fr-btc/contract.wit` and
+ * `fr-btc/alkanes.toml`). With the args missing, runtime read `vout = 0`,
+ * `amount_requested = 0`, then `min(0, frbtc_sent) = 0` triggered the
+ * `actual_amount_burn < 546` branch in `fr-btc/src/lib.rs:531-532` →
+ * "Cannot burn less than dust amount" (espo renders this as "dust limit
+ * underflow"). All incoming frBTC was refunded via the `Refund` pointer, so
+ * tokens were never destroyed — the unwrap simply never settled.
+ *
+ * Real-world repro: tx
+ *   `a95597ad69209615a519929b0cc2fb7bddbadd4bce302ec200a838302bfb7eef`
+ * confirmed at block 947162 with the malformed cellpack; the user's frBTC
+ * bounced to vout 1 (verified via `alkanes_protorunesbyoutpoint`).
+ *
+ * Fix: the cellpack must be `[32, 0, 78, dustVout, amount]` AND the tx must
+ * include a P2TR signer dust output at index `dustVout` (the contract's
+ * `burn()` enforces `tx.output[dustVout].script_pubkey == signer_script` —
+ * see `fr-btc/src/lib.rs:262-267`). The signer later spends that dust UTXO
+ * to settle the BTC payment recorded under `/payments/byheight/`.
+ *
+ * Output layout (matches `alkanes-cli/src/main.rs:3192-3197`):
+ *   - output 0: alkanes refund (taproot)         ← refund=v0
+ *   - output 1: BTC recipient (segwit)           ← pointer=v1
+ *   - output 2: signer P2TR dust                 ← dustVout=2
  */
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import * as bitcoin from 'bitcoinjs-lib';
@@ -45,7 +73,7 @@ import { useTransactionConfirm } from '@/context/TransactionConfirmContext';
 import { useSandshrewProvider } from './useSandshrewProvider';
 import { getConfig } from '@/utils/getConfig';
 import { buildUnwrapProtostone, buildUnwrapInputRequirements } from '@/lib/alkanes/builders';
-import { getBitcoinNetwork, extractPsbtBase64, toAlks } from '@/lib/alkanes/helpers';
+import { getBitcoinNetwork, extractPsbtBase64, toAlks, getSignerAddressDynamic } from '@/lib/alkanes/helpers';
 
 bitcoin.initEccLib(ecc);
 
@@ -82,7 +110,9 @@ export function useUnwrapMutation() {
       if (!taprootAddress && !segwitAddress) {
         throw new Error('No wallet address available. Please connect a wallet first.');
       }
-      // For alkane operations, prefer taproot if available (alkanes use P2TR)
+      // For alkane operations, prefer taproot if available (alkanes use P2TR).
+      // The early `throw` above guarantees at least one address; non-null
+      // assertion is applied at call sites that need a `string` (toAddresses).
       const primaryAddress = taprootAddress || segwitAddress;
       console.log('[useUnwrapMutation] Using addresses:', { taprootAddress, segwitAddress, primaryAddress });
 
@@ -93,28 +123,43 @@ export function useUnwrapMutation() {
 
       const unwrapAmount = toAlks(unwrapData.amount);
 
-      // Build protostone for unwrap operation
-      const protostone = buildUnwrapProtostone({
-        frbtcId: FRBTC_ALKANE_ID,
-      });
-
-      // Input requirements: frBTC amount to unwrap
+      // Input requirements: frBTC amount to unwrap (SDK auto-edicts to p0)
       const inputRequirements = buildUnwrapInputRequirements({
         frbtcId: FRBTC_ALKANE_ID,
         amount: unwrapAmount,
       });
 
-      // Get recipient address (taproot for alkanes, but BTC goes to segwit)
+      // BTC recipient. Default to segwit (cheaper); fall back to taproot for
+      // single-address wallets that don't expose a segwit derivation.
       const recipientAddress = account?.nativeSegwit?.address || account?.taproot?.address;
       if (!recipientAddress) throw new Error('No recipient address available');
 
       // Determine btcNetwork for PSBT operations
       const btcNetwork = getBitcoinNetwork(network);
 
+      // ----------------------------------------------------------------------
+      // Resolve the FROST signer's tweaked P2TR address (the dust output).
+      // ----------------------------------------------------------------------
+      // The contract's `burn()` requires `tx.output[dustVout].script_pubkey ==
+      // signer_script` — i.e. one of our outputs MUST be this exact P2TR
+      // script (see fr-btc/src/lib.rs:262-267).
+      //
+      // ALWAYS query dynamically. Opcode 103 returns the internal x-only
+      // pubkey; `getSignerAddressDynamic` derives the BIP341-tweaked P2TR via
+      // bitcoinjs `payments.p2tr`, which is exactly what the on-chain
+      // signer_script encodes. The hardcoded `SIGNER_ADDRESSES.mainnet` was
+      // historically the UNTWEAKED address (bc1p09qw7w...) — using it sends
+      // dust to the wrong script and the contract reverts with
+      // "signer pubkey must be targeted with supplementary output".
+      // Mirrors the perf-branch fix `b3b3a1bf` ("frBTC wrap signer address —
+      // apply BIP341 taproot tweak") for the wrap path.
+      const signerAddress = await getSignerAddressDynamic(network);
+
       console.log('[useUnwrapMutation] Executing unwrap:', {
         amount: unwrapAmount,
         frbtcId: FRBTC_ALKANE_ID,
         recipient: recipientAddress,
+        signer: signerAddress,
         feeRate: unwrapData.feeRate,
       });
 
@@ -131,11 +176,30 @@ export function useUnwrapMutation() {
         ? [segwitAddress, taprootAddress].filter(Boolean) as string[]
         : ['p2wpkh:0', 'p2tr:0'];
 
-      // Unwrap outputs BTC to segwit address (or taproot if no segwit)
-      // TypeScript can't infer from the early return that at least one address exists
+      // ----------------------------------------------------------------------
+      // Three-output unwrap layout (CLI canonical):
+      //   v0: alkanes refund (taproot or primary)   ← refund=v0
+      //   v1: BTC recipient (segwit or fallback)    ← pointer=v1
+      //   v2: FROST signer P2TR dust                ← dustVout=2
+      //
+      // Browser wallets must receive ACTUAL addresses (not symbolic) — same
+      // bug class as 2026-03-01. Keystore takes the symbolic descriptor
+      // branch which the SDK resolves against its loaded mnemonic.
+      // ----------------------------------------------------------------------
+      const DUST_VOUT = 2;
       const toAddresses = useActualAddresses
-        ? [(segwitAddress || taprootAddress)!]
-        : ['p2wpkh:0'];
+        ? [primaryAddress!, (segwitAddress || taprootAddress)!, signerAddress]
+        : ['p2tr:0', 'p2wpkh:0', signerAddress];
+
+      // Build protostone for unwrap operation. MUST include dustVout + amount
+      // in the cellpack — see header comment ("Calldata Bug Fix 2026-04-29").
+      const protostone = buildUnwrapProtostone({
+        frbtcId: FRBTC_ALKANE_ID,
+        dustVout: DUST_VOUT,
+        amount: unwrapAmount,
+        pointer: 'v1', // BTC payment record points at btcRecipient
+        refund: 'v0',  // unspent frBTC bounces back to alkanes recipient
+      });
 
       const changeAddr = useActualAddresses
         ? (segwitAddress || taprootAddress)
@@ -147,7 +211,7 @@ export function useUnwrapMutation() {
         : 'p2tr:0';
 
       console.log('[useUnwrapMutation] From addresses:', fromAddresses, '(browser:', isBrowserWallet, ')');
-      console.log('[useUnwrapMutation] To addresses:', toAddresses);
+      console.log('[useUnwrapMutation] To addresses (v0=alkanes-refund, v1=btc-recipient, v2=signer-dust):', toAddresses);
       console.log('[useUnwrapMutation] Change address:', changeAddr);
 
 

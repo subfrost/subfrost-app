@@ -223,15 +223,46 @@ export function buildWrapProtostone(params: {
 
 /**
  * Build protostone for frBTC → BTC unwrap operation.
+ *
+ * Cellpack: `[32, 0, 78, dustVout, amount]`
+ *
+ * The frBTC contract's `unwrap(vout: u128, amount_requested: u128)` requires
+ * BOTH arguments. With them omitted (the long-standing bug), the runtime read
+ * `vout = 0`, `amount_requested = 0`, then `min(0, frbtc_sent) = 0` triggered
+ * the `actual_amount_burn < 546` branch → `Cannot burn less than dust amount`
+ * (espo renders this as "dust limit underflow"). All incoming frBTC was then
+ * refunded via the `Refund` pointer — tokens were not destroyed but the
+ * unwrap never settled. See `fr-btc/src/lib.rs:519-545`.
+ *
+ * `dustVout` is the index of a P2TR output in this same tx that pays the
+ * FROST signer's tweaked address. The contract's `burn()` enforces
+ * `tx.output[dustVout].script_pubkey == signer_script`; the signer later
+ * spends that dust UTXO to settle the BTC payment via the `Payment` records
+ * stored under `/payments/byheight/`. The CLI canonical layout
+ * (`alkanes-cli/src/main.rs:3192-3197`) is:
+ *   - output 0: alkanes refund (taproot)
+ *   - output 1: BTC recipient (segwit) — destination for the queued BTC payment
+ *   - output 2: signer dust (P2TR) — `dustVout = 2`
+ * with `pointer = 'v1'` (BTC recipient) and `refund = 'v0'` (alkanes refund).
+ *
+ * Source: see `fr-btc/contract.wit` (signature) + `fr-btc/alkanes.toml`
+ *         (opcode 78) + `alkanes-cli/src/main.rs:3477-3502`
+ *         (`build_unwrap_protostone`).
  */
 export function buildUnwrapProtostone(params: {
   frbtcId: string;
+  /** Index of the P2TR signer dust output in this tx (the `vout` arg). */
+  dustVout: number;
+  /** frBTC amount to burn, in u128 sats (the `amount_requested` arg). */
+  amount: string;
+  /** Where the unwrapped BTC payment (queued for signer) is recorded. Default `v1`. */
   pointer?: string;
+  /** Where unspent frBTC bounces back. Default `v0` (alkanes recipient). */
   refund?: string;
 }): string {
-  const { frbtcId, pointer = 'v1', refund = 'v1' } = params;
+  const { frbtcId, dustVout, amount, pointer = 'v1', refund = 'v0' } = params;
   const [frbtcBlock, frbtcTx] = frbtcId.split(':');
-  const cellpack = [frbtcBlock, frbtcTx, FRBTC_UNWRAP_OPCODE].join(',');
+  const cellpack = [frbtcBlock, frbtcTx, FRBTC_UNWRAP_OPCODE, dustVout, amount].join(',');
   return `[${cellpack}]:${pointer}:${refund}`;
 }
 
@@ -365,7 +396,16 @@ export function buildWrapSwapProtostone(params: {
  * the edict at p0 from inputRequirements:
  *   p0: SDK auto-edict → sends sell tokens to p1
  *   p1: Swap cellpack → pointer=p2 forwards frBTC
- *   p2: Unwrap cellpack → outputs BTC to v0
+ *   p2: Unwrap cellpack → outputs BTC at `pointer` (default v0)
+ *
+ * The caller MUST include a P2TR signer dust output at index `dustVout` in
+ * the tx outputs — otherwise the unwrap reverts with "Cannot burn less than
+ * dust amount" (vout/amount default to 0). See `buildUnwrapProtostone` for
+ * the full explanation of the cellpack layout and `fr-btc/src/lib.rs:519-545`
+ * for the contract source.
+ *
+ * NOTE: this atomic two-protostone path is DEPRECATED in favor of the two-tx
+ * pattern in `useSwapUnwrapMutation`. Kept here for reference/tests.
  */
 export function buildSwapUnwrapProtostone(params: {
   sellTokenId: string;
@@ -374,8 +414,10 @@ export function buildSwapUnwrapProtostone(params: {
   factoryId: string;
   minFrbtcOutput: string;
   deadline: string;
+  /** Index of the P2TR signer dust output in this tx. */
+  dustVout: number;
 }): string {
-  const { sellTokenId, sellAmount, frbtcId, factoryId, minFrbtcOutput, deadline } = params;
+  const { sellTokenId, sellAmount, frbtcId, factoryId, minFrbtcOutput, deadline, dustVout } = params;
 
   const [sellBlock, sellTx] = sellTokenId.split(':');
   const [frbtcBlock, frbtcTx] = frbtcId.split(':');
@@ -396,7 +438,10 @@ export function buildSwapUnwrapProtostone(params: {
   ].join(',');
   const p1 = `[${swapCellpack}]:p2:v0`;
 
-  const unwrapCellpack = [frbtcBlock, frbtcTx, FRBTC_UNWRAP_OPCODE].join(',');
+  // Cellpack args: [..., 78, dustVout, amount]. Use minFrbtcOutput as the
+  // amount_requested ceiling — the contract `min()`s against actual frBTC
+  // received from the swap.
+  const unwrapCellpack = [frbtcBlock, frbtcTx, FRBTC_UNWRAP_OPCODE, dustVout, minFrbtcOutput].join(',');
   const p2 = `[${unwrapCellpack}]:v0:v0`;
 
   return `${p1},${p2}`;

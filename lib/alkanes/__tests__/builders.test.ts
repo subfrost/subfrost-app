@@ -148,18 +148,37 @@ describe('buildWrapProtostone', () => {
 });
 
 describe('buildUnwrapProtostone', () => {
-  it('builds unwrap protostone with opcode 78', () => {
-    const result = buildUnwrapProtostone({ frbtcId: FRBTC_ID });
-    expect(result).toBe('[32,0,78]:v1:v1');
+  // The cellpack MUST carry [block, tx, 78, dustVout, amount]. Omitting the
+  // last two args caused the 2026-04-29 "dust limit underflow" regression
+  // (real-world tx a95597ad...). See useUnwrapMutation.ts header comment.
+  it('builds unwrap protostone with opcode 78 + dustVout + amount', () => {
+    const result = buildUnwrapProtostone({
+      frbtcId: FRBTC_ID,
+      dustVout: 2,
+      amount: '500000',
+    });
+    expect(result).toBe('[32,0,78,2,500000]:v1:v0');
   });
 
   it('uses custom pointer and refund', () => {
     const result = buildUnwrapProtostone({
       frbtcId: FRBTC_ID,
+      dustVout: 2,
+      amount: '500000',
       pointer: 'v0',
       refund: 'v0',
     });
-    expect(result).toBe('[32,0,78]:v0:v0');
+    expect(result).toBe('[32,0,78,2,500000]:v0:v0');
+  });
+
+  it('threads dustVout through the cellpack (matches CLI canonical layout)', () => {
+    const result = buildUnwrapProtostone({
+      frbtcId: FRBTC_ID,
+      dustVout: 3,
+      amount: '1000',
+    });
+    // Position 4 in the cellpack is dustVout (after block, tx, opcode, then this).
+    expect(result).toContain(',78,3,1000]');
   });
 });
 
@@ -202,11 +221,12 @@ describe('buildSwapUnwrapProtostone', () => {
       factoryId: FACTORY_ID,
       minFrbtcOutput: '50000',
       deadline: '2000',
+      dustVout: 2,
     });
     // p1: swap, pointer=p2 (chains to unwrap)
     expect(result).toContain('[4,65498,13,2,2,0,32,0,1000000,50000,2000]:p2:v0');
-    // p2: unwrap
-    expect(result).toContain('[32,0,78]:v0:v0');
+    // p2: unwrap with dustVout + amount carried in cellpack (2026-04-29 fix)
+    expect(result).toContain('[32,0,78,2,50000]:v0:v0');
   });
 });
 
@@ -366,7 +386,7 @@ describe('builder consistency', () => {
         sellAmount: '100', minOutput: '50', deadline: '100',
       }),
       buildWrapProtostone({ frbtcId: FRBTC_ID }),
-      buildUnwrapProtostone({ frbtcId: FRBTC_ID }),
+      buildUnwrapProtostone({ frbtcId: FRBTC_ID, dustVout: 2, amount: '500000' }),
       buildTransferProtostone({ alkaneId: DIESEL_ID, amount: '100' }),
     ];
 
@@ -393,6 +413,7 @@ describe('builder consistency', () => {
       buildSwapUnwrapProtostone({
         sellTokenId: DIESEL_ID, sellAmount: '100', frbtcId: FRBTC_ID,
         factoryId: FACTORY_ID, minFrbtcOutput: '50', deadline: '100',
+        dustVout: 2,
       }),
     ];
 
