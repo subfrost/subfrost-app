@@ -189,7 +189,7 @@ describe('Browser wallet address handling', () => {
       if (!browserBranch) {
         // Inline pattern in alkanesExecuteTyped call
         const inlineMatch = src.match(
-          /changeAddress:\s*(?:isBrowserWallet|useActualAddresses)\s*\?\s*(.+?)\s*:\s*'p2wpkh:0'/
+          /changeAddress:\s*(?:isBrowserWallet|useActualAddresses)\s*\?\s*(.+?)\s*:\s*'p2(?:wpkh|tr):0'/
         );
         expect(inlineMatch).toBeTruthy();
         browserBranch = inlineMatch![1];
