@@ -1150,19 +1150,9 @@ export default function SwapShell() {
       return;
     }
 
-    // BTC → Token swap: Two-step wrap (BTC→frBTC) then swap (frBTC→Token)
-    //
-    // NOTE: This was previously a single-tx atomic wrap+swap using useWrapSwapMutation.
-    // That approach failed because the protostone `pointer` field only supports output
-    // indices (v0, v1), not protostone indices (p1, p2). The wrap cellpack's pointer=p1
-    // didn't deliver frBTC to the swap cellpack's incomingAlkanes. The factory received
-    // zero tokens and reverted with "balance underflow". See useWrapSwapMutation.ts header
-    // for full investigation details.
-    //
-    // JOURNAL (2026-03-15): Added state machine + TransactionStepper for clear UX feedback.
-    // Users now see step indicators (1/2, 2/2) and progress during polling.
-    //
-    // The two-step approach: wrap first, mine a block (regtest), then swap the frBTC.
+    // BTC → Token swap: Atomic wrap+swap in a single transaction.
+    // Two chained protostones: p0 wraps BTC→frBTC, p1 swaps frBTC→Token.
+    // Verified in alkanes-rs/crates/alkanes-integ-tests/tests/atomic_wrap_swap.rs
     if (isBtcToTokenSwap) {
       if (!quote || !quote.poolId) {
         console.error('[SWAP] BTC → Token swap requires quote with poolId');
@@ -1172,128 +1162,58 @@ export default function SwapShell() {
 
       try {
         const btcAmount = fromAmount;
-
-        // Update state: wrapping
-        setSwapFlowStep({ type: 'wrapping' });
-
-        // Step 1: Wrap BTC → frBTC
-        const wrapRes = await wrapMutation.mutateAsync({
-          amount: btcAmount,
-          feeRate: fee.feeRate,
-        });
-
-        if (!wrapRes?.success || !wrapRes.transactionId) {
-          setSwapFlowStep({ type: 'error', step: 'wrap', message: 'No transaction ID returned' });
-          throw new Error('Wrap step failed — no transaction ID returned');
-        }
-        const wrapTxId = wrapRes.transactionId;
-
-        // ⚠️ JOURNAL (2026-03-26): On devnet, the in-process indexer processes
-        // blocks synchronously — no esplora polling needed. On regtest, mine a
-        // block via the API. On all non-devnet networks, poll esplora_tx.
-        // This was first fixed in commit d3af35a, lost during revert to 69f39c8.
-        const isRegtest = ['regtest', 'subfrost-regtest', 'oylnet', 'regtest-local', 'devnet'].includes(network);
-
-        if (isRegtest && address) {
-          try {
-            if (network === 'devnet') {
-              await fetch(getRpcUrl(network), {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ jsonrpc: '2.0', method: 'generatetoaddress', params: [1, address], id: 1 }),
-              });
-            } else {
-              await fetch('/api/regtest/mine', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ blocks: 1, address }),
-              });
-            }
-          } catch (mineErr) {
-            console.warn('[SWAP] Mine failed (non-fatal):', mineErr);
-          }
-        }
-
-        if (network !== 'devnet') {
-          showNotification(wrapTxId, 'wrap', 'Step 1/2');
-
-          const pollInterval = isRegtest ? 1500 : 15000;
-          const maxPollAttempts = isRegtest ? 20 : 120;
-          let wrapConfirmed = false;
-
-          for (let attempt = 0; attempt < maxPollAttempts; attempt++) {
-            setSwapFlowStep({ type: 'wrap-confirming', txId: wrapTxId, attempt: attempt + 1, maxAttempts: maxPollAttempts });
-            await new Promise(resolve => setTimeout(resolve, pollInterval));
-            try {
-              const txResp = await fetch(getRpcUrl(network), {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ jsonrpc: '2.0', method: 'esplora_tx', params: [wrapTxId], id: 1 }),
-              });
-              const txData = await txResp.json();
-              if (txData?.result?.status?.confirmed) {
-                await new Promise(resolve => setTimeout(resolve, 2000));
-                wrapConfirmed = true;
-                break;
-              }
-            } catch { /* keep retrying */ }
-          }
-
-          if (!wrapConfirmed) {
-            setSwapFlowStep({ type: 'error', step: 'wrap', message: 'Wrap tx did not confirm', wrapTxId });
-            throw new Error(`Wrap tx did not confirm — swap frBTC → ${toToken.symbol} manually.`);
-          }
-        } else {
-          showNotification(wrapTxId, 'wrap', 'Step 1/2');
-          await new Promise(resolve => setTimeout(resolve, 500));
-        }
-
-        // Step 2: Swap frBTC → Target token
         setSwapFlowStep({ type: 'swapping' });
 
-        // Calculate frBTC amount after wrap fee (same logic as useWrapSwapMutation)
+        // Get signer address for wrap (BTC destination)
+        const { getSignerAddressDynamic } = await import('@/lib/alkanes/helpers');
+        const signerAddress = await getSignerAddressDynamic(network);
+
+        // Build atomic wrap+swap protostones
+        const { buildAtomicWrapSwapProtostones } = await import('@/lib/alkanes/builders');
         const wrapFeePerThousand = premiumData?.wrapFeePerThousand ?? FRBTC_WRAP_FEE_PER_1000;
         const btcSats = new BigNumber(btcAmount).multipliedBy(1e8).integerValue(BigNumber.ROUND_FLOOR);
-        const frbtcAmount = btcSats.multipliedBy(1000 - wrapFeePerThousand).dividedBy(1000)
+        const frbtcAfterFee = btcSats.multipliedBy(1000 - wrapFeePerThousand).dividedBy(1000)
           .integerValue(BigNumber.ROUND_FLOOR).toString();
 
-        const swapRes = await swapMutation.mutateAsync({
-          sellCurrency: FRBTC_ALKANE_ID,
+        const currentBlock = parseInt(localStorage.getItem('subfrost_last_block_height') || '0', 10);
+        const deadline = (currentBlock + deadlineBlocks).toString();
+        const protostones = buildAtomicWrapSwapProtostones({
+          factoryId: config.ALKANE_FACTORY_ID,
+          buyTokenId: toToken.id,
+          sellAmount: frbtcAfterFee,
+          minOutput: quote.minimumReceived || '1',
+          deadline,
+        });
+
+        // Execute: v0=signer (BTC), v1=user (swap output)
+        const primaryAddress = address;
+        const result = await swapMutation.mutateAsync({
+          sellCurrency: 'btc',
           buyCurrency: toToken.id,
           direction: 'sell',
-          sellAmount: frbtcAmount,
+          sellAmount: btcSats.toString(),
           buyAmount: quote.buyAmount,
           maxSlippage,
           feeRate: fee.feeRate,
           poolId: quote.poolId,
           deadlineBlocks,
-        });
+          // Override protostones and addresses for atomic wrap+swap
+          overrideProtostones: protostones,
+          overrideToAddresses: [signerAddress, primaryAddress!],
+          overrideInputRequirements: `B:${btcSats.toString()}:v0`,
+        } as any);
 
-        if (swapRes?.success && swapRes.transactionId) {
-
-          // On devnet, mine a block to confirm the swap tx so balances update
-          if (network === 'devnet' && address) {
-            try {
-              await fetch(getRpcUrl(network), {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ jsonrpc: '2.0', method: 'generatetoaddress', params: [1, address], id: 1 }),
-              });
-            } catch {}
-          }
-
-          setSwapFlowStep({ type: 'complete', wrapTxId, swapTxId: swapRes.transactionId });
-          showNotification(swapRes.transactionId, 'swap', 'Step 2/2');
+        if (result?.success && result.transactionId) {
+          setSwapFlowStep({ type: 'complete', swapTxId: result.transactionId });
+          showNotification(result.transactionId, 'swap');
           setTimeout(() => refreshWalletData(), 2000);
-          // Auto-dismiss stepper after 5 seconds on success
           setTimeout(() => setSwapFlowStep({ type: 'idle' }), 5000);
         } else {
-          setSwapFlowStep({ type: 'error', step: 'swap', message: 'No transaction ID returned', wrapTxId });
+          setSwapFlowStep({ type: 'error', step: 'swap', message: 'No transaction ID returned' });
         }
       } catch (e: any) {
-        console.error('[SWAP] BTC → Token swap failed:', e);
+        console.error('[SWAP] Atomic BTC → Token swap failed:', e);
         const msg = humanizeError(extractErrorMessage(e));
-        // Only update state if not already in error state (wrap error)
         if (swapFlowStep.type !== 'error') {
           setSwapFlowStep({ type: 'error', step: 'swap', message: msg });
         }

@@ -268,10 +268,10 @@ export function useSwapMutation() {
       // For alkane operations, prefer taproot if available (alkanes use P2TR)
       const primaryAddress = taprootAddress || segwitAddress;
 
-      // NOTE: BTC → token swaps (other than frBTC) should be handled in SwapShell.tsx
-      // by first wrapping BTC to frBTC, then calling swapMutation with frBTC.
-      // If we reach here with BTC as sellCurrency for a non-frBTC target, something is wrong.
-      if (swapData.sellCurrency === 'btc' && swapData.buyCurrency !== FRBTC_ALKANE_ID) {
+      // BTC → non-frBTC: only allowed with override protostones (atomic wrap+swap).
+      // Without overrides, this would try to swap BTC directly which is impossible.
+      const hasOverrides = !!(swapData as any).overrideProtostones;
+      if (swapData.sellCurrency === 'btc' && swapData.buyCurrency !== FRBTC_ALKANE_ID && !hasOverrides) {
         console.error('[useSwapMutation] ❌ BTC → non-frBTC swap reached mutation!');
         console.error('[useSwapMutation] sellCurrency:', swapData.sellCurrency);
         console.error('[useSwapMutation] buyCurrency:', swapData.buyCurrency);
@@ -412,12 +412,13 @@ export function useSwapMutation() {
 
         const isKeystoreWallet = walletType === 'keystore';
         const result = await provider.alkanesExecuteTyped({
-          inputRequirements,
-          protostones: protostone,
+          // Support overrides for atomic wrap+swap (SwapShell passes custom protostones/addresses)
+          inputRequirements: (swapData as any).overrideInputRequirements || inputRequirements,
+          protostones: (swapData as any).overrideProtostones || protostone,
           feeRate: swapData.feeRate,
           autoConfirm: isKeystoreWallet,
           fromAddresses,
-          toAddresses,
+          toAddresses: (swapData as any).overrideToAddresses || toAddresses,
           changeAddress: changeAddr,
           alkanesChangeAddress: alkanesChangeAddr,
           ordinalsStrategy: 'exclude',
