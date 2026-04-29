@@ -16,17 +16,33 @@ export const PENDING_TX_PREFIX = 'sf-pending-tx-';
 // Max age: 72 hours. Txs older than this are assumed dropped/replaced.
 const MAX_AGE_MS = 72 * 60 * 60 * 1000;
 
+/**
+ * Optional token metadata stored alongside a pending tx so the activity feed
+ * can render meaningful from/to/amount cells before the indexer catches up.
+ * Symbols and amounts are display values (e.g., "frBTC", "0.00500000").
+ */
+export interface PendingTxTokenInfo {
+  fromSymbol?: string;
+  toSymbol?: string;
+  fromId?: string;
+  toId?: string;
+  fromAmount?: string;
+  toAmount?: string;
+}
+
 export interface PendingTxRecord {
   txid: string;
   operationType: OperationType;
   stepContext?: string;
   storedAt: number;
+  tokenInfo?: PendingTxTokenInfo;
 }
 
 export function storePendingTx(
   txid: string,
   operationType: OperationType,
   stepContext?: string,
+  tokenInfo?: PendingTxTokenInfo,
 ): void {
   if (typeof window === 'undefined') return;
   const record: PendingTxRecord = {
@@ -34,6 +50,7 @@ export function storePendingTx(
     operationType,
     stepContext,
     storedAt: Date.now(),
+    tokenInfo,
   };
   try {
     localStorage.setItem(`${PENDING_TX_PREFIX}${txid}`, JSON.stringify(record));

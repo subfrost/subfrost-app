@@ -9,6 +9,7 @@ import DemoBanner from '@/app/components/DemoBanner';
 import SplashScreen from '@/app/components/SplashScreen';
 import ConnectWalletModal from '@/app/components/ConnectWalletModal';
 import { useWallet } from '@/context/WalletContext';
+import { useSyncPendingTransactions, useExpirePendingActivities } from '@/hooks/usePendingTransactions';
 
 // JOURNAL (2026-03-31): Guard ConnectWalletModal mount at the AppShell level.
 // Previously the modal used `if (!isConnectModalOpen) return null` internally.
@@ -32,6 +33,8 @@ function ConnectWalletModalGate() {
 // Confirmed ones are silently pruned. This closes the navigation/reload gap
 // where the pending toast would disappear but the tx was still in the mempool.
 function PendingTxSync() {
+  useSyncPendingTransactions();
+  useExpirePendingActivities();
   return null;
 }
 

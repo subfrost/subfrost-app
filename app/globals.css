@@ -653,6 +653,16 @@ textarea:focus-visible,
   to   { opacity: 1; transform: translateY(0); }
 }
 
+@keyframes sf-snake-char {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.sf-snake-char {
+  opacity: 0;
+  animation: sf-snake-char 60ms linear forwards;
+}
+
 /* Smooth scroll */
 @media (prefers-reduced-motion: no-preference) {
   html {

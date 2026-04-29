@@ -111,6 +111,7 @@ import { X, Send, AlertCircle, CheckCircle, Loader2, ChevronDown, Coins, Externa
 import { useWallet } from '@/context/WalletContext';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { useTransactionConfirm } from '@/context/TransactionConfirmContext';
+import { useNotification } from '@/context/NotificationContext';
 import { useEnrichedWalletData } from '@/hooks/useEnrichedWalletData';
 import { useSandshrewProvider } from '@/hooks/useSandshrewProvider';
 import TokenIcon from '@/app/components/TokenIcon';
@@ -254,8 +255,44 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
   const { provider, isInitialized } = useAlkanesSDK();
   const alkaneProvider = useSandshrewProvider();
   const { requestConfirmation } = useTransactionConfirm();
+  const { showError } = useNotification();
   const { t } = useTranslation();
   const { balances, refresh } = useEnrichedWalletData();
+
+  // Translate raw broadcast/signing errors into user-readable toast messages.
+  // Mirrors SwapShell.humanizeError so wallet rejections, balance errors, and dust
+  // failures show as the same human strings used elsewhere in the app.
+  const humanizeError = (raw: string): string => {
+    if (!raw) return t('send.failedBroadcast');
+    if (raw.includes('User rejected') || raw.includes('User denied') || raw.includes('user rejected') || raw.includes('cancelled') || raw.includes('Transaction rejected')) {
+      return t('errors.userCancelled');
+    }
+    if (raw.includes('Insufficient alkanes')) {
+      const match = raw.match(/need (\d+) of ([\d:]+), have (\d+)/);
+      if (match) {
+        const [, needed, tokenId, available] = match;
+        return t('errors.insufficientBalance', {
+          tokenId,
+          needed: (Number(needed) / 1e8).toFixed(4),
+          available: (Number(available) / 1e8).toFixed(4),
+        });
+      }
+    }
+    if (raw.includes('Insufficient funds') || raw.includes('insufficient funds')) {
+      const fundsMatch = raw.match(/need (\d+) sats/);
+      const needed = fundsMatch ? (Number(fundsMatch[1]) / 1e8).toFixed(6) : null;
+      return needed
+        ? t('errors.insufficientBtcWithAmount', { needed })
+        : t('errors.insufficientBtcGeneric');
+    }
+    if (raw.includes('dust') || raw.includes('dust limit')) {
+      return t('errors.dustAmount');
+    }
+    if (raw.includes('timeout') || raw.includes('Timeout')) {
+      return t('errors.requestTimeout');
+    }
+    return raw;
+  };
 
   // Fetch UTXOs via esplora when modal opens.
   const [esploraUtxos, setEsploraUtxos] = useState<any[]>([]);
@@ -307,7 +344,6 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
   const [amount, setAmount] = useState('');
   const [selectedUtxos, setSelectedUtxos] = useState<Set<string>>(new Set());
   const [step, setStep] = useState<'input' | 'confirm' | 'broadcasting' | 'success'>('input');
-  const [error, setError] = useState('');
   const [txid, setTxid] = useState('');
   const [sendMode, setSendMode] = useState<'btc' | 'alkanes'>('btc');
   const [selectedAlkaneId, setSelectedAlkaneId] = useState<string | null>(null);
@@ -416,16 +452,12 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
     .reduce((sum, val) => sum + val, 0);
 
   useEffect(() => {
-    if (isOpen) {
-      // Clear any stale errors when modal opens
-      setError('');
-    } else {
+    if (!isOpen) {
       // Reset state when modal closes (fee selection is persisted via useFeeRate)
       setStep('input');
       setRecipientAddress('');
       setAmount('');
       setSelectedUtxos(new Set());
-      setError('');
       setTxid('');
       setSendMode('btc');
       setSelectedAlkaneId(null);
@@ -497,31 +529,29 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
   };
 
   const handleNext = () => {
-    setError('');
-
     // Handle alkane sends
     if (sendMode === 'alkanes') {
       if (step === 'input') {
         // Validate alkane send inputs
         if (!validateAddress(recipientAddress)) {
-          setError(t('send.invalidAddress'));
+          showError(t('send.invalidAddress'));
           return;
         }
 
         if (!selectedAlkaneId) {
-          setError(t('send.selectAlkane'));
+          showError(t('send.selectAlkane'));
           return;
         }
 
         const selectedAlkane = balances.alkanes.find(a => a.alkaneId === selectedAlkaneId);
         if (!selectedAlkane) {
-          setError(t('send.selectedAlkaneNotFound'));
+          showError(t('send.selectedAlkaneNotFound'));
           return;
         }
 
         const amountFloat = parseFloat(amount);
         if (isNaN(amountFloat) || amountFloat <= 0) {
-          setError(t('send.invalidAmount'));
+          showError(t('send.invalidAmount'));
           return;
         }
 
@@ -531,12 +561,12 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
         const balanceBaseUnits = BigInt(selectedAlkane.balance);
 
         if (amountBaseUnits > balanceBaseUnits) {
-          setError(t('send.insufficientBalance'));
+          showError(t('send.insufficientBalance'));
           return;
         }
 
         if (feeRate < 1) {
-          setError(t('send.invalidFeeRate'));
+          showError(t('send.invalidFeeRate'));
           return;
         }
 
@@ -551,25 +581,25 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
     if (step === 'input') {
       // Validate inputs
       if (!validateAddress(recipientAddress)) {
-        setError(t('send.invalidAddress'));
+        showError(t('send.invalidAddress'));
         return;
       }
 
       const amountSats = Math.floor(parseFloat(amount) * 100000000);
       if (isNaN(amountSats) || amountSats <= 0) {
-        setError(t('send.invalidAmount'));
+        showError(t('send.invalidAmount'));
         return;
       }
 
       // JOURNAL (2026-03-03): Bitcoin Core rejects outputs below dust threshold (546 sats)
       // with error "dust, tx with dust output must be 0-fee". Validate before building PSBT.
       if (amountSats < DUST_THRESHOLD) {
-        setError(t('send.amountBelowDust', { threshold: DUST_THRESHOLD }));
+        showError(t('send.amountBelowDust', { threshold: DUST_THRESHOLD }));
         return;
       }
 
       if (feeRate < 1) {
-        setError(t('send.invalidFeeRate'));
+        showError(t('send.invalidFeeRate'));
         return;
       }
       const feeRateNum = feeRate;
@@ -611,16 +641,14 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
         // Check if we have enough total balance
         const totalAvailable = availableUtxos.reduce((sum, u) => sum + u.value, 0);
         if (totalAvailable >= required) {
-          setError(
-            t('send.utxoLimitError', {
-              limit: MAX_UTXOS,
-              need: (required / 100000000).toFixed(8),
-              have: (total / 100000000).toFixed(8),
-              total: (totalAvailable / 100000000).toFixed(8),
-            })
-          );
+          showError(t('send.utxoLimitError', {
+            limit: MAX_UTXOS,
+            need: (required / 100000000).toFixed(8),
+            have: (total / 100000000).toFixed(8),
+            total: (totalAvailable / 100000000).toFixed(8),
+          }));
         } else {
-          setError(t('send.insufficientFundsDetailed', {
+          showError(t('send.insufficientFundsDetailed', {
             need: (required / 100000000).toFixed(8),
             have: (totalAvailable / 100000000).toFixed(8),
           }));
@@ -701,8 +729,6 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
   };
 
   const handleBroadcast = async () => {
-    setError('');
-
     try {
       const amountSats = Math.floor(parseFloat(amount) * 100000000);
 
@@ -751,7 +777,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
           setSelectedUtxos(new Set());
           setShowFeeWarning(false);
           setStep('input');
-          setError(t('send.utxosStale'));
+          showError(t('send.utxosStale'));
           return; // Exit early - don't throw, just reset state
         }
 
@@ -937,7 +963,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
 
       if (!approved) {
         console.log('[SendModal] User rejected transaction');
-        setError(t('send.transactionRejected'));
+        showError(t('send.transactionRejected'));
         return;
       }
       console.log('[SendModal] User approved transaction');
@@ -999,9 +1025,8 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
     } catch (err: any) {
       console.error('[SendModal] Transaction failed:', err);
 
-      let errorMessage = err.message || t('send.failedBroadcast');
-
-      setError(errorMessage);
+      const rawMessage = err?.message || String(err) || t('send.failedBroadcast');
+      showError(humanizeError(rawMessage));
       // Go back to input step to allow re-selection of UTXOs
       // This prevents looping between confirm and error states
       setSelectedUtxos(new Set());
@@ -1016,7 +1041,6 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
    * Address strategy: Taproot for tokens, SegWit for BTC fees/change
    */
   const handleAlkaneBroadcast = async () => {
-    setError('');
     setIsProcessing(true);
 
     try {
@@ -1085,7 +1109,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
 
         if (!approved) {
           console.log('[SendModal] User rejected transaction');
-          setError(t('send.transactionRejected'));
+          showError(t('send.transactionRejected'));
           return;
         }
         console.log('[SendModal] User approved transaction');
@@ -1239,8 +1263,8 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
     } catch (err: any) {
       console.error('[SendModal] Alkane transfer failed:', err);
 
-      let errorMessage = err.message || t('send.failedSendAlkanes');
-      setError(errorMessage);
+      const rawMessage = err?.message || String(err) || t('send.failedSendAlkanes');
+      showError(humanizeError(rawMessage));
       setStep('input');
     } finally {
       setIsProcessing(false);
@@ -1311,8 +1335,6 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
             value={recipientAddress}
             onChange={(e) => {
               setRecipientAddress(e.target.value);
-              // Clear any previous error when user starts typing
-              if (error) setError('');
             }}
             placeholder="bc1q..."
             className="w-full px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-[color:var(--sf-text)] outline-none focus:shadow-[0_4px_12px_rgba(0,0,0,0.2)] text-base transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
@@ -1336,8 +1358,6 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
               // Reset collateral warning acknowledgment when amount changes
               // because different UTXOs might be selected
               setCollateralAcknowledged(false);
-              // Clear any previous error when user starts typing
-              if (error) setError('');
             }}
             placeholder="0.00000000"
             className="w-full px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-[color:var(--sf-text)] outline-none focus:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
@@ -1385,30 +1405,15 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
             />
           </div>
         </div>
-
-        {error && (
-          <div className="rounded-xl bg-[color:var(--sf-info-red-bg)] p-4 text-sm text-[color:var(--sf-info-red-text)] shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
-            <AlertCircle size={16} className="inline mr-2" />
-            {error}
-          </div>
-        )}
       </div>
 
-      <div className="flex gap-3">
-        <button
-          data-testid="send-submit"
-          onClick={() => { handleNext(); }}
-          className={`flex-1 px-4 py-3 rounded-xl shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none font-bold uppercase tracking-wide bg-[color:var(--sf-primary)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] text-white`}
-        >
-          {t('send.reviewAndSend')}
-        </button>
-        <button
-          onClick={onClose}
-          className="px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:bg-[color:var(--sf-surface)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)] font-bold uppercase tracking-wide"
-        >
-          {t('send.cancel')}
-        </button>
-      </div>
+      <button
+        data-testid="send-submit"
+        onClick={() => { handleNext(); }}
+        className="sf-btn-primary uppercase tracking-wide"
+      >
+        {t('send.reviewAndSend')}
+      </button>
     </>
   );
 
@@ -1432,10 +1437,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
         {balances.alkanes.length > 0 ? (
           <div>
             <label className="block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/60 mb-2">
-              <span className="flex items-center gap-1.5">
-                <Coins size={14} />
-                {t('send.selectAlkanes')}
-              </span>
+              {t('send.selectAlkanes')}
             </label>
             <div className="flex gap-4 mb-2">
               {(['tokens', 'positions', 'nfts'] as const).map((tab) => (
@@ -1648,35 +1650,20 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
             />
           </div>
         </div>
-
-        {error && (
-          <div className="rounded-xl bg-[color:var(--sf-info-red-bg)] p-4 text-sm text-[color:var(--sf-info-red-text)] shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
-            <AlertCircle size={16} className="inline mr-2" />
-            {error}
-          </div>
-        )}
       </div>
 
-      <div className="flex gap-3">
-        <button
-          onClick={() => { if (!isProcessing) { handleNext(); } }}
-          disabled={!selectedAlkaneId || !amount || isProcessing}
-          className={`flex-1 px-4 py-3 rounded-xl shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none font-bold uppercase tracking-wide disabled:opacity-50 disabled:cursor-not-allowed bg-[color:var(--sf-primary)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] text-white`}
-        >
-          {isProcessing ? (
-            <span className="flex items-center justify-center gap-2">
-              <Loader2 size={16} className="animate-spin" />
-              {t('send.preparing')}
-            </span>
-          ) : t('send.reviewAndSend')}
-        </button>
-        <button
-          onClick={onClose}
-          className="px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:bg-[color:var(--sf-surface)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)] font-bold uppercase tracking-wide"
-        >
-          {t('send.cancel')}
-        </button>
-      </div>
+      <button
+        onClick={() => { if (!isProcessing) { handleNext(); } }}
+        disabled={!selectedAlkaneId || !amount || isProcessing}
+        className="sf-btn-primary uppercase tracking-wide"
+      >
+        {isProcessing ? (
+          <>
+            <Loader2 size={16} className="animate-spin" />
+            {t('send.preparing')}
+          </>
+        ) : t('send.reviewAndSend')}
+      </button>
     </>
   );
 
@@ -1734,13 +1721,6 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
           {!showFeeWarning && (
             <div className="p-3 rounded-xl bg-[color:var(--sf-info-yellow-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-sm text-[color:var(--sf-info-yellow-text)]">
               {t('send.verifyWarning')}
-            </div>
-          )}
-
-          {error && (
-            <div className="rounded-xl bg-[color:var(--sf-info-red-bg)] p-4 text-sm text-[color:var(--sf-info-red-text)] shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
-              <AlertCircle size={16} className="inline mr-2" />
-              {error}
             </div>
           )}
         </div>
@@ -1844,7 +1824,6 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
                       setSendMode(tab);
                       setRecipientAddress('');
                       setAmount('');
-                      setError('');
                       setSelectedUtxos(new Set());
                       setSelectedAlkaneId(null);
                     }

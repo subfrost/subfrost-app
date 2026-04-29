@@ -30,6 +30,8 @@ export default function SwapSuccessNotification({
   const [isFlashing, setIsFlashing] = useState(true);
   const [isVisible, setIsVisible] = useState(false);
   const [isExpanded, setIsExpanded] = useState(true);
+  const [countdown, setCountdown] = useState(5);
+  const [revealComplete, setRevealComplete] = useState(false);
   const autoCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const confirmed = useTxConfirmed(autoCloseAfterConfirmed ? txId : undefined);
@@ -52,13 +54,24 @@ export default function SwapSuccessNotification({
     // End flash after 400ms
     const flashTimer = setTimeout(() => setIsFlashing(false), 400);
 
-    // Auto-collapse after 5 seconds (instead of dismiss)
+    // Countdown ticks: 5 → 4 → 3 → 2 → 1 → 0 (link reveals at 0)
+    const tickTimers: ReturnType<typeof setTimeout>[] = [];
+    for (let i = 1; i <= 5; i += 1) {
+      tickTimers.push(setTimeout(() => setCountdown(5 - i), i * 1000));
+    }
+
+    // Mark reveal complete after countdown ends + 1200ms reveal animation
+    const revealTimer = setTimeout(() => setRevealComplete(true), 5000 + 1200);
+
+    // Auto-collapse 5s after the link is fully revealed and clickable
     const collapseTimer = setTimeout(() => {
       setIsExpanded(false);
-    }, 5000);
+    }, 5000 + 1200 + 5000);
 
     return () => {
       clearTimeout(flashTimer);
+      tickTimers.forEach(clearTimeout);
+      clearTimeout(revealTimer);
       clearTimeout(collapseTimer);
     };
   }, []);
@@ -140,13 +153,40 @@ export default function SwapSuccessNotification({
             </h3>
             <div className="text-sm text-[color:var(--sf-info-green-text)]">
               {t('success.transactionId')}{" "}
-              <Link
-                href={`https://espo.sh/tx/${txId}`}
-                target="_blank"
-                className="font-semibold text-xs break-all hover:underline"
-              >
-                {txId}
-              </Link>
+              {countdown > 0 ? (
+                <span
+                  className="font-semibold text-xs tabular-nums"
+                  aria-live="polite"
+                >
+                  ({countdown})
+                </span>
+              ) : (
+                <Link
+                  href={`https://espo.sh/tx/${txId}`}
+                  target="_blank"
+                  className={`font-semibold text-xs break-all hover:underline ${
+                    revealComplete ? "" : "pointer-events-none"
+                  }`}
+                  aria-disabled={!revealComplete}
+                  tabIndex={revealComplete ? 0 : -1}
+                  aria-label={txId}
+                >
+                  {txId.split("").map((ch, i) => {
+                    const denom = Math.max(1, txId.length - 1);
+                    const delay = (i * 1140) / denom;
+                    return (
+                      <span
+                        key={i}
+                        className="sf-snake-char"
+                        style={{ animationDelay: `${delay}ms` }}
+                        aria-hidden="true"
+                      >
+                        {ch}
+                      </span>
+                    );
+                  })}
+                </Link>
+              )}
             </div>
           </div>
 

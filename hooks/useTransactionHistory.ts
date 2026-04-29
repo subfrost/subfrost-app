@@ -13,7 +13,7 @@
 import { useMemo, useCallback } from 'react';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
-import { fetchTxPage, TX_PAGE_SIZE, type TxPage } from '@/queries/history';
+import { fetchTxPage, sortByRecency, TX_PAGE_SIZE, type TxPage } from '@/queries/history';
 
 export interface TransactionInput {
   txid: string;
@@ -105,7 +105,7 @@ export function useTransactionHistory(addresses: string[]) {
         }
       }
     }
-    return all.sort((a, b) => (b.blockTime || 0) - (a.blockTime || 0));
+    return all.sort(sortByRecency);
   }, [query.data?.pages]);
 
   const refresh = useCallback(async () => {

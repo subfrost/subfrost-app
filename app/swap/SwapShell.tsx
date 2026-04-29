@@ -254,6 +254,7 @@ export default function SwapShell() {
       name: alkane.name,
       symbol: alkane.symbol,
       balance: alkane.balance,
+      priceUsd: alkane.priceUsd,
     }));
   }, [walletBalances?.alkanes]);
 
@@ -819,8 +820,8 @@ export default function SwapShell() {
     
     // Check user currencies first (most reliable)
     const cur = idToUserCurrency.get(tokenId);
-    if (cur?.priceInfo?.price && cur.priceInfo.price > 0) {
-      return cur.priceInfo.price;
+    if (cur?.priceUsd && cur.priceUsd > 0) {
+      return cur.priceUsd;
     }
     
     // For frBTC, use BTC price
@@ -1041,7 +1042,11 @@ export default function SwapShell() {
         const amountDisplay = direction === 'sell' ? fromAmount : toAmount;
         const res = await wrapMutation.mutateAsync({ amount: amountDisplay, feeRate: fee.feeRate });
         if (res?.success && res.transactionId) {
-          showNotification(res.transactionId, 'wrap');
+          showNotification(res.transactionId, 'wrap', undefined, {
+            fromSymbol: 'BTC', toSymbol: 'frBTC',
+            fromId: 'btc', toId: 'frbtc',
+            fromAmount: amountDisplay, toAmount: amountDisplay,
+          });
           setTimeout(() => refreshWalletData(), 2000);
         }
       } catch (e: any) {
@@ -1056,7 +1061,11 @@ export default function SwapShell() {
         const amountDisplay = direction === 'sell' ? fromAmount : toAmount;
         const res = await unwrapMutation.mutateAsync({ amount: amountDisplay, feeRate: fee.feeRate });
         if (res?.success && res.transactionId) {
-          showNotification(res.transactionId, 'unwrap');
+          showNotification(res.transactionId, 'unwrap', undefined, {
+            fromSymbol: 'frBTC', toSymbol: 'BTC',
+            fromId: 'frbtc', toId: 'btc',
+            fromAmount: amountDisplay, toAmount: amountDisplay,
+          });
           setTimeout(() => refreshWalletData(), 2000);
         }
       } catch (e: any) {
@@ -1072,7 +1081,11 @@ export default function SwapShell() {
         const amountDisplay = direction === 'sell' ? fromAmount : toAmount;
         const res = await wrapZecMutation.mutateAsync({ amount: amountDisplay, feeRate: fee.feeRate });
         if (res?.success && res.transactionId) {
-          showNotification(res.transactionId, 'wrap');
+          showNotification(res.transactionId, 'wrap', undefined, {
+            fromSymbol: fromToken?.symbol || 'BTC', toSymbol: toToken?.symbol || 'frZEC',
+            fromId: fromToken?.id, toId: toToken?.id,
+            fromAmount: amountDisplay, toAmount: amountDisplay,
+          });
           setTimeout(() => refreshWalletData(), 2000);
         }
       } catch (e: any) {
@@ -1088,7 +1101,11 @@ export default function SwapShell() {
         const amountDisplay = direction === 'sell' ? fromAmount : toAmount;
         const res = await unwrapZecMutation.mutateAsync({ amount: amountDisplay, feeRate: fee.feeRate });
         if (res?.success && res.transactionId) {
-          showNotification(res.transactionId, 'unwrap');
+          showNotification(res.transactionId, 'unwrap', undefined, {
+            fromSymbol: fromToken?.symbol || 'frZEC', toSymbol: toToken?.symbol || 'BTC',
+            fromId: fromToken?.id, toId: toToken?.id,
+            fromAmount: amountDisplay, toAmount: amountDisplay,
+          });
           setTimeout(() => refreshWalletData(), 2000);
         }
       } catch (e: any) {
@@ -1104,7 +1121,11 @@ export default function SwapShell() {
         const amountDisplay = direction === 'sell' ? fromAmount : toAmount;
         const res = await wrapEthMutation.mutateAsync({ amount: amountDisplay, feeRate: fee.feeRate });
         if (res?.success && res.transactionId) {
-          showNotification(res.transactionId, 'wrap');
+          showNotification(res.transactionId, 'wrap', undefined, {
+            fromSymbol: fromToken?.symbol || 'BTC', toSymbol: toToken?.symbol || 'frETH',
+            fromId: fromToken?.id, toId: toToken?.id,
+            fromAmount: amountDisplay, toAmount: amountDisplay,
+          });
           setTimeout(() => refreshWalletData(), 2000);
         }
       } catch (e: any) {
@@ -1120,7 +1141,11 @@ export default function SwapShell() {
         const amountDisplay = direction === 'sell' ? fromAmount : toAmount;
         const res = await unwrapEthMutation.mutateAsync({ amount: amountDisplay, feeRate: fee.feeRate });
         if (res?.success && res.transactionId) {
-          showNotification(res.transactionId, 'unwrap');
+          showNotification(res.transactionId, 'unwrap', undefined, {
+            fromSymbol: fromToken?.symbol || 'frETH', toSymbol: toToken?.symbol || 'BTC',
+            fromId: fromToken?.id, toId: toToken?.id,
+            fromAmount: amountDisplay, toAmount: amountDisplay,
+          });
           setTimeout(() => refreshWalletData(), 2000);
         }
       } catch (e: any) {
@@ -1209,7 +1234,11 @@ export default function SwapShell() {
 
         if (result?.success && result.transactionId) {
           setSwapFlowStep({ type: 'complete', swapTxId: result.transactionId });
-          showNotification(result.transactionId, 'swap');
+          showNotification(result.transactionId, 'swap', undefined, {
+            fromSymbol: 'BTC', toSymbol: toToken.symbol,
+            fromId: 'btc', toId: toToken.id,
+            fromAmount: btcAmount, toAmount: toAmount,
+          });
           setTimeout(() => refreshWalletData(), 2000);
           setTimeout(() => setSwapFlowStep({ type: 'idle' }), 5000);
         } else {
@@ -1303,8 +1332,14 @@ export default function SwapShell() {
           }
         }
 
+        const tokenToFrbtcInfo = {
+          fromSymbol: fromToken.symbol, toSymbol: 'frBTC',
+          fromId: fromToken.id, toId: 'frbtc',
+          fromAmount: fromAmount, toAmount: quote.displayBuyAmount,
+        };
+
         if (network !== 'devnet') {
-        showNotification(swapTxId, 'swap', 'Step 1/2');
+        showNotification(swapTxId, 'swap', 'Step 1/2', tokenToFrbtcInfo);
 
         const pollInterval = isRegtest ? 1500 : 15000;
         const maxPollAttempts = isRegtest ? 20 : 120;
@@ -1337,7 +1372,7 @@ export default function SwapShell() {
           throw new Error(`Swap tx did not confirm — unwrap frBTC → BTC manually.`);
         }
         } else {
-          showNotification(swapTxId, 'swap', 'Step 1/2');
+          showNotification(swapTxId, 'swap', 'Step 1/2', tokenToFrbtcInfo);
           await new Promise(resolve => setTimeout(resolve, 500));
         }
 
@@ -1401,7 +1436,11 @@ export default function SwapShell() {
           }
 
           setSwapFlowStep({ type: 'complete', swapTxId, unwrapTxId: unwrapRes.transactionId });
-          showNotification(unwrapRes.transactionId, 'unwrap', 'Step 2/2');
+          showNotification(unwrapRes.transactionId, 'unwrap', 'Step 2/2', {
+            fromSymbol: 'frBTC', toSymbol: 'BTC',
+            fromId: 'frbtc', toId: 'btc',
+            fromAmount: frbtcAmount, toAmount: frbtcAmount,
+          });
           setTimeout(() => refreshWalletData(), 2000);
           // Auto-dismiss stepper after 5 seconds on success
           setTimeout(() => setSwapFlowStep({ type: 'idle' }), 5000);
@@ -1468,7 +1507,11 @@ export default function SwapShell() {
     try {
       const res = await swapMutation.mutateAsync(payload as any);
       if (res?.success && res.transactionId) {
-        showNotification(res.transactionId, 'swap');
+        showNotification(res.transactionId, 'swap', undefined, {
+          fromSymbol: fromToken.symbol, toSymbol: toToken.symbol,
+          fromId: fromToken.id, toId: toToken.id,
+          fromAmount: fromAmount, toAmount: toAmount,
+        });
       }
     } catch (e: any) {
       console.error('[SWAP] Mutation error:', e?.message);
@@ -1551,7 +1594,11 @@ export default function SwapShell() {
       });
 
       if (result?.success && result.transactionId) {
-        showNotification(result.transactionId, 'addLiquidity');
+        showNotification(result.transactionId, 'addLiquidity', undefined, {
+          fromSymbol: poolToken0.symbol, toSymbol: poolToken1.symbol,
+          fromId: poolToken0.id, toId: poolToken1.id,
+          fromAmount: poolToken0Amount, toAmount: poolToken1Amount,
+        });
         // Clear amounts after success
         setPoolToken0Amount('');
         setPoolToken1Amount('');
@@ -1593,7 +1640,15 @@ export default function SwapShell() {
       });
 
       if (result?.success && result.transactionId) {
-        showNotification(result.transactionId, 'removeLiquidity');
+        showNotification(result.transactionId, 'removeLiquidity', undefined, {
+          fromSymbol: selectedLPPosition.token0Symbol,
+          toSymbol: selectedLPPosition.token1Symbol,
+          fromId: selectedLPPosition.token0Id,
+          toId: selectedLPPosition.token1Id,
+          // LP burn returns proportional token0/token1 amounts; exact split is
+          // pool-state dependent so leave amounts off — confirmed row will fill
+          // them in once indexed.
+        });
         // Clear state after success
         setRemoveAmount('');
         setSelectedLPPosition(null);
@@ -1706,13 +1761,13 @@ export default function SwapShell() {
         name: resolved.name,
         iconUrl: token.id === 'btc' ? undefined : (token.iconUrl || currency?.iconUrl),
         balance: token.id === 'btc' ? String(btcBalanceSats ?? 0) : currency?.balance,
-        price: currency?.priceInfo?.price,
+        price: getTokenPrice(token.id),
         isAvailable,
       };
     });
 
     return sortTokenOptions(options);
-  }, [fromOptions, idToUserCurrency, tokenNamesMap, walletAlkaneNames, btcBalanceSats, toToken, isAllowedPair]);
+  }, [fromOptions, idToUserCurrency, tokenNamesMap, walletAlkaneNames, btcBalanceSats, toToken, isAllowedPair, btcPrice]);
 
   const toTokenOptions = useMemo<TokenOption[]>(() => {
     const options = toOptions.map((token) => {
@@ -1730,13 +1785,13 @@ export default function SwapShell() {
         name: resolved.name,
         iconUrl: token.id === 'btc' ? undefined : (token.iconUrl || currency?.iconUrl),
         balance: token.id === 'btc' ? String(btcBalanceSats ?? 0) : currency?.balance,
-        price: currency?.priceInfo?.price,
+        price: getTokenPrice(token.id),
         isAvailable,
       };
     });
 
     return sortTokenOptions(options);
-  }, [toOptions, idToUserCurrency, tokenNamesMap, walletAlkaneNames, btcBalanceSats, fromToken, isAllowedPair]);
+  }, [toOptions, idToUserCurrency, tokenNamesMap, walletAlkaneNames, btcBalanceSats, fromToken, isAllowedPair, btcPrice]);
 
   // Pool token options - show all tokens that appear in any pool
   const poolTokenOptions = useMemo<TokenOption[]>(() => {
@@ -1775,7 +1830,7 @@ export default function SwapShell() {
         name: 'BTC',
         iconUrl: undefined,
         balance: String(btcBalanceSats ?? 0),
-        price: undefined,
+        price: getTokenPrice('btc'),
         isAvailable: btcIsAvailable,
       });
     }
@@ -1799,7 +1854,7 @@ export default function SwapShell() {
           name: 'frBTC',
           iconUrl: frbtcCurrency?.iconUrl,
           balance: frbtcCurrency?.balance,
-          price: frbtcCurrency?.priceInfo?.price,
+          price: getTokenPrice(FRBTC_ALKANE_ID),
           isAvailable: frbtcIsAvailable,
         });
       }
@@ -1822,7 +1877,7 @@ export default function SwapShell() {
           name: busdToken?.name ?? defaultSymbol,
           iconUrl: busdToken?.iconUrl || busdCurrency?.iconUrl,
           balance: busdCurrency?.balance,
-          price: busdCurrency?.priceInfo?.price,
+          price: getTokenPrice(BUSD_ALKANE_ID),
           isAvailable: busdIsAvailable,
         });
       }
@@ -1851,7 +1906,7 @@ export default function SwapShell() {
           name: resolved.name,
           iconUrl: poolToken.iconUrl || currency?.iconUrl,
           balance: poolToken.id === 'btc' ? String(btcBalanceSats ?? 0) : currency?.balance,
-          price: currency?.priceInfo?.price,
+          price: getTokenPrice(poolToken.id),
           isAvailable,
         });
       }
@@ -1883,14 +1938,14 @@ export default function SwapShell() {
           name: resolved.name,
           iconUrl: currency.iconUrl,
           balance: currency.balance,
-          price: currency.priceInfo?.price,
+          price: getTokenPrice(currency.id),
           isAvailable,
         });
       }
     });
 
     return sortTokenOptions(opts);
-  }, [markets, idToUserCurrency, userCurrencies, tokenNamesMap, walletAlkaneNames, FRBTC_ALKANE_ID, BUSD_ALKANE_ID, poolTokenMap, btcBalanceSats, tokenSelectorMode, poolToken0, poolToken1, isAllowedPair, network]);
+  }, [markets, idToUserCurrency, userCurrencies, tokenNamesMap, walletAlkaneNames, FRBTC_ALKANE_ID, BUSD_ALKANE_ID, poolTokenMap, btcBalanceSats, tokenSelectorMode, poolToken0, poolToken1, isAllowedPair, network, btcPrice]);
 
   const handleTokenSelect = (tokenId: string) => {
     if (tokenSelectorMode === 'from') {

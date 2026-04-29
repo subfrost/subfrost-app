@@ -36,6 +36,24 @@ interface EnrichedTransaction {
 // Helpers
 // ---------------------------------------------------------------------------
 
+/**
+ * Newest-first comparator. Unconfirmed (mempool) txs come first, then
+ * confirmed txs sorted by blockHeight desc with blockTime as tiebreaker.
+ * blockHeight is the authoritative key because the espo paginated endpoint
+ * sometimes returns confirmed txs with an undefined blockTime.
+ */
+export function sortByRecency(
+  a: { confirmed?: boolean; blockHeight?: number; blockTime?: number },
+  b: { confirmed?: boolean; blockHeight?: number; blockTime?: number },
+): number {
+  const aPending = !a.confirmed;
+  const bPending = !b.confirmed;
+  if (aPending !== bPending) return aPending ? -1 : 1;
+  const heightDiff = (b.blockHeight || 0) - (a.blockHeight || 0);
+  if (heightDiff !== 0) return heightDiff;
+  return (b.blockTime || 0) - (a.blockTime || 0);
+}
+
 function mapToObject(item: any): any {
   if (item instanceof Map) {
     const obj: any = {};
@@ -157,7 +175,10 @@ export async function fetchTxPage(
       }
     }
   }
-  transactions.sort((a, b) => (b.blockTime || 0) - (a.blockTime || 0));
+  // Sort newest-first. The espo paginated endpoint sometimes omits blockTime
+  // for very recent txs (still has blockHeight), so blockHeight is the
+  // authoritative ordering key — fall back to blockTime for ties or pre-mempool.
+  transactions.sort(sortByRecency);
 
   // If any address returned a full page, there's likely more
   const hasMore = results.some((r) => r.length >= limit);

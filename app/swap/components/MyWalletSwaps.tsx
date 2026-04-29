@@ -7,7 +7,9 @@ import { useTokenDisplayMap } from '@/hooks/useTokenDisplayMap';
 import TokenIcon from '@/app/components/TokenIcon';
 import Link from 'next/link';
 import { useWallet } from '@/context/WalletContext';
+import { useNotification } from '@/context/NotificationContext';
 import { useTranslation } from '@/hooks/useTranslation';
+import type { OperationType } from '@/app/components/SwapSuccessNotification';
 import type { Network } from '@/utils/constants';
 
 type AmmRow =
@@ -17,6 +19,50 @@ type AmmRow =
   | ({ type: 'creation'; token0Amount: string; token1Amount: string; tokenSupply: string; poolBlockId: string; poolTxId: string; timestamp: string; transactionId: string; token0BlockId: string; token0TxId: string; token1BlockId: string; token1TxId: string; address?: string; creatorAddress?: string })
   | ({ type: 'wrap'; address?: string; transactionId: string; timestamp: string; amount: string })
   | ({ type: 'unwrap'; address?: string; transactionId: string; timestamp: string; amount: string });
+
+function pendingTypeLabel(op: OperationType, t: (key: string) => string): string {
+  switch (op) {
+    case 'swap': return t('myActivity.swap');
+    case 'wrap': return t('myActivity.wrap');
+    case 'unwrap': return t('myActivity.unwrap');
+    case 'addLiquidity': return t('myActivity.supply');
+    case 'removeLiquidity': return t('myActivity.withdraw');
+    default: return t('myActivity.swap');
+  }
+}
+
+function pendingPair(op: OperationType): { leftId: string; rightId: string; leftName: string; rightName: string } {
+  if (op === 'wrap') return { leftId: 'btc', rightId: 'frbtc', leftName: 'BTC', rightName: 'frBTC' };
+  if (op === 'unwrap') return { leftId: 'frbtc', rightId: 'btc', leftName: 'frBTC', rightName: 'BTC' };
+  // Swap / addLiquidity / removeLiquidity: fall back to blank when no
+  // tokenInfo was captured at broadcast time.
+  return { leftId: '', rightId: '', leftName: '', rightName: '' };
+}
+
+function pendingSign(op: OperationType): { left: string; right: string; leftColor: string; rightColor: string } {
+  switch (op) {
+    case 'addLiquidity':    return { left: '-', right: '-', leftColor: '', rightColor: '' };
+    case 'removeLiquidity': return { left: '+', right: '+', leftColor: 'text-green-400', rightColor: 'text-green-400' };
+    case 'swap':
+    case 'wrap':
+    case 'unwrap':
+    default:                return { left: '-', right: '+', leftColor: '', rightColor: 'text-green-400' };
+  }
+}
+
+function formatDisplayAmount(raw: string | undefined, symbol?: string): string {
+  if (!raw) return '';
+  const n = parseFloat(raw);
+  if (!Number.isFinite(n)) return raw;
+  const fractionDigits = (symbol === 'BTC' || symbol === 'frBTC') ? 5 : 2;
+  if (n > 0 && n < Math.pow(10, -fractionDigits)) {
+    return `<${Math.pow(10, -fractionDigits).toFixed(fractionDigits)}`;
+  }
+  return new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: fractionDigits,
+  }).format(n);
+}
 
 function formatAmount(raw: string, decimals = 8, tokenSymbol?: string) {
   const n = Number(raw ?? '0');
@@ -39,6 +85,7 @@ function formatAmount(raw: string, decimals = 8, tokenSymbol?: string) {
 export default function MyWalletSwaps() {
   const { t } = useTranslation();
   const { address, network } = useWallet();
+  const { pendingActivities } = useNotification();
 
   const {
     data,
@@ -57,6 +104,24 @@ export default function MyWalletSwaps() {
     return (data?.pages ?? [])
       .flatMap((p) => (p.items as AmmRow[]));
   }, [data?.pages]);
+
+  // Pending (unconfirmed) rows: anything tracked as a pending activity that has
+  // not yet appeared in the confirmed AMM history. pendingActivities is hydrated
+  // from localStorage by useSyncPendingTransactions on mount and is independent
+  // of the green toast — dismissing the toast does NOT remove the row here.
+  // 'send' operations are excluded — they aren't AMM activity.
+  const pendingRows = useMemo(() => {
+    const confirmedTxids = new Set<string>();
+    for (const row of items) {
+      const id = (row as any).transactionId;
+      if (id) confirmedTxids.add(id);
+    }
+    return pendingActivities
+      .filter((p) => p.operationType !== 'send')
+      .filter((p) => !confirmedTxids.has(p.txId))
+      .slice()
+      .sort((a, b) => b.createdAt - a.createdAt);
+  }, [pendingActivities, items]);
 
   const tokenIds = useMemo(() => {
     const out = new Set<string>();
@@ -125,12 +190,73 @@ export default function MyWalletSwaps() {
           </div>
 
           <div className="overflow-auto no-scrollbar max-h-[240px]">
-            {items.length === 0 && !isLoading ? (
+            {items.length === 0 && pendingRows.length === 0 && !isLoading ? (
               <div className="px-6 py-12 text-center text-sm text-[color:var(--sf-text)]/60">
                 {t('myActivity.noActivity')}
               </div>
             ) : (
               <>
+                {pendingRows.map((p) => {
+                  const typeLabel = pendingTypeLabel(p.operationType, t);
+                  const fallbackPair = pendingPair(p.operationType);
+                  const info = p.tokenInfo;
+                  const leftName = info?.fromSymbol || fallbackPair.leftName;
+                  const rightName = info?.toSymbol || fallbackPair.rightName;
+                  const leftId = info?.fromId || fallbackPair.leftId;
+                  const rightId = info?.toId || fallbackPair.rightId;
+
+                  const sign = pendingSign(p.operationType);
+                  const leftAmtFormatted = formatDisplayAmount(info?.fromAmount, leftName);
+                  const rightAmtFormatted = formatDisplayAmount(info?.toAmount, rightName);
+                  const hasAnyAmount = !!(leftAmtFormatted || rightAmtFormatted);
+
+                  return (
+                    <Link
+                      key={`pending-${p.txId}`}
+                      href={`https://espo.sh/tx/${p.txId}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="sf-row block"
+                    >
+                      <div className="grid grid-cols-[0.5fr_0.7fr_0.7fr_1fr_0.6fr] gap-1 text-[11px] leading-[20px] px-3 py-1.5 items-center">
+                        <span className="text-[color:var(--sf-text)]/40">
+                          {typeLabel}
+                          {p.stepContext ? <span className="ml-1 text-[10px] text-[color:var(--sf-text)]/30">{p.stepContext}</span> : null}
+                        </span>
+                        <div className="flex items-center gap-1 min-w-0">
+                          {leftId ? (
+                            <TokenIcon symbol={leftName} id={leftId} size="sm" network={network} />
+                          ) : null}
+                          <span className="text-[color:var(--sf-text)]/60 truncate">{leftName || '—'}</span>
+                        </div>
+                        <div className="flex items-center gap-1 min-w-0">
+                          {rightId ? (
+                            <TokenIcon symbol={rightName} id={rightId} size="sm" network={network} />
+                          ) : null}
+                          <span className="text-[color:var(--sf-text)]/60 truncate">{rightName || '—'}</span>
+                        </div>
+                        <span className="text-right tabular-nums truncate">
+                          {hasAnyAmount ? (
+                            <>
+                              <span className={sign.leftColor || 'text-[color:var(--sf-text)]/60'}>
+                                {leftAmtFormatted ? `${sign.left}${leftAmtFormatted} ${leftName || ''}`.trim() : '—'}
+                              </span>
+                              <span className="text-[color:var(--sf-text)]/25">{', '}</span>
+                              <span className={sign.rightColor || 'text-[color:var(--sf-text)]/60'}>
+                                {rightAmtFormatted ? `${sign.right}${rightAmtFormatted} ${rightName || ''}`.trim() : '—'}
+                              </span>
+                            </>
+                          ) : (
+                            <span className="text-[color:var(--sf-text)]/40">—</span>
+                          )}
+                        </span>
+                        <span className="text-[color:var(--sf-info-yellow-title)]/80 text-right animate-pulse">
+                          {t('myActivity.unconfirmed')}
+                        </span>
+                      </div>
+                    </Link>
+                  );
+                })}
                 {items.map((row, idx) => {
                   const time = new Date(row.timestamp);
                   const timeLabel = `${String(time.getMonth() + 1).padStart(2, '0')}/${String(time.getDate()).padStart(2, '0')}/${String(time.getFullYear()).slice(-2)}`;

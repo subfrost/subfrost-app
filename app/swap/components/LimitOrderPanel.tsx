@@ -181,7 +181,16 @@ export default function LimitOrderPanel({
       });
 
       if (result.transactionId) {
-        showNotification(result.transactionId, 'swap' as any);
+        // Limit order: side='buy' wants base for quote; side='sell' gives base for quote.
+        const fromSym = side === 'sell' ? (fromToken?.symbol || '') : (toToken?.symbol || '');
+        const toSym = side === 'sell' ? (toToken?.symbol || '') : (fromToken?.symbol || '');
+        const fromId = side === 'sell' ? fromToken?.id : toToken?.id;
+        const toId = side === 'sell' ? toToken?.id : fromToken?.id;
+        showNotification(result.transactionId, 'swap' as any, undefined, {
+          fromSymbol: fromSym, toSymbol: toSym,
+          fromId, toId,
+          fromAmount: amount, toAmount: total.replace(/,/g, ''),
+        });
       }
     } catch (e: any) {
       console.error('[LimitOrder] Failed:', e);

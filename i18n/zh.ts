@@ -242,7 +242,11 @@ const zh: Record<string, string> = {
   'txHistory.rawJson': '\u539f\u59cb JSON',
   'txHistory.confirmed': '\u5df2\u786e\u8ba4',
   'txHistory.pending': '\u5f85\u786e\u8ba4',
+  'txHistory.unconfirmed': '\u672a\u786e\u8ba4',
+  'txHistory.tbd': '\u5f85\u5b9a',
   'txHistory.alkanes': 'Alkanes',
+  'txHistory.nativeSegwit': '\u539f\u751f\u9694\u79bb\u89c1\u8bc1',
+  'txHistory.taproot': 'Taproot',
   'txHistory.block': '\u533a\u5757',
   'txHistory.fee': '\u8d39\u7528\uff1a',
   'txHistory.sats': 'sats',
@@ -533,6 +537,7 @@ const zh: Record<string, string> = {
   'myActivity.create': '创建',
   'myActivity.wrap': '包装',
   'myActivity.unwrap': '解包装',
+  'myActivity.unconfirmed': '未确认',
 
   // LP Position Selector
   'lpSelector.title': '选择 LP 仓位',
@@ -1016,7 +1021,7 @@ const zh: Record<string, string> = {
   'errors.insufficientSpendableDetailed': '{tokenId} 可用余额不足。\n\n请求：{requested}\n可用：{spendable}\n\n部分代币可能位于带有铭文或其他资产的 UTXO 上，已被排除在兑换之外。请尝试更小的金额（最多 {spendable}）。',
   'errors.userCancelled': '交易已取消。',
   'errors.insufficientBalance': '{tokenId} 可用余额不足。需要 {needed}，可用 {available}。部分代币可能位于带有铭文的 UTXO 上，出于安全考虑已被排除。',
-  'errors.insufficientBtcWithAmount': 'BTC 余额不足。此交易需要 {needed} BTC。请向您的支付地址添加资金。',
+  'errors.insufficientBtcWithAmount': 'BTC 余额不足。此交易需要 {needed} BTC。请向您的支付地址添加资金（SUBFROST Keystore 与 Unisat 使用 Taproot 地址；Oyl 与 Xverse 使用 Native Segwit）。',
   'errors.insufficientBtcGeneric': '用于交易手续费的 BTC 不足。请向您的支付地址添加资金。',
   'errors.poolNotFound': '未找到该交易对的流动性池，请重试。',
   'errors.dustAmount': '交易金额过小，请尝试更大的金额。',

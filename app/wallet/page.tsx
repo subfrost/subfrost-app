@@ -199,7 +199,7 @@ export default function WalletDashboardPage() {
                             <span className="whitespace-nowrap">{tab.shortLabel}</span>
                           )}
                           {tab.id === 'transactions' && pendingCount > 0 && (
-                            <span className="ml-1 flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-orange-500/90 px-1 text-[10px] font-bold text-white leading-none">
+                            <span className="ml-1 px-1.5 py-0.5 text-[9px] font-bold rounded-full bg-[color:var(--sf-primary)]/20 text-[color:var(--sf-primary)]">
                               {pendingCount}
                             </span>
                           )}
