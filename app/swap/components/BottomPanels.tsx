@@ -21,7 +21,7 @@
 // Source: hooks/useUserOrders.ts, hooks/useCancelOrderMutation.ts
 
 import { useState, lazy, Suspense } from 'react';
-import { BarChart3, Layers, Clock, Activity, X, LogOut, Plus } from 'lucide-react';
+import { BarChart3, Layers, Globe, Activity, X, LogOut, Plus } from 'lucide-react';
 import { useLPPositions } from '@/hooks/useLPPositions';
 import { useWallet } from '@/context/WalletContext';
 import { useUserOrders } from '@/hooks/useUserOrders';
@@ -154,10 +154,10 @@ export default function BottomPanels({ baseToken, quoteToken, baseTokenId, quote
   const openOrderCount = userOrders.length;
 
   const tabs: { key: PanelTab; label: string; icon: React.ReactNode; count?: number }[] = [
-    { key: 'trades', label: 'Global Trades', icon: <Clock size={12} /> },
-    { key: 'orders', label: 'Open Orders', icon: <Layers size={12} />, count: openOrderCount },
-    { key: 'positions', label: 'Positions', icon: <BarChart3 size={12} />, count: lpPositions.length },
+    { key: 'trades', label: 'Global Trades', icon: <Globe size={12} /> },
     { key: 'activity', label: 'My Activity', icon: <Activity size={12} /> },
+    { key: 'positions', label: 'Positions', icon: <BarChart3 size={12} />, count: lpPositions.length },
+    { key: 'orders', label: 'Open Orders', icon: <Layers size={12} />, count: openOrderCount },
   ];
 
   return (
@@ -186,7 +186,7 @@ export default function BottomPanels({ baseToken, quoteToken, baseTokenId, quote
       </div>
 
       {/* Panel content */}
-      <div className="min-h-[100px] max-h-[280px] overflow-y-auto">
+      <div className="min-h-[100px]">
         <Suspense fallback={<div className="p-6 text-center text-xs text-[color:var(--sf-text)]/20 animate-pulse">Loading...</div>}>
 
           {/* Open Orders — powered by useUserOrders (Carbine opcode 25) */}
@@ -207,6 +207,7 @@ export default function BottomPanels({ baseToken, quoteToken, baseTokenId, quote
                   <span className="text-right">Filled</span>
                   <span />
                 </div>
+                <div className="max-h-[240px] overflow-y-auto">
                 {userOrders.map((order) => {
                   // Raw u128 values are in 1e8 units — convert for display
                   const price  = (Number(order.price)  / 1e8).toFixed(8).replace(/0+$/, '').replace(/\.$/, '.0');
@@ -252,6 +253,7 @@ export default function BottomPanels({ baseToken, quoteToken, baseTokenId, quote
                     </div>
                   );
                 })}
+                </div>
               </div>
             )
           )}
@@ -274,6 +276,7 @@ export default function BottomPanels({ baseToken, quoteToken, baseTokenId, quote
                   <span className="text-center">Close</span>
                   <span className="text-right">ID</span>
                 </div>
+                <div className="max-h-[240px] overflow-y-auto">
                 {lpPositions.map((pos) => (
                   <div key={pos.id} className="sf-row grid grid-cols-[1.4fr_0.9fr_0.7fr_0.7fr_0.7fr] gap-2 px-3 py-2.5 items-center">
                     <div className="flex items-center gap-2 min-w-0">
@@ -320,6 +323,7 @@ export default function BottomPanels({ baseToken, quoteToken, baseTokenId, quote
                     </span>
                   </div>
                 ))}
+                </div>
               </div>
             )
           )}

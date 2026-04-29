@@ -32,16 +32,18 @@ const KNOWN_TOKEN_NAMES: Record<string, string> = {
   '2:56801': 'bUSD',
 };
 
-function formatAmount(raw: string, decimals = 8, tokenSymbol?: string) {
+function formatAmount(raw: string, decimals = 8, tokenSymbol?: string, opts?: { minDigits?: number }) {
   const n = Number(raw ?? '0');
   const scaled = n / Math.pow(10, decimals);
   if (!Number.isFinite(scaled)) return '0';
-  const fractionDigits = (tokenSymbol === 'BTC' || tokenSymbol === 'frBTC') ? 5 : 2;
+  const baseDigits = (tokenSymbol === 'BTC' || tokenSymbol === 'frBTC') ? 5 : 2;
+  const minDigits = opts?.minDigits ?? 0;
+  const fractionDigits = Math.max(baseDigits, minDigits);
   if (scaled > 0 && scaled < Math.pow(10, -fractionDigits)) {
     return `<${(Math.pow(10, -fractionDigits)).toFixed(fractionDigits)}`;
   }
   return new Intl.NumberFormat('en-US', {
-    minimumFractionDigits: 0,
+    minimumFractionDigits: minDigits,
     maximumFractionDigits: fractionDigits,
   }).format(scaled);
 }
@@ -94,47 +96,55 @@ export default function RecentTradesPanel({ baseToken, quoteToken, poolId: poolI
 
   // Wrap/unwrap history — used when the swap shell is on a BTC↔frBTC wrap pair.
   // BTC↔frBTC has no AMM pool, so trades come from the global wrap/unwrap stream.
-  // Each page fetches both categories in parallel and merges by timestamp.
+  // The endpoint returns both categories in one response (with item.type set);
+  // the `category` param is not honored server-side, so calling per category
+  // produces duplicates.
+  // Pagination is keyed on the raw response size, not the filtered list — the
+  // endpoint returns mixed transaction types and wraps/unwraps may be a small
+  // fraction. Stopping when `filtered.length < PAGE_SIZE` would cut off scroll
+  // after the first page.
   const wrapQuery = useInfiniteQuery({
     queryKey: ['wrap-unwrap-history', network],
     enabled: !!isWrapPair && !!network,
     staleTime: Infinity,
     initialPageParam: 0,
-    getNextPageParam: (lastPage: any[], _all: any[][], lastPageParam: number) =>
-      lastPage.length >= PAGE_SIZE ? lastPageParam + PAGE_SIZE : undefined,
+    getNextPageParam: (lastPage: { items: any[]; rawCount: number }, _all, lastPageParam: number) =>
+      lastPage.rawCount >= PAGE_SIZE ? lastPageParam + PAGE_SIZE : undefined,
     queryFn: async ({ pageParam }) => {
       const rpcBase = `/api/rpc/${network || 'mainnet'}`;
-      const fetchCategory = async (category: 'wrap' | 'unwrap') => {
-        const resp = await fetch(`${rpcBase}/get-all-amm-tx-history`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          signal: AbortSignal.timeout(10000),
-          body: JSON.stringify({ limit: PAGE_SIZE, offset: pageParam, category }),
-        });
-        if (!resp.ok) return [];
-        const json = await resp.json();
-        const items = json?.data?.items || json?.data || [];
-        return Array.isArray(items) ? items : [];
-      };
-      const [wraps, unwraps] = await Promise.all([fetchCategory('wrap'), fetchCategory('unwrap')]);
-      const tagged = [
-        ...wraps.map((w: any) => ({ ...w, type: w.type || 'wrap' })),
-        ...unwraps.map((u: any) => ({ ...u, type: u.type || 'unwrap' })),
-      ];
+      const resp = await fetch(`${rpcBase}/get-all-amm-tx-history`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(10000),
+        body: JSON.stringify({ limit: PAGE_SIZE, offset: pageParam }),
+      });
+      if (!resp.ok) return { items: [], rawCount: 0 };
+      const json = await resp.json();
+      const items = json?.data?.items || json?.data || [];
+      const list = Array.isArray(items) ? items : [];
+      const wrapsAndUnwraps = list.filter(
+        (it: any) => it?.type === 'wrap' || it?.type === 'unwrap'
+      );
       const tsOf = (it: any) => {
         const ts = it.timestamp;
         if (typeof ts === 'number') return ts > 1e12 ? ts : ts * 1000;
         const parsed = ts ? Date.parse(ts) : 0;
         return Number.isFinite(parsed) ? parsed : 0;
       };
-      return tagged.sort((a, b) => tsOf(b) - tsOf(a));
+      return {
+        items: wrapsAndUnwraps.sort((a, b) => tsOf(b) - tsOf(a)),
+        rawCount: list.length,
+      };
     },
   });
 
   const { hasNextPage, fetchNextPage, isFetchingNextPage } = isWrapPair ? wrapQuery : swapQuery;
 
   const swapItems = useMemo(() => swapQuery.data?.pages?.flat() || [], [swapQuery.data]);
-  const wrapItems = useMemo(() => wrapQuery.data?.pages?.flat() || [], [wrapQuery.data]);
+  const wrapItems = useMemo(
+    () => wrapQuery.data?.pages?.flatMap((p) => p.items) || [],
+    [wrapQuery.data]
+  );
 
   // Get token names from pool data (only relevant for AMM pair view)
   const pairPool = useMemo(() => {
@@ -160,25 +170,31 @@ export default function RecentTradesPanel({ baseToken, quoteToken, poolId: poolI
 
     if (isWrapPair) {
       if (!wrapItems.length) return [];
-      return wrapItems.map((item: any, idx: number) => {
-        const isWrap = item.type === 'wrap';
-        const fromSymbol = isWrap ? 'BTC' : 'frBTC';
-        const toSymbol = isWrap ? 'frBTC' : 'BTC';
-        const fromId = isWrap ? 'btc' : '32:0';
-        const toId = isWrap ? '32:0' : 'btc';
-        const amount = item.amount || item.value || '0';
-        return {
-          id: `${item.transactionId || item.txid || 'wrap'}-${idx}`,
-          soldFormatted: formatAmount(amount, 8, fromSymbol),
-          boughtFormatted: formatAmount(amount, 8, toSymbol),
-          fromSymbol,
-          fromId,
-          toSymbol,
-          toId,
-          type: isWrap ? 'Wrap' : 'Unwrap',
-          time: fmtTime(item.timestamp),
-        };
-      });
+      return wrapItems
+        .filter((item: any) => {
+          const raw = item.amount ?? item.value ?? '0';
+          const n = Number(raw);
+          return Number.isFinite(n) && n > 0;
+        })
+        .map((item: any, idx: number) => {
+          const isWrap = item.type === 'wrap';
+          const fromSymbol = isWrap ? 'BTC' : 'frBTC';
+          const toSymbol = isWrap ? 'frBTC' : 'BTC';
+          const fromId = isWrap ? 'btc' : '32:0';
+          const toId = isWrap ? '32:0' : 'btc';
+          const amount = item.amount || item.value || '0';
+          return {
+            id: `${item.transactionId || item.txid || 'wrap'}-${idx}`,
+            soldFormatted: formatAmount(amount, 8, fromSymbol, { minDigits: 6 }),
+            boughtFormatted: formatAmount(amount, 8, toSymbol, { minDigits: 6 }),
+            fromSymbol,
+            fromId,
+            toSymbol,
+            toId,
+            type: isWrap ? 'Wrap' : 'Unwrap',
+            time: fmtTime(item.timestamp),
+          };
+        });
     }
 
     if (!swapItems?.length) return [];
@@ -236,6 +252,18 @@ export default function RecentTradesPanel({ baseToken, quoteToken, poolId: poolI
     el.addEventListener('scroll', handleScroll, { passive: true });
     return () => el.removeEventListener('scroll', handleScroll);
   }, [handleScroll]);
+
+  // For wrap pairs, the underlying endpoint mixes all transaction types and
+  // wraps/unwraps may be sparse — keep fetching pages until we have enough
+  // rows to fill the container (or the source is exhausted). Without this,
+  // the visible list is too short to trigger scroll-based pagination.
+  useEffect(() => {
+    if (!isWrapPair) return;
+    if (!hasNextPage || isFetchingNextPage) return;
+    if (trades.length < 20) {
+      fetchNextPage();
+    }
+  }, [isWrapPair, trades.length, hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   const emptyMessage = isWrapPair
     ? 'No recent wraps or unwraps'

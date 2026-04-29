@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef } from 'react';
+import { Activity } from 'lucide-react';
 import { useInfiniteAmmTxHistory } from '@/hooks/useAmmHistory';
 import { useTokenDisplayMap } from '@/hooks/useTokenDisplayMap';
 import TokenIcon from '@/app/components/TokenIcon';
@@ -108,13 +109,14 @@ export default function MyWalletSwaps() {
   return (
     <div className="flex flex-col">
       {!address ? (
-        <div className="px-6 py-4 text-center text-sm text-[color:var(--sf-text)]/60 flex items-center justify-center min-h-[72px]">
-          {t('myActivity.connectWallet')}
+        <div className="flex flex-col items-center justify-center py-8 text-[color:var(--sf-text)]/20">
+          <Activity className="h-6 w-6 mb-2" />
+          <span className="text-xs">{t('myActivity.connectWallet')}</span>
         </div>
       ) : (
         <>
           {/* Column Headers */}
-          <div className="sf-table-header grid grid-cols-[0.6fr_0.7fr_0.7fr_1fr_0.6fr] gap-1 px-3 py-2">
+          <div className="sf-table-header grid grid-cols-[0.5fr_0.7fr_0.7fr_1fr_0.6fr] gap-1 px-3 py-2">
             <span>Type</span>
             <span>From</span>
             <span>To</span>
@@ -122,7 +124,7 @@ export default function MyWalletSwaps() {
             <span className="text-right">Date</span>
           </div>
 
-          <div className="overflow-auto no-scrollbar" style={{ maxHeight: 'calc(8 * 40px)' }}>
+          <div className="overflow-auto no-scrollbar max-h-[240px]">
             {items.length === 0 && !isLoading ? (
               <div className="px-6 py-12 text-center text-sm text-[color:var(--sf-text)]/60">
                 {t('myActivity.noActivity')}
@@ -227,7 +229,7 @@ export default function MyWalletSwaps() {
                       rel="noopener noreferrer"
                       className="sf-row block"
                     >
-                      <div className="grid grid-cols-[0.6fr_0.7fr_0.7fr_1fr_0.6fr] gap-1 text-[11px] leading-[20px] px-3 py-1.5 items-center">
+                      <div className="grid grid-cols-[0.5fr_0.7fr_0.7fr_1fr_0.6fr] gap-1 text-[11px] leading-[20px] px-3 py-1.5 items-center">
                         {/* TXN */}
                         <span className="text-[color:var(--sf-text)]/40">{typeLabel}</span>
 
