@@ -83,8 +83,16 @@ describe.runIf(INTEGRATION)('Tier 1: Unwrap frBTC -> BTC', () => {
 
     expect(frbtcBefore).toBeGreaterThanOrEqual(BigInt(unwrapAmount));
 
-    // Build unwrap transaction
-    const protostones = buildUnwrapProtostone({ frbtcId: REGTEST.FRBTC_ID });
+    // Build unwrap transaction.
+    // 3-output canonical layout: [alkanes-refund (taproot), btc-recipient
+    // (segwit), signer P2TR dust]. dustVout=2 indexes the signer dust output.
+    // Without this layout the contract reverts with "Cannot burn less than
+    // dust amount" (see hooks/useUnwrapMutation.ts header for the full story).
+    const protostones = buildUnwrapProtostone({
+      frbtcId: REGTEST.FRBTC_ID,
+      dustVout: 2,
+      amount: unwrapAmount,
+    });
     const inputRequirements = buildUnwrapInputRequirements({
       frbtcId: REGTEST.FRBTC_ID,
       amount: unwrapAmount,
@@ -96,7 +104,7 @@ describe.runIf(INTEGRATION)('Tier 1: Unwrap frBTC -> BTC', () => {
       feeRate: 2,
       // Put taproot first since frBTC UTXOs are there
       fromAddresses: [taprootAddress, segwitAddress],
-      toAddresses: [segwitAddress],
+      toAddresses: [taprootAddress, segwitAddress, REGTEST.FRBTC_SIGNER],
       changeAddress: segwitAddress,
       alkanesChangeAddress: taprootAddress,
     });
