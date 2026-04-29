@@ -335,31 +335,41 @@ describe('buildWrapProtostone', () => {
 describe('buildUnwrapProtostone', () => {
   const FRBTC_ID = '32:0';
 
+  // Cellpack format: [block, tx, 78, dustVout, amount]. Per fr-btc/contract.wit
+  // `unwrap(vout: u64, amount-requested: u64)`. The dustVout indexes into the
+  // tx outputs and MUST point at the FROST signer's tweaked P2TR script —
+  // see fr-btc/src/lib.rs:262-267 (`signer_script == tx.output[vout]...`).
   it('should build correct unwrap protostone with default pointers', () => {
     const protostone = buildUnwrapProtostone({
       frbtcId: FRBTC_ID,
+      dustVout: 2,
+      amount: '500000',
     });
 
-    // Shared builder defaults to v1:v1
-    expect(protostone).toBe('[32,0,78]:v1:v1');
+    // Defaults: pointer=v1 (BTC recipient), refund=v0 (alkanes refund).
+    expect(protostone).toBe('[32,0,78,2,500000]:v1:v0');
   });
 
   it('should build correct unwrap protostone with custom pointers', () => {
     const protostone = buildUnwrapProtostone({
       frbtcId: FRBTC_ID,
+      dustVout: 2,
+      amount: '500000',
       pointer: 'v1',
       refund: 'v2',
     });
 
-    expect(protostone).toBe('[32,0,78]:v1:v2');
+    expect(protostone).toBe('[32,0,78,2,500000]:v1:v2');
   });
 
   it('should use opcode 78 for unwrap', () => {
     const protostone = buildUnwrapProtostone({
       frbtcId: FRBTC_ID,
+      dustVout: 2,
+      amount: '500000',
     });
 
-    expect(protostone).toContain(',78]');
+    expect(protostone).toContain(',78,');
   });
 });
 
@@ -570,9 +580,13 @@ describe('Integration: Transaction Building', () => {
       const FRBTC_ID = '32:0';
       const UNWRAP_AMOUNT = '100000000'; // 1 frBTC
 
-      // Build protostone
+      // Build protostone — opcode 78 takes (vout, amount). dustVout=2 mirrors
+      // the canonical 3-output layout used by useUnwrapMutation:
+      //   v0=alkanes refund, v1=BTC recipient, v2=signer P2TR dust.
       const protostone = buildUnwrapProtostone({
         frbtcId: FRBTC_ID,
+        dustVout: 2,
+        amount: UNWRAP_AMOUNT,
       });
 
       // Build input requirements
@@ -580,7 +594,7 @@ describe('Integration: Transaction Building', () => {
         alkaneInputs: [{ alkaneId: FRBTC_ID, amount: UNWRAP_AMOUNT }],
       });
 
-      expect(protostone).toBe('[32,0,78]:v1:v1');
+      expect(protostone).toBe('[32,0,78,2,100000000]:v1:v0');
       expect(inputRequirements).toBe('32:0:100000000');
     });
   });

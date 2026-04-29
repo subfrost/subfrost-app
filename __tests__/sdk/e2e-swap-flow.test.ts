@@ -162,7 +162,13 @@ function buildSwapProtostone(params: {
  *
  * p0: Edict   [sell_block:sell_tx:amount:p1]:v0:v0
  * p1: Swap    [factory_block,factory_tx,13,2,sell_block,sell_tx,frbtc_block,frbtc_tx,amount,minFrbtc,deadline]:p2:v0
- * p2: Unwrap  [frbtc_block,frbtc_tx,78]:v0:v0
+ * p2: Unwrap  [frbtc_block,frbtc_tx,78,dustVout,minFrbtc]:v0:v0
+ *
+ * The unwrap cellpack MUST carry (vout, amount). Pre-2026-04-29 this builder
+ * omitted them and the contract reverted with "Cannot burn less than dust
+ * amount" — see hooks/useUnwrapMutation.ts header for the full bug story.
+ * Caller MUST place the FROST signer's tweaked P2TR script at output index
+ * `dustVout`.
  */
 function buildSwapUnwrapProtostone(params: {
   sellTokenId: string;
@@ -171,6 +177,8 @@ function buildSwapUnwrapProtostone(params: {
   factoryId: string;
   minFrbtcOutput: string;
   deadline: string;
+  /** Index of the P2TR signer dust output in this tx. */
+  dustVout: number;
 }): string {
   const [sellBlock, sellTx] = params.sellTokenId.split(':');
   const [frbtcBlock, frbtcTx] = params.frbtcId.split(':');
@@ -186,7 +194,9 @@ function buildSwapUnwrapProtostone(params: {
   ].join(',');
   const p1 = `[${swapCellpack}]:p2:v0`;
 
-  const unwrapCellpack = [frbtcBlock, frbtcTx, 78].join(',');
+  // Cellpack: [block, tx, 78, dustVout, amount]. amount=minFrbtcOutput acts as
+  // the ceiling; the contract `min()`s against actual frBTC routed in from p1.
+  const unwrapCellpack = [frbtcBlock, frbtcTx, 78, params.dustVout, params.minFrbtcOutput].join(',');
   const p2 = `[${unwrapCellpack}]:v0:v0`;
 
   return `${p0},${p1},${p2}`;
@@ -632,6 +642,11 @@ describe.runIf(INTEGRATION)('E2E Swap Flow (integration)', () => {
       const minFrbtcOutput = '1';
       const deadline = '999999999';
 
+      // 3-output unwrap layout (matches useUnwrapMutation/useSwapUnwrapMutation):
+      //   v0: alkanes refund (walletAddress, taproot)
+      //   v1: BTC recipient (walletAddress)  ← could split to segwit if desired
+      //   v2: signer P2TR dust  ← dustVout = 2
+      const SIGNER_DUST_VOUT = 2;
       const protostone = buildSwapUnwrapProtostone({
         sellTokenId: DIESEL_ID,
         sellAmount,
@@ -639,10 +654,11 @@ describe.runIf(INTEGRATION)('E2E Swap Flow (integration)', () => {
         factoryId: FACTORY_ID,
         minFrbtcOutput,
         deadline,
+        dustVout: SIGNER_DUST_VOUT,
       });
 
       const inputRequirements = `2:0:${sellAmount}`;
-      const toAddresses = [walletAddress, SIGNER_ADDRESS];
+      const toAddresses = [walletAddress, walletAddress, SIGNER_ADDRESS];
 
       console.log('[SwapUnwrap] protostone:', protostone);
       console.log('[SwapUnwrap] inputRequirements:', inputRequirements);

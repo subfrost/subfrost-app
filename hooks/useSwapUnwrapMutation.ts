@@ -71,7 +71,7 @@ import * as bitcoin from 'bitcoinjs-lib';
 import * as ecc from '@bitcoinerlab/secp256k1';
 import { patchInputsOnly } from '@/lib/psbt-patching';
 import { buildSwapProtostone, buildSwapInputRequirements, buildUnwrapProtostone } from '@/lib/alkanes/builders';
-import { getBitcoinNetwork, extractPsbtBase64 } from '@/lib/alkanes/helpers';
+import { getBitcoinNetwork, extractPsbtBase64, getSignerAddressDynamic } from '@/lib/alkanes/helpers';
 import {
   getUnfinalizedPsbtTxId,
   getRemainingUtxosAfterPsbt,
@@ -329,20 +329,44 @@ export function useSwapUnwrapMutation() {
       // ========================================================================
       console.log('[SwapUnwrap] Building unwrap PSBT...');
 
-      // Build unwrap protostone
+      // ----------------------------------------------------------------------
+      // Resolve FROST signer's BIP341-tweaked P2TR address (always dynamic).
+      // The unwrap cellpack carries `[32, 0, 78, dustVout, amount]` and the
+      // contract requires `tx.output[dustVout].script_pubkey == signer_script`
+      // — that script is the TWEAKED P2TR. The hardcoded mainnet constant in
+      // SIGNER_ADDRESSES is the untweaked internal pubkey and would send dust
+      // to the wrong script. See useUnwrapMutation.ts header for the full
+      // bug story (2026-04-29).
+      // ----------------------------------------------------------------------
+      const signerAddress = await getSignerAddressDynamic(network);
+
+      // Three-output unwrap layout (matches useUnwrapMutation):
+      //   v0: alkanes refund (taproot)        ← refund=v0
+      //   v1: BTC recipient (segwit fallback) ← pointer=v1
+      //   v2: signer P2TR dust                ← dustVout=2
+      const unwrapAlkanesRecipient = isBrowserWallet
+        ? (taprootAddress || segwitAddress)!
+        : 'p2tr:0';
+      const unwrapBtcRecipient = isBrowserWallet
+        ? (segwitAddress || taprootAddress)!
+        : 'p2wpkh:0';
+      const unwrapToAddresses = [unwrapAlkanesRecipient, unwrapBtcRecipient, signerAddress];
+      const UNWRAP_DUST_VOUT = 2;
+
+      // Build unwrap protostone with proper calldata + dust output index.
       const unwrapProtostone = buildUnwrapProtostone({
         frbtcId: FRBTC_ALKANE_ID,
+        dustVout: UNWRAP_DUST_VOUT,
+        amount: minFrbtcOut.toString(),
+        pointer: 'v1',
+        refund: 'v0',
       });
 
       console.log('[SwapUnwrap] Unwrap protostone:', unwrapProtostone);
+      console.log('[SwapUnwrap] Unwrap toAddresses (v0=alk-refund, v1=btc, v2=signer):', unwrapToAddresses);
 
       // For unwrap, we need frBTC input. Build input requirements.
       const [frbtcBlock, frbtcTx] = FRBTC_ALKANE_ID.split(':');
-
-      // Unwrap outputs BTC to segwit address (or taproot if no segwit)
-      const unwrapToAddresses = isBrowserWallet
-        ? [(segwitAddress || taprootAddress)!]
-        : ['p2wpkh:0'];
 
       // Build unwrap using SDK
       const unwrapInputRequirements = `${frbtcBlock}:${frbtcTx}:${minFrbtcOut}`;

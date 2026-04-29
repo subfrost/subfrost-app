@@ -216,22 +216,34 @@ describe('Browser wallet address handling in useWrapMutation', () => {
 // ---------------------------------------------------------------------------
 
 describe('Unwrap frBTC→BTC protostone', () => {
-  it('should use opcode 78', () => {
-    const result = buildUnwrapProtostone({ frbtcId: FRBTC_ID });
-    expect(result).toContain(`,${FRBTC_UNWRAP_OPCODE}]`);
+  // Cellpack now carries the contract args [block, tx, 78, dustVout, amount]
+  // — see useUnwrapMutation.ts header for the 2026-04-29 fix.
+  it('should use opcode 78 followed by the dustVout arg', () => {
+    const result = buildUnwrapProtostone({
+      frbtcId: FRBTC_ID,
+      dustVout: 2,
+      amount: '500000',
+    });
+    expect(result).toContain(`,${FRBTC_UNWRAP_OPCODE},2,`);
   });
 
-  it('should default pointer and refund to v1:v1', () => {
-    const result = buildUnwrapProtostone({ frbtcId: FRBTC_ID });
-    expect(result).toBe('[32,0,78]:v1:v1');
+  it('should default pointer to v1 (BTC recipient) and refund to v0 (alkanes)', () => {
+    const result = buildUnwrapProtostone({
+      frbtcId: FRBTC_ID,
+      dustVout: 2,
+      amount: '500000',
+    });
+    expect(result).toBe('[32,0,78,2,500000]:v1:v0');
   });
 
   it('should accept custom pointer and refund', () => {
     const result = buildUnwrapProtostone({
       frbtcId: FRBTC_ID,
+      dustVout: 2,
+      amount: '500000',
       pointer: 'v0',
       refund: 'v0',
     });
-    expect(result).toBe('[32,0,78]:v0:v0');
+    expect(result).toBe('[32,0,78,2,500000]:v0:v0');
   });
 });
