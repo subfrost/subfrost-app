@@ -82,14 +82,13 @@ export const POOL_OPCODES = {
 /**
  * Signer addresses per network — derived from frBTC contract opcode 103 (GET_SIGNER).
  *
- * The CLI derives this dynamically via `get_subfrost_address()` in `subfrost.rs`,
- * which calls opcode 103 on [32:0], receives a 32-byte x-only pubkey,
- * and converts it to a P2TR address.
- *
- * If the frBTC contract is redeployed with a different signer key, update here.
+ * frBTC signer address is computed dynamically via getSignerAddressDynamic()
+ * which queries opcode 103 and applies BIP341 taproot tweak.
+ * These constants are kept for test compatibility only — not used in production.
+ * @deprecated Use getSignerAddressDynamic() instead
  */
 export const SIGNER_ADDRESSES: Record<string, string> = {
-  mainnet: 'bc1p09qw7wm9j9u6zdcaaszhj09sylx7g7qxldnvu83ard5a2m0x98wqcdrpr6',
+  mainnet: 'bc1p5lushqjk7kxpqa87ppwn0dealucyqa6t40ppdkhpqm3grcpqvw9s3wdsx7',
   regtest: 'bcrt1p466wtm6hn2llrm02ckx6z03tsygjjyfefdaz6sekczvcr7z00vtsc5gvgz',
   'subfrost-regtest': 'bcrt1p466wtm6hn2llrm02ckx6z03tsygjjyfefdaz6sekczvcr7z00vtsc5gvgz',
   oylnet: 'bcrt1p466wtm6hn2llrm02ckx6z03tsygjjyfefdaz6sekczvcr7z00vtsc5gvgz',

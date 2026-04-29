@@ -1815,8 +1815,8 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
   );
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 px-4 backdrop-blur-sm" onClick={onClose}>
-      <div data-testid="send-modal" className="flex max-h-[90vh] w-full max-w-md flex-col overflow-hidden rounded-3xl bg-[color:var(--sf-glass-bg)] shadow-[0_24px_96px_rgba(0,0,0,0.4)] backdrop-blur-xl" onClick={e => e.stopPropagation()}>
+    <div className="sf-popup-overlay p-4" onClick={onClose}>
+      <div data-testid="send-modal" className="sf-popup w-full max-w-md max-h-[90vh]" onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div className="bg-[color:var(--sf-panel-bg)] px-6 py-5 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
           <div className="flex items-center justify-between">
