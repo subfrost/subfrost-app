@@ -104,6 +104,50 @@ export function buildSwapInputRequirements(params: {
 }
 
 // ---------------------------------------------------------------------------
+// Atomic Wrap + Swap (single transaction)
+// ---------------------------------------------------------------------------
+
+/**
+ * Build protostones for atomic BTC → frBTC → Token swap in one transaction.
+ *
+ * Two chained protostones:
+ *   p0: [32,0,77] — wrap BTC to frBTC, pointer=p1 (frBTC flows to swap)
+ *   p1: [factory,13,...] — swap frBTC for target token, pointer=v1 (output to user)
+ *
+ * Output layout:
+ *   v0 = signer address (receives BTC for wrap)
+ *   v1 = user address (receives swapped tokens)
+ *
+ * Verified pattern from alkanes-rs/crates/alkanes-integ-tests/tests/atomic_wrap_swap.rs
+ */
+export function buildAtomicWrapSwapProtostones(params: {
+  factoryId: string;
+  buyTokenId: string;
+  sellAmount: string;
+  minOutput: string;
+  deadline: string;
+}): string {
+  const { factoryId, buyTokenId, sellAmount, minOutput, deadline } = params;
+  const [factoryBlock, factoryTx] = factoryId.split(':');
+  const [buyBlock, buyTx] = buyTokenId.split(':');
+
+  // p0: wrap BTC → frBTC, pointer=p1 (forward minted frBTC to swap), refund=v1 (fail → user)
+  const wrapProtostone = `[32,0,${FRBTC_WRAP_OPCODE}]:p1:v1`;
+
+  // p1: swap frBTC → buyToken via factory, pointer=v1 (output to user), refund=v1 (fail → frBTC to user)
+  const swapCellpack = [
+    factoryBlock, factoryTx, FACTORY_SWAP_OPCODE,
+    2, // path_len
+    32, 0, // frBTC (sell)
+    buyBlock, buyTx, // buy token
+    sellAmount, minOutput, deadline,
+  ].join(',');
+  const swapProtostone = `[${swapCellpack}]:v1:v1`;
+
+  return `${wrapProtostone},${swapProtostone}`;
+}
+
+// ---------------------------------------------------------------------------
 // Router Swap (hybrid CLOB+AMM via Universal Router)
 // ---------------------------------------------------------------------------
 
