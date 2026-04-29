@@ -138,7 +138,7 @@ export default function PoolDetailsCard({ pool, chartTokenId, isWrapPair }: Prop
           ) : null}
         </div>
       ) : (
-        <div className="flex flex-col items-center justify-center py-12 text-center">
+        <div className="flex flex-col items-center justify-center h-full min-h-[460px] py-12 text-center">
           {isWrapPair ? (
             <>
               <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 256 256" className="text-[color:var(--sf-text)]/20 mb-3">
@@ -168,14 +168,14 @@ export default function PoolDetailsCard({ pool, chartTokenId, isWrapPair }: Prop
                 BTC Wrapping &amp; Unwrapping is backed 1:1 with our reserve.
               </p>
               <p className="text-sm text-[color:var(--sf-text)]/50 mt-1">
-                See proof here:{' '}
+                Read docs here:{' '}
                 <a
-                  href="https://subfrost.io/"
+                  href="https://docs.subfrost.io/"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-[color:var(--sf-primary)] hover:underline"
                 >
-                  subfrost.io
+                  docs.subfrost.io
                 </a>
               </p>
             </>
