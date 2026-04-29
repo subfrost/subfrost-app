@@ -565,7 +565,7 @@ export default function ConnectWalletModal() {
                       value={inviteCode}
                       onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
                       onKeyDown={(e) => e.key === 'Enter' && validateInviteCode()}
-                      className="w-full rounded-xl bg-[color:var(--sf-panel-bg)] px-4 py-3 shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-base font-bold tracking-wider text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/40 placeholder:font-medium placeholder:tracking-normal placeholder:normal-case focus:outline-none transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none uppercase"
+                      className="w-full rounded-xl bg-[color:var(--sf-panel-bg)] px-4 py-3 shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)] active:shadow-[0_6px_24px_rgba(0,0,0,0.18)] focus:shadow-[var(--sf-focus-glow)] text-base font-bold tracking-wider text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/40 placeholder:font-medium placeholder:tracking-normal placeholder:normal-case focus:outline-none transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none uppercase"
                       placeholder={t('wallet.enterYourInviteCode')}
                       autoFocus
                     />
@@ -665,7 +665,7 @@ export default function ConnectWalletModal() {
                     type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="w-full rounded-xl bg-[color:var(--sf-panel-bg)] px-4 py-3 pr-10 shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-base font-medium text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/40 focus:outline-none transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
+                    className="w-full rounded-xl bg-[color:var(--sf-panel-bg)] px-4 py-3 pr-10 shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)] active:shadow-[0_6px_24px_rgba(0,0,0,0.18)] focus:shadow-[var(--sf-focus-glow)] text-base font-medium text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/40 focus:outline-none transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
                     placeholder={t('wallet.enterPassword')}
                   />
                   <button
@@ -684,7 +684,7 @@ export default function ConnectWalletModal() {
                   type={showPassword ? 'text' : 'password'}
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="w-full rounded-xl bg-[color:var(--sf-panel-bg)] px-4 py-3 shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-base font-medium text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/40 focus:outline-none transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
+                  className="w-full rounded-xl bg-[color:var(--sf-panel-bg)] px-4 py-3 shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)] active:shadow-[0_6px_24px_rgba(0,0,0,0.18)] focus:shadow-[var(--sf-focus-glow)] text-base font-medium text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/40 focus:outline-none transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
                   placeholder={t('wallet.confirmPasswordPlaceholder')}
                 />
               </div>
@@ -698,7 +698,7 @@ export default function ConnectWalletModal() {
                     type="text"
                     value={passwordHintInput}
                     onChange={(e) => setPasswordHintInput(e.target.value)}
-                    className="w-full rounded-xl bg-[color:var(--sf-panel-bg)] px-4 py-3 shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-base font-medium text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/40 focus:outline-none transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
+                    className="w-full rounded-xl bg-[color:var(--sf-panel-bg)] px-4 py-3 shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)] active:shadow-[0_6px_24px_rgba(0,0,0,0.18)] focus:shadow-[var(--sf-focus-glow)] text-base font-medium text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/40 focus:outline-none transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
                     placeholder={t('wallet.passwordHintPlaceholder')}
                   />
                   <div className="mt-2 text-xs font-medium text-[color:var(--sf-text)]/50">
@@ -839,7 +839,7 @@ export default function ConnectWalletModal() {
                 <textarea
                   value={mnemonic}
                   onChange={(e) => setMnemonic(e.target.value)}
-                  className="h-24 w-full resize-none rounded-xl bg-[color:var(--sf-panel-bg)] px-4 py-3 shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-base font-medium text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/40 focus:outline-none transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
+                  className="h-24 w-full resize-none rounded-xl bg-[color:var(--sf-panel-bg)] px-4 py-3 shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)] active:shadow-[0_6px_24px_rgba(0,0,0,0.18)] focus:shadow-[var(--sf-focus-glow)] text-base font-medium text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/40 focus:outline-none transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
                   placeholder={t('wallet.enterRecoveryPhrase')}
                 />
               </div>
@@ -851,7 +851,7 @@ export default function ConnectWalletModal() {
                     type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="w-full rounded-xl bg-[color:var(--sf-panel-bg)] px-4 py-3 pr-10 shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-base font-medium text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/40 focus:outline-none transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
+                    className="w-full rounded-xl bg-[color:var(--sf-panel-bg)] px-4 py-3 pr-10 shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)] active:shadow-[0_6px_24px_rgba(0,0,0,0.18)] focus:shadow-[var(--sf-focus-glow)] text-base font-medium text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/40 focus:outline-none transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
                     placeholder={t('wallet.createPassword')}
                   />
                   <button
@@ -930,7 +930,7 @@ export default function ConnectWalletModal() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleRestoreFromJson()}
-                    className="w-full rounded-xl bg-[color:var(--sf-panel-bg)] px-4 py-3 pr-10 shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-base font-medium text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/40 focus:outline-none transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
+                    className="w-full rounded-xl bg-[color:var(--sf-panel-bg)] px-4 py-3 pr-10 shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)] active:shadow-[0_6px_24px_rgba(0,0,0,0.18)] focus:shadow-[var(--sf-focus-glow)] text-base font-medium text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/40 focus:outline-none transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
                     placeholder={t('wallet.enterKeystorePassword')}
                   />
                   <button
@@ -1139,7 +1139,7 @@ export default function ConnectWalletModal() {
                     type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="w-full rounded-xl bg-[color:var(--sf-panel-bg)] px-4 py-3 pr-10 shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-base font-medium text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/40 focus:outline-none transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
+                    className="w-full rounded-xl bg-[color:var(--sf-panel-bg)] px-4 py-3 pr-10 shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)] active:shadow-[0_6px_24px_rgba(0,0,0,0.18)] focus:shadow-[var(--sf-focus-glow)] text-base font-medium text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/40 focus:outline-none transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
                     placeholder={t('wallet.enterWalletPassword')}
                     onKeyDown={(e) => e.key === 'Enter' && handleRestoreFromDrive()}
                   />
@@ -1185,7 +1185,7 @@ export default function ConnectWalletModal() {
                     type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="w-full rounded-xl bg-[color:var(--sf-panel-bg)] px-4 py-3 pr-10 shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-base font-medium text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/40 focus:outline-none transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
+                    className="w-full rounded-xl bg-[color:var(--sf-panel-bg)] px-4 py-3 pr-10 shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)] active:shadow-[0_6px_24px_rgba(0,0,0,0.18)] focus:shadow-[var(--sf-focus-glow)] text-base font-medium text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/40 focus:outline-none transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
                     placeholder={t('wallet.enterYourPassword')}
                     onKeyDown={(e) => e.key === 'Enter' && handleUnlockKeystore()}
                   />

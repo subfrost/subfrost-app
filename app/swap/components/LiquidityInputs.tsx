@@ -8,7 +8,7 @@ import { useTheme } from "@/context/ThemeContext";
 import { useModalStore } from "@/stores/modals";
 import { useGlobalStore } from "@/stores/global";
 import type { SlippageSelection } from "@/stores/global";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Settings } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import type { FeeSelection } from "@/hooks/useFeeRate";
 import { useTranslation } from '@/hooks/useTranslation';
@@ -335,7 +335,7 @@ export default function LiquidityInputs({
                   className="sf-collapsible-trigger"
                 >
                   <span>{t('vaultDeposit.transactionDetails')}</span>
-                  <ChevronDown
+                  <Settings
                     size={14}
                     className={`transition-transform duration-[200ms] ${detailsOpen ? 'rotate-180' : ''}`}
                   />
@@ -718,7 +718,7 @@ export default function LiquidityInputs({
               className="sf-collapsible-trigger"
             >
               <span>{t('vaultDeposit.transactionDetails')}</span>
-              <ChevronDown
+              <Settings
                 size={14}
                 className={`transition-transform duration-[200ms] ${detailsOpen ? 'rotate-180' : ''}`}
               />
@@ -730,7 +730,7 @@ export default function LiquidityInputs({
               {/* Minimum Received row */}
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60">
-                  Minimum Received
+                  {t('liquidity.minimumReceived')}
                 </span>
                 <span className="font-semibold text-[color:var(--sf-text)]">
                   {minimumToken0 || (token0.id === 'btc' || token0.symbol === 'frBTC' ? '0.00000000' : '0.00')} {token0.symbol} / {minimumToken1 || (token1.id === 'btc' || token1.symbol === 'frBTC' ? '0.00000000' : '0.00')} {token1.symbol}
@@ -740,7 +740,7 @@ export default function LiquidityInputs({
               {/* Deadline (blocks) row */}
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60">
-                  Deadline (blocks)
+                  {t('swapSummary.deadlineBlocks')}
                 </span>
                 <div className="flex items-center gap-2">
                   <div className="relative">

@@ -11,7 +11,7 @@ import { useFeeRate } from "@/hooks/useFeeRate";
 import type { FeeSelection } from "@/hooks/useFeeRate";
 import { useGlobalStore } from "@/stores/global";
 import type { SlippageSelection } from "@/stores/global";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Settings } from "lucide-react";
 import { useTranslation } from '@/hooks/useTranslation';
 import { useDemoGate } from '@/hooks/useDemoGate';
 
@@ -357,7 +357,7 @@ export default function VaultDepositInterface({
               className="sf-collapsible-trigger"
             >
               <span>{t('vaultDeposit.transactionDetails')}</span>
-              <ChevronDown
+              <Settings
                 size={14}
                 className={`transition-transform duration-300 ${detailsOpen ? 'rotate-180' : ''}`}
               />
