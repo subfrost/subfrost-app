@@ -162,6 +162,14 @@ export default function BridgeDepositFlow({
 
   const isDark = theme === "dark";
   const isToBtc = toToken === "BTC";
+  // Show the rich deposit UX (QR + MetaMask 2-step) whenever the user is
+  // depositing a cross-chain token, regardless of whether the destination is
+  // BTC or another alkane (e.g., ETH→bUSD, ZEC→FIRE). When the user is
+  // bridging the OTHER direction (TO a cross-chain token like BTC→USDC,
+  // bUSD→ETH, FIRE→ZEC), the existing "Bridge BTC to X" text branch is kept.
+  const CROSS_CHAIN_SYMBOLS = ["USDT", "USDC", "ETH", "ZEC"];
+  const isFromCrossChain = CROSS_CHAIN_SYMBOLS.includes(fromToken);
+  const sourceChainLabel = fromToken === "ZEC" ? "Zcash" : "Ethereum";
   const stableToken = (isToBtc ? fromToken : toToken) as StableToken;
 
   const depositAddress = useMemo(
@@ -541,13 +549,13 @@ export default function BridgeDepositFlow({
       {mode === "qr" ? (
         /* ---- QR Code Mode ---- */
         <div className="rounded-2xl bg-[color:var(--sf-panel-bg)] p-5 backdrop-blur-md shadow-[0_2px_12px_rgba(0,0,0,0.08)]">
-          {isToBtc && (
+          {isFromCrossChain && (
             <>
               <label className="block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70 mb-1">
                 Send {hasValidAmount ? `exactly ${amount}` : ""} {fromToken} to
               </label>
               <p className="text-[10px] text-[color:var(--sf-text)]/40 mb-3">
-                Deposit address for {fromToken} on Ethereum
+                Deposit address for {fromToken} on {sourceChainLabel}
               </p>
 
               {/* Address + copy */}
@@ -581,15 +589,15 @@ export default function BridgeDepositFlow({
               </div>
 
               <p className="text-[10px] text-center text-[color:var(--sf-text)]/40">
-                Scan with your Ethereum wallet to deposit
+                Scan with your {sourceChainLabel} wallet to deposit
               </p>
             </>
           )}
 
-          {!isToBtc && (
+          {!isFromCrossChain && (
             <div className="text-center py-4">
               <p className="text-sm text-[color:var(--sf-text)]/60 mb-2">
-                BTC {"\u2192"} {toToken} requires a Bitcoin wallet.
+                {fromToken} {"\u2192"} {toToken} requires a Bitcoin wallet.
               </p>
               <p className="text-xs text-[color:var(--sf-text)]/40">
                 Connect your Bitcoin wallet and use the Bridge button below.
@@ -611,7 +619,7 @@ export default function BridgeDepositFlow({
       ) : (
         /* ---- MetaMask Mode ---- */
         <div className="rounded-2xl bg-[color:var(--sf-panel-bg)] p-5 backdrop-blur-md shadow-[0_2px_12px_rgba(0,0,0,0.08)]">
-          {isToBtc ? (
+          {isFromCrossChain ? (
             <>
               <label className="block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70 mb-3">
                 Bridge via MetaMask

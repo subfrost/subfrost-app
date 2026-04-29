@@ -347,7 +347,28 @@ const STORAGE_KEYS = {
   BROWSER_WALLET_ID: 'subfrost_browser_wallet_id', // Last connected browser wallet ID
   WALLET_TYPE: 'subfrost_wallet_type', // 'keystore' or 'browser'
   BROWSER_WALLET_ADDRESSES: 'subfrost_browser_wallet_addresses', // Cached addresses to avoid re-prompting
+  TAPROOT_DERIVATION: 'subfrost_taproot_derivation', // Per-user BIP86 derivation indices
+  SEGWIT_DERIVATION: 'subfrost_segwit_derivation', // Per-user BIP84 derivation indices
 } as const;
+
+type DerivationIndices = { accountIndex: number; changeIndex: number; addressIndex: number };
+const DEFAULT_DERIVATION: DerivationIndices = { accountIndex: 0, changeIndex: 0, addressIndex: 0 };
+
+function loadDerivationIndices(key: string): DerivationIndices {
+  if (typeof localStorage === 'undefined') return DEFAULT_DERIVATION;
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return DEFAULT_DERIVATION;
+    const parsed = JSON.parse(raw);
+    return {
+      accountIndex: Number.isFinite(parsed.accountIndex) ? parsed.accountIndex : 0,
+      changeIndex: parsed.changeIndex === 1 ? 1 : 0,
+      addressIndex: Number.isFinite(parsed.addressIndex) ? parsed.addressIndex : 0,
+    };
+  } catch {
+    return DEFAULT_DERIVATION;
+  }
+}
 
 type WalletContextType = {
   // Connection state
@@ -427,6 +448,34 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
   } | null>(null);
   // SDK wallet adapter for signing - handles all wallet-specific logic
   const [walletAdapter, setWalletAdapter] = useState<JsWalletAdapter | null>(null);
+
+  // Derivation indices — user-configurable via Wallet Settings (BIP86 + BIP84).
+  // Both display addresses and signing keys derive from these so they cannot diverge.
+  const [taprootDerivation, setTaprootDerivation] = useState<DerivationIndices>(() => loadDerivationIndices(STORAGE_KEYS.TAPROOT_DERIVATION));
+  const [segwitDerivation, setSegwitDerivation] = useState<DerivationIndices>(() => loadDerivationIndices(STORAGE_KEYS.SEGWIT_DERIVATION));
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      setTaprootDerivation(loadDerivationIndices(STORAGE_KEYS.TAPROOT_DERIVATION));
+      setSegwitDerivation(loadDerivationIndices(STORAGE_KEYS.SEGWIT_DERIVATION));
+      if (detail) {
+        console.log('[WalletContext] Derivation changed:', detail);
+      }
+    };
+    window.addEventListener('derivation-changed', handler);
+    return () => window.removeEventListener('derivation-changed', handler);
+  }, []);
+
+  // Keystore-derived addresses computed via BIP32 from the session mnemonic.
+  // Updated by an effect below whenever wallet/network/derivation indices change.
+  const [keystoreAddresses, setKeystoreAddresses] = useState<{
+    taproot: { address: string; pubkey: string; pubKeyXOnly: string; hdPath: string };
+    nativeSegwit: { address: string; pubkey: string; hdPath: string };
+  }>({
+    taproot: { address: '', pubkey: '', pubKeyXOnly: '', hdPath: '' },
+    nativeSegwit: { address: '', pubkey: '', hdPath: '' },
+  });
 
   // WalletConnector instance (lazy initialized)
   const walletConnectorRef = useRef<WalletConnector | null>(null);
@@ -727,19 +776,15 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       };
     }
 
-    // For keystore wallets
+    // For keystore wallets — addresses are computed by the BIP32 effect below
+    // using user-configured derivation indices (taprootDerivation/segwitDerivation).
+    // This guarantees the displayed address matches what the signing functions sign for.
     if (!wallet) {
       return {
         nativeSegwit: { address: '', pubkey: '', hdPath: '' },
         taproot: { address: '', pubkey: '', pubKeyXOnly: '', hdPath: '' },
       };
     }
-
-    let segwitInfo = { address: '', publicKey: '' };
-    let taprootInfo = wallet.deriveAddress(AddressType.P2TR, 0, 0);
-
-    // No coinType override needed — createWalletViaClient uses AlkanesClient.withMnemonic
-    // which correctly derives coinType=1 for regtest/devnet, coinType=0 for mainnet.
 
     // Derive Zcash address from the same mnemonic (BIP44 m/44'/133'/0'/0/0)
     // On mainnet, show the real ZEC address alongside BTC addresses
@@ -759,20 +804,11 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
     }
 
     return {
-      nativeSegwit: {
-        address: segwitInfo.address || '',
-        pubkey: segwitInfo.publicKey || '',
-        hdPath: (segwitInfo as any).path || '',
-      },
-      taproot: {
-        address: taprootInfo.address,
-        pubkey: taprootInfo.publicKey,
-        pubKeyXOnly: taprootInfo.publicKey.slice(2), // Remove prefix for x-only
-        hdPath: taprootInfo.path,
-      },
+      nativeSegwit: keystoreAddresses.nativeSegwit,
+      taproot: keystoreAddresses.taproot,
       zcash: zcashInfo || undefined,
     };
-  }, [wallet, browserWallet, walletType, browserWalletAddresses, network]);
+  }, [wallet, browserWallet, walletType, browserWalletAddresses, network, keystoreAddresses]);
 
   // Build account structure
   const account: Account = useMemo(() => {
@@ -788,6 +824,80 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       network: NetworkMap[network],
     };
   }, [addresses, network]);
+
+  // Derive keystore taproot + segwit addresses via BIP32 using the user's saved
+  // derivation indices. Same path is used by signTaprootPsbt/signSegwitPsbt so
+  // the displayed address always matches the signing key.
+  useEffect(() => {
+    if (!wallet || walletType !== 'keystore') {
+      setKeystoreAddresses({
+        taproot: { address: '', pubkey: '', pubKeyXOnly: '', hdPath: '' },
+        nativeSegwit: { address: '', pubkey: '', hdPath: '' },
+      });
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const sessionMnemonic = typeof sessionStorage !== 'undefined'
+          ? sessionStorage.getItem(SESSION_MNEMONIC_KEY)
+          : null;
+        if (!sessionMnemonic) return;
+
+        const [bitcoin, tinysecp, BIP32Factory, bip39] = await Promise.all([
+          import('bitcoinjs-lib'),
+          import('tiny-secp256k1'),
+          import('bip32').then(m => m.default),
+          import('bip39'),
+        ]);
+
+        bitcoin.initEccLib(tinysecp);
+
+        const btcNetwork = network === 'mainnet'
+          ? bitcoin.networks.bitcoin
+          : (network === 'testnet' || network === 'signet')
+            ? bitcoin.networks.testnet
+            : bitcoin.networks.regtest;
+
+        const coinType = network === 'mainnet' ? 0 : 1;
+        const seed = bip39.mnemonicToSeedSync(sessionMnemonic);
+        const bip32 = BIP32Factory(tinysecp);
+        const root = bip32.fromSeed(seed, btcNetwork);
+
+        // Taproot (BIP86): m/86'/coinType'/account'/change/index
+        const tPath = `m/86'/${coinType}'/${taprootDerivation.accountIndex}'/${taprootDerivation.changeIndex}/${taprootDerivation.addressIndex}`;
+        const tNode = root.derivePath(tPath);
+        const tInternal = tNode.publicKey.slice(1, 33);
+        const tPay = bitcoin.payments.p2tr({ internalPubkey: Buffer.from(tInternal), network: btcNetwork });
+
+        // SegWit (BIP84): m/84'/coinType'/account'/change/index
+        const sPath = `m/84'/${coinType}'/${segwitDerivation.accountIndex}'/${segwitDerivation.changeIndex}/${segwitDerivation.addressIndex}`;
+        const sNode = root.derivePath(sPath);
+        const sPay = bitcoin.payments.p2wpkh({ pubkey: Buffer.from(sNode.publicKey), network: btcNetwork });
+
+        if (cancelled) return;
+
+        setKeystoreAddresses({
+          taproot: {
+            address: tPay.address || '',
+            pubkey: Buffer.from(tNode.publicKey).toString('hex'),
+            pubKeyXOnly: Buffer.from(tInternal).toString('hex'),
+            hdPath: tPath,
+          },
+          nativeSegwit: {
+            address: sPay.address || '',
+            pubkey: Buffer.from(sNode.publicKey).toString('hex'),
+            hdPath: sPath,
+          },
+        });
+      } catch (e) {
+        console.error('[WalletContext] Keystore BIP32 address derivation failed:', e);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [wallet, walletType, network, taprootDerivation, segwitDerivation]);
 
   // Create new wallet
   const createNewWallet = useCallback(async (password: string): Promise<{ mnemonic: string }> => {
@@ -1955,10 +2065,12 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
     const bip32 = BIP32Factory(tinysecp);
     const root = bip32.fromSeed(seed, btcNetwork);
 
-    // BIP86 path: m/86'/coinType/0'/0/0
-    // coinType: 0 for mainnet, 1 for testnet/regtest
+    // BIP86 path: m/86'/coinType/account'/change/index
+    // coinType: 0 for mainnet, 1 for testnet/regtest. Indices come from user
+    // settings and match the path used to display the taproot address — they
+    // must stay aligned or transactions sign for a different output than shown.
     const coinType = network === 'mainnet' ? 0 : 1;
-    const taprootPath = `m/86'/${coinType}'/0'/0/0`;
+    const taprootPath = `m/86'/${coinType}'/${taprootDerivation.accountIndex}'/${taprootDerivation.changeIndex}/${taprootDerivation.addressIndex}`;
     const taprootChild = root.derivePath(taprootPath);
 
     if (!taprootChild.privateKey) {
@@ -1991,7 +2103,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
     }
 
     return psbt.toBase64();
-  }, [wallet, network, walletAdapter, walletType, browserWallet, browserWalletAddresses]);
+  }, [wallet, network, walletAdapter, walletType, browserWallet, browserWalletAddresses, taprootDerivation]);
 
   // Sign PSBT with segwit inputs (BIP84 derivation)
   // Uses SDK wallet adapters for browser wallets, BIP84 derivation for keystore
@@ -2115,10 +2227,10 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
     const bip32 = BIP32Factory(tinysecp);
     const root = bip32.fromSeed(seed, btcNetwork);
 
-    // BIP84 path: m/84'/coinType/0'/0/0
-    // coinType: 0 for mainnet, 1 for testnet/regtest
+    // BIP84 path: m/84'/coinType/account'/change/index — indices come from user
+    // settings and must match the path used to display the segwit address.
     const coinType = network === 'mainnet' ? 0 : 1;
-    const segwitPath = `m/84'/${coinType}'/0'/0/0`;
+    const segwitPath = `m/84'/${coinType}'/${segwitDerivation.accountIndex}'/${segwitDerivation.changeIndex}/${segwitDerivation.addressIndex}`;
     const segwitChild = root.derivePath(segwitPath);
 
     if (!segwitChild.privateKey) {
@@ -2143,7 +2255,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
     }
 
     return psbt.toBase64();
-  }, [wallet, network, walletAdapter, walletType]);
+  }, [wallet, network, walletAdapter, walletType, segwitDerivation]);
 
   // Sign multiple PSBTs - supports both keystore and browser wallets
   // Uses SDK wallet adapters for all browser wallet signing
