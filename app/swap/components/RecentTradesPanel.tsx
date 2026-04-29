@@ -94,47 +94,40 @@ export default function RecentTradesPanel({ baseToken, quoteToken, poolId: poolI
     },
   });
 
-  // Wrap/unwrap history — used when the swap shell is on a BTC↔frBTC wrap pair.
-  // BTC↔frBTC has no AMM pool, so trades come from the global wrap/unwrap stream.
-  // The endpoint returns both categories in one response (with item.type set);
-  // the `category` param is not honored server-side, so calling per category
-  // produces duplicates.
-  // Pagination is keyed on the raw response size, not the filtered list — the
-  // endpoint returns mixed transaction types and wraps/unwraps may be a small
-  // fraction. Stopping when `filtered.length < PAGE_SIZE` would cut off scroll
-  // after the first page.
+  // Wrap/unwrap history — dedicated endpoints return only wraps/unwraps.
+  // Fetches both in parallel per page, merges by timestamp.
   const wrapQuery = useInfiniteQuery({
     queryKey: ['wrap-unwrap-history', network],
     enabled: !!isWrapPair && !!network,
     staleTime: Infinity,
     initialPageParam: 0,
-    getNextPageParam: (lastPage: { items: any[]; rawCount: number }, _all, lastPageParam: number) =>
-      lastPage.rawCount >= PAGE_SIZE ? lastPageParam + PAGE_SIZE : undefined,
+    getNextPageParam: (lastPage: any[], _all: any[][], lastPageParam: number) =>
+      lastPage.length >= PAGE_SIZE ? lastPageParam + PAGE_SIZE : undefined,
     queryFn: async ({ pageParam }) => {
       const rpcBase = `/api/rpc/${network || 'mainnet'}`;
-      const resp = await fetch(`${rpcBase}/get-all-amm-tx-history`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        signal: AbortSignal.timeout(10000),
-        body: JSON.stringify({ limit: PAGE_SIZE, offset: pageParam }),
-      });
-      if (!resp.ok) return { items: [], rawCount: 0 };
-      const json = await resp.json();
-      const items = json?.data?.items || json?.data || [];
-      const list = Array.isArray(items) ? items : [];
-      const wrapsAndUnwraps = list.filter(
-        (it: any) => it?.type === 'wrap' || it?.type === 'unwrap'
-      );
+      const fetchEndpoint = async (endpoint: string, type: string) => {
+        const resp = await fetch(`${rpcBase}/${endpoint}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          signal: AbortSignal.timeout(10000),
+          body: JSON.stringify({ limit: PAGE_SIZE, offset: pageParam }),
+        });
+        if (!resp.ok) return [];
+        const json = await resp.json();
+        const items = json?.data?.items || json?.data || [];
+        return (Array.isArray(items) ? items : []).map((it: any) => ({ ...it, type }));
+      };
+      const [wraps, unwraps] = await Promise.all([
+        fetchEndpoint('get-all-wrap-history', 'wrap'),
+        fetchEndpoint('get-all-unwrap-history', 'unwrap'),
+      ]);
       const tsOf = (it: any) => {
         const ts = it.timestamp;
         if (typeof ts === 'number') return ts > 1e12 ? ts : ts * 1000;
         const parsed = ts ? Date.parse(ts) : 0;
         return Number.isFinite(parsed) ? parsed : 0;
       };
-      return {
-        items: wrapsAndUnwraps.sort((a, b) => tsOf(b) - tsOf(a)),
-        rawCount: list.length,
-      };
+      return [...wraps, ...unwraps].sort((a, b) => tsOf(b) - tsOf(a));
     },
   });
 
@@ -142,7 +135,7 @@ export default function RecentTradesPanel({ baseToken, quoteToken, poolId: poolI
 
   const swapItems = useMemo(() => swapQuery.data?.pages?.flat() || [], [swapQuery.data]);
   const wrapItems = useMemo(
-    () => wrapQuery.data?.pages?.flatMap((p) => p.items) || [],
+    () => wrapQuery.data?.pages?.flat() || [],
     [wrapQuery.data]
   );
 
@@ -252,18 +245,6 @@ export default function RecentTradesPanel({ baseToken, quoteToken, poolId: poolI
     el.addEventListener('scroll', handleScroll, { passive: true });
     return () => el.removeEventListener('scroll', handleScroll);
   }, [handleScroll]);
-
-  // For wrap pairs, the underlying endpoint mixes all transaction types and
-  // wraps/unwraps may be sparse — keep fetching pages until we have enough
-  // rows to fill the container (or the source is exhausted). Without this,
-  // the visible list is too short to trigger scroll-based pagination.
-  useEffect(() => {
-    if (!isWrapPair) return;
-    if (!hasNextPage || isFetchingNextPage) return;
-    if (trades.length < 20) {
-      fetchNextPage();
-    }
-  }, [isWrapPair, trades.length, hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   const emptyMessage = isWrapPair
     ? 'No recent wraps or unwraps'
