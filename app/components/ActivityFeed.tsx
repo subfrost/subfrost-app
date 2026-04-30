@@ -305,8 +305,8 @@ export default function ActivityFeed({
   const namesPending = namesLoading || namesFetching || !displayMap;
 
   return (
-    <div className="rounded-2xl bg-[color:var(--sf-glass-bg)] backdrop-blur-md overflow-hidden shadow-[0_4px_20px_rgba(0,0,0,0.2)] border-t border-[color:var(--sf-top-highlight)]">
-      <div className="px-6 py-4 border-b-2 border-[color:var(--sf-row-border)] bg-[color:var(--sf-surface)]/40">
+    <div className="rounded-2xl bg-[color:var(--sf-glass-bg)] backdrop-blur-md shadow-[0_4px_20px_rgba(0,0,0,0.2)] border-t border-[color:var(--sf-top-highlight)]">
+      <div className="rounded-t-2xl px-6 py-4 border-b-2 border-[color:var(--sf-row-border)] bg-[color:var(--sf-surface)]/40">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <h3 className="text-base font-bold text-[color:var(--sf-text)]">
@@ -421,7 +421,7 @@ export default function ActivityFeed({
       </div>
 
       <div
-        className={`no-scrollbar overflow-auto ${
+        className={`no-scrollbar rounded-b-2xl overflow-auto ${
           isFullPage
             ? "max-h-[calc(100vh-200px)]"
             : maxHeightClass ?? "max-h-[70vh]"
