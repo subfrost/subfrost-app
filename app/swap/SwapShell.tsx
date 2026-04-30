@@ -34,6 +34,7 @@ import { FRBTC_WRAP_FEE_PER_1000 } from "@/constants/alkanes";
 import { useAddLiquidityMutation } from "@/hooks/useAddLiquidityMutation";
 import { useAtomicWrapSwapMutation } from "@/hooks/useAtomicWrapSwapMutation";
 import { useAtomicWrapAddLiquidityMutation } from "@/hooks/useAtomicWrapAddLiquidityMutation";
+import { useTokenToBtcSwap } from "@/hooks/useTokenToBtcSwap";
 import { useMatchedLpPool } from "@/hooks/useMatchedLpPool";
 import { computePairedLpAmount, computeRemoveLiquidityMinAmounts } from "@/lib/alkanes/liquidity-math";
 import { useTokenNames, resolveTokenDisplay } from "@/hooks/useTokenNames";
@@ -191,6 +192,7 @@ export default function SwapShell() {
   const removeLiquidityMutation = useRemoveLiquidityMutation();
   const { executeAtomicSwap } = useAtomicWrapSwapMutation();
   const { executeAtomicAddLiquidity } = useAtomicWrapAddLiquidityMutation();
+  const { executeTokenToBtcSwap } = useTokenToBtcSwap();
   const { data: premiumData } = useFrbtcPremium();
 
   // Wallet/config
@@ -1222,163 +1224,19 @@ export default function SwapShell() {
       }
 
       try {
-        // Step 1: Swap Token → frBTC
-        setSwapFlowStep({ type: 'swapping' });
-
-        const sellAmount = quote.sellAmount;
-
-        const swapRes = await swapMutation.mutateAsync({
-          sellCurrency: fromToken.id,
-          buyCurrency: FRBTC_ALKANE_ID,
-          direction: 'sell',
-          sellAmount,
+        // Implementation lives in useTokenToBtcSwap. Two-tx chained flow:
+        // swap Token→frBTC, then unwrap frBTC→BTC. UI state transitions and
+        // toast notifications come back via callbacks.
+        await executeTokenToBtcSwap({
+          fromTokenId: fromToken.id,
+          sellAmount: quote.sellAmount,
           buyAmount: quote.buyAmount,
-          maxSlippage,
-          feeRate: fee.feeRate,
           poolId: quote.poolId,
-          deadlineBlocks,
+          onProgress: (p) => setSwapFlowStep(p as any),
+          onNotify: (txId, op, ctx) => showNotification(txId, op, ctx),
         });
-
-        if (!swapRes?.success || !swapRes.transactionId) {
-          setSwapFlowStep({ type: 'error', step: 'swap', message: 'No transaction ID returned' });
-          throw new Error('Swap step failed — no transaction ID returned');
-        }
-        const swapTxId = swapRes.transactionId;
-
-        // ⚠️ JOURNAL (2026-03-26): Same devnet handling as BTC→Token flow above.
-        const isRegtest = ['regtest', 'subfrost-regtest', 'oylnet', 'regtest-local', 'devnet'].includes(network);
-
-        if (isRegtest && address) {
-          try {
-            if (network === 'devnet') {
-              await fetch(getRpcUrl(network), {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ jsonrpc: '2.0', method: 'generatetoaddress', params: [1, address], id: 1 }),
-              });
-            } else {
-              await fetch('/api/regtest/mine', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ blocks: 1, address }),
-              });
-            }
-          } catch (mineErr) {
-            console.warn('[SWAP] Mine failed (non-fatal):', mineErr);
-          }
-        }
-
-        const tokenToFrbtcInfo = {
-          fromSymbol: fromToken.symbol, toSymbol: 'frBTC',
-          fromId: fromToken.id, toId: 'frbtc',
-          fromAmount: fromAmount, toAmount: quote.displayBuyAmount,
-        };
-
-        if (network !== 'devnet') {
-        showNotification(swapTxId, 'swap', 'Step 1/2');
-
-        const pollInterval = isRegtest ? 1500 : 15000;
-        const maxPollAttempts = isRegtest ? 20 : 120;
-        let swapConfirmed = false;
-
-        for (let attempt = 0; attempt < maxPollAttempts; attempt++) {
-          setSwapFlowStep({ type: 'swap-confirming', txId: swapTxId, attempt: attempt + 1, maxAttempts: maxPollAttempts });
-          await new Promise(resolve => setTimeout(resolve, pollInterval));
-          try {
-            const txResp = await fetch(getRpcUrl(network), {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ jsonrpc: '2.0', method: 'esplora_tx', params: [swapTxId], id: 1 }),
-            });
-            const txData = await txResp.json();
-            if (txData?.result?.status?.confirmed) {
-              const elapsedSec = Math.round((attempt + 1) * pollInterval / 1000);
-              await new Promise(resolve => setTimeout(resolve, 2000));
-              swapConfirmed = true;
-              break;
-            }
-            const elapsed = Math.round((attempt + 1) * pollInterval / 1000);
-          } catch {
-            // Polling error — keep retrying
-          }
-        }
-
-        if (!swapConfirmed) {
-          setSwapFlowStep({ type: 'error', step: 'swap', message: 'Swap tx did not confirm', swapTxId });
-          throw new Error(`Swap tx did not confirm — unwrap frBTC → BTC manually.`);
-        }
-        } else {
-          showNotification(swapTxId, 'swap', 'Step 1/2');
-          await new Promise(resolve => setTimeout(resolve, 500));
-        }
-
-        // Step 2: Unwrap frBTC → BTC
-        setSwapFlowStep({ type: 'unwrapping' });
-
-        // ⚠️ JOURNAL (2026-03-26): On devnet, quote.buyAmount can be wildly wrong
-        // because pool reserves don't match the quote engine's expectations.
-        // Query actual frBTC balance via enriched balances (assets[].runes[])
-        // which queries the alkanes indexer directly and always returns correct data.
-        let frbtcAmount = quote.buyAmount;
-        if (network === 'devnet' && address) {
-          try {
-            // Query actual frBTC balance via enriched balances (lua_evalsaved).
-            // quote.buyAmount is unreliable on devnet — can be off by orders of magnitude.
-            // Use the enriched balance Lua script (hash 4efbe0cd...) which returns
-            // assets[].runes[] — NOT the get_utxos script (c1e61d34) which only returns BTC.
-            const resp = await fetch(getRpcUrl(network), {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                jsonrpc: '2.0', id: 1,
-                method: 'lua_evalsaved',
-                params: ['4efbe0cdfe14270cb72eec80bce63e44f9f926951a67a0ad7256fca39046b80f', address, '1'],
-              }),
-            });
-            const data = await resp.json();
-            const assets = data?.result?.returns?.assets || [];
-            let totalFrbtc = 0n;
-            for (const asset of assets) {
-              for (const r of (asset?.runes || [])) {
-                if (r.block === 32 && r.tx === 0) totalFrbtc += BigInt(r.amount || 0);
-              }
-            }
-            if (totalFrbtc > 0n) {
-              // Convert from raw alkane units to display units (÷ 1e8).
-              // unwrapMutation.amount expects display units — toAlks(amount) converts back.
-              frbtcAmount = (Number(totalFrbtc) / 1e8).toFixed(8);
-            }
-          } catch (err) {
-            console.warn('[SWAP] Devnet: could not query frBTC balance, using quote:', err);
-          }
-        }
-
-        const unwrapRes = await unwrapMutation.mutateAsync({
-          amount: frbtcAmount,
-          feeRate: fee.feeRate,
-        });
-
-        if (unwrapRes?.success && unwrapRes.transactionId) {
-
-          // On devnet, mine a block to confirm the unwrap tx so BTC balance updates
-          if (network === 'devnet' && address) {
-            try {
-              await fetch(getRpcUrl(network), {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ jsonrpc: '2.0', method: 'generatetoaddress', params: [1, address], id: 1 }),
-              });
-            } catch {}
-          }
-
-          setSwapFlowStep({ type: 'complete', swapTxId, unwrapTxId: unwrapRes.transactionId });
-          showNotification(unwrapRes.transactionId, 'unwrap', 'Step 2/2');
-          setTimeout(() => refreshWalletData(), 2000);
-          // Auto-dismiss stepper after 5 seconds on success
-          setTimeout(() => setSwapFlowStep({ type: 'idle' }), 5000);
-        } else {
-          setSwapFlowStep({ type: 'error', step: 'unwrap', message: 'No transaction ID returned', swapTxId });
-        }
+        setTimeout(() => refreshWalletData(), 2000);
+        setTimeout(() => setSwapFlowStep({ type: 'idle' }), 5000);
       } catch (e: any) {
         console.error('[SWAP] Token → BTC swap failed:', e);
         const raw = extractErrorMessage(e);
