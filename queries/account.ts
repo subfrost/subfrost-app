@@ -758,7 +758,13 @@ export function alkaneBalanceQueryOptions(deps: AlkaneBalanceDeps) {
               balance,
               decimals: knownInfo?.decimals ?? 8,
               logo: item.tokenImage || undefined,
-              priceUsd: item.priceUsd || item.busdPoolPriceInUsd || undefined,
+              // frBTC is bridged 1:1 with BTC, but espo derives priceUsd from
+              // the bUSD/frBTC pool — that pool isn't peg-arbitraged so its
+              // implied price drifts. Skip it for frBTC and let consumers fall
+              // back to the live BTC price.
+              priceUsd: alkaneId === '32:0'
+                ? undefined
+                : (item.priceUsd || item.busdPoolPriceInUsd || undefined),
               priceInSatoshi: item.priceInSatoshi ? Number(item.priceInSatoshi) : undefined,
             });
           } else {

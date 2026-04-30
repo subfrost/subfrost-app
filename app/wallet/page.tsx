@@ -8,6 +8,7 @@ import { Wallet, Activity, Settings, BarChart2, Send, QrCode, Copy, Check, Refre
 import { useTranslation } from '@/hooks/useTranslation';
 import AddressAvatar from '@/app/components/AddressAvatar';
 import AccountSwitcher from '@/app/components/AccountSwitcher';
+import PageContent from '@/app/components/PageContent';
 import BitcoinBalanceCard from './components/BitcoinBalanceCard';
 import AlkanesBalancesCard from './components/AlkanesBalancesCard';
 import UTXOManagement from './components/UTXOManagement';
@@ -81,7 +82,7 @@ export default function WalletDashboardPage() {
   ];
 
   return (
-    <div className="mx-auto w-full max-w-6xl px-2 sm:px-4 lg:px-0 text-[color:var(--sf-text)]">
+    <PageContent className="text-[color:var(--sf-text)]">
       <div className="flex w-full flex-col gap-6">
         {/* Page Header */}
         <div className="flex w-full flex-col gap-2">
@@ -200,7 +201,7 @@ export default function WalletDashboardPage() {
                             <span className="whitespace-nowrap">{tab.shortLabel}</span>
                           )}
                           {tab.id === 'transactions' && pendingCount > 0 && (
-                            <span className="ml-1 flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-orange-500/90 px-1 text-[10px] font-bold text-white leading-none">
+                            <span className="ml-1 px-1.5 py-0.5 text-[9px] font-bold rounded-full bg-[color:var(--sf-primary)]/20 text-[color:var(--sf-primary)]">
                               {pendingCount}
                             </span>
                           )}
@@ -269,6 +270,6 @@ export default function WalletDashboardPage() {
         isOpen={showReceiveModal}
         onClose={() => setShowReceiveModal(false)}
       />
-    </div>
+    </PageContent>
   );
 }
