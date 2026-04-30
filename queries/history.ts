@@ -136,19 +136,33 @@ export async function fetchTxPage(
 ): Promise<TxPage> {
   const results = await Promise.all(
     addresses.filter(Boolean).map(async (addr) => {
-      // Primary: espo paginated endpoint
+      // Primary: espo paginated endpoint (confirmed txs only)
       try {
         const raw = await provider.espoGetAddressTransactions(addr, page, limit, null);
         const parsed = typeof raw === 'string' ? JSON.parse(raw) : mapToObject(raw);
+        if (parsed?.error) throw new Error(parsed.error.message || 'espo returned error');
         const txList =
           parsed?.transactions ||
           parsed?.data?.transactions ||
           parsed?.data ||
           parsed?.result ||
           (Array.isArray(parsed) ? parsed : []);
-        return Array.isArray(txList) ? txList : [];
+        if (Array.isArray(txList) && txList.length > 0) {
+          // Espo returns confirmed only. On page 1, also fetch mempool txs.
+          if (page === 1) {
+            try {
+              const memRaw = await provider.esploraGetAddressTxsMempool(addr);
+              const memTxs = typeof memRaw === 'string' ? JSON.parse(memRaw) : mapToObject(memRaw);
+              if (Array.isArray(memTxs) && memTxs.length > 0) {
+                return [...memTxs, ...txList];
+              }
+            } catch { /* mempool fetch optional */ }
+          }
+          return txList;
+        }
+        if (page > 1) return [];
       } catch (e) {
-        console.warn(`[txHistory] espo paginated failed for ${addr}:`, e);
+        console.warn(`[txHistory] espo paginated failed for ${addr.slice(0,8)}:`, e);
       }
 
       // Fallback: full fetch + manual slice
@@ -175,9 +189,6 @@ export async function fetchTxPage(
       }
     }
   }
-  // Sort newest-first. The espo paginated endpoint sometimes omits blockTime
-  // for very recent txs (still has blockHeight), so blockHeight is the
-  // authoritative ordering key — fall back to blockTime for ties or pre-mempool.
   transactions.sort(sortByRecency);
 
   // If any address returned a full page, there's likely more

@@ -13,7 +13,7 @@
 import { useMemo, useCallback } from 'react';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
-import { fetchTxPage, sortByRecency, TX_PAGE_SIZE, type TxPage } from '@/queries/history';
+import { fetchTxPage, TX_PAGE_SIZE, sortByRecency, type TxPage } from '@/queries/history';
 
 export interface TransactionInput {
   txid: string;
