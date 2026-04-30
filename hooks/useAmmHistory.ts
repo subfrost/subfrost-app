@@ -328,8 +328,9 @@ export function useInfiniteAmmTxHistory({
           .filter((item: any) => item != null);
         const total = payload?.total ?? rawItems.length;
 
-        // Client-side category filter if the API doesn't support it
-        const filteredItems = transactionType && transactionType !== 'wrap' && transactionType !== 'unwrap'
+        // Client-side category filter — the API returns all types mixed together,
+        // so we always filter locally when a specific type is requested.
+        const filteredItems = transactionType
           ? rawItems.filter((item: any) => item?.type === transactionType)
           : rawItems;
 

@@ -245,7 +245,11 @@ const en: Record<string, string> = {
   'txHistory.rawJson': 'Raw JSON',
   'txHistory.confirmed': 'Confirmed',
   'txHistory.pending': 'Pending',
+  'txHistory.unconfirmed': 'Unconfirmed',
+  'txHistory.tbd': 'TBD',
   'txHistory.alkanes': 'Alkanes',
+  'txHistory.nativeSegwit': 'Native SegWit',
+  'txHistory.taproot': 'Taproot',
   'txHistory.block': 'Block',
   'txHistory.fee': 'Fee:',
   'txHistory.sats': 'sats',
@@ -541,6 +545,7 @@ const en: Record<string, string> = {
   'myActivity.create': 'Create',
   'myActivity.wrap': 'Wrap',
   'myActivity.unwrap': 'Unwrap',
+  'myActivity.unconfirmed': 'Unconfirmed',
 
   // LP Position Selector
   'lpSelector.title': 'Select LP Position',
@@ -1024,7 +1029,7 @@ const en: Record<string, string> = {
   'errors.insufficientSpendableDetailed': 'Insufficient spendable balance for {tokenId}.\n\nRequested: {requested}\nSpendable: {spendable}\n\nSome tokens may be on UTXOs with inscriptions/other assets and are excluded from swaps. Try a smaller amount (up to {spendable}).',
   'errors.userCancelled': 'Transaction was cancelled.',
   'errors.insufficientBalance': 'Insufficient spendable balance for {tokenId}. Need {needed}, have {available}. Some tokens may be on UTXOs with inscriptions and are excluded for safety.',
-  'errors.insufficientBtcWithAmount': 'Insufficient BTC balance. Need {needed} BTC for this transaction. Please add funds to your payment address.',
+  'errors.insufficientBtcWithAmount': 'Insufficient BTC balance. Need {needed} BTC for this transaction. Please add funds to your payment address (Taproot address for SUBFROST Keystore & Unisat. Native Segwit for Oyl & Xverse).',
   'errors.insufficientBtcGeneric': 'Insufficient BTC for transaction fees. Please add funds to your payment address.',
   'errors.poolNotFound': 'Pool not found for this pair. Please try again.',
   'errors.dustAmount': 'Transaction amount too small. Try a larger amount.',

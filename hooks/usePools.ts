@@ -709,8 +709,10 @@ export function usePools(params: UsePoolsParams = {}) {
         throw new Error('SDK provider not available');
       }
 
-      // Fetch token metadata in parallel with pool data (espo-backed)
-      const tokenMetaPromise = fetchTokenMetadata(network);
+      // Fetch token metadata in parallel with pool data (espo-backed).
+      // Swallow errors here — tokenMeta is enrichment, not required for first paint.
+      const tokenMetaPromise: Promise<Map<string, { name: string; symbol: string }>> =
+        fetchTokenMetadata(network).catch(() => new Map());
 
       let items: PoolsListItem[] = [];
       let tokenMetaMap: Map<string, { name: string; symbol: string }> = new Map();
@@ -730,9 +732,18 @@ export function usePools(params: UsePoolsParams = {}) {
       // Primary: Direct REST call to get-all-pools-details (preserves ALL API fields
       // including poolApr, poolVolume30dInUsd, etc. which the SDK WASM deserializer drops).
       // On devnet, the fetch interceptor routes these REST calls through quspo.
+      // Pool fetch runs in parallel with tokenMeta — don't block trending on slow tokenMeta.
+      // Race tokenMeta against a 250ms budget: if it's already cached, use it for symbol
+      // enrichment in the parse loop; otherwise the second pass below handles missing names.
       try {
-        tokenMetaMap = await tokenMetaPromise;
-        items = await fetchPoolsFromPoolsDetailsRest(ALKANE_FACTORY_ID, network, tokenMetaMap);
+        items = await fetchPoolsFromPoolsDetailsRest(ALKANE_FACTORY_ID, network, undefined);
+        const TOKEN_META_BUDGET_MS = 250;
+        tokenMetaMap = await Promise.race([
+          tokenMetaPromise,
+          new Promise<Map<string, { name: string; symbol: string }>>(
+            resolve => setTimeout(() => resolve(new Map()), TOKEN_META_BUDGET_MS),
+          ),
+        ]);
       } catch (e) {
         console.warn('[usePools] get-all-pools-details REST failed, falling back to SDK WASM:', e);
         try { tokenMetaMap = await tokenMetaPromise; } catch { /* ignore */ }
