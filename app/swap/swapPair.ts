@@ -17,3 +17,18 @@ export function loadSwapPair(): { from: TokenMeta; to: TokenMeta } | null {
   } catch { /* ignore */ }
   return null;
 }
+
+export function clearSwapPair() {
+  try {
+    localStorage.removeItem(SWAP_PAIR_KEY);
+  } catch { /* ignore */ }
+}
+
+// One-shot read: returns the saved pair (if any) and clears it.
+// Used by the swap page so HomeMarketsButton can hand off a pair
+// for a single navigation, without persisting selections forever.
+export function consumeSwapPair(): { from: TokenMeta; to: TokenMeta } | null {
+  const pair = loadSwapPair();
+  if (pair) clearSwapPair();
+  return pair;
+}

@@ -470,12 +470,16 @@ function Row({ label, value, highlight, warning, danger, className }: { label: s
   );
 }
 
+// Matches the height of the collapsed sf-panel (sf-collapsible-trigger:
+// padding 1rem + ~1rem line) so the layout doesn't jump when isCalculating
+// flips during quote refetches.
 function SkeletonLines() {
   return (
-    <div className="flex flex-col gap-2.5 animate-in fade-in duration-[200ms]">
-      <div className="h-4 w-full animate-pulse rounded-lg bg-[color:var(--sf-primary)]/10" />
-      <div className="h-4 w-3/4 animate-pulse rounded-lg bg-[color:var(--sf-primary)]/10" />
-      <div className="h-4 w-2/3 animate-pulse rounded-lg bg-[color:var(--sf-primary)]/10" />
+    <div className="sf-panel animate-in fade-in duration-[200ms]">
+      <div className="flex items-center justify-between px-4 py-4">
+        <div className="h-4 w-32 animate-pulse rounded-lg bg-[color:var(--sf-primary)]/10" />
+        <div className="h-3.5 w-3.5 animate-pulse rounded-full bg-[color:var(--sf-primary)]/10" />
+      </div>
     </div>
   );
 }

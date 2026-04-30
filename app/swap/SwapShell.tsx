@@ -42,7 +42,7 @@ import { KNOWN_TOKENS } from "@/lib/alkanes-client";
 import TradeForm, { type OrderType } from "./components/TradeForm";
 import BottomPanels from "./components/BottomPanels";
 import MobileDataPanels from "./components/MobileDataPanels";
-import { saveSwapPair, loadSwapPair } from "./swapPair";
+import { consumeSwapPair } from "./swapPair";
 
 // Lazy loaded components - split into separate chunks
 const PoolDetailsCard = lazy(() => import("./components/PoolDetailsCard"));
@@ -321,26 +321,30 @@ export default function SwapShell() {
     return poolStats !== undefined && Object.keys(poolStats).length > 0;
   }, [poolStats]);
 
-  // Initialize swap tokens from session (returning user) or trending pool (first visit).
-  // Session storage preserves the user's last pair choice across page navigations.
-  // Uses a ref to ensure initialization only happens once per mount.
+  // Initialize swap tokens to the trending pair (highest volume) on every visit.
+  // A saved pair is only honored as a one-shot handoff from explicit cross-page
+  // navigation (e.g. HomeMarketsButton): consumeSwapPair() reads and clears it.
+  // User selections within the swap page are NOT persisted — entering /swap
+  // always lands on the current trending pair.
   //
   // Two-phase approach:
-  //   Phase 1 (eager): As soon as pools load, restore from session or pick trending by TVL.
+  //   Phase 1 (eager): As soon as pools load, pick trending by TVL fallback.
   //     This avoids empty selectors while waiting for volume stats.
   //   Phase 2 (refined): Once volume stats arrive, re-pick trending if we used the TVL fallback.
   const trendingPoolInitializedRef = useRef(false);
   const usedSessionRef = useRef(false);
 
-  // Immediately restore token selection from session — don't wait for pools.
-  // This makes selectors show FROM/TO instantly on page reload.
+  // Immediately consume any one-shot saved pair (set by HomeMarketsButton).
+  // No fallback to BTC/USDC or anything else — undefined tokens render as
+  // "Select" until the trending-pool effect below populates them.
   const sessionRestoredRef = useRef(false);
   if (!sessionRestoredRef.current && !fromToken && !toToken) {
-    const saved = loadSwapPair();
+    const saved = consumeSwapPair();
     if (saved) {
       setFromToken(saved.from);
       setToToken(saved.to);
       sessionRestoredRef.current = true;
+      usedSessionRef.current = true;
     }
   }
 
@@ -350,46 +354,30 @@ export default function SwapShell() {
     // Phase 1: need at least pools loaded with some markets
     if (isLoadingPools || markets.length === 0) return;
 
-    // Try restoring from session first (user previously selected a pair)
-    const saved = loadSwapPair();
-    if (saved) {
-      // Find the matching pool in current markets so selectedPool has full data
+    // If a one-shot pair was already consumed synchronously above, attach the
+    // matching pool record (if any) and mark initialized — don't override it.
+    if (usedSessionRef.current && fromToken && toToken) {
       const matchingPool = markets.find(
         (p) =>
-          (p.token0.id === saved.from.id && p.token1.id === saved.to.id) ||
-          (p.token0.id === saved.to.id && p.token1.id === saved.from.id)
+          (p.token0.id === fromToken.id && p.token1.id === toToken.id) ||
+          (p.token0.id === toToken.id && p.token1.id === fromToken.id)
       );
-      if (matchingPool) {
-        setFromToken(saved.from);
-        setToToken(saved.to);
-        setSelectedPool(matchingPool);
-        trendingPoolInitializedRef.current = true;
-        usedSessionRef.current = true;
-        return;
-      }
-      // Saved pair no longer in markets — also check for wrap pairs (BTC/frBTC)
-      const isSavedWrapPair = (saved.from.id === 'btc' || saved.to.id === 'btc');
-      if (isSavedWrapPair) {
-        setFromToken(saved.from);
-        setToToken(saved.to);
-        trendingPoolInitializedRef.current = true;
-        usedSessionRef.current = true;
-        return;
-      }
-      // Saved pair no longer exists — fall through to trending
+      if (matchingPool) setSelectedPool(matchingPool);
+      trendingPoolInitializedRef.current = true;
+      return;
     }
 
-    // First visit: use trending (highest volume) pool — or first pool by TVL if no volume data yet
+    // Default: use trending (highest volume) pool — or first pool by TVL if no volume data yet
     if (topVolumePool) {
       setFromToken(topVolumePool.token0);
       setToToken(topVolumePool.token1);
       setSelectedPool(topVolumePool);
       trendingPoolInitializedRef.current = true;
     }
-  }, [topVolumePool, isLoadingPools, markets]);
+  }, [topVolumePool, isLoadingPools, markets, fromToken, toToken]);
 
   // Phase 2 (refined): Once volume stats finish loading, re-evaluate trending pool.
-  // If the user restored from session or already picked manually, skip this.
+  // If the user restored from a one-shot handoff, skip this.
   const volumeRefinedRef = useRef(false);
   useEffect(() => {
     if (volumeRefinedRef.current || usedSessionRef.current) return;
@@ -404,14 +392,6 @@ export default function SwapShell() {
     }
     volumeRefinedRef.current = true;
   }, [topVolumePool, isLoadingPoolStats, poolStatsHasData, hasVolumeDataMerged, selectedPool?.id]);
-
-  // Persist user's pair selection to sessionStorage so it survives page navigation.
-  // Only save after initialization is complete to avoid overwriting with undefined.
-  useEffect(() => {
-    if (trendingPoolInitializedRef.current && fromToken && toToken) {
-      saveSwapPair(fromToken, toToken);
-    }
-  }, [fromToken, toToken]);
 
   // Default LP tokens: frBTC / DIESEL (or bUSD on mainnet)
   // Initialize when the Liquidity tab becomes active
