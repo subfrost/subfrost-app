@@ -34,18 +34,14 @@ export function useSandshrewProvider(): ExtendedWebProvider | null {
 
   const taprootAddress = account?.taproot?.address;
   const segwitAddress = account?.nativeSegwit?.address;
-  // Scope the auto-injection to regtest/devnet networks where the matrix is
-  // verified. Mainnet keystore wallets technically have the same shape
-  // (nativeSegwit.address is `''`), but we don't want to expand the change
-  // surface to mainnet without explicit verification — the protorunes index
-  // there could in theory have stale data, and a false-clean classification
-  // would cost real BTC. Mainnet keeps the existing well-trodden path.
-  const REGTEST_NETWORKS = new Set(['devnet', 'regtest', 'regtest-local', 'subfrost-regtest', 'qubitcoin-regtest', 'oylnet']);
+  // Applies to keystore wallets on every network. The discovery helper
+  // (lib/wallet/taprootCleanUtxos.ts) classifies each UTXO via
+  // `alkanes_protorunesbyoutpoint` (live per-outpoint state, the same
+  // authoritative pattern useAddLiquidityMutation already uses), so a
+  // historically-touched-but-now-empty outpoint is correctly classified
+  // as clean and remains available for fees.
   const isKeystoreSingleAddress =
-    walletType === 'keystore' &&
-    !!taprootAddress &&
-    !segwitAddress &&
-    REGTEST_NETWORKS.has(network);
+    walletType === 'keystore' && !!taprootAddress && !segwitAddress;
 
   const extendedProvider = useMemo(() => {
     if (!provider) return null;
