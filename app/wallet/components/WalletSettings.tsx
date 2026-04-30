@@ -75,12 +75,17 @@ export default function WalletSettings() {
   const [customDataApiUrl, setCustomDataApiUrl] = useState('');
   const [customSandshrewUrl, setCustomSandshrewUrl] = useState('');
 
-  // Derivation config
-  const [taprootConfig, setTaprootConfig] = useState<DerivationConfig>({
+  // Derivation config — only addressIndex is functional (SDK only exposes it).
+  // Account and changeIndex are kept in state to render preview path but cannot
+  // be saved to disk: the SDK ignores them and would silently desync the
+  // displayed address from the signing key.
+  const [taprootConfig, setTaprootConfig] = useState<DerivationConfig>(() => ({
     accountIndex: 0,
     changeIndex: 0,
-    addressIndex: 0,
-  });
+    addressIndex: typeof localStorage !== 'undefined'
+      ? parseInt(localStorage.getItem('subfrost_taproot_address_index') || '0', 10) || 0
+      : 0,
+  }));
   const [segwitConfig, setSegwitConfig] = useState<DerivationConfig>({
     accountIndex: 0,
     changeIndex: 0,
@@ -244,8 +249,9 @@ export default function WalletSettings() {
     // Save network to localStorage
     localStorage.setItem('subfrost_selected_network', network);
 
-    // Save taproot account index
-    localStorage.setItem('subfrost_taproot_account_index', String(taprootConfig.accountIndex));
+    // Save taproot address index (last segment of BIP-86 path).
+    // SDK only exposes the address index — account/change are fixed at 0.
+    localStorage.setItem('subfrost_taproot_address_index', String(taprootConfig.addressIndex));
 
     // Dispatch custom event to notify other components (same tab)
     window.dispatchEvent(new CustomEvent('network-changed', { detail: network }));
@@ -607,52 +613,7 @@ export default function WalletSettings() {
                         {t('settings.taprootBip86')} - {taprootPath}
                       </label>
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      <div>
-                        <label className="block text-xs text-[color:var(--sf-text)]/60 mb-1">{t('settings.account')}</label>
-                        <input
-                          type="number"
-                          min="0"
-                          max="2147483647"
-                          value={taprootConfig.accountIndex}
-                          onChange={(e) => setTaprootConfig({ ...taprootConfig, accountIndex: parseInt(e.target.value) || 0 })}
-                          className="w-full rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-primary)]/5 px-3 py-2 text-sm text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)]"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-[color:var(--sf-text)]/60 mb-1">{t('settings.change')}</label>
-                        <div className="relative" ref={taprootChangeDropdownRef}>
-                          <button
-                            type="button"
-                            onClick={() => setTaprootChangeDropdownOpen((v) => !v)}
-                            className="w-full flex items-center gap-2 rounded-xl bg-[color:var(--sf-surface)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] px-4 py-3 text-sm text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none cursor-pointer"
-                          >
-                            <span className="flex-1 text-left">{CHANGE_OPTIONS.find((o) => o.value === taprootConfig.changeIndex)?.label ?? 'External (0)'}</span>
-                            <ChevronDown size={16} className={`transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${taprootChangeDropdownOpen ? 'rotate-180' : ''}`} />
-                          </button>
-                          {taprootChangeDropdownOpen && (
-                            <div className="absolute left-0 top-full z-50 mt-1 w-full overflow-hidden rounded-xl bg-[color:var(--sf-surface)] backdrop-blur-xl shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
-                              {CHANGE_OPTIONS.map((option) => (
-                                <button
-                                  key={option.value}
-                                  type="button"
-                                  onClick={() => {
-                                    setTaprootConfig({ ...taprootConfig, changeIndex: option.value });
-                                    setTaprootChangeDropdownOpen(false);
-                                  }}
-                                  className={`w-full px-4 py-2.5 text-left text-sm font-medium transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
-                                    taprootConfig.changeIndex === option.value
-                                      ? 'bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]'
-                                      : 'text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10'
-                                  }`}
-                                >
-                                  {option.label}
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      </div>
+                    <div className="grid grid-cols-1 gap-3">
                       <div>
                         <label className="block text-xs text-[color:var(--sf-text)]/60 mb-1">{t('settings.addressIndex')}</label>
                         <input
@@ -692,52 +653,7 @@ export default function WalletSettings() {
                         {t('settings.segwitBip84')} - {segwitPath}
                       </label>
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      <div>
-                        <label className="block text-xs text-[color:var(--sf-text)]/60 mb-1">{t('settings.account')}</label>
-                        <input
-                          type="number"
-                          min="0"
-                          max="2147483647"
-                          value={segwitConfig.accountIndex}
-                          onChange={(e) => setSegwitConfig({ ...segwitConfig, accountIndex: parseInt(e.target.value) || 0 })}
-                          className="w-full rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-primary)]/5 px-3 py-2 text-sm text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)]"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-[color:var(--sf-text)]/60 mb-1">{t('settings.change')}</label>
-                        <div className="relative" ref={segwitChangeDropdownRef}>
-                          <button
-                            type="button"
-                            onClick={() => setSegwitChangeDropdownOpen((v) => !v)}
-                            className="w-full flex items-center gap-2 rounded-xl bg-[color:var(--sf-surface)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] px-4 py-3 text-sm text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none cursor-pointer"
-                          >
-                            <span className="flex-1 text-left">{CHANGE_OPTIONS.find((o) => o.value === segwitConfig.changeIndex)?.label ?? 'External (0)'}</span>
-                            <ChevronDown size={16} className={`transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${segwitChangeDropdownOpen ? 'rotate-180' : ''}`} />
-                          </button>
-                          {segwitChangeDropdownOpen && (
-                            <div className="absolute left-0 top-full z-50 mt-1 w-full overflow-hidden rounded-xl bg-[color:var(--sf-surface)] backdrop-blur-xl shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
-                              {CHANGE_OPTIONS.map((option) => (
-                                <button
-                                  key={option.value}
-                                  type="button"
-                                  onClick={() => {
-                                    setSegwitConfig({ ...segwitConfig, changeIndex: option.value });
-                                    setSegwitChangeDropdownOpen(false);
-                                  }}
-                                  className={`w-full px-4 py-2.5 text-left text-sm font-medium transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
-                                    segwitConfig.changeIndex === option.value
-                                      ? 'bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]'
-                                      : 'text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10'
-                                  }`}
-                                >
-                                  {option.label}
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      </div>
+                    <div className="grid grid-cols-1 gap-3">
                       <div>
                         <label className="block text-xs text-[color:var(--sf-text)]/60 mb-1">{t('settings.addressIndex')}</label>
                         <input
