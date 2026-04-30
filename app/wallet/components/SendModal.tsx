@@ -299,7 +299,10 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
     if (!isOpen) return;
     const addresses = [account?.taproot?.address, account?.nativeSegwit?.address].filter(Boolean);
     if (addresses.length === 0) return;
-    const rpcPath = network ? `/api/rpc/${network}` : '/api/rpc';
+    // JOURNAL (2026-04-30): on devnet, hit the in-browser harness directly via
+    // localhost:18888 (the fetch interceptor catches it). The /api/rpc/devnet
+    // server proxy can't reach an in-browser indexer and returns 503.
+    const rpcPath = network === 'devnet' ? 'http://localhost:18888' : (network ? `/api/rpc/${network}` : '/api/rpc');
     const isRegtest = network === 'regtest' || network === 'regtest-local' || network === 'subfrost-regtest' || network === 'qubitcoin-regtest';
 
     (async () => {
