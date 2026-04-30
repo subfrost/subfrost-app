@@ -66,3 +66,51 @@ export function computePairedLpAmount(input: PairedAmountInput): string | null {
   const pairedRaw = isPairedBtc ? pairedFrbtcEquiv.dividedBy(wrapMul) : pairedFrbtcEquiv;
   return pairedRaw.dividedBy(1e8).toFixed(8).replace(/\.?0+$/, '');
 }
+
+export interface RemoveLiquidityMinAmountsInput {
+  /** Display LP amount the user wants to burn (e.g. "0.01"). */
+  lpAmountDisplay: string;
+  /** Pool reserves in raw 1e8 sub-units. */
+  reserve0: string;
+  reserve1: string;
+  /** Total LP supply in raw 1e8 sub-units. */
+  lpTotalSupply: string;
+  /** Slippage percent (e.g. "0.5"). */
+  maxSlippagePercent: string;
+}
+
+export interface RemoveLiquidityMinAmounts {
+  /** Display amount of token0 with slippage applied (e.g. "0.123"). */
+  minAmount0: string;
+  /** Display amount of token1 with slippage applied. */
+  minAmount1: string;
+}
+
+/**
+ * Compute slippage-protected min amounts for a remove-liquidity call:
+ *   expected_i = (lpAmount / lpTotalSupply) * reserve_i
+ *   min_i = expected_i * (1 - slippage)
+ *
+ * Throws if pool data is incomplete or supply is zero — callers should abort
+ * the tx rather than silently fall back to min=0 (MEV exposure).
+ */
+export function computeRemoveLiquidityMinAmounts(
+  input: RemoveLiquidityMinAmountsInput,
+): RemoveLiquidityMinAmounts {
+  const supply = new BigNumber(input.lpTotalSupply);
+  if (supply.lte(0)) throw new Error('Pool LP supply is zero — cannot compute slippage');
+  const r0 = new BigNumber(input.reserve0);
+  const r1 = new BigNumber(input.reserve1);
+  if (r0.lte(0) || r1.lte(0)) throw new Error('Pool reserves are zero or unavailable');
+
+  const lpRaw = new BigNumber(input.lpAmountDisplay).multipliedBy(1e8);
+  const slipFactor = new BigNumber(100).minus(input.maxSlippagePercent).dividedBy(100);
+  const expected0 = lpRaw.multipliedBy(r0).dividedBy(supply);
+  const expected1 = lpRaw.multipliedBy(r1).dividedBy(supply);
+  return {
+    minAmount0: expected0.multipliedBy(slipFactor)
+      .integerValue(BigNumber.ROUND_FLOOR).dividedBy(1e8).toString(),
+    minAmount1: expected1.multipliedBy(slipFactor)
+      .integerValue(BigNumber.ROUND_FLOOR).dividedBy(1e8).toString(),
+  };
+}
