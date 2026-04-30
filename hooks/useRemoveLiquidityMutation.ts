@@ -285,12 +285,17 @@ export function useRemoveLiquidityMutation() {
             const approved = await requestConfirmation({
               type: 'removeLiquidity',
               title: 'Confirm Remove Liquidity',
-              lpAmount: (parseFloat(data.lpAmount) / 1e8).toString(),
+              // data.lpAmount is already in display units (what the user typed),
+              // not raw 1e8 sub-units. Don't divide.
+              lpAmount: data.lpAmount,
               poolName: data.poolName || `${token0Sym} / ${token1Sym}`,
-              token0Amount: data.minToken0Amount ? (parseFloat(data.minToken0Amount) / 1e8).toString() : undefined,
+              // Callers pass minAmount0 / minAmount1 (display units) — use those
+              // directly. minToken0Amount / minToken1Amount were leftover legacy
+              // aliases that nothing populated, hence the "~—" placeholders.
+              token0Amount: data.minAmount0 || data.minToken0Amount,
               token0Symbol: token0Sym,
               token0Id: data.token0Id,
-              token1Amount: data.minToken1Amount ? (parseFloat(data.minToken1Amount) / 1e8).toString() : undefined,
+              token1Amount: data.minAmount1 || data.minToken1Amount,
               token1Symbol: token1Sym,
               token1Id: data.token1Id,
               feeRate: data.feeRate,
@@ -303,17 +308,16 @@ export function useRemoveLiquidityMutation() {
             console.log('[RemoveLiquidity] User approved transaction');
           }
 
-          // Sign PSBT — browser wallets sign all input types in a single call,
-          // so we must NOT call signPsbt twice (causes "inputType: sh without redeemScript").
-          let signedPsbtBase64: string;
-          if (isBrowserWallet) {
-            console.log('[RemoveLiquidity] Browser wallet: signing PSBT once (all input types)...');
-            signedPsbtBase64 = await signTaprootPsbt(finalPsbtBase64);
-          } else {
-            console.log('[RemoveLiquidity] Keystore: signing PSBT with SegWit, then Taproot...');
-            signedPsbtBase64 = await signSegwitPsbt(finalPsbtBase64);
-            signedPsbtBase64 = await signTaprootPsbt(signedPsbtBase64);
-          }
+          // Single signing call for both wallet types:
+          //   - Browser: signTaprootPsbt routes through the SDK wallet adapter
+          //     which signs every input (taproot + segwit) in one popup. A
+          //     second call to signSegwitPsbt would re-sign and corrupt the
+          //     PSBT ("inputType: sh without redeemScript").
+          //   - Keystore: taproot-only after our refactor — segwit derivation
+          //     is disabled, signSegwitPsbt throws, and all PSBT inputs are
+          //     already taproot. Direct taproot sign is sufficient.
+          console.log('[RemoveLiquidity] Signing PSBT with taproot key…');
+          const signedPsbtBase64 = await signTaprootPsbt(finalPsbtBase64);
 
           // Finalize and extract transaction
           const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtBase64, { network: btcNetwork });
