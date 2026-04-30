@@ -231,6 +231,49 @@ export async function bootDevnetWithWasms(
   // Install fetch interceptor — all RPC calls now go in-process
   _harness.installFetchInterceptor();
 
+  // JOURNAL (2026-04-30): SDK presign-RBF path uses Bitcoin Core's batch
+  // `sendrawtransactions` (plural) RPC, but the qubitcoin in-browser harness
+  // only supports `sendrawtransaction` (singular). Wrap fetch to translate
+  // batch calls into N singular calls in order. Without this, every
+  // commit/reveal envelope deploy (FIRE Bonding, FIRE Token, etc.) fails
+  // with "Bitcoin method not supported in devnet: sendrawtransactions".
+  if (typeof globalThis !== 'undefined' && globalThis.fetch) {
+    const harnessFetch = globalThis.fetch;
+    const sendrawTranslator: typeof fetch = async (input: any, init: any) => {
+      const url = typeof input === 'string' ? input : (input instanceof URL ? input.toString() : input.url);
+      const method = init?.method?.toUpperCase() ?? 'GET';
+      const isHarness = url?.startsWith('http://localhost:18888') || url?.startsWith('http://127.0.0.1:18888');
+      if (method === 'POST' && isHarness && init?.body) {
+        try {
+          const body = typeof init.body === 'string' ? init.body : await new Response(init.body).text();
+          const parsed = JSON.parse(body);
+          if (parsed.method === 'sendrawtransactions' || parsed.method === 'btc_sendrawtransactions') {
+            const txHexes: string[] = Array.isArray(parsed.params?.[0]) ? parsed.params[0] : parsed.params;
+            const results: string[] = [];
+            for (const txHex of txHexes) {
+              const r = await harnessFetch.call(globalThis, url, {
+                ...init,
+                body: JSON.stringify({ jsonrpc: '2.0', method: 'btc_sendrawtransaction', params: [txHex], id: parsed.id }),
+              });
+              const j: any = await r.json();
+              if (j.error) {
+                return new Response(JSON.stringify({ jsonrpc: '2.0', error: j.error, id: parsed.id }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+              }
+              results.push(j.result);
+            }
+            return new Response(JSON.stringify({ jsonrpc: '2.0', result: results, id: parsed.id }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+          }
+        } catch {
+          // Fall through to harness fetch on parse error
+        }
+      }
+      return harnessFetch.call(globalThis, input, init);
+    };
+    globalThis.fetch = sendrawTranslator;
+    if (globalThis.window) globalThis.window.fetch = sendrawTranslator;
+    console.log('[devnet-boot] Installed sendrawtransactions → sendrawtransaction translator');
+  }
+
   // If we have a saved state, import it instead of mining blocks
   if (savedState) {
     onProgress('Restoring saved state...', 20);
@@ -666,18 +709,26 @@ async function executeCall(
     // WASM PSBT builder is O(n²) and blocks the JS thread indefinitely with both addresses.
     // Taproot has ~5 UTXOs (dust from alkane ops), completes in ~200ms.
     const fromAddresses = fromAddressesOverride ?? [segwit, taproot];
+    // JOURNAL (2026-04-30): when from_addresses is taproot-only (used to avoid
+    // UTXO-bloat hangs in late-boot txns), the SDK's default protect_taproot=true
+    // makes taproot UTXOs ineligible for fees, leaving zero candidates and
+    // failing with "Insufficient funds: have 0 (protect_taproot=true)". When
+    // we're explicitly funding from taproot, we must opt out of the protection.
+    const isTaprootOnly = fromAddresses.length === 1 && fromAddresses[0] === taproot;
+    const options: any = {
+      from_addresses: fromAddresses,
+      change_address: fromAddresses[0] === taproot ? taproot : segwit,
+      alkanes_change_address: taproot,
+      mine_enabled: true,
+    };
+    if (isTaprootOnly) options.protect_taproot = false;
     const result = await provider.alkanesExecuteFull(
       JSON.stringify(toAddresses || [taproot]),
       inputRequirements,
       protostone,
       '1',
       null,
-      JSON.stringify({
-        from_addresses: fromAddresses,
-        change_address: fromAddresses[0] === taproot ? taproot : segwit,
-        alkanes_change_address: taproot,
-        mine_enabled: true,
-      }),
+      JSON.stringify(options),
     );
     const txid = result?.txid || result?.reveal_txid || result?.revealTxid || '';
     _lastTxid = txid;

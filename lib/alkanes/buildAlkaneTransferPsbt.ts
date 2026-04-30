@@ -130,7 +130,11 @@ async function fetchUtxos(address: string, networkName?: string): Promise<Simple
   };
   console.log('[fetchUtxos] RPC request:', JSON.stringify(rpcBody));
 
-  const resp = await fetch('/api/rpc', {
+  // JOURNAL (2026-04-30): on devnet, hit the in-browser harness directly via
+  // localhost:18888 (the fetch interceptor catches it). The /api/rpc server
+  // proxy returns 500 for devnet because it can't reach an in-browser indexer.
+  const rpcUrl = networkName === 'devnet' ? 'http://localhost:18888' : '/api/rpc';
+  const resp = await fetch(rpcUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(rpcBody),
@@ -140,7 +144,22 @@ async function fetchUtxos(address: string, networkName?: string): Promise<Simple
   const json = await resp.json();
   console.log('[fetchUtxos] RPC response:', JSON.stringify(json).slice(0, 500));
 
-  // If JSON-RPC returns empty/null, fall back to REST API
+  // JOURNAL (2026-04-30): on devnet, the in-browser harness JSON-RPC is authoritative.
+  // Skip the REST fallback — `/api/esplora/...?network=devnet` returns 500 because the
+  // server-side proxy can't reach the in-browser indexer. An empty result here means
+  // the address truly has no UTXOs.
+  if (networkName === 'devnet') {
+    const utxos = (Array.isArray(json.result) ? json.result : []).map((u: any) => ({
+      txid: u.txid,
+      vout: u.vout,
+      value: u.value,
+      confirmed: u.status?.confirmed ?? false,
+    }));
+    console.log('[fetchUtxos] Devnet JSON-RPC authoritative, found', utxos.length, 'UTXOs');
+    return utxos;
+  }
+
+  // On mainnet, JSON-RPC sometimes returns empty even when UTXOs exist — fall back to REST.
   if (!json.result || !Array.isArray(json.result) || json.result.length === 0) {
     console.log('[fetchUtxos] JSON-RPC returned empty, trying REST API fallback...');
 
@@ -201,12 +220,17 @@ async function fetchOrdOutputs(address: string, networkName?: string): Promise<O
   console.log('[fetchOrdOutputs] Fetching ord outputs for:', address);
 
   // Determine the RPC endpoint based on network
+  // JOURNAL (2026-04-30): added 'devnet' so the in-browser fetch interceptor
+  // catches this and dispatches to the in-process WASM indexer. Without this
+  // entry, devnet falls through to mainnet and queries a chain that has none
+  // of the user's outpoints, surfacing as "No UTXOs found containing alkane".
   const RPC_ENDPOINTS: Record<string, string> = {
     mainnet: 'https://mainnet.subfrost.io/v4/subfrost',
     testnet: 'https://testnet.subfrost.io/v4/subfrost',
     signet: 'https://signet.subfrost.io/v4/subfrost',
     regtest: 'https://regtest.subfrost.io/v4/subfrost',
     'regtest-local': 'http://localhost:18888',
+    devnet: 'http://localhost:18888',
     'subfrost-regtest': 'https://regtest.subfrost.io/v4/subfrost',
     oylnet: 'https://regtest.subfrost.io/v4/subfrost',
   };
@@ -277,12 +301,17 @@ async function fetchAlkaneOutpoints(address: string, networkName?: string): Prom
   console.log('[fetchAlkaneOutpoints] Fetching alkane outpoints for:', address);
 
   // Determine the RPC endpoint based on network
+  // JOURNAL (2026-04-30): added 'devnet' so the in-browser fetch interceptor
+  // catches this and dispatches to the in-process WASM indexer. Without this
+  // entry, devnet falls through to mainnet and queries a chain that has none
+  // of the user's outpoints, surfacing as "No UTXOs found containing alkane".
   const RPC_ENDPOINTS: Record<string, string> = {
     mainnet: 'https://mainnet.subfrost.io/v4/subfrost',
     testnet: 'https://testnet.subfrost.io/v4/subfrost',
     signet: 'https://signet.subfrost.io/v4/subfrost',
     regtest: 'https://regtest.subfrost.io/v4/subfrost',
     'regtest-local': 'http://localhost:18888',
+    devnet: 'http://localhost:18888',
     'subfrost-regtest': 'https://regtest.subfrost.io/v4/subfrost',
     oylnet: 'https://regtest.subfrost.io/v4/subfrost',
   };
