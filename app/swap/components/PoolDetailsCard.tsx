@@ -10,6 +10,8 @@ type Props = {
   chartTokenId?: string;
   /** When true, the user has selected a BTC/frBTC wrap pair — show wrap info instead of "select a market". */
   isWrapPair?: boolean;
+  /** Render without the outer sf-card wrapper so this can be embedded inside another sf-card panel. */
+  bare?: boolean;
 };
 
 const ALKANODE_RPC_URL = 'https://api.alkanode.com/rpc';
@@ -80,7 +82,7 @@ function getQuoteForPool(pool: PoolSummary): 'usd' | 'btc' {
   return 'usd';
 }
 
-export default function PoolDetailsCard({ pool, chartTokenId, isWrapPair }: Props) {
+export default function PoolDetailsCard({ pool, chartTokenId, isWrapPair, bare }: Props) {
   const { t } = useTranslation();
 
   // Use chartTokenId if provided and valid, otherwise fall back to token0
@@ -97,7 +99,7 @@ export default function PoolDetailsCard({ pool, chartTokenId, isWrapPair }: Prop
   const iframeUrl = symbol ? buildIframeUrl(symbol, quote) : null;
 
   return (
-    <div className="sf-card h-full overflow-hidden">
+    <div className={`${bare ? '' : 'sf-card '}h-full overflow-hidden`}>
       {pool ? (
         <div className="relative h-full min-h-[460px]">
           {isSymbolLoading && (

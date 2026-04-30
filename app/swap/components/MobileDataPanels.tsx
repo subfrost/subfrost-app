@@ -5,52 +5,101 @@ import { ChevronDown } from 'lucide-react';
 import type { PoolSummary } from '../types';
 
 const PoolDetailsCard = lazy(() => import('./PoolDetailsCard'));
+const OrderbookPanel = lazy(() => import('./OrderbookPanel'));
 
 interface Props {
   chartPool?: PoolSummary;
   chartTokenId?: string;
   isWrapPair?: boolean;
+  baseTokenId?: string;
+  quoteTokenId?: string;
+  onPriceSelect?: (price: string) => void;
 }
 
 export default function MobileDataPanels({
   chartPool,
   chartTokenId,
   isWrapPair,
+  baseTokenId,
+  quoteTokenId,
+  onPriceSelect,
 }: Props) {
   const [chartOpen, setChartOpen] = useState(false);
+  const [orderbookOpen, setOrderbookOpen] = useState(false);
 
   return (
-    <div className="sf-panel overflow-visible">
-      <button
-        type="button"
-        onClick={() => setChartOpen(!chartOpen)}
-        className="sf-collapsible-trigger"
-      >
-        <span>{chartOpen ? 'Hide Chart' : 'Show Chart'}</span>
-        <ChevronDown
-          size={14}
-          className={`transition-transform duration-300 ${chartOpen ? 'rotate-180' : ''}`}
-        />
-      </button>
-      <div
-        className={`transition-all duration-300 ease-in-out ${
-          chartOpen
-            ? 'max-h-[600px] opacity-100 overflow-visible'
-            : 'max-h-0 opacity-0 overflow-hidden'
-        }`}
-      >
-        <div className="h-[460px] px-1 pb-3">
-          <Suspense
-            fallback={
-              <div className="animate-pulse h-full bg-[color:var(--sf-primary)]/10 rounded-xl" />
-            }
-          >
-            <PoolDetailsCard
-              pool={chartPool}
-              chartTokenId={chartTokenId}
-              isWrapPair={isWrapPair}
-            />
-          </Suspense>
+    <div className="flex flex-col gap-3">
+      <div className="sf-panel overflow-visible">
+        <button
+          type="button"
+          onClick={() => setChartOpen(!chartOpen)}
+          className="sf-collapsible-trigger"
+        >
+          <span>{chartOpen ? 'Hide Chart' : 'Show Chart'}</span>
+          <ChevronDown
+            size={14}
+            className={`transition-transform duration-300 ${chartOpen ? 'rotate-180' : ''}`}
+          />
+        </button>
+        <div
+          className={`transition-all duration-300 ease-in-out ${
+            chartOpen
+              ? 'max-h-[600px] opacity-100 overflow-visible'
+              : 'max-h-0 opacity-0 overflow-hidden'
+          }`}
+        >
+          <div className="px-1 pb-3">
+            <div className="h-[460px]">
+              <Suspense
+                fallback={
+                  <div className="animate-pulse h-full bg-[color:var(--sf-primary)]/10 rounded-xl" />
+                }
+              >
+                <PoolDetailsCard
+                  pool={chartPool}
+                  chartTokenId={chartTokenId}
+                  isWrapPair={isWrapPair}
+                />
+              </Suspense>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="sf-panel overflow-visible">
+        <button
+          type="button"
+          onClick={() => setOrderbookOpen(!orderbookOpen)}
+          className="sf-collapsible-trigger"
+        >
+          <span>{orderbookOpen ? 'Hide Order Book' : 'Show Order Book'}</span>
+          <ChevronDown
+            size={14}
+            className={`transition-transform duration-300 ${orderbookOpen ? 'rotate-180' : ''}`}
+          />
+        </button>
+        <div
+          className={`transition-all duration-300 ease-in-out ${
+            orderbookOpen
+              ? 'max-h-[600px] opacity-100 overflow-visible'
+              : 'max-h-0 opacity-0 overflow-hidden'
+          }`}
+        >
+          <div className="px-1 pb-3">
+            <div className="h-[460px]">
+              <Suspense
+                fallback={
+                  <div className="animate-pulse h-full bg-[color:var(--sf-primary)]/10 rounded-xl" />
+                }
+              >
+                <OrderbookPanel
+                  baseToken={baseTokenId || '2:0'}
+                  quoteToken={quoteTokenId || '32:0'}
+                  onPriceSelect={onPriceSelect}
+                />
+              </Suspense>
+            </div>
+          </div>
         </div>
       </div>
     </div>

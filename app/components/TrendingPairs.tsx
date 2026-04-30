@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePools } from '@/hooks/usePools';
 import { useAllPoolStats } from '@/hooks/usePoolData';
 import TokenIcon from '@/app/components/TokenIcon';
+import HomeMarketsButton from '@/app/components/HomeMarketsButton';
 import { useTranslation } from '@/hooks/useTranslation';
 
 
@@ -93,7 +94,6 @@ export default function TrendingPairs() {
     <div className="sf-card h-full">
       <div className="sf-card-header">
         <h3 className="text-base font-bold text-[color:var(--sf-text)]">{t('trending.trendingPair')}</h3>
-        <Link href="/swap" className="sf-card-header-action">{t('trending.viewAll')}</Link>
       </div>
       <div className="p-4 flex flex-col gap-3">
         {pairs.map((p) => (
@@ -105,18 +105,20 @@ export default function TrendingPairs() {
             <div className="flex items-center justify-between mb-3">
               <PairBadge a={{ id: p.token0.id, symbol: p.token0.symbol }} b={{ id: p.token1.id, symbol: p.token1.symbol }} />
             </div>
-            <div className="grid grid-cols-3 gap-2">
-              <div>
-                <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">{t('trending.tvl')}</div>
-                <div className="font-bold text-[color:var(--sf-text)]">{formatUsd(p.tvlUsd)}</div>
+            <div className="flex flex-col gap-3">
+              <div className="grid grid-cols-2 gap-2">
+                <div className="text-center">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">{t('trending.volume24h')}</div>
+                  <div className="font-bold text-[color:var(--sf-text)]">{formatUsd(p.vol24hUsd, true)}</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">{t('trending.volume30d')}</div>
+                  <div className="font-bold text-[color:var(--sf-text)]">{formatUsd(p.vol30dUsd, true)}</div>
+                </div>
               </div>
               <div className="text-center">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">{t('trending.volume24h')}</div>
-                <div className="font-bold text-[color:var(--sf-text)]">{formatUsd(p.vol24hUsd, true)}</div>
-              </div>
-              <div className="text-right">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">{t('trending.volume30d')}</div>
-                <div className="font-bold text-[color:var(--sf-text)]">{formatUsd(p.vol30dUsd, true)}</div>
+                <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">{t('trending.tvl')}</div>
+                <div className="font-bold text-[color:var(--sf-text)]">{formatUsd(p.tvlUsd)}</div>
               </div>
             </div>
           </Link>
@@ -124,6 +126,7 @@ export default function TrendingPairs() {
         {pairs.length === 0 && (
           <div className="text-sm text-[color:var(--sf-text)]/60">{t('trending.noPairs')}</div>
         )}
+        <HomeMarketsButton />
       </div>
     </div>
   );
