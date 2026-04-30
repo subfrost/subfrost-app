@@ -1754,7 +1754,20 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
     if (!wallet) {
       throw new Error('Wallet not connected');
     }
-    return wallet.signPsbt(psbtBase64);
+    // JOURNAL (2026-04-30): The wallet shim's signPsbt returns the SDK result's
+    // psbtHex (createWalletViaClient line 95). Callers expect base64 (SendModal
+    // and the mutation hooks all do `bitcoin.Psbt.fromBase64(...)`). Convert to
+    // base64 here so the public signPsbt contract is consistent (browser path
+    // already returns base64 above).
+    const signed = await wallet.signPsbt(psbtBase64);
+    // Heuristic: hex strings have only [0-9a-f]; base64 has /+= and uppercase.
+    // bitcoinjs PSBT magic = 0x70736274ff → first byte 'p' = 0x70 in base64
+    // begins with 'cHNidP...' (the standard base64 prefix). If signed starts
+    // with 'cHNidP', it's already base64 — pass through. Otherwise treat as hex.
+    if (typeof signed === 'string' && signed.startsWith('cHNidP')) {
+      return signed;
+    }
+    return Buffer.from(signed, 'hex').toString('base64');
   }, [wallet, walletAdapter, walletType, browserWalletAddresses, browserWallet]);
 
   // Sign PSBT with taproot inputs (BIP86 derivation)
@@ -1989,10 +2002,34 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
     // X-only pubkey for taproot (remove first byte which is the prefix)
     const xOnlyPubkey = taprootChild.publicKey.slice(1, 33);
 
-    // Tweak the key for taproot key-path spend
-    const tweakedChild = taprootChild.tweak(
-      bitcoin.crypto.taggedHash('TapTweak', xOnlyPubkey)
-    );
+    // JOURNAL (2026-04-30): BIP-341 key-path tweak — must be applied to the
+    // private key (not via bip32.tweak()) AND the privKey must be negated
+    // first if the internal pubkey has odd y-parity. bip32's .tweak() doesn't
+    // handle the parity flip, which causes the resulting tweaked pubkey to
+    // mismatch the on-chain output key for ~50% of all keys (Y-coordinate
+    // ambiguity). bitcoinjs's _signTaprootInput then can't write tapKeySig
+    // because pubkey != outputKey, so the input is left unfinalized and
+    // finalizeAllInputs() throws "No tapleaf script signature provided".
+    //
+    // The fix: if the compressed pubkey has prefix 0x03 (odd y), negate the
+    // privKey before applying the TapTweak. This matches what
+    // ECPair.fromPrivateKey + tweakedKeyPair.signSchnorr does inside the SDK
+    // canonical path, but we apply it correctly here.
+    const ecc = await import('@bitcoinerlab/secp256k1');
+    const ecpairModule = await import('ecpair');
+    const ECPair = ecpairModule.ECPairFactory(ecc as any);
+
+    let privKeyForTweak = taprootChild.privateKey;
+    if (taprootChild.publicKey[0] === 0x03) {
+      // Odd y-parity → negate privKey so the implicit pubkey has even y
+      privKeyForTweak = ecc.privateNegate(privKeyForTweak);
+    }
+    const tapTweak = bitcoin.crypto.taggedHash('TapTweak', xOnlyPubkey);
+    const tweakedPriv = ecc.privateAdd(privKeyForTweak, tapTweak);
+    if (!tweakedPriv) {
+      throw new Error('TapTweak produced an invalid private key (overflow)');
+    }
+    const tweakedKeyPair = ECPair.fromPrivateKey(Buffer.from(tweakedPriv), { network: btcNetwork });
 
     // Parse and sign the PSBT
     const psbt = bitcoin.Psbt.fromBase64(psbtBase64, { network: btcNetwork });
@@ -2000,11 +2037,12 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
     console.log('[signTaprootPsbt] Signing', psbt.inputCount, 'inputs with taproot key');
     console.log('[signTaprootPsbt] Taproot path:', taprootPath);
     console.log('[signTaprootPsbt] X-only pubkey:', Buffer.from(xOnlyPubkey).toString('hex'));
+    console.log('[signTaprootPsbt] Internal y-parity:', taprootChild.publicKey[0] === 0x03 ? 'odd (negated)' : 'even');
 
     // Sign each input with the tweaked taproot key
     for (let i = 0; i < psbt.inputCount; i++) {
       try {
-        psbt.signInput(i, tweakedChild);
+        psbt.signInput(i, tweakedKeyPair);
         console.log(`[signTaprootPsbt] Signed input ${i}`);
       } catch (error) {
         console.warn(`[signTaprootPsbt] Could not sign input ${i}:`, error);
