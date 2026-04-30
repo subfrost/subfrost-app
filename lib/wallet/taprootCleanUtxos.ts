@@ -1,40 +1,17 @@
 /**
  * Clean BTC UTXO discovery for keystore single-address (taproot-only) wallets.
  *
- * The SDK's default `protect_taproot=true` excludes ALL taproot UTXOs from
- * fee-input selection because it can't tell which carry alkanes. For dual-
- * address wallets fees come from segwit, so this is invisible. For single-
- * address keystore wallets where taproot is the only fee source, the
- * protection becomes a denial-of-service.
+ * The SDK's `protect_taproot=true` default leaves single-address keystores
+ * with no fee candidates. This helper enumerates the taproot UTXOs and
+ * certifies each via `alkanes_protorunesbyoutpoint` — the same pattern as
+ * `useAddLiquidityMutation.discoverAlkaneUtxos`. Returned strings are in
+ * `txid:vout:satoshis` form for the SDK's `payment_utxos` option.
  *
- * This helper enumerates the taproot UTXOs and per-outpoint queries
- * `alkanes_protorunesbyoutpoint` (the same authoritative pattern used by
- * `useAddLiquidityMutation.discoverAlkaneUtxos`) to certify each as either
- * carrying alkanes (exclude) or empty (clean for fee use). The clean ones
- * are returned in the `txid:vout:satoshis` format expected by the SDK's
- * `payment_utxos` option.
- *
- * Per-outpoint truth is what `useAddLiquidityMutation` already does. We
- * mirror that here rather than relying on the by-address index, which is
- * historical and reports an outpoint as alkane-touched even after the
- * outpoint has been fully drained.
- *
- * Fail-closed: if a per-outpoint query errors, that specific UTXO is
- * excluded (we don't know if it's clean, so we don't claim it is). If the
- * top-level UTXO fetch fails, we return null and the caller falls back to
- * the SDK's default behavior.
+ * Per-outpoint live state (not the by-address index) ensures a drained
+ * outpoint is correctly classified as clean.
  */
 
-const RPC_ENDPOINTS: Record<string, string> = {
-  mainnet: 'https://mainnet.subfrost.io/v4/subfrost',
-  testnet: 'https://testnet.subfrost.io/v4/subfrost',
-  signet: 'https://signet.subfrost.io/v4/subfrost',
-  regtest: 'https://regtest.subfrost.io/v4/subfrost',
-  'regtest-local': 'http://localhost:18888',
-  devnet: 'http://localhost:18888',
-  'subfrost-regtest': 'https://regtest.subfrost.io/v4/subfrost',
-  oylnet: 'https://regtest.subfrost.io/v4/subfrost',
-};
+import { getRpcUrl } from '@/utils/getConfig';
 
 interface SimpleUtxo {
   txid: string;
@@ -44,7 +21,7 @@ interface SimpleUtxo {
 }
 
 async function fetchAddressUtxos(address: string, networkName?: string): Promise<SimpleUtxo[]> {
-  const rpcUrl = networkName === 'devnet' ? 'http://localhost:18888' : '/api/rpc';
+  const rpcUrl = getRpcUrl(networkName || 'mainnet');
   const resp = await fetch(rpcUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -66,6 +43,8 @@ async function fetchAddressUtxos(address: string, networkName?: string): Promise
     }));
   }
 
+  // On mainnet/testnet, JSON-RPC sometimes returns empty even when UTXOs
+  // exist. Fall back to the REST proxy.
   if (!json.result || !Array.isArray(json.result) || json.result.length === 0) {
     const restUrl = `/api/esplora/address/${address}/utxo${networkName ? `?network=${networkName}` : ''}`;
     const restResp = await fetch(restUrl);
@@ -88,24 +67,25 @@ async function fetchAddressUtxos(address: string, networkName?: string): Promise
   }));
 }
 
+type OutpointCheck = 'clean' | 'has-alkanes' | 'unknown';
+
 /**
- * Live per-outpoint state check via `alkanes_protorunesbyoutpoint`.
- * Returns true iff the outpoint currently holds zero alkane balance.
- *
- * Mirrors the pattern in `useAddLiquidityMutation.discoverAlkaneUtxos`:
- * a non-empty `balance_sheet.cached.balances` array means the outpoint
- * carries alkanes right now, regardless of historical activity.
- *
- * Returns false on any error — fail-closed for the individual outpoint.
+ * Live per-outpoint state via `alkanes_protorunesbyoutpoint`. Distinguishes
+ * three outcomes so the caller can decide how to handle each:
+ *   - 'clean'        : RPC returned an empty/zero balance sheet
+ *   - 'has-alkanes'  : RPC returned a non-zero balance
+ *   - 'unknown'      : RPC errored — caller should fail-open (return null
+ *                      from the top-level helper) rather than silently
+ *                      classify every UTXO as alkane-bearing.
  */
-async function isOutpointClean(
+async function classifyOutpoint(
   txid: string,
   vout: number,
   networkName?: string,
-): Promise<boolean> {
-  const baseUrl = RPC_ENDPOINTS[networkName || 'mainnet'] || RPC_ENDPOINTS.mainnet;
+): Promise<OutpointCheck> {
+  const rpcUrl = getRpcUrl(networkName || 'mainnet');
   try {
-    const resp = await fetch(baseUrl, {
+    const resp = await fetch(rpcUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -116,32 +96,29 @@ async function isOutpointClean(
       }),
     });
     const json = await resp.json();
-    if (json.error) return false;
+    if (json.error) return 'unknown';
     const balances = json?.result?.balance_sheet?.cached?.balances || [];
-    if (balances.length === 0) return true;
-    // Defensive: a drained outpoint can leave zero-amount entries in the
-    // balance sheet. Treat as clean only if every entry's amount is zero.
-    return balances.every((b: any) => !b.amount || BigInt(b.amount) === 0n);
+    if (balances.length === 0) return 'clean';
+    // A drained outpoint may leave zero-amount entries in the balance sheet.
+    const allZero = balances.every((b: any) => !b.amount || BigInt(b.amount) === 0n);
+    return allZero ? 'clean' : 'has-alkanes';
   } catch {
-    return false;
+    return 'unknown';
   }
 }
 
 /**
- * Returns clean BTC-only UTXOs at a single taproot address as
- * `txid:vout:satoshis` strings (the format `payment_utxos` expects in the
- * SDK options). Returns null if the top-level UTXO fetch fails — caller
- * falls through to default SDK behavior.
- *
- * Per-UTXO classification uses `alkanes_protorunesbyoutpoint` (live
- * authoritative state), the same pattern as
- * `useAddLiquidityMutation.discoverAlkaneUtxos`.
+ * Returns clean BTC-only taproot UTXOs as `txid:vout:satoshis` strings.
+ * Returns null if the UTXO fetch fails OR if any per-UTXO classification
+ * is 'unknown' — fail-open prevents a flaky RPC from silently classifying
+ * every UTXO as alkane-bearing and starving the user of fee candidates.
  */
 export async function getCleanTaprootBtcUtxos(
   taprootAddress: string,
   networkName?: string,
 ): Promise<string[] | null> {
   if (!taprootAddress) return null;
+
   let allUtxos: SimpleUtxo[];
   try {
     allUtxos = await fetchAddressUtxos(taprootAddress, networkName);
@@ -156,12 +133,17 @@ export async function getCleanTaprootBtcUtxos(
   const checks = await Promise.all(
     candidates.map(async u => ({
       utxo: u,
-      clean: await isOutpointClean(u.txid, u.vout, networkName),
+      result: await classifyOutpoint(u.txid, u.vout, networkName),
     })),
   );
 
+  if (checks.some(c => c.result === 'unknown')) {
+    console.warn('[getCleanTaprootBtcUtxos] Per-outpoint classification incomplete, falling back to SDK default');
+    return null;
+  }
+
   const clean = checks
-    .filter(c => c.clean)
+    .filter(c => c.result === 'clean')
     .map(c => `${c.utxo.txid}:${c.utxo.vout}:${c.utxo.value}`);
 
   return clean.length > 0 ? clean : null;
