@@ -347,6 +347,7 @@ const STORAGE_KEYS = {
   BROWSER_WALLET_ID: 'subfrost_browser_wallet_id', // Last connected browser wallet ID
   WALLET_TYPE: 'subfrost_wallet_type', // 'keystore' or 'browser'
   BROWSER_WALLET_ADDRESSES: 'subfrost_browser_wallet_addresses', // Cached addresses to avoid re-prompting
+  TAPROOT_ACCOUNT_INDEX: 'subfrost_taproot_account_index', // BIP86 account index for keystore
 } as const;
 
 type WalletContextType = {
@@ -415,6 +416,11 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
   const [isInitializing, setIsInitializing] = useState(true);
   const [wallet, setWallet] = useState<AlkanesWallet | null>(null);
   const [hasStoredKeystore, setHasStoredKeystore] = useState(false);
+  const [taprootAccountIndex, setTaprootAccountIndex] = useState(() =>
+    typeof localStorage !== 'undefined'
+      ? parseInt(localStorage.getItem(STORAGE_KEYS.TAPROOT_ACCOUNT_INDEX) || '0', 10) || 0
+      : 0
+  );
 
   // Browser wallet state
   const [browserWallet, setBrowserWallet] = useState<ConnectedWallet | null>(null);
@@ -568,6 +574,16 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
 
     initializeWallet();
   }, [network, sdkInitialized, loadWallet, getWalletConnector]);
+
+  // Listen for account index changes from WalletSettings
+  useEffect(() => {
+    const handler = () => {
+      const idx = parseInt(localStorage.getItem(STORAGE_KEYS.TAPROOT_ACCOUNT_INDEX) || '0', 10) || 0;
+      setTaprootAccountIndex(idx);
+    };
+    window.addEventListener('derivation-changed', handler);
+    return () => window.removeEventListener('derivation-changed', handler);
+  }, []);
 
   // Load keystore wallet into SDK provider when sdkInitialized becomes true
   // (separate from main init so it doesn't re-trigger browser wallet reconnect)
@@ -736,7 +752,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
     }
 
     let segwitInfo = { address: '', publicKey: '' };
-    let taprootInfo = wallet.deriveAddress(AddressType.P2TR, 0, 0);
+    let taprootInfo = wallet.deriveAddress(AddressType.P2TR, taprootAccountIndex, 0);
 
     // No coinType override needed — createWalletViaClient uses AlkanesClient.withMnemonic
     // which correctly derives coinType=1 for regtest/devnet, coinType=0 for mainnet.
@@ -772,7 +788,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       },
       zcash: zcashInfo || undefined,
     };
-  }, [wallet, browserWallet, walletType, browserWalletAddresses, network]);
+  }, [wallet, browserWallet, walletType, browserWalletAddresses, network, taprootAccountIndex]);
 
   // Build account structure
   const account: Account = useMemo(() => {

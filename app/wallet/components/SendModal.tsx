@@ -111,6 +111,7 @@ import { X, Send, AlertCircle, CheckCircle, Loader2, ChevronDown, Coins, Externa
 import { useWallet } from '@/context/WalletContext';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { useTransactionConfirm } from '@/context/TransactionConfirmContext';
+import { useNotification } from '@/context/NotificationContext';
 import { useEnrichedWalletData } from '@/hooks/useEnrichedWalletData';
 import { useSandshrewProvider } from '@/hooks/useSandshrewProvider';
 import TokenIcon from '@/app/components/TokenIcon';
@@ -254,8 +255,43 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
   const { provider, isInitialized } = useAlkanesSDK();
   const alkaneProvider = useSandshrewProvider();
   const { requestConfirmation } = useTransactionConfirm();
+  const { showError } = useNotification();
   const { t } = useTranslation();
   const { balances, refresh } = useEnrichedWalletData();
+
+  // Translate raw broadcast/signing errors into user-readable toast messages.
+  // Mirrors SwapShell.humanizeError for consistent error UX across the app.
+  const humanizeError = (raw: string): string => {
+    if (!raw) return t('send.failedBroadcast');
+    if (raw.includes('User rejected') || raw.includes('User denied') || raw.includes('user rejected') || raw.includes('cancelled') || raw.includes('Transaction rejected')) {
+      return t('errors.userCancelled');
+    }
+    if (raw.includes('Insufficient alkanes')) {
+      const match = raw.match(/need (\d+) of ([\d:]+), have (\d+)/);
+      if (match) {
+        const [, needed, tokenId, available] = match;
+        return t('errors.insufficientBalance', {
+          tokenId,
+          needed: (Number(needed) / 1e8).toFixed(4),
+          available: (Number(available) / 1e8).toFixed(4),
+        });
+      }
+    }
+    if (raw.includes('Insufficient funds') || raw.includes('insufficient funds')) {
+      const fundsMatch = raw.match(/need (\d+) sats/);
+      const needed = fundsMatch ? (Number(fundsMatch[1]) / 1e8).toFixed(6) : null;
+      return needed
+        ? t('errors.insufficientBtcWithAmount', { needed })
+        : t('errors.insufficientBtcGeneric');
+    }
+    if (raw.includes('dust') || raw.includes('dust limit')) {
+      return t('errors.dustAmount');
+    }
+    if (raw.includes('timeout') || raw.includes('Timeout')) {
+      return t('errors.requestTimeout');
+    }
+    return raw;
+  };
 
   // Fetch UTXOs via esplora when modal opens.
   const [esploraUtxos, setEsploraUtxos] = useState<any[]>([]);
@@ -999,9 +1035,10 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
     } catch (err: any) {
       console.error('[SendModal] Transaction failed:', err);
 
-      let errorMessage = err.message || t('send.failedBroadcast');
-
-      setError(errorMessage);
+      const rawMessage = err?.message || String(err) || t('send.failedBroadcast');
+      const friendlyMessage = humanizeError(rawMessage);
+      showError(friendlyMessage);
+      setError(friendlyMessage);
       // Go back to input step to allow re-selection of UTXOs
       // This prevents looping between confirm and error states
       setSelectedUtxos(new Set());
@@ -1239,8 +1276,10 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
     } catch (err: any) {
       console.error('[SendModal] Alkane transfer failed:', err);
 
-      let errorMessage = err.message || t('send.failedSendAlkanes');
-      setError(errorMessage);
+      const rawMessage = err?.message || String(err) || t('send.failedSendAlkanes');
+      const friendlyMessage = humanizeError(rawMessage);
+      showError(friendlyMessage);
+      setError(friendlyMessage);
       setStep('input');
     } finally {
       setIsProcessing(false);

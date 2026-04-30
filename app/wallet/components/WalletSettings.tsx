@@ -244,8 +244,12 @@ export default function WalletSettings() {
     // Save network to localStorage
     localStorage.setItem('subfrost_selected_network', network);
 
+    // Save taproot account index
+    localStorage.setItem('subfrost_taproot_account_index', String(taprootConfig.accountIndex));
+
     // Dispatch custom event to notify other components (same tab)
     window.dispatchEvent(new CustomEvent('network-changed', { detail: network }));
+    window.dispatchEvent(new CustomEvent('derivation-changed'));
 
     // Update initial network to reflect saved state
     setInitialNetwork(network);

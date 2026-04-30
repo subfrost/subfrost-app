@@ -36,6 +36,24 @@ interface EnrichedTransaction {
 // Helpers
 // ---------------------------------------------------------------------------
 
+/**
+ * Newest-first comparator. Unconfirmed (mempool) txs come first, then
+ * confirmed txs sorted by blockHeight desc with blockTime as tiebreaker.
+ * blockHeight is the authoritative key because the espo paginated endpoint
+ * sometimes returns confirmed txs with an undefined blockTime.
+ */
+export function sortByRecency(
+  a: { confirmed?: boolean; blockHeight?: number; blockTime?: number },
+  b: { confirmed?: boolean; blockHeight?: number; blockTime?: number },
+): number {
+  const aPending = !a.confirmed;
+  const bPending = !b.confirmed;
+  if (aPending !== bPending) return aPending ? -1 : 1;
+  const heightDiff = (b.blockHeight || 0) - (a.blockHeight || 0);
+  if (heightDiff !== 0) return heightDiff;
+  return (b.blockTime || 0) - (a.blockTime || 0);
+}
+
 function mapToObject(item: any): any {
   if (item instanceof Map) {
     const obj: any = {};
@@ -118,19 +136,33 @@ export async function fetchTxPage(
 ): Promise<TxPage> {
   const results = await Promise.all(
     addresses.filter(Boolean).map(async (addr) => {
-      // Primary: espo paginated endpoint
+      // Primary: espo paginated endpoint (confirmed txs only)
       try {
         const raw = await provider.espoGetAddressTransactions(addr, page, limit, null);
         const parsed = typeof raw === 'string' ? JSON.parse(raw) : mapToObject(raw);
+        if (parsed?.error) throw new Error(parsed.error.message || 'espo returned error');
         const txList =
           parsed?.transactions ||
           parsed?.data?.transactions ||
           parsed?.data ||
           parsed?.result ||
           (Array.isArray(parsed) ? parsed : []);
-        return Array.isArray(txList) ? txList : [];
+        if (Array.isArray(txList) && txList.length > 0) {
+          // Espo returns confirmed only. On page 1, also fetch mempool txs.
+          if (page === 1) {
+            try {
+              const memRaw = await provider.esploraGetAddressTxsMempool(addr);
+              const memTxs = typeof memRaw === 'string' ? JSON.parse(memRaw) : mapToObject(memRaw);
+              if (Array.isArray(memTxs) && memTxs.length > 0) {
+                return [...memTxs, ...txList];
+              }
+            } catch { /* mempool fetch optional */ }
+          }
+          return txList;
+        }
+        if (page > 1) return [];
       } catch (e) {
-        console.warn(`[txHistory] espo paginated failed for ${addr}:`, e);
+        console.warn(`[txHistory] espo paginated failed for ${addr.slice(0,8)}:`, e);
       }
 
       // Fallback: full fetch + manual slice
@@ -157,7 +189,7 @@ export async function fetchTxPage(
       }
     }
   }
-  transactions.sort((a, b) => (b.blockTime || 0) - (a.blockTime || 0));
+  transactions.sort(sortByRecency);
 
   // If any address returned a full page, there's likely more
   const hasMore = results.some((r) => r.length >= limit);
