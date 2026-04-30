@@ -31,8 +31,11 @@ import { useBridgeEthMutation } from "@/hooks/useBridgeEthMutation";
 import { useBridgeZecMutation } from "@/hooks/useBridgeZecMutation";
 import { useFrbtcPremium } from "@/hooks/useFrbtcPremium";
 import { FRBTC_WRAP_FEE_PER_1000 } from "@/constants/alkanes";
-import { computePairedLpAmount } from "@/lib/alkanes/liquidity-math";
+import { computePairedLpAmount, computeRemoveLiquidityMinAmounts } from "@/lib/alkanes/liquidity-math";
 import { useAddLiquidityMutation } from "@/hooks/useAddLiquidityMutation";
+import { useAtomicWrapSwapMutation } from "@/hooks/useAtomicWrapSwapMutation";
+import { useAtomicWrapAddLiquidityMutation } from "@/hooks/useAtomicWrapAddLiquidityMutation";
+import { useMatchedLpPool } from "@/hooks/useMatchedLpPool";
 import { useTokenNames, resolveTokenDisplay } from "@/hooks/useTokenNames";
 import { useRemoveLiquidityMutation } from "@/hooks/useRemoveLiquidityMutation";
 import { useLPPositions } from "@/hooks/useLPPositions";
@@ -222,6 +225,8 @@ export default function SwapShell() {
   const { bridgeToZec } = useBridgeZecMutation();
   const addLiquidityMutation = useAddLiquidityMutation();
   const removeLiquidityMutation = useRemoveLiquidityMutation();
+  const { executeAtomicSwap } = useAtomicWrapSwapMutation();
+  const { executeAtomicAddLiquidity } = useAtomicWrapAddLiquidityMutation();
   const { data: premiumData } = useFrbtcPremium();
 
   // Wallet/config
@@ -1172,7 +1177,8 @@ export default function SwapShell() {
 
     // BTC → Token swap: Atomic wrap+swap in a single transaction.
     // Two chained protostones: p0 wraps BTC→frBTC, p1 swaps frBTC→Token.
-    // Verified in alkanes-rs/crates/alkanes-integ-tests/tests/atomic_wrap_swap.rs
+    // Implementation lives in useAtomicWrapSwapMutation; this branch only
+    // handles UI flow + error formatting.
     if (isBtcToTokenSwap) {
       if (!quote || !quote.poolId) {
         console.error('[SWAP] BTC → Token swap requires quote with poolId');
@@ -1181,47 +1187,16 @@ export default function SwapShell() {
       }
 
       try {
-        const btcAmount = fromAmount;
         setSwapFlowStep({ type: 'swapping' });
-
-        // Get signer address for wrap (BTC destination)
-        const { getSignerAddressDynamic } = await import('@/lib/alkanes/helpers');
-        const signerAddress = await getSignerAddressDynamic(network);
-
-        // Build atomic wrap+swap protostones
-        const { buildAtomicWrapSwapProtostones } = await import('@/lib/alkanes/builders');
-        const wrapFeePerThousand = premiumData?.wrapFeePerThousand ?? FRBTC_WRAP_FEE_PER_1000;
-        const btcSats = new BigNumber(btcAmount).multipliedBy(1e8).integerValue(BigNumber.ROUND_FLOOR);
-        const frbtcAfterFee = btcSats.multipliedBy(1000 - wrapFeePerThousand).dividedBy(1000)
-          .integerValue(BigNumber.ROUND_FLOOR).toString();
-
-        const currentBlock = parseInt(localStorage.getItem('subfrost_last_block_height') || '0', 10);
-        const deadline = (currentBlock + deadlineBlocks).toString();
-        const protostones = buildAtomicWrapSwapProtostones({
-          factoryId: config.ALKANE_FACTORY_ID,
+        const result = await executeAtomicSwap({
+          btcAmount: fromAmount,
           buyTokenId: toToken.id,
-          sellAmount: frbtcAfterFee,
-          minOutput: quote.minimumReceived || '1',
-          deadline,
-        });
-
-        // Execute: v0=signer (BTC), v1=user (swap output)
-        const primaryAddress = address;
-        const result = await swapMutation.mutateAsync({
-          sellCurrency: 'btc',
-          buyCurrency: toToken.id,
-          direction: 'sell',
-          sellAmount: btcSats.toString(),
-          buyAmount: quote.buyAmount,
-          maxSlippage,
-          feeRate: fee.feeRate,
           poolId: quote.poolId,
+          quoteBuyAmount: quote.buyAmount,
+          minimumReceived: quote.minimumReceived || '1',
+          maxSlippage,
           deadlineBlocks,
-          // Override protostones and addresses for atomic wrap+swap
-          overrideProtostones: protostones,
-          overrideToAddresses: [signerAddress, primaryAddress!],
-          overrideInputRequirements: `B:${btcSats.toString()}:v0`,
-        } as any);
+        });
 
         if (result?.success && result.transactionId) {
           setSwapFlowStep({ type: 'complete', swapTxId: result.transactionId });
@@ -1562,11 +1537,6 @@ export default function SwapShell() {
         : undefined;
 
       if (isAtomicWrapAdd) {
-        if (!FRBTC_ALKANE_ID) {
-          showSwapError(t('errors.btcRequiresWrap'));
-          return;
-        }
-
         // Resolve which side is BTC and which is the alkane partner.
         const btcAmount = btcOnSide0 ? poolToken0Amount : poolToken1Amount;
         const tokenAmount = btcOnSide0 ? poolToken1Amount : poolToken0Amount;
@@ -1576,57 +1546,14 @@ export default function SwapShell() {
           return;
         }
 
-        // Convert BTC → sats, then apply wrap fee to compute frBTC amount that
-        // actually arrives at addLiquidity. amount_a_min uses (1 - slippage).
-        const btcSats = new BigNumber(btcAmount).multipliedBy(1e8).integerValue(BigNumber.ROUND_FLOOR);
-        const wrapFeePerThousand = premiumData?.wrapFeePerThousand ?? FRBTC_WRAP_FEE_PER_1000;
-        const frbtcDesired = btcSats.multipliedBy(1000 - wrapFeePerThousand).dividedBy(1000)
-          .integerValue(BigNumber.ROUND_FLOOR);
-        const tokenAmountAlks = new BigNumber(tokenAmount).multipliedBy(1e8)
-          .integerValue(BigNumber.ROUND_FLOOR);
-
-        const slippageFactor = new BigNumber(100).minus(maxSlippage).dividedBy(100);
-        const frbtcMin = frbtcDesired.multipliedBy(slippageFactor)
-          .integerValue(BigNumber.ROUND_FLOOR);
-        const tokenMin = tokenAmountAlks.multipliedBy(slippageFactor)
-          .integerValue(BigNumber.ROUND_FLOOR);
-
-        const currentBlock = parseInt(localStorage.getItem('subfrost_last_block_height') || '0', 10);
-        const deadline = (currentBlock + (deadlineBlocks || 5)).toString();
-
-        const { getSignerAddressDynamic } = await import('@/lib/alkanes/helpers');
-        const signerAddress = await getSignerAddressDynamic(network);
-
-        const { buildAtomicWrapAddLiquidityProtostones } = await import('@/lib/alkanes/builders');
-        const protostones = buildAtomicWrapAddLiquidityProtostones({
-          factoryId: config.ALKANE_FACTORY_ID,
-          tokenA: FRBTC_ALKANE_ID,
-          tokenB: tokenSide.id,
-          amountADesired: frbtcDesired.toString(),
-          amountBDesired: tokenAmountAlks.toString(),
-          amountAMin: frbtcMin.toString(),
-          amountBMin: tokenMin.toString(),
-          deadline,
-        });
-
-        const inputRequirements = `B:${btcSats.toString()}:v0,${tokenSide.id.replace(':', ':')}:${tokenAmountAlks.toString()}`;
-        // (the .replace is a no-op; kept for readability — tokenSide.id is already block:tx)
-        const primaryAddress = address;
-
-        const result = await addLiquidityMutation.mutateAsync({
-          token0Id: FRBTC_ALKANE_ID,
-          token1Id: tokenSide.id,
-          token0Amount: new BigNumber(frbtcDesired).dividedBy(1e8).toString(),
-          token1Amount: tokenAmount,
-          token0Decimals: 8,
-          token1Decimals: 8,
+        // Implementation lives in useAtomicWrapAddLiquidityMutation.
+        const result = await executeAtomicAddLiquidity({
+          tokenSideId: tokenSide.id,
+          btcAmount,
+          tokenAmount,
           maxSlippage,
-          feeRate: fee.feeRate,
           deadlineBlocks,
           poolId,
-          overrideProtostones: protostones,
-          overrideToAddresses: [signerAddress, primaryAddress!],
-          overrideInputRequirements: inputRequirements,
         });
 
         if (result?.success && result.transactionId) {
@@ -1685,28 +1612,27 @@ export default function SwapShell() {
         return;
       }
 
-      // Compute slippage-protected min amounts: expected = (lpAmount /
-      // lpTotalSupply) * reserve, then min = expected * (1 - slippage).
-      // Aborts if pool data is missing — proceeding with min=0 would expose
-      // the user to MEV / sandwich without warning.
+      // Compute slippage-protected min amounts. Aborts if pool data is missing
+      // — proceeding with min=0 would expose the user to MEV / sandwich.
       const removePool = markets.find(p => p.id === selectedLPPosition.id);
       if (!removePool?.token0Amount || !removePool?.token1Amount || !removePool?.lpTotalSupply) {
         showSwapError('Pool reserves or LP total supply unavailable — refresh and retry');
         return;
       }
-      const supply = new BigNumber(removePool.lpTotalSupply);
-      if (supply.lte(0)) {
-        showSwapError('Pool LP supply is zero — cannot compute slippage');
+      let minAmount0: string;
+      let minAmount1: string;
+      try {
+        ({ minAmount0, minAmount1 } = computeRemoveLiquidityMinAmounts({
+          lpAmountDisplay: removeAmount,
+          reserve0: removePool.token0Amount,
+          reserve1: removePool.token1Amount,
+          lpTotalSupply: removePool.lpTotalSupply,
+          maxSlippagePercent: maxSlippage,
+        }));
+      } catch (e: any) {
+        showSwapError(e?.message || 'Failed to compute slippage');
         return;
       }
-      const lpRaw = new BigNumber(removeAmount).multipliedBy(1e8);
-      const slipFactor = new BigNumber(100).minus(maxSlippage).dividedBy(100);
-      const expected0 = lpRaw.multipliedBy(removePool.token0Amount).dividedBy(supply);
-      const expected1 = lpRaw.multipliedBy(removePool.token1Amount).dividedBy(supply);
-      const minAmount0 = expected0.multipliedBy(slipFactor)
-        .integerValue(BigNumber.ROUND_FLOOR).dividedBy(1e8).toString();
-      const minAmount1 = expected1.multipliedBy(slipFactor)
-        .integerValue(BigNumber.ROUND_FLOOR).dividedBy(1e8).toString();
 
       const result = await removeLiquidityMutation.mutateAsync({
         lpTokenId: selectedLPPosition.id,
@@ -2153,21 +2079,10 @@ export default function SwapShell() {
     return null;
   };
 
-  // Find the actual pool that matches the user-selected LP token pair.
-  // Required because `selectedPool` can be stale (set by pool list click or
-  // swap inheritance) while the user changes tokens in the LP selectors.
-  // Returns null if no pool exists for the chosen pair (e.g. BTC + frBTC).
-  const matchedLpPool = useMemo(() => {
-    if (!poolToken0 || !poolToken1) return null;
-    const equivalentId = (id: string) => (id === 'btc' ? FRBTC_ALKANE_ID : id);
-    const a = equivalentId(poolToken0.id);
-    const b = equivalentId(poolToken1.id);
-    if (a === b) return null; // BTC + frBTC is not a valid pair
-    return markets.find(p =>
-      (p.token0.id === a && p.token1.id === b) ||
-      (p.token0.id === b && p.token1.id === a)
-    ) || null;
-  }, [poolToken0, poolToken1, markets, FRBTC_ALKANE_ID]);
+  // Find the live pool for the user's UI pair (BTC ≡ frBTC). Stale
+  // selectedPool can disagree with whatever the user picked in the LP
+  // selectors, so we compute the match fresh from the markets list.
+  const matchedLpPool = useMatchedLpPool(poolToken0, poolToken1, markets, FRBTC_ALKANE_ID);
 
   // Auto-calculate the paired LP amount based on the matched pool's reserve
   // ratio. Pure math is in lib/alkanes/liquidity-math.ts.

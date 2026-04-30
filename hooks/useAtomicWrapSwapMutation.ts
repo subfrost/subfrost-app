@@ -36,7 +36,7 @@ export interface AtomicWrapSwapParams {
   /** Buy token alkane id (e.g. "2:0" for DIESEL). */
   buyTokenId: string;
   /** Pool id from the swap quote. */
-  poolId?: string;
+  poolId?: { block: string | number; tx: string | number };
   /** Quote's expected buy amount in sub-units. Used by mutation for display. */
   quoteBuyAmount: string;
   /** Quote's minimum-received in sub-units (post-slippage). */
