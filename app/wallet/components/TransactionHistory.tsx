@@ -89,7 +89,7 @@ const TransactionHistory = forwardRef<TransactionHistoryHandle>(function Transac
 
   return (
     <div>
-      <div ref={scrollRef} className="space-y-2 max-h-[308px] lg:max-h-[752px] overflow-y-auto pr-1">
+      <div ref={scrollRef} className="space-y-2 max-h-[308px] lg:max-h-[752px] overflow-y-auto pr-1 no-scrollbar">
         {transactions.length > 0 ? (
           <>
             {transactions.map((tx) => (

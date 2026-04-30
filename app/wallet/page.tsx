@@ -7,6 +7,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Wallet, Activity, Settings, BarChart2, Send, QrCode, Copy, Check, RefreshCw } from 'lucide-react';
 import { useTranslation } from '@/hooks/useTranslation';
 import AddressAvatar from '@/app/components/AddressAvatar';
+import AccountSwitcher from '@/app/components/AccountSwitcher';
 import BitcoinBalanceCard from './components/BitcoinBalanceCard';
 import AlkanesBalancesCard from './components/AlkanesBalancesCard';
 import UTXOManagement from './components/UTXOManagement';
@@ -133,7 +134,7 @@ export default function WalletDashboardPage() {
             )}
             {address && (
               <div className="flex items-center gap-3">
-                <AddressAvatar address={address} size={24} className="shrink-0" />
+                <AccountSwitcher size={24} className="shrink-0" />
                 <span className="text-xs sm:text-sm text-[color:var(--sf-text)]/60 whitespace-nowrap">
                   {t('walletDash.taproot')}
                 </span>
