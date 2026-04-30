@@ -17,9 +17,9 @@ import * as path from 'path';
 // Shared builder imports (pure functions, no WASM)
 import {
   buildCreateNewPoolProtostone,
-  buildAddLiquidityToPoolProtostone,
+  buildFactoryAddLiquidityProtostones,
   buildAddLiquidityInputRequirements,
-  buildRemoveLiquidityProtostone,
+  buildFactoryBurnProtostone,
   buildRemoveLiquidityInputRequirements,
 } from '@/lib/alkanes/builders';
 import { POOL_OPCODES } from '@/lib/alkanes/constants';
@@ -96,51 +96,23 @@ describe('CreateNewPool two-protostone pattern', () => {
 // 2. Two-Protostone Pattern — AddLiquidity to Existing Pool
 // ---------------------------------------------------------------------------
 
-describe('AddLiquidity to existing pool', () => {
-  it('should use pool opcode 1 (AddLiquidity) in p1', () => {
-    const result = buildAddLiquidityToPoolProtostone({
-      poolId: POOL_ID,
-      token0Id: DIESEL_ID,
-      token1Id: FRBTC_ID,
-      amount0: '1000',
-      amount1: '500',
+describe('AddLiquidity to existing pool via factory router (opcode 11)', () => {
+  const FACTORY_ID = '4:65498';
+  it('should produce a single protostone with factory opcode 11 and full Uniswap params', () => {
+    const result = buildFactoryAddLiquidityProtostones({
+      factoryId: FACTORY_ID,
+      tokenA: DIESEL_ID,
+      tokenB: FRBTC_ID,
+      amountADesired: '1000',
+      amountBDesired: '500',
+      amountAMin: '995',
+      amountBMin: '498',
+      deadline: '1000',
     });
-    // p1 cellpack: [pool_block,pool_tx,1]
-    expect(result).toContain(`[${POOL_ID.block},${POOL_ID.tx},${POOL_OPCODES.AddLiquidity}]:v0:v0`);
-  });
-
-  it('should include two edicts in p0 for both tokens', () => {
-    const result = buildAddLiquidityToPoolProtostone({
-      poolId: POOL_ID,
-      token0Id: DIESEL_ID,
-      token1Id: FRBTC_ID,
-      amount0: '1000',
-      amount1: '500',
-    });
-    expect(result).toContain('[2:0:1000:p1]');
-    expect(result).toContain('[32:0:500:p1]');
-  });
-
-  it('should accept string pool IDs', () => {
-    const result = buildAddLiquidityToPoolProtostone({
-      poolId: { block: '2', tx: '6' },
-      token0Id: DIESEL_ID,
-      token1Id: FRBTC_ID,
-      amount0: '100',
-      amount1: '50',
-    });
-    expect(result).toContain('[2,6,1]:v0:v0');
-  });
-
-  it('should accept numeric pool IDs', () => {
-    const result = buildAddLiquidityToPoolProtostone({
-      poolId: { block: 2, tx: 6 },
-      token0Id: DIESEL_ID,
-      token1Id: FRBTC_ID,
-      amount0: '100',
-      amount1: '50',
-    });
-    expect(result).toContain('[2,6,1]:v0:v0');
+    // cellpack: [factory_block,factory_tx,11,ta_b,ta_t,tb_b,tb_t,a_des,b_des,a_min,b_min,deadline]
+    expect(result).toBe('[4,65498,11,2,0,32,0,1000,500,995,498,1000]:v0:v0');
+    // Auto-allocation handles input alkanes — no manual edicts required.
+    expect(result).not.toContain(':p1]');
   });
 });
 
@@ -219,27 +191,20 @@ describe('Amount conversion for liquidity', () => {
 // 5. Remove Liquidity
 // ---------------------------------------------------------------------------
 
-describe('Remove liquidity protostone', () => {
-  it('should include LP edict pointing to p1', () => {
-    const result = buildRemoveLiquidityProtostone({
-      lpTokenId: '2:6',
-      lpAmount: '10000',
-      minAmount0: '500',
-      minAmount1: '250',
+describe('Remove liquidity protostone (factory opcode 12)', () => {
+  it('should produce single-protostone factory.Burn cellpack', () => {
+    const result = buildFactoryBurnProtostone({
+      factoryId: '4:65498',
+      tokenA: '2:0',
+      tokenB: '32:0',
+      liquidity: '10000',
+      amountAMin: '500',
+      amountBMin: '250',
       deadline: '2000',
     });
-    expect(result).toContain('[2:6:10000:p1]');
-  });
-
-  it('should use pool opcode 2 (RemoveLiquidity) in p1', () => {
-    const result = buildRemoveLiquidityProtostone({
-      lpTokenId: '2:6',
-      lpAmount: '10000',
-      minAmount0: '500',
-      minAmount1: '250',
-      deadline: '2000',
-    });
-    expect(result).toContain('[2,6,2,500,250,2000]');
+    expect(result).toBe('[4,65498,12,2,0,32,0,10000,500,250,2000]:v0:v0');
+    // No edict-only protostone — LP tokens auto-allocate.
+    expect(result).not.toContain(':p1]');
   });
 
   it('should build correct remove liquidity input requirements', () => {
@@ -317,7 +282,7 @@ describe('Pool existence check in useAddLiquidityMutation', () => {
   });
 
   it('should use AddLiquidity when pool exists', () => {
-    expect(src).toContain('buildAddLiquidityToPoolProtostone');
+    expect(src).toContain('buildFactoryAddLiquidityProtostones');
   });
 
   it('should fall back to DEFAULT_POOL_ID when factory returns no pool', () => {

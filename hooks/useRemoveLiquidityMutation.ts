@@ -28,60 +28,21 @@
  * Uses `@alkanes/ts-sdk/wasm` aliased to `lib/oyl/alkanes/` (see next.config.mjs).
  * If "Insufficient alkanes" errors occur, sync WASM: see docs/SDK_DEPENDENCY_MANAGEMENT.md
  *
- * ## CRITICAL IMPLEMENTATION NOTES (January 2026)
+ * ## Implementation
  *
- * ### Why We Call the Pool Directly (Not the Factory)
+ * Uses **factory router opcode 12 (Burn)** — same Uniswap-style pattern as
+ * factory.AddLiquidity. Single-protostone cellpack:
+ *   [factory_block, factory_tx, 12, ta_block, ta_tx, tb_block, tb_tx,
+ *    liquidity, amount_a_min, amount_b_min, deadline]
  *
- * The app's constants/index.ts defines FACTORY_OPCODES including opcode 12 (Burn),
- * but this opcode DOES NOT EXIST in the deployed factory contract. The actual
- * factory only has opcodes 0-3:
- *   - 0: InitPool
- *   - 1: CreateNewPool
- *   - 2: FindExistingPoolId
- *   - 3: GetAllPools
+ * LP tokens auto-allocate to the protostone. The factory finds the matching
+ * pool by `(token_a, token_b)`, burns the supplied LP, and enforces slippage
+ * via `amount_*_min` plus the deadline. No manual edicts.
  *
- * The POOL contract has the actual operation opcodes:
- *   - 0: Init
- *   - 1: AddLiquidity (mint LP tokens)
- *   - 2: RemoveLiquidity (burn LP tokens) <-- WE USE THIS
- *   - 3: Swap
- *   - 4: SimulateSwap
+ * Source: fujin-factory/src/lib.rs:75 (#[opcode(12)] Burn).
  *
- * ### The Two-Protostone Pattern
- *
- * For RemoveLiquidity to work, LP tokens must appear in the pool's `incomingAlkanes`.
- * This is how the indexer (poolburn.rs) detects burn events:
- *   1. Looks for delegatecall to pool with inputs[0] == 0x2 (opcode 2)
- *   2. Checks incomingAlkanes for LP tokens matching the pool ID
- *
- * To achieve this, we use TWO protostones:
- *   - p0: Edict [lp_block:lp_tx:amount:p1] - transfers LP tokens to p1
- *   - p1: Cellpack [pool_block,pool_tx,2,...] - calls pool with opcode 2
- *
- * The edict in p0 sends LP tokens TO p1, making them available as incomingAlkanes
- * for the pool call.
- *
- * ### Previous Broken Implementation
- *
- * The old code tried to call factory opcode 12:
- *   Protostone: [4,0,12,2,3,amount,min0,min1,deadline]:v0:v0
- *
- * This transaction would broadcast and confirm, but LP tokens were NOT burned
- * because factory opcode 12 doesn't exist - the factory just ignored the call.
- *
- * ### Working Implementation
- *
- * Current code calls pool directly with two-protostone pattern:
- *   Protostone: [2:3:amount:p1]:v0:v0,[2,3,2,min0,min1,deadline]:v0:v0
- *
- * This ensures LP tokens flow into the pool call and get properly burned.
- *
- * @see alkanes-rs-dev/crates/alkanes-cli-common/src/alkanes/amm.rs - Pool opcodes
- * @see alkanes-rs-dev/crates/alkanes-contract-indexer/src/helpers/poolburn.rs - Burn detection
- * @see alkanes-rs-dev/docs/FLEXIBLE-PROTOSTONE-PARSING.md - Protostone format docs
- * @see useSwapMutation.ts - Same two-protostone pattern for swaps
- * @see useAddLiquidityMutation.ts - Uses factory routing (different pattern)
- * @see constants/index.ts - FACTORY_OPCODES documentation with warnings
+ * @see useSwapMutation.ts — factory opcode 13 (single-protostone swap)
+ * @see useAddLiquidityMutation.ts — factory opcode 11 (single-protostone add)
  */
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -95,8 +56,9 @@ import * as ecc from '@bitcoinerlab/secp256k1';
 // NOTE: Only patching INPUTS (witnessUtxo + redeemScript), NOT outputs
 // Output patching was removed - see useSwapMutation.ts for why
 import { patchInputsOnly } from '@/lib/psbt-patching';
-import { buildRemoveLiquidityProtostone, buildRemoveLiquidityInputRequirements } from '@/lib/alkanes/builders';
+import { buildFactoryBurnProtostone, buildRemoveLiquidityInputRequirements } from '@/lib/alkanes/builders';
 import { getBitcoinNetwork, toAlks, extractPsbtBase64 } from '@/lib/alkanes/helpers';
+import { getConfig } from '@/utils/getConfig';
 
 bitcoin.initEccLib(ecc);
 
@@ -116,7 +78,7 @@ export type RemoveLiquidityTransactionData = {
   token1Decimals?: number; // token1 decimals (default 8)
   poolName?: string;       // pool name for display (e.g., "DIESEL / frBTC")
   feeRate: number;         // sats/vB
-  deadlineBlocks?: number; // blocks until deadline (default 3)
+  deadlineBlocks?: number; // blocks until deadline (default 5)
 };
 
 export function useRemoveLiquidityMutation() {
@@ -168,25 +130,31 @@ export function useRemoveLiquidityMutation() {
       // Get block height for deadline (regtest uses large offset so deadline never expires)
       const isRegtest = network === 'regtest' || network === 'subfrost-regtest' || network === 'regtest-local' || network === 'qubitcoin-regtest';
       const deadline = await getFutureBlockHeight(
-        isRegtest ? 1000 : (data.deadlineBlocks || 3),
+        isRegtest ? 1000 : (data.deadlineBlocks || 5),
         provider as any
       );
 
       console.log('[RemoveLiquidity] Deadline block:', deadline);
 
-      // Build protostone - calls pool directly with opcode 2
-      // Uses two-protostone pattern: p0 transfers LP tokens to p1 (pool call)
-      const protostone = buildRemoveLiquidityProtostone({
-        lpTokenId: data.lpTokenId,
-        lpAmount: lpAmountAlks,
-        minAmount0: minAmount0Alks,
-        minAmount1: minAmount1Alks,
+      // Build protostone — factory router opcode 12 (Burn).
+      // Single protostone: cellpack identifies the pool by token_a/token_b;
+      // LP tokens auto-allocate as incomingAlkanes. Slippage enforced via
+      // amount_a_min / amount_b_min, deadline enforced on-chain.
+      if (!data.token0Id || !data.token1Id) {
+        throw new Error('token0Id and token1Id are required for factory.Burn (opcode 12)');
+      }
+      const config = getConfig(network);
+      const protostone = buildFactoryBurnProtostone({
+        factoryId: config.ALKANE_FACTORY_ID,
+        tokenA: data.token0Id,
+        tokenB: data.token1Id,
+        liquidity: lpAmountAlks,
+        amountAMin: minAmount0Alks,
+        amountBMin: minAmount1Alks,
         deadline: deadline.toString(),
       });
 
-      console.log('[RemoveLiquidity] Protostone (two-protostone pattern):', protostone);
-      console.log('[RemoveLiquidity] p0: edict transfers LP to p1');
-      console.log('[RemoveLiquidity] p1: pool call with opcode 2 (RemoveLiquidity)');
+      console.log('[RemoveLiquidity] Protostone (factory opcode 12):', protostone);
 
       // Build input requirements
       const inputRequirements = buildRemoveLiquidityInputRequirements({
@@ -213,9 +181,11 @@ export function useRemoveLiquidityMutation() {
       // Symbolic addresses (p2tr:0, p2wpkh:0) resolve to the SDK's DUMMY wallet.
       // Bug fixed: 2026-03-01 - see useSwapMutation.ts for full documentation.
       // ============================================================================
+      // Keystore is taproot-only: symbolic addresses all resolve to p2tr:0
+      // so BTC change / alkane change / from all stay on taproot.
       const fromAddresses = useActualAddresses
         ? [segwitAddress, taprootAddress].filter(Boolean) as string[]
-        : ['p2wpkh:0', 'p2tr:0'];
+        : ['p2tr:0'];
 
       // JOURNAL ENTRY (2026-03-01): For single-address wallets, use primaryAddress
       // TypeScript can't infer from the early return that primaryAddress is defined, use assertion
@@ -225,7 +195,7 @@ export function useRemoveLiquidityMutation() {
 
       const changeAddr = useActualAddresses
         ? (segwitAddress || taprootAddress)
-        : 'p2wpkh:0';
+        : 'p2tr:0';
 
       const alkanesChangeAddr = useActualAddresses
         ? primaryAddress

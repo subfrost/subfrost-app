@@ -25,34 +25,25 @@
  *
  * ## Architecture (2026-01-28)
  *
- * This hook calls the POOL contract directly (not the factory) for adding liquidity,
- * matching the pattern used by useSwapMutation and useRemoveLiquidityMutation.
+ * This hook routes ALL add-liquidity calls through the **factory router** for
+ * Uniswap-style slippage protection (`amount_a_min` / `amount_b_min`) and
+ * deadline enforcement. Pool-direct calls (opcode 1) are no longer used — they
+ * have no min checks and expose users to MEV / reserve drift.
  *
  * Flow:
  *   1. Check if pool exists via factory opcode 2 (FindPoolId)
- *   2. If pool EXISTS: Call pool directly with opcode 1 (AddLiquidity)
- *   3. If NO pool exists: Use factory opcode 1 (CreateNewPool) to create the pool
+ *   2. If pool EXISTS: factory.AddLiquidity (opcode 11) — single protostone
+ *   3. If NO pool exists: factory.CreateNewPool (opcode 1)
  *
- * ## Two-Protostone Pattern
+ * ## Single-Protostone Pattern
  *
- * Add liquidity requires TWO protostones (both edicts in p0):
- *   - p0: Two edicts transferring token0 AND token1 to p1
- *   - p1: Cellpack protostone calling pool with opcode 1 (AddLiquidity)
+ * Both branches use a single cellpack protostone. Input alkanes auto-allocate
+ * to the protostone; the cellpack identifies them via `token_a` / `token_b`
+ * params. No manual edicts needed — the factory finds matching tokens and
+ * refunds excess via the refund pointer.
  *
- * Both edicts are in the same protostone (p0), targeting p1 (the cellpack).
- * This pattern was proven working in CreateNewPool tx a29d0307 (block 1470).
- * The pool receives both tokens as `incomingAlkanes`.
- * Without the edicts, the pool receives zero tokens and fails with "expected 2 alkane inputs".
- *
- * ## Why Call Pool Directly (Not Factory)
- *
- * The factory's AddLiquidity (opcode 11) and the pool's AddLiquidity (opcode 1) are
- * different entry points. The pool contract has the actual liquidity logic. Calling the
- * pool directly is the same pattern used by swap (opcode 3) and remove (opcode 2).
- *
- * @see useSwapMutation.ts - Same two-protostone pattern calling pool directly
- * @see useRemoveLiquidityMutation.ts - Same two-protostone pattern calling pool directly
- * @see constants/index.ts - FACTORY_OPCODES documentation
+ * @see useSwapMutation.ts — single-protostone factory.swap (opcode 13)
+ * @see useRemoveLiquidityMutation.ts — single-protostone factory.Burn (opcode 12)
  */
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useWallet } from '@/context/WalletContext';
@@ -67,7 +58,7 @@ import * as ecc from '@bitcoinerlab/secp256k1';
 // NOTE: Only patching INPUTS (witnessUtxo + redeemScript), NOT outputs
 // Output patching was removed - see useSwapMutation.ts for why
 import { patchInputsOnly } from '@/lib/psbt-patching';
-import { buildCreateNewPoolProtostone, buildAddLiquidityToPoolProtostone, buildAddLiquidityInputRequirements } from '@/lib/alkanes/builders';
+import { buildCreateNewPoolProtostone, buildFactoryAddLiquidityProtostones, buildAddLiquidityInputRequirements } from '@/lib/alkanes/builders';
 import { getBitcoinNetwork, toAlks, extractPsbtBase64 } from '@/lib/alkanes/helpers';
 import { encodeSimulateCalldata } from '@/utils/simulateCalldata';
 
@@ -82,10 +73,16 @@ export type AddLiquidityTransactionData = {
   token1Decimals?: number; // default 8
   token0Symbol?: string;   // for confirmation display
   token1Symbol?: string;   // for confirmation display
-  maxSlippage?: string;  // percent string, e.g. '0.5' (unused for now, minLP=0)
+  maxSlippage?: string;  // percent string, e.g. '0.5' — applied to amount_a_min / amount_b_min in factory opcode 11
   feeRate: number;       // sats/vB
-  deadlineBlocks?: number; // default 3
+  deadlineBlocks?: number; // default 5
   poolId?: { block: string | number; tx: string | number }; // Pool to add liquidity to
+  // Override hooks for atomic flows (e.g. wrap+addLiquidity in a single tx).
+  // When set, these bypass the normal protostone/inputRequirements/toAddresses
+  // construction and pass the caller-provided values directly to the SDK.
+  overrideProtostones?: string;
+  overrideInputRequirements?: string;
+  overrideToAddresses?: string[];
 };
 
 /**
@@ -389,16 +386,28 @@ export function useAddLiquidityMutation() {
       let protostone: string;
 
       if (resolvedPoolId) {
-        // Pool exists: call pool directly with opcode 1 (AddLiquidity)
-        // Same pattern as useSwapMutation and useRemoveLiquidityMutation
-        protostone = buildAddLiquidityToPoolProtostone({
-          poolId: resolvedPoolId,
-          token0Id: data.token0Id,
-          token1Id: data.token1Id,
-          amount0: amount0Alks,
-          amount1: amount1Alks,
+        // Pool exists: call factory.AddLiquidity (opcode 11) with full Uniswap-style
+        // params for slippage protection. Pool opcode 1 has no min checks, so the
+        // user could lose value to MEV / reserve drift between quote and confirm.
+        const slippagePercent = data.maxSlippage ? parseFloat(data.maxSlippage) : 0.5;
+        const slippageFactor = (10000 - Math.floor(slippagePercent * 100)) / 10000;
+        const amount0Min = BigInt(Math.floor(Number(amount0Alks) * slippageFactor)).toString();
+        const amount1Min = BigInt(Math.floor(Number(amount1Alks) * slippageFactor)).toString();
+
+        const blockHeight = parseInt(localStorage.getItem('subfrost_last_block_height') || '0', 10);
+        const deadline = (blockHeight + (data.deadlineBlocks || 5)).toString();
+
+        protostone = buildFactoryAddLiquidityProtostones({
+          factoryId: ALKANE_FACTORY_ID,
+          tokenA: data.token0Id,
+          tokenB: data.token1Id,
+          amountADesired: amount0Alks,
+          amountBDesired: amount1Alks,
+          amountAMin: amount0Min,
+          amountBMin: amount1Min,
+          deadline,
         });
-        console.log('[AddLiquidity] Pool found at', `${resolvedPoolId.block}:${resolvedPoolId.tx}`, '- calling pool directly with opcode 1');
+        console.log('[AddLiquidity] Pool found at', `${resolvedPoolId.block}:${resolvedPoolId.tx}`, '- using factory opcode 11 with slippage', slippagePercent, '%');
       } else {
         // Pool doesn't exist: use factory opcode 1 (CreateNewPool)
         protostone = buildCreateNewPoolProtostone({
@@ -440,9 +449,12 @@ export function useAddLiquidityMutation() {
       // Symbolic addresses (p2tr:0, p2wpkh:0) resolve to the SDK's DUMMY wallet.
       // Bug fixed: 2026-03-01 - see useSwapMutation.ts for full documentation.
       // ============================================================================
+      // Keystore is taproot-only (mirrors useSwapMutation): all symbolic
+      // addresses resolve to p2tr:0 so BTC change/alkane change/from all
+      // stay on taproot. Browser wallets use actual addresses.
       const fromAddresses = useActualAddresses
         ? [segwitAddress, taprootAddress].filter(Boolean) as string[]
-        : ['p2wpkh:0', 'p2tr:0'];
+        : ['p2tr:0'];
 
       // JOURNAL ENTRY (2026-03-01): For single-address wallets, use primaryAddress
       // TypeScript can't infer from the early return that primaryAddress is defined, use assertion
@@ -452,7 +464,7 @@ export function useAddLiquidityMutation() {
 
       const changeAddr = useActualAddresses
         ? (segwitAddress || taprootAddress)
-        : 'p2wpkh:0';
+        : 'p2tr:0';
 
       const alkanesChangeAddr = useActualAddresses
         ? primaryAddress
@@ -465,12 +477,13 @@ export function useAddLiquidityMutation() {
       try {
 
         const result = await provider.alkanesExecuteTyped({
-          inputRequirements,
-          protostones: protostone,
+          // Atomic wrap+addLiquidity passes overrides (custom protostones, BTC input, signer output)
+          inputRequirements: data.overrideInputRequirements || inputRequirements,
+          protostones: data.overrideProtostones || protostone,
           feeRate: data.feeRate,
           autoConfirm: false,
           fromAddresses,
-          toAddresses,
+          toAddresses: data.overrideToAddresses || toAddresses,
           changeAddress: changeAddr,
           alkanesChangeAddress: alkanesChangeAddr,
           ordinalsStrategy: 'exclude',

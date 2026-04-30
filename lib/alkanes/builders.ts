@@ -13,13 +13,14 @@
 
 import {
   FACTORY_SWAP_OPCODE,
+  FACTORY_ADD_LIQUIDITY_OPCODE,
+  FACTORY_BURN_OPCODE,
   FRBTC_WRAP_OPCODE,
   FRBTC_UNWRAP_OPCODE,
   FRZEC_WRAP_OPCODE,
   FRZEC_UNWRAP_OPCODE,
   FRETH_WRAP_OPCODE,
   FRETH_UNWRAP_OPCODE,
-  POOL_OPCODES,
   ROUTER_OPCODES,
 } from './constants';
 
@@ -145,6 +146,57 @@ export function buildAtomicWrapSwapProtostones(params: {
   const swapProtostone = `[${swapCellpack}]:v1:v1`;
 
   return `${wrapProtostone},${swapProtostone}`;
+}
+
+/**
+ * Atomic BTC → frBTC + Token X → AddLiquidity in a single transaction.
+ *
+ * Two chained protostones:
+ *   p0: [32,0,FRBTC_WRAP_OPCODE] — wrap BTC to frBTC, pointer=p1
+ *       Token X (auto-allocated from input UTXO) is forwarded by frBTC's
+ *       CallResponse::forward(incoming_alkanes), so [X, frBTC] both arrive at p1.
+ *   p1: [factory,11,...] — factory.AddLiquidity, pointer=v0 (LP tokens to user)
+ *
+ * Output layout:
+ *   v0 = signer address (receives BTC for wrap)
+ *   v1 = user address (receives LP tokens + token refunds)
+ *
+ * Verified: frBTC contract uses CallResponse::forward at lib.rs:496 — incoming
+ * alkanes pass through wrap. Factory opcode 11 signature confirmed at
+ * fujin-factory/src/lib.rs:63 (token_a, token_b, amount_a_desired, amount_b_desired,
+ * amount_a_min, amount_b_min, deadline).
+ */
+export function buildAtomicWrapAddLiquidityProtostones(params: {
+  factoryId: string;
+  tokenA: string;
+  tokenB: string;
+  amountADesired: string;
+  amountBDesired: string;
+  amountAMin: string;
+  amountBMin: string;
+  deadline: string;
+}): string {
+  const { factoryId, tokenA, tokenB, amountADesired, amountBDesired, amountAMin, amountBMin, deadline } = params;
+  const [factoryBlock, factoryTx] = factoryId.split(':');
+  const [tokenABlock, tokenATx] = tokenA.split(':');
+  const [tokenBBlock, tokenBTx] = tokenB.split(':');
+
+  // p0: wrap BTC → frBTC, pointer=p1 (forwards [auto-alloc X + minted frBTC] to addLiquidity).
+  // refund=v1 (failure → any incoming alkanes refunded to user).
+  const wrapProtostone = `[32,0,${FRBTC_WRAP_OPCODE}]:p1:v1`;
+
+  // p1: factory.AddLiquidity, pointer=v1 (LP tokens to user), refund=v1 (failure → tokens to user).
+  const addLiquidityCellpack = [
+    factoryBlock, factoryTx, FACTORY_ADD_LIQUIDITY_OPCODE,
+    tokenABlock, tokenATx,
+    tokenBBlock, tokenBTx,
+    amountADesired, amountBDesired,
+    amountAMin, amountBMin,
+    deadline,
+  ].join(',');
+  const addLiquidityProtostone = `[${addLiquidityCellpack}]:v1:v1`;
+
+  return `${wrapProtostone},${addLiquidityProtostone}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -519,35 +571,46 @@ export function buildCreateNewPoolProtostone(params: {
 }
 
 /**
- * Build protostone for AddLiquidity to existing pool.
+ * Build protostone for AddLiquidity through the factory router (opcode 11).
  *
- * Two-protostone pattern:
- *   p0: Two edicts transferring token0 AND token1 to p1
- *   p1: Cellpack calling pool directly with opcode 1 (AddLiquidity)
+ * Single-protostone pattern (same shape as swap):
+ *   p0: Cellpack calling factory.AddLiquidity with full Uniswap-style params:
+ *       (token_a, token_b, amount_a_desired, amount_b_desired,
+ *        amount_a_min, amount_b_min, deadline)
+ *
+ * Input alkanes auto-allocate to this single protostone; the factory looks
+ * them up by token_a/token_b in the cellpack params and refunds excess via
+ * the refund pointer. No manual edicts needed.
+ *
+ * Factory enforces slippage via amount_*_min. Pool opcode 1 has no slippage
+ * protection — use this builder for any case that needs it.
+ *
+ * Source: fujin-factory/src/lib.rs:63 (#[opcode(11)] AddLiquidity {...})
  */
-export function buildAddLiquidityToPoolProtostone(params: {
-  poolId: { block: string | number; tx: string | number };
-  token0Id: string;
-  token1Id: string;
-  amount0: string;
-  amount1: string;
+export function buildFactoryAddLiquidityProtostones(params: {
+  factoryId: string;
+  tokenA: string;
+  tokenB: string;
+  amountADesired: string;
+  amountBDesired: string;
+  amountAMin: string;
+  amountBMin: string;
+  deadline: string;
 }): string {
-  const poolBlock = params.poolId.block.toString();
-  const poolTx = params.poolId.tx.toString();
-  const [token0Block, token0Tx] = params.token0Id.split(':');
-  const [token1Block, token1Tx] = params.token1Id.split(':');
-
-  const edict0 = `[${token0Block}:${token0Tx}:${params.amount0}:p1]`;
-  const edict1 = `[${token1Block}:${token1Tx}:${params.amount1}:p1]`;
-  const p0 = `${edict0}:${edict1}:v0:v0`;
+  const { factoryId, tokenA, tokenB, amountADesired, amountBDesired, amountAMin, amountBMin, deadline } = params;
+  const [factoryBlock, factoryTx] = factoryId.split(':');
+  const [tokenABlock, tokenATx] = tokenA.split(':');
+  const [tokenBBlock, tokenBTx] = tokenB.split(':');
 
   const cellpack = [
-    poolBlock, poolTx,
-    POOL_OPCODES.AddLiquidity,
+    factoryBlock, factoryTx, FACTORY_ADD_LIQUIDITY_OPCODE,
+    tokenABlock, tokenATx,
+    tokenBBlock, tokenBTx,
+    amountADesired, amountBDesired,
+    amountAMin, amountBMin,
+    deadline,
   ].join(',');
-  const p1 = `[${cellpack}]:v0:v0`;
-
-  return `${p0},${p1}`;
+  return `[${cellpack}]:v0:v0`;
 }
 
 /**
@@ -570,50 +633,48 @@ export function buildAddLiquidityInputRequirements(params: {
 // ---------------------------------------------------------------------------
 
 /**
- * Build protostone for RemoveLiquidity (burn LP tokens).
+ * Build protostone for Burn / RemoveLiquidity through the factory router (opcode 12).
  *
- * Two-protostone pattern:
- *   p0: Edict transferring LP tokens to p1
- *   p1: Cellpack calling pool with opcode 2 (RemoveLiquidity)
+ * Single-protostone pattern (same shape as addLiquidity):
+ *   p0: Cellpack calling factory.Burn with full Uniswap-style params:
+ *       (token_a, token_b, liquidity, amount_a_min, amount_b_min, deadline)
  *
- * The LP token ID IS the pool ID.
+ * LP tokens auto-allocate to this single protostone; the factory looks them
+ * up against the pool identified by token_a/token_b and burns. No manual
+ * edicts needed.
+ *
+ * Source: fujin-factory/src/lib.rs:75 (#[opcode(12)] Burn {...})
  */
-export function buildRemoveLiquidityProtostone(params: {
-  lpTokenId: string;
-  lpAmount: string;
-  minAmount0: string;
-  minAmount1: string;
+export function buildFactoryBurnProtostone(params: {
+  factoryId: string;
+  tokenA: string;
+  tokenB: string;
+  liquidity: string;
+  amountAMin: string;
+  amountBMin: string;
   deadline: string;
   pointer?: string;
   refund?: string;
 }): string {
   const {
-    lpTokenId,
-    lpAmount,
-    minAmount0,
-    minAmount1,
-    deadline,
-    pointer = 'v0',
-    refund = 'v0',
+    factoryId, tokenA, tokenB, liquidity, amountAMin, amountBMin, deadline,
+    pointer = 'v0', refund = 'v0',
   } = params;
-
-  const [lpBlock, lpTx] = lpTokenId.split(':');
-
-  const edict = `[${lpBlock}:${lpTx}:${lpAmount}:p1]`;
-  const p0 = `${edict}:${pointer}:${refund}`;
+  const [factoryBlock, factoryTx] = factoryId.split(':');
+  const [tokenABlock, tokenATx] = tokenA.split(':');
+  const [tokenBBlock, tokenBTx] = tokenB.split(':');
 
   const cellpack = [
-    lpBlock,
-    lpTx,
-    POOL_OPCODES.RemoveLiquidity,
-    minAmount0,
-    minAmount1,
+    factoryBlock, factoryTx, FACTORY_BURN_OPCODE,
+    tokenABlock, tokenATx,
+    tokenBBlock, tokenBTx,
+    liquidity,
+    amountAMin, amountBMin,
     deadline,
   ].join(',');
-  const p1 = `[${cellpack}]:${pointer}:${refund}`;
-
-  return `${p0},${p1}`;
+  return `[${cellpack}]:${pointer}:${refund}`;
 }
+
 
 /**
  * Build input requirements for RemoveLiquidity.

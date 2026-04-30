@@ -1215,11 +1215,19 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
       }
 
       const isBrowserWallet = walletType === 'browser';
+      const isKeystoreWallet = walletType === 'keystore';
 
       // Sign the PSBT
       let signedPsbtBase64: string;
       if (isBrowserWallet) {
         console.log('[SendModal] Browser wallet: signing all inputs in single call...');
+        signedPsbtBase64 = await signTaprootPsbt(psbtBase64);
+      } else if (isKeystoreWallet) {
+        // Keystore is taproot-only — all inputs are taproot, sign with taproot key.
+        // The dual-key path was a legacy artifact from when keystore exposed both
+        // segwit + taproot; double signing on a taproot input can leave the PSBT
+        // half-signed and finalize fails with "No tapleaf script signature provided".
+        console.log('[SendModal] Keystore (taproot-only): signing with taproot key...');
         signedPsbtBase64 = await signTaprootPsbt(psbtBase64);
       } else if (isSingleAddressMode) {
         console.log(`[SendModal] Signing PSBT with ${primaryAddressType.signingMethod} key (single-address mode)...`);
@@ -1229,7 +1237,8 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
           signedPsbtBase64 = await signSegwitPsbt(psbtBase64);
         }
       } else {
-        console.log('[SendModal] Keystore: signing with both keys...');
+        // Dual-address browser wallet (Xverse, Leather): sign with both keys.
+        console.log('[SendModal] Dual-address: signing with both keys...');
         signedPsbtBase64 = await signSegwitPsbt(psbtBase64);
         signedPsbtBase64 = await signTaprootPsbt(signedPsbtBase64);
       }

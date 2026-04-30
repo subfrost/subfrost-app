@@ -15,9 +15,9 @@ import {
   buildTransferProtostone,
   buildTransferInputRequirements,
   buildCreateNewPoolProtostone,
-  buildAddLiquidityToPoolProtostone,
+  buildFactoryAddLiquidityProtostones,
   buildAddLiquidityInputRequirements,
-  buildRemoveLiquidityProtostone,
+  buildFactoryBurnProtostone,
   buildRemoveLiquidityInputRequirements,
 } from '../builders';
 
@@ -280,33 +280,24 @@ describe('buildCreateNewPoolProtostone', () => {
   });
 });
 
-describe('buildAddLiquidityToPoolProtostone', () => {
-  it('builds two-protostone pattern with pool opcode 1', () => {
-    const result = buildAddLiquidityToPoolProtostone({
-      poolId: { block: 2, tx: 6 },
-      token0Id: DIESEL_ID,
-      token1Id: FRBTC_ID,
-      amount0: '1000',
-      amount1: '500',
+describe('buildFactoryAddLiquidityProtostones', () => {
+  it('builds single-protostone factory opcode 11 with full Uniswap params', () => {
+    const result = buildFactoryAddLiquidityProtostones({
+      factoryId: '4:65498',
+      tokenA: DIESEL_ID,
+      tokenB: FRBTC_ID,
+      amountADesired: '1000',
+      amountBDesired: '500',
+      amountAMin: '995',
+      amountBMin: '498',
+      deadline: '12345',
     });
 
-    // p0: two edicts
-    expect(result).toContain('[2:0:1000:p1]');
-    expect(result).toContain('[32:0:500:p1]');
-
-    // p1: pool cellpack with opcode 1 (AddLiquidity)
-    expect(result).toContain('[2,6,1]:v0:v0');
-  });
-
-  it('handles string pool IDs', () => {
-    const result = buildAddLiquidityToPoolProtostone({
-      poolId: { block: '2', tx: '6' },
-      token0Id: DIESEL_ID,
-      token1Id: FRBTC_ID,
-      amount0: '100',
-      amount1: '50',
-    });
-    expect(result).toContain('[2,6,1]:v0:v0');
+    // Single protostone: cellpack with factory opcode 11 + tokens + amounts + min + deadline
+    expect(result).toBe('[4,65498,11,2,0,32,0,1000,500,995,498,12345]:v0:v0');
+    // No comma-separated multiple protostones, no edict syntax
+    expect(result).not.toContain(':p1]');
+    expect(result).not.toMatch(/],\[/);
   });
 });
 
@@ -322,48 +313,36 @@ describe('buildAddLiquidityInputRequirements', () => {
   });
 });
 
-describe('buildRemoveLiquidityProtostone', () => {
-  it('builds LP edict + pool opcode 2', () => {
-    const result = buildRemoveLiquidityProtostone({
-      lpTokenId: POOL_ID,
-      lpAmount: '10000',
-      minAmount0: '500',
-      minAmount1: '250',
+describe('buildFactoryBurnProtostone', () => {
+  it('builds single-protostone factory opcode 12 with full Uniswap params', () => {
+    const result = buildFactoryBurnProtostone({
+      factoryId: '4:65498',
+      tokenA: DIESEL_ID,
+      tokenB: FRBTC_ID,
+      liquidity: '10000',
+      amountAMin: '500',
+      amountBMin: '250',
       deadline: '2000',
     });
-
-    // p0: LP edict targeting p1
-    expect(result).toContain('[2:6:10000:p1]');
-
-    // p1: pool cellpack with opcode 2 (RemoveLiquidity), min amounts, deadline
-    expect(result).toContain('[2,6,2,500,250,2000]:v0:v0');
+    // [factory_block,factory_tx,12,ta_b,ta_t,tb_b,tb_t,liq,a_min,b_min,deadline]
+    expect(result).toBe('[4,65498,12,2,0,32,0,10000,500,250,2000]:v0:v0');
+    expect(result).not.toContain(':p1]');
+    expect(result).not.toMatch(/],\[/);
   });
 
-  it('propagates custom pointer and refund to both p0 and p1', () => {
-    const result = buildRemoveLiquidityProtostone({
-      lpTokenId: POOL_ID,
-      lpAmount: '100',
-      minAmount0: '10',
-      minAmount1: '5',
+  it('propagates custom pointer and refund', () => {
+    const result = buildFactoryBurnProtostone({
+      factoryId: '4:65498',
+      tokenA: DIESEL_ID,
+      tokenB: FRBTC_ID,
+      liquidity: '100',
+      amountAMin: '10',
+      amountBMin: '5',
       deadline: '1000',
       pointer: 'v1',
       refund: 'v1',
     });
-    // Both p0 and p1 should use v1
-    const parts = result.split(',[');
-    expect(parts[0]).toContain(':v1:v1');
-    expect(parts[1]).toContain(':v1:v1');
-  });
-
-  it('defaults pointer and refund to v0', () => {
-    const result = buildRemoveLiquidityProtostone({
-      lpTokenId: POOL_ID,
-      lpAmount: '100',
-      minAmount0: '10',
-      minAmount1: '5',
-      deadline: '1000',
-    });
-    expect(result).toContain(':v0:v0');
+    expect(result).toContain(':v1:v1');
   });
 });
 
@@ -402,13 +381,14 @@ describe('builder consistency', () => {
         factoryId: FACTORY_ID, token0Id: DIESEL_ID, token1Id: FRBTC_ID,
         amount0: '100', amount1: '50',
       }),
-      buildAddLiquidityToPoolProtostone({
-        poolId: { block: 2, tx: 6 }, token0Id: DIESEL_ID, token1Id: FRBTC_ID,
-        amount0: '100', amount1: '50',
+      buildFactoryAddLiquidityProtostones({
+        factoryId: FACTORY_ID, tokenA: DIESEL_ID, tokenB: FRBTC_ID,
+        amountADesired: '100', amountBDesired: '50',
+        amountAMin: '99', amountBMin: '49', deadline: '1000',
       }),
-      buildRemoveLiquidityProtostone({
-        lpTokenId: POOL_ID, lpAmount: '100', minAmount0: '10',
-        minAmount1: '5', deadline: '1000',
+      buildFactoryBurnProtostone({
+        factoryId: FACTORY_ID, tokenA: DIESEL_ID, tokenB: FRBTC_ID,
+        liquidity: '100', amountAMin: '10', amountBMin: '5', deadline: '1000',
       }),
       buildSwapUnwrapProtostone({
         sellTokenId: DIESEL_ID, sellAmount: '100', frbtcId: FRBTC_ID,

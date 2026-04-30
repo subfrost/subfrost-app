@@ -31,6 +31,7 @@ import { useBridgeEthMutation } from "@/hooks/useBridgeEthMutation";
 import { useBridgeZecMutation } from "@/hooks/useBridgeZecMutation";
 import { useFrbtcPremium } from "@/hooks/useFrbtcPremium";
 import { FRBTC_WRAP_FEE_PER_1000 } from "@/constants/alkanes";
+import { computePairedLpAmount } from "@/lib/alkanes/liquidity-math";
 import { useAddLiquidityMutation } from "@/hooks/useAddLiquidityMutation";
 import { useTokenNames, resolveTokenDisplay } from "@/hooks/useTokenNames";
 import { useRemoveLiquidityMutation } from "@/hooks/useRemoveLiquidityMutation";
@@ -422,19 +423,34 @@ export default function SwapShell() {
     }
   }, [fromToken, toToken]);
 
-  // Default LP tokens: frBTC / DIESEL (or bUSD on mainnet)
-  // Initialize when liquidity modal opens
+  // Default LP tokens: inherit the active swap pair when the liquidity modal
+  // opens (e.g. swap = DIESEL/frBTC → liquidity prefills DIESEL/frBTC). Falls
+  // back to frBTC + bUSD/DIESEL if no swap pair is selected. Only pre-fills
+  // empty slots — preserves user's prior LP selection.
   useEffect(() => {
-    if (isLiquidityModalOpen) {
-      if (!poolToken0 && FRBTC_ALKANE_ID) {
-        setPoolToken0({ id: FRBTC_ALKANE_ID, symbol: 'frBTC', name: 'frBTC' });
-      }
-      if (!poolToken1 && BUSD_ALKANE_ID) {
-        const symbol = network === 'mainnet' ? 'bUSD' : 'DIESEL';
-        setPoolToken1({ id: BUSD_ALKANE_ID, symbol, name: symbol });
-      }
+    if (!isLiquidityModalOpen) return;
+
+    const candidates = [fromToken, toToken].filter(Boolean) as TokenMeta[];
+    const fallbackFrbtc: TokenMeta | null = FRBTC_ALKANE_ID
+      ? { id: FRBTC_ALKANE_ID, symbol: 'frBTC', name: 'frBTC' }
+      : null;
+    const fallbackOther: TokenMeta | null = BUSD_ALKANE_ID
+      ? (() => {
+          const symbol = network === 'mainnet' ? 'bUSD' : 'DIESEL';
+          return { id: BUSD_ALKANE_ID, symbol, name: symbol };
+        })()
+      : null;
+
+    if (!poolToken0) {
+      const next = candidates[0] || fallbackFrbtc;
+      if (next) setPoolToken0(next);
     }
-  }, [isLiquidityModalOpen, poolToken0, poolToken1, FRBTC_ALKANE_ID, BUSD_ALKANE_ID, network]);
+    if (!poolToken1) {
+      const taken = poolToken0?.id || candidates[0]?.id;
+      const next = candidates.find((c) => c.id !== taken) || fallbackOther;
+      if (next) setPoolToken1(next);
+    }
+  }, [isLiquidityModalOpen, poolToken0, poolToken1, fromToken, toToken, FRBTC_ALKANE_ID, BUSD_ALKANE_ID, network]);
 
   // Allow all tokens - no filtering
   // Base tokens - tokens that can swap with any token (BTC, frBTC, bUSD)
@@ -1521,21 +1537,105 @@ export default function SwapShell() {
       return;
     }
 
-    // Handle BTC: requires wrap to frBTC first
-    const hasBtc = poolToken0.id === 'btc' || poolToken1.id === 'btc';
-    if (hasBtc) {
-      showSwapError(t('errors.btcRequiresWrap'));
+    // BTC + frBTC is not a valid pool pair (BTC is just unwrapped frBTC).
+    const equivalentId = (id: string) => (id === 'btc' ? FRBTC_ALKANE_ID : id);
+    if (equivalentId(poolToken0.id) === equivalentId(poolToken1.id)) {
+      showSwapError(t('errors.invalidPair') || 'Cannot pair BTC with frBTC — they are equivalent');
       return;
     }
 
+    // Detect BTC side: requires atomic wrap+addLiquidity in a single transaction.
+    // Two chained protostones: p0 wraps BTC→frBTC, p1 calls factory.AddLiquidity (opcode 11).
+    // The wrap forwards both auto-allocated Token X and minted frBTC to p1.
+    const btcOnSide0 = poolToken0.id === 'btc';
+    const btcOnSide1 = poolToken1.id === 'btc';
+    const isAtomicWrapAdd = btcOnSide0 || btcOnSide1;
+
     try {
-      // Pass poolId if we have a selected pool, so the mutation can call the pool directly
+      // Pass poolId if we have a selected pool, so the mutation can skip the
+      // factory.FindPoolId lookup and route straight to factory.AddLiquidity.
       const poolId = selectedPool?.id
         ? (() => {
             const [block, tx] = selectedPool.id.split(':').map(Number);
             return { block, tx };
           })()
         : undefined;
+
+      if (isAtomicWrapAdd) {
+        if (!FRBTC_ALKANE_ID) {
+          showSwapError(t('errors.btcRequiresWrap'));
+          return;
+        }
+
+        // Resolve which side is BTC and which is the alkane partner.
+        const btcAmount = btcOnSide0 ? poolToken0Amount : poolToken1Amount;
+        const tokenAmount = btcOnSide0 ? poolToken1Amount : poolToken0Amount;
+        const tokenSide = btcOnSide0 ? poolToken1 : poolToken0;
+        if (tokenSide.id === 'btc') {
+          showSwapError(t('errors.btcRequiresWrap'));
+          return;
+        }
+
+        // Convert BTC → sats, then apply wrap fee to compute frBTC amount that
+        // actually arrives at addLiquidity. amount_a_min uses (1 - slippage).
+        const btcSats = new BigNumber(btcAmount).multipliedBy(1e8).integerValue(BigNumber.ROUND_FLOOR);
+        const wrapFeePerThousand = premiumData?.wrapFeePerThousand ?? FRBTC_WRAP_FEE_PER_1000;
+        const frbtcDesired = btcSats.multipliedBy(1000 - wrapFeePerThousand).dividedBy(1000)
+          .integerValue(BigNumber.ROUND_FLOOR);
+        const tokenAmountAlks = new BigNumber(tokenAmount).multipliedBy(1e8)
+          .integerValue(BigNumber.ROUND_FLOOR);
+
+        const slippageFactor = new BigNumber(100).minus(maxSlippage).dividedBy(100);
+        const frbtcMin = frbtcDesired.multipliedBy(slippageFactor)
+          .integerValue(BigNumber.ROUND_FLOOR);
+        const tokenMin = tokenAmountAlks.multipliedBy(slippageFactor)
+          .integerValue(BigNumber.ROUND_FLOOR);
+
+        const currentBlock = parseInt(localStorage.getItem('subfrost_last_block_height') || '0', 10);
+        const deadline = (currentBlock + (deadlineBlocks || 5)).toString();
+
+        const { getSignerAddressDynamic } = await import('@/lib/alkanes/helpers');
+        const signerAddress = await getSignerAddressDynamic(network);
+
+        const { buildAtomicWrapAddLiquidityProtostones } = await import('@/lib/alkanes/builders');
+        const protostones = buildAtomicWrapAddLiquidityProtostones({
+          factoryId: config.ALKANE_FACTORY_ID,
+          tokenA: FRBTC_ALKANE_ID,
+          tokenB: tokenSide.id,
+          amountADesired: frbtcDesired.toString(),
+          amountBDesired: tokenAmountAlks.toString(),
+          amountAMin: frbtcMin.toString(),
+          amountBMin: tokenMin.toString(),
+          deadline,
+        });
+
+        const inputRequirements = `B:${btcSats.toString()}:v0,${tokenSide.id.replace(':', ':')}:${tokenAmountAlks.toString()}`;
+        // (the .replace is a no-op; kept for readability — tokenSide.id is already block:tx)
+        const primaryAddress = address;
+
+        const result = await addLiquidityMutation.mutateAsync({
+          token0Id: FRBTC_ALKANE_ID,
+          token1Id: tokenSide.id,
+          token0Amount: new BigNumber(frbtcDesired).dividedBy(1e8).toString(),
+          token1Amount: tokenAmount,
+          token0Decimals: 8,
+          token1Decimals: 8,
+          maxSlippage,
+          feeRate: fee.feeRate,
+          deadlineBlocks,
+          poolId,
+          overrideProtostones: protostones,
+          overrideToAddresses: [signerAddress, primaryAddress!],
+          overrideInputRequirements: inputRequirements,
+        });
+
+        if (result?.success && result.transactionId) {
+          showNotification(result.transactionId, 'addLiquidity');
+          setPoolToken0Amount('');
+          setPoolToken1Amount('');
+        }
+        return;
+      }
 
       const result = await addLiquidityMutation.mutateAsync({
         token0Id: poolToken0.id,
@@ -1580,12 +1680,42 @@ export default function SwapShell() {
     }
 
     try {
+      if (!selectedLPPosition.token0Id || !selectedLPPosition.token1Id) {
+        showSwapError('LP position is missing token IDs');
+        return;
+      }
+
+      // Compute slippage-protected min amounts: expected = (lpAmount /
+      // lpTotalSupply) * reserve, then min = expected * (1 - slippage).
+      // Aborts if pool data is missing — proceeding with min=0 would expose
+      // the user to MEV / sandwich without warning.
+      const removePool = markets.find(p => p.id === selectedLPPosition.id);
+      if (!removePool?.token0Amount || !removePool?.token1Amount || !removePool?.lpTotalSupply) {
+        showSwapError('Pool reserves or LP total supply unavailable — refresh and retry');
+        return;
+      }
+      const supply = new BigNumber(removePool.lpTotalSupply);
+      if (supply.lte(0)) {
+        showSwapError('Pool LP supply is zero — cannot compute slippage');
+        return;
+      }
+      const lpRaw = new BigNumber(removeAmount).multipliedBy(1e8);
+      const slipFactor = new BigNumber(100).minus(maxSlippage).dividedBy(100);
+      const expected0 = lpRaw.multipliedBy(removePool.token0Amount).dividedBy(supply);
+      const expected1 = lpRaw.multipliedBy(removePool.token1Amount).dividedBy(supply);
+      const minAmount0 = expected0.multipliedBy(slipFactor)
+        .integerValue(BigNumber.ROUND_FLOOR).dividedBy(1e8).toString();
+      const minAmount1 = expected1.multipliedBy(slipFactor)
+        .integerValue(BigNumber.ROUND_FLOOR).dividedBy(1e8).toString();
+
       const result = await removeLiquidityMutation.mutateAsync({
-        lpTokenId: selectedLPPosition.id,  // LP token's alkane ID (same as pool ID)
+        lpTokenId: selectedLPPosition.id,
         lpAmount: removeAmount,
         lpDecimals: 8,
-        minAmount0: '0',  // No slippage protection for now
-        minAmount1: '0',
+        token0Id: selectedLPPosition.token0Id,
+        token1Id: selectedLPPosition.token1Id,
+        minAmount0,
+        minAmount1,
         token0Decimals: 8,
         token1Decimals: 8,
         feeRate: fee.feeRate,
@@ -1762,8 +1892,10 @@ export default function SwapShell() {
     // Build full list of all allowed tokens for LP
     const opts: TokenOption[] = [];
     
-    // Add BTC first (hide if counterpart is frBTC or BTC itself)
-    const btcHidden = counterpartId === FRBTC_ALKANE_ID || counterpartId === 'btc';
+    // Add BTC first. Hide only if counterpart is BTC itself — frBTC on the
+    // other side is allowed (user may be choosing between BTC and frBTC for
+    // the BTC-equivalent input; mutation handles atomic wrap when BTC picked).
+    const btcHidden = counterpartId === 'btc';
     let btcIsAvailable = counterpartToken
       ? isAllowedPair('btc', counterpartToken.id)
       : true; // If no counterpart, BTC is always available
@@ -1783,8 +1915,9 @@ export default function SwapShell() {
     // Get whitelisted pool tokens only
     const seen = new Set(['btc']); // BTC already added above
 
-    // Always add frBTC as a base token (hide if counterpart is BTC or frBTC itself)
-    const frbtcHidden = counterpartId === 'btc' || counterpartId === FRBTC_ALKANE_ID;
+    // Always add frBTC as a base token. Hide only if counterpart is frBTC
+    // itself; counterpart=BTC is allowed (user can choose the unwrapped form).
+    const frbtcHidden = counterpartId === FRBTC_ALKANE_ID;
     if (FRBTC_ALKANE_ID && !seen.has(FRBTC_ALKANE_ID)) {
       seen.add(FRBTC_ALKANE_ID);
       if (!frbtcHidden) {
@@ -2020,15 +2153,62 @@ export default function SwapShell() {
     return null;
   };
 
+  // Find the actual pool that matches the user-selected LP token pair.
+  // Required because `selectedPool` can be stale (set by pool list click or
+  // swap inheritance) while the user changes tokens in the LP selectors.
+  // Returns null if no pool exists for the chosen pair (e.g. BTC + frBTC).
+  const matchedLpPool = useMemo(() => {
+    if (!poolToken0 || !poolToken1) return null;
+    const equivalentId = (id: string) => (id === 'btc' ? FRBTC_ALKANE_ID : id);
+    const a = equivalentId(poolToken0.id);
+    const b = equivalentId(poolToken1.id);
+    if (a === b) return null; // BTC + frBTC is not a valid pair
+    return markets.find(p =>
+      (p.token0.id === a && p.token1.id === b) ||
+      (p.token0.id === b && p.token1.id === a)
+    ) || null;
+  }, [poolToken0, poolToken1, markets, FRBTC_ALKANE_ID]);
+
+  // Auto-calculate the paired LP amount based on the matched pool's reserve
+  // ratio. Pure math is in lib/alkanes/liquidity-math.ts.
+  const computePaired = (typedSide: 0 | 1, value: string): string | null => {
+    if (!matchedLpPool || !poolToken0 || !poolToken1) return null;
+    if (!matchedLpPool.token0Amount || !matchedLpPool.token1Amount) return null;
+    return computePairedLpAmount({
+      typedSide,
+      typedDisplay: value,
+      uiToken0Id: poolToken0.id,
+      uiToken1Id: poolToken1.id,
+      poolToken0Id: matchedLpPool.token0.id,
+      reserve0: matchedLpPool.token0Amount,
+      reserve1: matchedLpPool.token1Amount,
+      frbtcId: FRBTC_ALKANE_ID,
+      wrapFeePerThousand: premiumData?.wrapFeePerThousand ?? FRBTC_WRAP_FEE_PER_1000,
+    });
+  };
+
+  const handlePoolToken0AmountChange = (value: string) => {
+    setPoolToken0Amount(value);
+    if (!value) { setPoolToken1Amount(''); return; }
+    const paired = computePaired(0, value);
+    if (paired !== null) setPoolToken1Amount(paired);
+  };
+
+  const handlePoolToken1AmountChange = (value: string) => {
+    setPoolToken1Amount(value);
+    if (!value) { setPoolToken0Amount(''); return; }
+    const paired = computePaired(1, value);
+    if (paired !== null) setPoolToken0Amount(paired);
+  };
+
   // Handle percentage of balance click for LP token 0
   const handlePercentToken0 = (percent: number) => {
     if (!poolToken0) return;
+    let amount: string | null = null;
     if (poolToken0.id === 'btc') {
       const sats = Number(btcBalanceSats || 0);
-      const btc = (sats * percent) / 1e8;
-      setPoolToken0Amount(btc.toFixed(8));
+      amount = ((sats * percent) / 1e8).toFixed(8);
     } else {
-      // Try walletAlkaneBalances first, then idToUserCurrency
       let balance = walletAlkaneBalances.get(poolToken0.id);
       if (!balance) {
         const cur = idToUserCurrency.get(poolToken0.id);
@@ -2037,20 +2217,20 @@ export default function SwapShell() {
       if (balance) {
         const amt = (Number(balance) * percent) / 1e8;
         const decimals = poolToken0.id === FRBTC_ALKANE_ID ? 8 : 4;
-        setPoolToken0Amount(amt.toFixed(decimals));
+        amount = amt.toFixed(decimals);
       }
     }
+    if (amount !== null) handlePoolToken0AmountChange(amount);
   };
 
   // Handle percentage of balance click for LP token 1
   const handlePercentToken1 = (percent: number) => {
     if (!poolToken1) return;
+    let amount: string | null = null;
     if (poolToken1.id === 'btc') {
       const sats = Number(btcBalanceSats || 0);
-      const btc = (sats * percent) / 1e8;
-      setPoolToken1Amount(btc.toFixed(8));
+      amount = ((sats * percent) / 1e8).toFixed(8);
     } else {
-      // Try walletAlkaneBalances first, then idToUserCurrency
       let balance = walletAlkaneBalances.get(poolToken1.id);
       if (!balance) {
         const cur = idToUserCurrency.get(poolToken1.id);
@@ -2059,9 +2239,10 @@ export default function SwapShell() {
       if (balance) {
         const amt = (Number(balance) * percent) / 1e8;
         const decimals = poolToken1.id === FRBTC_ALKANE_ID ? 8 : 4;
-        setPoolToken1Amount(amt.toFixed(decimals));
+        amount = amt.toFixed(decimals);
       }
     }
+    if (amount !== null) handlePoolToken1AmountChange(amount);
   };
 
   // Compute the pool and chart token for the Espo chart.
@@ -2230,8 +2411,8 @@ export default function SwapShell() {
             token1Options={poolTokenOptions}
             token0Amount={poolToken0Amount}
             token1Amount={poolToken1Amount}
-            onChangeToken0Amount={setPoolToken0Amount}
-            onChangeToken1Amount={setPoolToken1Amount}
+            onChangeToken0Amount={handlePoolToken0AmountChange}
+            onChangeToken1Amount={handlePoolToken1AmountChange}
             onSelectToken0={(id) => {
               const t = poolTokenOptions.find((x) => x.id === id);
               if (t) setPoolToken0(t);

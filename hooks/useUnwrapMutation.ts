@@ -172,9 +172,10 @@ export function useUnwrapMutation() {
       // Symbolic addresses (p2tr:0, p2wpkh:0) resolve to the SDK's DUMMY wallet.
       // Bug fixed: 2026-03-01 - see useSwapMutation.ts for full documentation.
       // ============================================================================
+      // Keystore is taproot-only: symbolic addresses all resolve to p2tr:0.
       const fromAddresses = useActualAddresses
         ? [segwitAddress, taprootAddress].filter(Boolean) as string[]
-        : ['p2wpkh:0', 'p2tr:0'];
+        : ['p2tr:0'];
 
       // ----------------------------------------------------------------------
       // Three-output unwrap layout (CLI canonical):
@@ -184,12 +185,13 @@ export function useUnwrapMutation() {
       //
       // Browser wallets must receive ACTUAL addresses (not symbolic) — same
       // bug class as 2026-03-01. Keystore takes the symbolic descriptor
-      // branch which the SDK resolves against its loaded mnemonic.
+      // branch which the SDK resolves against its loaded mnemonic; BTC
+      // recipient v1 is taproot for keystore (taproot-only policy).
       // ----------------------------------------------------------------------
       const DUST_VOUT = 2;
       const toAddresses = useActualAddresses
         ? [primaryAddress!, (segwitAddress || taprootAddress)!, signerAddress]
-        : ['p2tr:0', 'p2wpkh:0', signerAddress];
+        : ['p2tr:0', 'p2tr:0', signerAddress];
 
       // Build protostone for unwrap operation. MUST include dustVout + amount
       // in the cellpack — see header comment ("Calldata Bug Fix 2026-04-29").
@@ -203,7 +205,7 @@ export function useUnwrapMutation() {
 
       const changeAddr = useActualAddresses
         ? (segwitAddress || taprootAddress)
-        : 'p2wpkh:0';
+        : 'p2tr:0';
 
       // JOURNAL ENTRY (2026-03-01): For single-address wallets, use primaryAddress
       const alkanesChangeAddr = useActualAddresses

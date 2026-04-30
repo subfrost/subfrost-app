@@ -83,10 +83,10 @@ export function useCancelOrderMutation() {
       const isBrowserWallet = walletType === 'browser';
       const useActualAddresses = isBrowserWallet || network === 'devnet' || network === 'regtest-local' || network === 'qubitcoin-regtest';
 
-      // Browser wallets need ACTUAL addresses, not symbolic
+      // Browser wallets need ACTUAL addresses; keystore is taproot-only.
       const fromAddresses = useActualAddresses
         ? [segwitAddress, taprootAddress].filter(Boolean) as string[]
-        : ['p2wpkh:0', 'p2tr:0'];
+        : ['p2tr:0'];
 
       const toAddresses = useActualAddresses
         ? [primaryAddress!]
@@ -94,7 +94,7 @@ export function useCancelOrderMutation() {
 
       const changeAddr = useActualAddresses
         ? (segwitAddress || taprootAddress)
-        : 'p2wpkh:0';
+        : 'p2tr:0';
 
       const alkanesChangeAddr = useActualAddresses
         ? primaryAddress

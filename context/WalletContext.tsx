@@ -1976,10 +1976,14 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
     const bip32 = BIP32Factory(tinysecp);
     const root = bip32.fromSeed(seed, btcNetwork);
 
-    // BIP86 path: m/86'/coinType/0'/0/0
+    // BIP86 path: m/86'/coinType/0'/0/N
     // coinType: 0 for mainnet, 1 for testnet/regtest
+    // N: user-configurable address index (default 0). MUST match the path used
+    // in `addresses` useMemo to derive the displayed taproot address — otherwise
+    // the signing key won't match `tapInternalKey` in the PSBT and finalize
+    // fails with "No tapleaf script signature provided".
     const coinType = network === 'mainnet' ? 0 : 1;
-    const taprootPath = `m/86'/${coinType}'/0'/0/0`;
+    const taprootPath = `m/86'/${coinType}'/0'/0/${taprootAddressIndex}`;
     const taprootChild = root.derivePath(taprootPath);
 
     if (!taprootChild.privateKey) {
@@ -2088,7 +2092,15 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       }
     }
 
-    // For keystore wallets, use BIP84 derivation
+    // Keystore is taproot-only by policy. Native segwit derivation is intentionally
+    // disabled to ensure all keystore funds live at a single (taproot) address.
+    // Callers should never reach this branch — if they do, that means a code path
+    // is still treating keystore as dual-address. Surface the bug rather than
+    // silently producing a half-signed PSBT.
+    if (walletType === 'keystore') {
+      throw new Error('signSegwitPsbt called for keystore wallet — keystore is taproot-only. Use signTaprootPsbt instead.');
+    }
+
     if (!wallet) {
       throw new Error('Wallet not connected');
     }
@@ -2131,7 +2143,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
 
     const btcNetwork = getBitcoinNetwork();
 
-    // Derive segwit key using BIP84 path
+    // Derive segwit key using BIP84 path (browser wallets that need it use SDK adapter above)
     const seed = bip39.mnemonicToSeedSync(mnemonic);
     const bip32 = BIP32Factory(tinysecp);
     const root = bip32.fromSeed(seed, btcNetwork);

@@ -174,7 +174,7 @@ export function useWrapSwapMutation() {
 
       // Get deadline block height
       const isRegtest = network === 'regtest' || network === 'subfrost-regtest' || network === 'regtest-local' || network === 'qubitcoin-regtest';
-      const deadlineBlocks = isRegtest ? 1000 : (data.deadlineBlocks || 3);
+      const deadlineBlocks = isRegtest ? 1000 : (data.deadlineBlocks || 5);
       const deadline = await getFutureBlockHeight(deadlineBlocks, provider as any);
       console.log('[WrapSwap] Deadline:', deadline, `(+${deadlineBlocks} blocks)`);
 
@@ -219,9 +219,10 @@ export function useWrapSwapMutation() {
       // - Output 1 (v1): user receives minted frBTC
       console.log('[WrapSwap] Building wrap PSBT...');
 
+      // Keystore is taproot-only: symbolic addresses all resolve to p2tr:0.
       const fromAddresses = useActualAddresses
         ? [segwitAddress, taprootAddress].filter(Boolean) as string[]
-        : ['p2wpkh:0', 'p2tr:0'];
+        : ['p2tr:0'];
 
       const toAddresses = useActualAddresses
         ? [signerAddress, taprootAddress!]
@@ -229,7 +230,7 @@ export function useWrapSwapMutation() {
 
       const changeAddr = useActualAddresses
         ? (segwitAddress || taprootAddress)
-        : 'p2wpkh:0';
+        : 'p2tr:0';
 
       const alkanesChangeAddr = useActualAddresses
         ? taprootAddress

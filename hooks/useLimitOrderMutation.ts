@@ -177,9 +177,10 @@ export function useLimitOrderMutation() {
       const useActualAddresses = isBrowserWallet || network === 'devnet' || network === 'regtest-local' || network === 'qubitcoin-regtest';
 
       // Browser wallets need ACTUAL addresses, not symbolic
+      // Keystore is taproot-only: symbolic addresses all resolve to p2tr:0.
       const fromAddresses = useActualAddresses
         ? [segwitAddress, taprootAddress].filter(Boolean) as string[]
-        : ['p2wpkh:0', 'p2tr:0'];
+        : ['p2tr:0'];
 
       const toAddresses = useActualAddresses
         ? [primaryAddress!]
@@ -187,7 +188,7 @@ export function useLimitOrderMutation() {
 
       const changeAddr = useActualAddresses
         ? (segwitAddress || taprootAddress)
-        : 'p2wpkh:0';
+        : 'p2tr:0';
 
       const alkanesChangeAddr = useActualAddresses
         ? primaryAddress

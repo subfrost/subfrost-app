@@ -49,7 +49,7 @@ export function useFireBondClaimMutation() {
       const protostonesStr = `[${bondingBlock},${bondingTx},${FIRE_BONDING_OPCODES.ClaimVested},${bondId}]:v0:v0`;
 
       const toAddresses = useActualAddresses ? [taprootAddress] : ['p2tr:0'];
-      const changeAddr = useActualAddresses ? (segwitAddress || taprootAddress) : 'p2wpkh:0';
+      const changeAddr = useActualAddresses ? (segwitAddress || taprootAddress) : 'p2tr:0';
       const alkanesChangeAddr = useActualAddresses ? taprootAddress : 'p2tr:0';
 
       const result = await (provider as any).alkanesExecuteTyped({

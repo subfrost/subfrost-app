@@ -9,6 +9,12 @@
 /** Factory router opcode for SwapExactTokensForTokens */
 export const FACTORY_SWAP_OPCODE = 13;
 
+/** Factory router opcode for AddLiquidity (Uniswap-style with slippage + deadline) */
+export const FACTORY_ADD_LIQUIDITY_OPCODE = 11;
+
+/** Factory router opcode for Burn / RemoveLiquidity (Uniswap-style with slippage + deadline) */
+export const FACTORY_BURN_OPCODE = 12;
+
 /** frBTC wrap opcode (exchange BTC for frBTC) — contract [32:0] */
 export const FRBTC_WRAP_OPCODE = 77;
 

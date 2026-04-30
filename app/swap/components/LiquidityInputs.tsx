@@ -374,8 +374,8 @@ export default function LiquidityInputs({
                             setFocusedField(null);
                             const val = parseInt(deadlineLocal, 10);
                             if (!deadlineLocal || isNaN(val) || val < 1) {
-                              setDeadlineLocal('3');
-                              setDeadlineBlocks(3);
+                              setDeadlineLocal('5');
+                              setDeadlineBlocks(5);
                             } else {
                               setDeadlineBlocks(Math.min(100, val));
                             }
@@ -757,8 +757,8 @@ export default function LiquidityInputs({
                         setFocusedField(null);
                         const val = parseInt(deadlineLocal, 10);
                         if (!deadlineLocal || isNaN(val) || val < 1) {
-                          setDeadlineLocal('3');
-                          setDeadlineBlocks(3);
+                          setDeadlineLocal('5');
+                          setDeadlineBlocks(5);
                         } else {
                           setDeadlineBlocks(Math.min(100, val));
                         }

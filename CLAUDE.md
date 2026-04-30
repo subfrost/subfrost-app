@@ -346,7 +346,7 @@ Source: `oyl-amm/alkanes/pool/src/lib.rs` + `oyl-amm/alkanes/alkanes-runtime-poo
 | 99 | GetName | Get pool name (returns String). |
 | 999 | PoolDetails | Get comprehensive pool details (returns Vec<u8>). |
 
-**Key Insight:** The factory has router methods (11, 12, 13, 14, 29) that call pools internally, AND pools have direct methods (1, 2, 3). The frontend calls the **factory router for swaps** (opcode 13) because the deployed pool logic [4:65496] is missing Swap opcode 3. Pools are called directly for add liquidity (opcode 1) and remove liquidity (opcode 2), which DO work on the deployed pool.
+**Key Insight:** The frontend calls the **factory router for ALL AMM operations** — swap (opcode 13), addLiquidity (opcode 11), and burn/removeLiquidity (opcode 12). Factory routes provide Uniswap-style slippage params (`amount_a_min`, `amount_b_min`) and a deadline; pool-direct calls (opcodes 1/2/3) skip these checks and expose users to MEV / reserve drift. Pool opcodes are kept here for reference only — do **not** call them directly from the frontend.
 
 ### frBTC Signer Address
 
@@ -375,15 +375,24 @@ The CLI's `--inputs` flag auto-generates p0. The frontend manually constructs bo
 
 2. **p1 (cellpack protostone):** Contains the actual contract call (cellpack). When the runtime processes p1, any alkanes transferred to it by p0 become `incomingAlkanes` in the called contract's execution context. The contract then reads these to know what tokens it received.
 
-### When You Need Two Protostones
+### When You Need Multiple Protostones
 
-- **AddLiquidity (pool opcode 1):** Two edicts in p0 (token0 + token1) → p1 calls pool
-- **CreateNewPool (factory opcode 1):** Two edicts in p0 (token0 + token1) → p1 calls factory
-- **Swap (factory opcode 13):** One edict in p0 (input token) → p1 calls factory
-- **RemoveLiquidity (pool opcode 2):** One edict in p0 (LP token) → p1 calls pool
-- **Wrap BTC:** BTC output at v0 + protostone at v1 (different pattern — BTC, not alkanes)
+For most AMM operations a **single cellpack protostone is enough** — input alkanes auto-allocate to it and the cellpack's `token_a` / `token_b` parameters tell the contract what to do with them:
 
-### Common Mistake
+- **Swap (factory opcode 13):** Single protostone — `[factory, 13, ..., sellTokenId, ...]`
+- **AddLiquidity (factory opcode 11):** Single protostone — `[factory, 11, ta, tb, a_des, b_des, a_min, b_min, deadline]`
+- **Burn / RemoveLiquidity (factory opcode 12):** Single protostone — `[factory, 12, ta, tb, liquidity, a_min, b_min, deadline]`
+
+Multi-protostone (chained) is only needed when:
+
+- **Atomic wrap+swap:** p0 wraps BTC → frBTC, pointer=p1 forwards to swap. The frBTC contract uses `CallResponse::forward(incoming_alkanes)`, so any auto-allocated input alkanes also pass through to p1.
+- **Atomic wrap+addLiquidity:** Same pattern — wrap forwards to factory.AddLiquidity at p1.
+- **CreateNewPool (factory opcode 1):** Currently kept as two-protostone with explicit edicts (legacy pattern). Could be simplified to single protostone — same auto-allocation mechanics as opcode 11.
+- **Wrap BTC:** BTC output at v0 + protostone at v1 (different pattern — BTC, not alkanes).
+
+### When You Actually Need Edicts
+
+Edicts are only mandatory when **input alkanes need to land at a non-first protostone** (e.g. p2 in a 3-protostone chain). For single-protostone calls the edicts are redundant — the cellpack params identify the tokens.
 
 If the edict in p0 has the wrong pointer (e.g., `v0` instead of `v1`), the tokens go to output 0 instead of to the cellpack protostone. The contract receives zero `incomingAlkanes` and fails with "expected N alkane inputs" or "input amount cannot be zero".
 
@@ -431,8 +440,8 @@ For swap/wrap: SDK uses `payment_utxos` from UniSat `getBitcoinUtxos()` (clean U
 **Fix:** Use CreateNewPool (opcode 1) first, or check pool exists with opcode 2.
 
 ### "expected 2 alkane inputs"
-**Cause:** Pool's AddLiquidity (opcode 1) received fewer than 2 token types in `incomingAlkanes`.
-**Fix:** Ensure p0 has TWO edicts (one per token) both pointing to p1. Both tokens must be different alkane IDs.
+**Cause:** Factory.AddLiquidity (opcode 11) received fewer than 2 token types in `incomingAlkanes`. Either UTXO selection only picked up one of the two tokens, or `inputRequirements` was wrong.
+**Fix:** Verify both tokens are in `inputRequirements` (`block:tx:amount,block:tx:amount`). Both must be different alkane IDs.
 
 ### "Extcall failed: Unrecognized opcode"
 **Cause:** The factory proxy delegates to a logic contract that doesn't implement the called opcode. The WASM is an incomplete build.
@@ -598,7 +607,10 @@ See "Address Handling — useActualAddresses is MANDATORY" above. This rule was 
 ```typescript
 const isBrowserWallet = walletType === 'browser';
 const toAddresses = isBrowserWallet ? [primaryAddress] : ['p2tr:0'];
-const changeAddr = isBrowserWallet ? (segwitAddress || taprootAddress) : 'p2wpkh:0';
+// Keystore is taproot-only (BIP86) — BTC change must go to taproot, not segwit.
+// Sending change to 'p2wpkh:0' for keystore strands BTC at a segwit address
+// the user does not actively hold funds at.
+const changeAddr = isBrowserWallet ? (segwitAddress || taprootAddress) : 'p2tr:0';
 const alkanesChangeAddr = isBrowserWallet ? primaryAddress : 'p2tr:0';
 ```
 
@@ -646,7 +658,7 @@ All input alkanes automatically go to the FIRST protostone with matching `protoc
 - **tapInternalKey**: SDK adapters can't patch it — frontend `patchTapInternalKeys()` is mandatory before signing
 - **Symbolic addresses**: NEVER use `p2tr:0`/`p2wpkh:0` for browser wallets — tokens go to SDK dummy wallet
 - **Wallet session**: `ensureWalletSession()` in `lib/wallet/browserWalletSigning.ts` must run before all mutations
-- **Factory router for swaps**: Use factory opcode 13, not pool opcode 3 (pool's Swap is missing)
+- **Factory router for ALL AMM ops**: Use factory opcode 13 (swap), 11 (addLiquidity), 12 (burn). Never call pool-direct (opcodes 1/2/3) — factory routes give Uniswap-style slippage protection (`amount_a_min`, `amount_b_min`) and a deadline; pool-direct opcodes have no min checks.
 - **WASM sync**: Always copy `lib/oyl/alkanes/` after SDK rebuild
 - **DUST_VALUE = 600 sats** (not 546) for relay compatibility
 

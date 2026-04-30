@@ -175,7 +175,7 @@ export function useSwapUnwrapMutation() {
 
       // Get deadline block height
       const isRegtest = network === 'regtest' || network === 'subfrost-regtest' || network === 'regtest-local' || network === 'qubitcoin-regtest';
-      const deadlineBlocks = isRegtest ? 1000 : (data.deadlineBlocks || 3);
+      const deadlineBlocks = isRegtest ? 1000 : (data.deadlineBlocks || 5);
       const deadline = await getFutureBlockHeight(deadlineBlocks, provider as any);
       console.log('[SwapUnwrap] Deadline:', deadline, `(+${deadlineBlocks} blocks)`);
 
@@ -216,9 +216,10 @@ export function useSwapUnwrapMutation() {
       // ========================================================================
       console.log('[SwapUnwrap] Building swap PSBT (Token → frBTC)...');
 
+      // Keystore is taproot-only: symbolic addresses all resolve to p2tr:0.
       const fromAddresses = useActualAddresses
         ? [segwitAddress, taprootAddress].filter(Boolean) as string[]
-        : ['p2wpkh:0', 'p2tr:0'];
+        : ['p2tr:0'];
 
       const toAddresses = useActualAddresses
         ? [taprootAddress!]
@@ -226,7 +227,7 @@ export function useSwapUnwrapMutation() {
 
       const changeAddr = useActualAddresses
         ? (segwitAddress || taprootAddress)
-        : 'p2wpkh:0';
+        : 'p2tr:0';
 
       const alkanesChangeAddr = useActualAddresses
         ? taprootAddress
@@ -342,14 +343,14 @@ export function useSwapUnwrapMutation() {
 
       // Three-output unwrap layout (matches useUnwrapMutation):
       //   v0: alkanes refund (taproot)        ← refund=v0
-      //   v1: BTC recipient (segwit fallback) ← pointer=v1
+      //   v1: BTC recipient                    ← pointer=v1 (taproot for keystore)
       //   v2: signer P2TR dust                ← dustVout=2
       const unwrapAlkanesRecipient = isBrowserWallet
         ? (taprootAddress || segwitAddress)!
         : 'p2tr:0';
       const unwrapBtcRecipient = isBrowserWallet
         ? (segwitAddress || taprootAddress)!
-        : 'p2wpkh:0';
+        : 'p2tr:0';
       const unwrapToAddresses = [unwrapAlkanesRecipient, unwrapBtcRecipient, signerAddress];
       const UNWRAP_DUST_VOUT = 2;
 
