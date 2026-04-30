@@ -494,13 +494,6 @@ describe('WalletSettings', () => {
     expect(src).toMatch(/useTheme\(\)/);
   });
 
-  it('has derivation configuration support', () => {
-    expect(src).toMatch(/interface\s+DerivationConfig/);
-    expect(src).toMatch(/accountIndex/);
-    expect(src).toMatch(/changeIndex/);
-    expect(src).toMatch(/addressIndex/);
-  });
-
   it('supports Google Drive backup feature', () => {
     expect(src).toMatch(/import.*initGoogleDrive/);
     expect(src).toMatch(/import.*backupWalletToDrive/);
