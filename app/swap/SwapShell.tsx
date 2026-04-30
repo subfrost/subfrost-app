@@ -38,14 +38,12 @@ import { useLPPositions } from "@/hooks/useLPPositions";
 import { useTranslation } from '@/hooks/useTranslation';
 
 // New unified layout components
-import TradeForm from "./components/TradeForm";
+import TradeForm, { type OrderType } from "./components/TradeForm";
 import BottomPanels from "./components/BottomPanels";
-import LiquidityModal from "./components/LiquidityModal";
-import MarketsSidepanel from "./components/MarketsSidepanel";
 import MobileDataPanels from "./components/MobileDataPanels";
+import { saveSwapPair, loadSwapPair } from "./swapPair";
 
 // Lazy loaded components - split into separate chunks
-const LiquidityInputs = lazy(() => import("./components/LiquidityInputs"));
 const PoolDetailsCard = lazy(() => import("./components/PoolDetailsCard"));
 const SwapSummary = lazy(() => import("./components/SwapSummary"));
 const TransactionSettingsModal = lazy(() => import("@/app/components/TransactionSettingsModal"));
@@ -67,42 +65,6 @@ type SwapFlowStep =
   | { type: 'unwrap-confirming'; txId: string; attempt: number; maxAttempts: number }
   | { type: 'complete'; wrapTxId?: string; swapTxId?: string; unwrapTxId?: string }
   | { type: 'error'; step: 'wrap' | 'swap' | 'unwrap'; message: string; wrapTxId?: string; swapTxId?: string };
-
-// Loading skeleton for swap form
-const SwapFormSkeleton = () => (
-  <div className="animate-pulse space-y-4">
-    <div className="h-24 bg-[color:var(--sf-primary)]/10 rounded-xl" />
-    <div className="h-10 w-10 mx-auto bg-[color:var(--sf-primary)]/10 rounded-full" />
-    <div className="h-24 bg-[color:var(--sf-primary)]/10 rounded-xl" />
-    <div className="h-14 bg-[color:var(--sf-primary)]/10 rounded-xl" />
-  </div>
-);
-
-// Loading skeleton for markets grid
-const MarketsSkeleton = () => (
-  <div className="animate-pulse space-y-3">
-    <div className="h-20 bg-[color:var(--sf-primary)]/10 rounded-xl" />
-    <div className="h-32 bg-[color:var(--sf-primary)]/10 rounded-xl" />
-  </div>
-);
-
-const SWAP_PAIR_KEY = 'subfrost_swap_pair';
-
-function saveSwapPair(from: TokenMeta, to: TokenMeta) {
-  try {
-    localStorage.setItem(SWAP_PAIR_KEY, JSON.stringify({ from, to }));
-  } catch { /* ignore quota/private mode errors */ }
-}
-
-function loadSwapPair(): { from: TokenMeta; to: TokenMeta } | null {
-  try {
-    const raw = localStorage.getItem(SWAP_PAIR_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (parsed?.from?.id && parsed?.to?.id) return parsed;
-  } catch { /* ignore */ }
-  return null;
-}
 
 /** Get the human-readable bridge route for a cross-chain pair. */
 function getBridgeRoute(from: string, to: string): string {
@@ -153,17 +115,18 @@ export default function SwapShell() {
     });
   }, [poolsData?.items, poolStats]);
 
-  // Volume period state (shared between MarketsGrid and PoolDetailsCard)
-  const [volumePeriod, setVolumePeriod] = useState<'24h' | '30d'>('30d');
-
   const marketType = 'spot' as const;
 
   // Limit order price from orderbook click
   const [limitSelectedPrice, setLimitSelectedPrice] = useState<string | undefined>();
 
-  // Modal states
-  const [isLiquidityModalOpen, setIsLiquidityModalOpen] = useState(false);
-  const [isMarketsPanelOpen, setIsMarketsPanelOpen] = useState(false);
+  // Order type drives the desktop left panel default: market/liquidity → chart, limit → orderbook.
+  // Users can still manually flip the panel via the Chart / Order Book buttons.
+  const [orderType, setOrderType] = useState<OrderType>('market');
+  const [desktopLeftView, setDesktopLeftView] = useState<'chart' | 'orderbook'>('chart');
+  useEffect(() => {
+    setDesktopLeftView(orderType === 'limit' ? 'orderbook' : 'chart');
+  }, [orderType]);
 
   // Liquidity mode state
   const [liquidityMode, setLiquidityMode] = useState<'provide' | 'remove'>('provide');
@@ -424,9 +387,9 @@ export default function SwapShell() {
   }, [fromToken, toToken]);
 
   // Default LP tokens: frBTC / DIESEL (or bUSD on mainnet)
-  // Initialize when liquidity modal opens
+  // Initialize when the Liquidity tab becomes active
   useEffect(() => {
-    if (isLiquidityModalOpen) {
+    if (orderType === 'liquidity') {
       if (!poolToken0 && FRBTC_ALKANE_ID) {
         setPoolToken0({ id: FRBTC_ALKANE_ID, symbol: 'frBTC', name: 'frBTC' });
       }
@@ -435,7 +398,7 @@ export default function SwapShell() {
         setPoolToken1({ id: BUSD_ALKANE_ID, symbol, name: symbol });
       }
     }
-  }, [isLiquidityModalOpen, poolToken0, poolToken1, FRBTC_ALKANE_ID, BUSD_ALKANE_ID, network]);
+  }, [orderType, poolToken0, poolToken1, FRBTC_ALKANE_ID, BUSD_ALKANE_ID, network]);
 
   // Allow all tokens - no filtering
   // Base tokens - tokens that can swap with any token (BTC, frBTC, bUSD)
@@ -1540,17 +1503,6 @@ export default function SwapShell() {
     ];
   }, [selectedPool, poolTokenMap, BUSD_ALKANE_ID, FRBTC_ALKANE_ID]);
 
-  const handleSelectPool = (pool: PoolSummary) => {
-    setSelectedPool(pool);
-    setFromToken(pool.token0);
-    setToToken(pool.token1);
-    // Also update LP tokens if liquidity modal is open
-    if (isLiquidityModalOpen) {
-      setPoolToken0(pool.token0);
-      setPoolToken1(pool.token1);
-    }
-  };
-
   const handleAddLiquidity = async () => {
 
     if (!poolToken0 || !poolToken1) {
@@ -2162,7 +2114,6 @@ export default function SwapShell() {
             <TradeForm
               fromToken={fromToken}
               toToken={toToken}
-              onOpenMarkets={() => setIsMarketsPanelOpen(true)}
               network={network}
               swapInputsProps={{
                 from: fromToken,
@@ -2216,11 +2167,57 @@ export default function SwapShell() {
               }}
               baseToken={fromToken?.symbol || 'DIESEL'}
               quoteToken={toToken?.symbol || 'frBTC'}
-              baseTokenId={fromToken?.id || '2:0'}
-              quoteTokenId={toToken?.id || '32:0'}
               limitSelectedPrice={limitSelectedPrice}
               onLimitPriceSelect={setLimitSelectedPrice}
-              onOpenLiquidity={() => setIsLiquidityModalOpen(true)}
+              liquidityProps={{
+                token0: poolToken0,
+                token1: poolToken1,
+                token0Options: poolTokenOptions,
+                token1Options: poolTokenOptions,
+                token0Amount: poolToken0Amount,
+                token1Amount: poolToken1Amount,
+                onChangeToken0Amount: setPoolToken0Amount,
+                onChangeToken1Amount: setPoolToken1Amount,
+                onSelectToken0: (id: string) => {
+                  const t = poolTokenOptions.find((x) => x.id === id);
+                  if (t) setPoolToken0(t);
+                },
+                onSelectToken1: (id: string) => {
+                  const t = poolTokenOptions.find((x) => x.id === id);
+                  if (t) setPoolToken1(t);
+                },
+                onAddLiquidity: handleAddLiquidity,
+                onRemoveLiquidity: handleRemoveLiquidity,
+                isLoading: addLiquidityMutation.isPending,
+                isRemoveLoading: removeLiquidityMutation.isPending,
+                token0BalanceText: formatBalance(poolToken0?.id),
+                token1BalanceText: formatBalance(poolToken1?.id),
+                token0FiatText: calculateUsdValue(poolToken0?.id, poolToken0Amount),
+                token1FiatText: calculateUsdValue(poolToken1?.id, poolToken1Amount),
+                onPercentToken0: poolToken0 ? handlePercentToken0 : undefined,
+                onPercentToken1: poolToken1 ? handlePercentToken1 : undefined,
+                minimumToken0: poolToken0Amount ? (parseFloat(poolToken0Amount) * 0.995).toFixed(
+                  poolToken0?.id === 'btc' || poolToken0?.id === FRBTC_ALKANE_ID ? 8 : 2
+                ) : undefined,
+                minimumToken1: poolToken1Amount ? (parseFloat(poolToken1Amount) * 0.995).toFixed(
+                  poolToken1?.id === 'btc' || poolToken1?.id === FRBTC_ALKANE_ID ? 8 : 2
+                ) : undefined,
+                feeRate: fee.feeRate,
+                feeSelection: fee.selection,
+                setFeeSelection: fee.setSelection,
+                customFee: fee.custom,
+                setCustomFee: fee.setCustom,
+                feePresets: fee.presets,
+                liquidityMode,
+                onModeChange: setLiquidityMode,
+                selectedLPPosition,
+                onSelectLPPosition: setSelectedLPPosition,
+                onOpenLPSelector: () => setIsLPSelectorOpen(true),
+                removeAmount,
+                onChangeRemoveAmount: setRemoveAmount,
+              }}
+              orderType={orderType}
+              onOrderTypeChange={setOrderType}
             />
 
             {/* Transaction Stepper - shows during multi-step swaps */}
@@ -2237,17 +2234,52 @@ export default function SwapShell() {
           </div>
         </div>
 
-        {/* Chart — desktop only (7 cols) */}
-        <div className="hidden lg:flex lg:col-span-7 lg:order-1 flex-col min-h-0" style={{ minHeight: '450px' }}>
-          <PoolDetailsCard pool={chartPool} chartTokenId={chartTokenId} isWrapPair={!chartPool && (isWrapPair || isUnwrapPair || isWrapZecPair || isUnwrapZecPair || isWrapEthPair || isUnwrapEthPair)} />
+        {/* Chart / Orderbook switcher — desktop only (7 cols).
+            Buttons are absolutely positioned over the content so the chart/orderbook
+            panels can start at the very top of the card while the buttons retain their
+            original top-right placement. */}
+        <div className="hidden lg:flex lg:col-span-7 lg:order-1 sf-card flex-col h-full overflow-hidden relative" style={{ minHeight: '450px' }}>
+          <div className="flex-1 min-h-0 relative">
+            {/* Both panels stay mounted so the chart iframe doesn't reload when toggling. */}
+            <div className={`absolute inset-0 ${desktopLeftView === 'chart' ? '' : 'invisible pointer-events-none'}`}>
+              <PoolDetailsCard pool={chartPool} chartTokenId={chartTokenId} isWrapPair={!chartPool && (isWrapPair || isUnwrapPair || isWrapZecPair || isUnwrapZecPair || isWrapEthPair || isUnwrapEthPair)} bare />
+            </div>
+            <div className={`absolute inset-0 ${desktopLeftView === 'orderbook' ? '' : 'invisible pointer-events-none'}`}>
+              <Suspense fallback={<div className="h-full bg-[color:var(--sf-primary)]/5 rounded-xl animate-pulse" />}>
+                <OrderbookPanel
+                  baseToken={fromToken?.id || '2:0'}
+                  quoteToken={toToken?.id || '32:0'}
+                  onPriceSelect={setLimitSelectedPrice}
+                  bare
+                />
+              </Suspense>
+            </div>
+          </div>
+          <div className="absolute top-0 right-0 flex items-center justify-end gap-2 p-3 pb-0 z-10 pointer-events-none">
+            <button
+              onClick={() => setDesktopLeftView('chart')}
+              className={`sf-tab-btn pointer-events-auto ${desktopLeftView === 'chart' ? 'sf-tab-btn--active' : ''}`}
+            >
+              Chart
+            </button>
+            <button
+              onClick={() => setDesktopLeftView('orderbook')}
+              className={`sf-tab-btn pointer-events-auto ${desktopLeftView === 'orderbook' ? 'sf-tab-btn--active' : ''}`}
+            >
+              Order Book
+            </button>
+          </div>
         </div>
 
-        {/* Mobile data panels — collapsible chart (below trade form on mobile) */}
+        {/* Mobile data panels — collapsible chart + orderbook (below trade form on mobile) */}
         <div className="lg:hidden order-2">
           <MobileDataPanels
             chartPool={chartPool}
             chartTokenId={chartTokenId}
             isWrapPair={!chartPool && (isWrapPair || isUnwrapPair || isWrapZecPair || isUnwrapZecPair || isWrapEthPair || isUnwrapEthPair)}
+            baseTokenId={fromToken?.id || '2:0'}
+            quoteTokenId={toToken?.id || '32:0'}
+            onPriceSelect={setLimitSelectedPrice}
           />
         </div>
       </div>
@@ -2268,75 +2300,8 @@ export default function SwapShell() {
             setPoolToken1({ id: pair.token1Id, symbol: pair.token1Symbol, name: pair.token1Symbol });
           }
           setLiquidityMode('provide');
-          setIsLiquidityModalOpen(true);
+          setOrderType('liquidity');
         }}
-      />
-
-      {/* Liquidity Modal */}
-      <LiquidityModal
-        isOpen={isLiquidityModalOpen}
-        onClose={() => setIsLiquidityModalOpen(false)}
-      >
-        <Suspense fallback={<SwapFormSkeleton />}>
-          <LiquidityInputs
-            token0={poolToken0}
-            token1={poolToken1}
-            token0Options={poolTokenOptions}
-            token1Options={poolTokenOptions}
-            token0Amount={poolToken0Amount}
-            token1Amount={poolToken1Amount}
-            onChangeToken0Amount={setPoolToken0Amount}
-            onChangeToken1Amount={setPoolToken1Amount}
-            onSelectToken0={(id) => {
-              const t = poolTokenOptions.find((x) => x.id === id);
-              if (t) setPoolToken0(t);
-            }}
-            onSelectToken1={(id) => {
-              const t = poolTokenOptions.find((x) => x.id === id);
-              if (t) setPoolToken1(t);
-            }}
-            onAddLiquidity={handleAddLiquidity}
-            onRemoveLiquidity={handleRemoveLiquidity}
-            isLoading={addLiquidityMutation.isPending}
-            isRemoveLoading={removeLiquidityMutation.isPending}
-            token0BalanceText={formatBalance(poolToken0?.id)}
-            token1BalanceText={formatBalance(poolToken1?.id)}
-            token0FiatText={calculateUsdValue(poolToken0?.id, poolToken0Amount)}
-            token1FiatText={calculateUsdValue(poolToken1?.id, poolToken1Amount)}
-            onPercentToken0={poolToken0 ? handlePercentToken0 : undefined}
-            onPercentToken1={poolToken1 ? handlePercentToken1 : undefined}
-            minimumToken0={poolToken0Amount ? (parseFloat(poolToken0Amount) * 0.995).toFixed(
-              poolToken0?.id === 'btc' || poolToken0?.id === FRBTC_ALKANE_ID ? 8 : 2
-            ) : undefined}
-            minimumToken1={poolToken1Amount ? (parseFloat(poolToken1Amount) * 0.995).toFixed(
-              poolToken1?.id === 'btc' || poolToken1?.id === FRBTC_ALKANE_ID ? 8 : 2
-            ) : undefined}
-            feeRate={fee.feeRate}
-            feeSelection={fee.selection}
-            setFeeSelection={fee.setSelection}
-            customFee={fee.custom}
-            setCustomFee={fee.setCustom}
-            feePresets={fee.presets}
-            liquidityMode={liquidityMode}
-            onModeChange={setLiquidityMode}
-            selectedLPPosition={selectedLPPosition}
-            onSelectLPPosition={setSelectedLPPosition}
-            onOpenLPSelector={() => setIsLPSelectorOpen(true)}
-            removeAmount={removeAmount}
-            onChangeRemoveAmount={setRemoveAmount}
-          />
-        </Suspense>
-      </LiquidityModal>
-
-      {/* Markets Sidepanel */}
-      <MarketsSidepanel
-        isOpen={isMarketsPanelOpen}
-        onClose={() => setIsMarketsPanelOpen(false)}
-        pools={markets}
-        onSelect={handleSelectPool}
-        selectedPoolId={selectedPool?.id}
-        volumePeriod={volumePeriod}
-        onVolumePeriodChange={setVolumePeriod}
       />
 
       <Suspense fallback={null}>

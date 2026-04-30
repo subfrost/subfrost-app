@@ -9,6 +9,8 @@ interface Props {
   baseToken: string;
   quoteToken: string;
   onPriceSelect?: (price: string) => void;
+  /** Render without the outer sf-card wrapper so this can be embedded inside another sf-card panel. */
+  bare?: boolean;
 }
 
 type DisplayMode = 'both' | 'bids' | 'asks';
@@ -56,7 +58,7 @@ function OrderRow({
   );
 }
 
-export default function OrderbookPanel({ baseToken, quoteToken, onPriceSelect }: Props) {
+export default function OrderbookPanel({ baseToken, quoteToken, onPriceSelect, bare }: Props) {
   const { data: orderbook, isLoading } = useOrderbook(baseToken, quoteToken);
   const [displayMode, setDisplayMode] = useState<DisplayMode>('both');
   const [grouping, setGrouping] = useState<GroupingSize>('0.01');
@@ -93,13 +95,15 @@ export default function OrderbookPanel({ baseToken, quoteToken, onPriceSelect }:
   const groupingOptions: GroupingSize[] = ['0.01', '0.1', '1'];
 
   return (
-    <div className="sf-card flex flex-col h-full overflow-hidden">
-      {/* Header */}
-      <div className="sf-card-header">
-        <span className="text-xs font-bold text-[color:var(--sf-text)] uppercase tracking-wide">
-          Order Book
-        </span>
-        <div className="flex items-center gap-1.5">
+    <div className={`${bare ? '' : 'sf-card '}flex flex-col h-full overflow-hidden`}>
+      {/* Header — height (58px) matches the distance from the top of the sf-card panel
+          on the right (TradeForm) to the top of its input field component, so the
+          orderbook column headers align horizontally with the input box on the right. */}
+      <div className="sf-card-header !pt-3 !pb-4 min-h-[58px]">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="text-xs font-bold text-[color:var(--sf-text)] uppercase tracking-wide whitespace-nowrap">
+            Order Book (Limit)
+          </span>
           {/* Grouping selector */}
           <div className="relative">
             <button
@@ -139,27 +143,27 @@ export default function OrderbookPanel({ baseToken, quoteToken, onPriceSelect }:
             )}
           </div>
           <div className="flex gap-0.5 bg-[color:var(--sf-surface)] rounded-md p-0.5">
-          <button
-            onClick={() => setDisplayMode('both')}
-            title="Both"
-            className={`p-1 rounded transition-colors ${displayMode === 'both' ? 'bg-[color:var(--sf-primary)]/20 text-[color:var(--sf-primary)]' : 'text-[color:var(--sf-text)]/30 hover:text-[color:var(--sf-text)]/50'}`}
-          >
-            <ArrowUpDown size={12} />
-          </button>
-          <button
-            onClick={() => setDisplayMode('bids')}
-            title="Bids only"
-            className={`p-1 rounded transition-colors ${displayMode === 'bids' ? 'bg-green-500/20 text-green-400' : 'text-[color:var(--sf-text)]/30 hover:text-[color:var(--sf-text)]/50'}`}
-          >
-            <TrendingUp size={12} />
-          </button>
-          <button
-            onClick={() => setDisplayMode('asks')}
-            title="Asks only"
-            className={`p-1 rounded transition-colors ${displayMode === 'asks' ? 'bg-red-500/20 text-red-400' : 'text-[color:var(--sf-text)]/30 hover:text-[color:var(--sf-text)]/50'}`}
-          >
-            <TrendingDown size={12} />
-          </button>
+            <button
+              onClick={() => setDisplayMode('both')}
+              title="Both"
+              className={`p-1 rounded transition-colors ${displayMode === 'both' ? 'bg-[color:var(--sf-primary)]/20 text-[color:var(--sf-primary)]' : 'text-[color:var(--sf-text)]/30 hover:text-[color:var(--sf-text)]/50'}`}
+            >
+              <ArrowUpDown size={12} />
+            </button>
+            <button
+              onClick={() => setDisplayMode('bids')}
+              title="Bids only"
+              className={`p-1 rounded transition-colors ${displayMode === 'bids' ? 'bg-green-500/20 text-green-400' : 'text-[color:var(--sf-text)]/30 hover:text-[color:var(--sf-text)]/50'}`}
+            >
+              <TrendingUp size={12} />
+            </button>
+            <button
+              onClick={() => setDisplayMode('asks')}
+              title="Asks only"
+              className={`p-1 rounded transition-colors ${displayMode === 'asks' ? 'bg-red-500/20 text-red-400' : 'text-[color:var(--sf-text)]/30 hover:text-[color:var(--sf-text)]/50'}`}
+            >
+              <TrendingDown size={12} />
+            </button>
           </div>
         </div>
       </div>

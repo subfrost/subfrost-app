@@ -67,7 +67,7 @@ export default function MarketsSidepanel({
     <div className="fixed inset-0 z-50 flex justify-end" onTransitionEnd={handleTransitionEnd}>
       {/* Backdrop */}
       <div
-        className={`absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity duration-300 ease-[cubic-bezier(0,0,0,1)] ${
+        className={`absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity duration-200 ease-[cubic-bezier(0,0,0,1)] ${
           visible ? 'opacity-100' : 'opacity-0'
         }`}
         onClick={onClose}
@@ -76,7 +76,7 @@ export default function MarketsSidepanel({
       {/* Panel — slides in from the right on md+ */}
       <div
         ref={panelRef}
-        className={`sf-panel sf-panel--overlay relative w-full max-w-lg h-full flex flex-col overflow-hidden shadow-2xl transition-transform duration-300 ease-[cubic-bezier(0,0,0,1)] ${
+        className={`sf-panel sf-panel--overlay relative w-full max-w-lg h-full flex flex-col overflow-hidden shadow-2xl transition-transform duration-200 ease-[cubic-bezier(0,0,0,1)] ${
           visible ? 'translate-x-0' : 'translate-x-full'
         }`}
       >

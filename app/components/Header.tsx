@@ -247,7 +247,7 @@ export default function Header() {
               <button
                 type="button"
                 onClick={() => onConnectModalOpenChange(true)}
-                className="relative rounded-lg bg-[color:var(--sf-panel-bg)] px-6 py-2 text-sm font-semibold text-[color:var(--sf-text)] shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)] overflow-hidden whitespace-nowrap min-w-[148px] text-center"
+                className="relative rounded-lg bg-[color:var(--sf-panel-bg)] hover:bg-[color:var(--sf-surface)] px-6 py-2 text-sm font-semibold text-[color:var(--sf-text)] shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)] overflow-hidden whitespace-nowrap min-w-[148px] text-center"
               >
                 <span className="relative z-10">
                   {t("header.connectWallet")}
@@ -455,7 +455,7 @@ export default function Header() {
                 <button
                   type="button"
                   onClick={() => onConnectModalOpenChange(true)}
-                  className="relative rounded-lg bg-[color:var(--sf-panel-bg)] px-6 py-2 text-sm font-semibold text-[color:var(--sf-text)] shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)] overflow-hidden whitespace-nowrap min-w-[148px] text-center"
+                  className="relative rounded-lg bg-[color:var(--sf-panel-bg)] hover:bg-[color:var(--sf-surface)] px-6 py-2 text-sm font-semibold text-[color:var(--sf-text)] shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)] overflow-hidden whitespace-nowrap min-w-[148px] text-center"
                 >
                   <span className="relative z-10">
                     {t("header.connectWallet")}
