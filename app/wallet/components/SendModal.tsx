@@ -1167,6 +1167,13 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
       const isBrowserWallet = walletType === 'browser';
 
       // Sign the PSBT
+      // JOURNAL (2026-04-30): Keystore taproot signing must apply the BIP-341
+      // tweak with proper y-parity handling (negate privKey if internal pubkey
+      // has odd y). bip32's .tweak() ignored this and silently produced a
+      // tweaked pubkey that didn't match the witnessUtxo output key 50% of
+      // the time, causing finalizeAllInputs to throw "No tapleaf script
+      // signature provided". signTaprootPsbt now does the parity check
+      // correctly via privateNegate + ecc.privateAdd.
       let signedPsbtBase64: string;
       if (isBrowserWallet) {
         console.log('[SendModal] Browser wallet: signing all inputs in single call...');
