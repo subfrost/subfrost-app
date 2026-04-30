@@ -181,7 +181,6 @@ export default function ActivityFeed({
     { value: "swap", label: t("activity.swaps") },
     { value: "mint", label: t("activity.supply") },
     { value: "burn", label: t("activity.withdraw") },
-    { value: "creation", label: t("activity.createPool") },
     { value: "wrap", label: t("activity.wrap") },
     { value: "unwrap", label: t("activity.unwrap") },
   ];

@@ -6,12 +6,6 @@ import { ChevronRight } from 'lucide-react';
 import { useTranslation } from '@/hooks/useTranslation';
 import { AVAILABLE_VAULTS } from '@/app/vaults/constants';
 
-function getHistoricalApy(apyHistory?: number[]): string {
-  if (!apyHistory || apyHistory.length === 0) return '-';
-  const avg = apyHistory.reduce((sum, val) => sum + val, 0) / apyHistory.length;
-  return `${avg.toFixed(1)}%`;
-}
-
 export default function VaultTiles() {
   const { t } = useTranslation();
   const router = useRouter();
@@ -52,11 +46,11 @@ export default function VaultTiles() {
               <div className="grid grid-cols-2 gap-2">
                 <div className="text-center">
                   <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">7D APY</div>
-                  <div className="font-bold text-[color:var(--sf-text)]">{fireVault.estimatedApy ? `${fireVault.estimatedApy}%` : '-'}</div>
+                  <div className="font-bold text-[color:var(--sf-text)]">TBD</div>
                 </div>
                 <div className="text-center">
                   <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">30D APY</div>
-                  <div className="font-bold text-[color:var(--sf-text)]">{getHistoricalApy(fireVault.apyHistory)}</div>
+                  <div className="font-bold text-[color:var(--sf-text)]">TBD</div>
                 </div>
               </div>
               <div className="text-center">

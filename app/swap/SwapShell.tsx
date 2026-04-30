@@ -36,6 +36,7 @@ import { useTokenNames, resolveTokenDisplay } from "@/hooks/useTokenNames";
 import { useRemoveLiquidityMutation } from "@/hooks/useRemoveLiquidityMutation";
 import { useLPPositions } from "@/hooks/useLPPositions";
 import { useTranslation } from '@/hooks/useTranslation';
+import { KNOWN_TOKENS } from "@/lib/alkanes-client";
 
 // New unified layout components
 import TradeForm, { type OrderType } from "./components/TradeForm";
@@ -226,6 +227,32 @@ export default function SwapShell() {
     userCurrencies.forEach((c: any) => map.set(c.id, c));
     return map;
   }, [userCurrencies]);
+
+  // Wallet-independent token prices derived from pool TVL/reserves.
+  // Espo's per-token priceUsd (used by idToUserCurrency) is only available
+  // when a wallet is connected, so input fields would show $0.00 for any
+  // alkane until connect. `markets` is wallet-independent — derive a price
+  // from each pool's token{0,1}TvlUsd / (amount / 10^decimals). Pools are
+  // sorted by TVL desc, so first-found wins (highest-liquidity pool).
+  const derivedTokenPrices = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const pool of markets) {
+      const entries: Array<{ id?: string; amount?: string; tvlUsd?: number }> = [
+        { id: pool.token0?.id, amount: (pool as any).token0Amount, tvlUsd: pool.token0TvlUsd },
+        { id: pool.token1?.id, amount: (pool as any).token1Amount, tvlUsd: pool.token1TvlUsd },
+      ];
+      for (const { id, amount, tvlUsd } of entries) {
+        if (!id || !amount || !tvlUsd || tvlUsd <= 0) continue;
+        if (map.has(id)) continue;
+        const decimals = KNOWN_TOKENS[id]?.decimals ?? 8;
+        const denom = Number(amount) / 10 ** decimals;
+        if (!Number.isFinite(denom) || denom <= 0) continue;
+        const price = tvlUsd / denom;
+        if (Number.isFinite(price) && price > 0) map.set(id, price);
+      }
+    }
+    return map;
+  }, [markets]);
 
   // Independent token name source — fetches from /get-alkanes bulk API.
   // Loads independently of usePools, ensuring names are available even if pools fail.
@@ -796,6 +823,10 @@ export default function SwapShell() {
     if (tokenId === BUSD_ALKANE_ID || tokenId === 'usdt') {
       return 1.0;
     }
+
+    // Fallback: derive from pool TVL — works without a wallet connection.
+    const derived = derivedTokenPrices.get(tokenId);
+    if (derived && derived > 0) return derived;
 
     return undefined;
   };
