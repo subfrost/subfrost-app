@@ -30,8 +30,6 @@ export default function SwapSuccessNotification({
   const [isFlashing, setIsFlashing] = useState(true);
   const [isVisible, setIsVisible] = useState(false);
   const [isExpanded, setIsExpanded] = useState(true);
-  const [countdown, setCountdown] = useState(5);
-  const [revealComplete, setRevealComplete] = useState(false);
   const autoCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const confirmed = useTxConfirmed(autoCloseAfterConfirmed ? txId : undefined);
@@ -54,24 +52,13 @@ export default function SwapSuccessNotification({
     // End flash after 400ms
     const flashTimer = setTimeout(() => setIsFlashing(false), 400);
 
-    // Countdown ticks: 5 → 4 → 3 → 2 → 1 → 0 (link reveals at 0)
-    const tickTimers: ReturnType<typeof setTimeout>[] = [];
-    for (let i = 1; i <= 5; i += 1) {
-      tickTimers.push(setTimeout(() => setCountdown(5 - i), i * 1000));
-    }
-
-    // Mark reveal complete after countdown ends + 1200ms reveal animation
-    const revealTimer = setTimeout(() => setRevealComplete(true), 5000 + 1200);
-
-    // Auto-collapse 5s after the link is fully revealed and clickable
+    // Auto-collapse 5s after appearing
     const collapseTimer = setTimeout(() => {
       setIsExpanded(false);
-    }, 5000 + 1200 + 5000);
+    }, 5000);
 
     return () => {
       clearTimeout(flashTimer);
-      tickTimers.forEach(clearTimeout);
-      clearTimeout(revealTimer);
       clearTimeout(collapseTimer);
     };
   }, []);
@@ -116,21 +103,21 @@ export default function SwapSuccessNotification({
         }`}
       />
 
-      {/* Collapsed circle - bottom right */}
+      {/* Collapsed circle - tucked into bottom-right corner, sized to fit in the page margin */}
       <div
-        className={`fixed bottom-6 right-6 z-[9999] transition-all duration-300 ease-out ${
+        className={`fixed bottom-2 right-2 z-[9999] transition-all duration-300 ease-out ${
           isVisible && !isExpanded ? "opacity-100 scale-100" : "opacity-0 scale-75 pointer-events-none"
         }`}
       >
         <button
           onClick={handleExpand}
-          className="flex h-10 w-10 items-center justify-center rounded-full border border-[color:var(--sf-info-green-border)] bg-[color:var(--sf-info-green-bg)] shadow-[0_4px_20px_rgba(34,197,94,0.3)] hover:shadow-[0_6px_28px_rgba(34,197,94,0.4)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none cursor-pointer"
+          className="flex h-7 w-7 items-center justify-center rounded-full border border-[color:var(--sf-info-green-border)] bg-[color:var(--sf-info-green-bg)] shadow-[0_4px_20px_rgba(34,197,94,0.3)] hover:shadow-[0_6px_28px_rgba(34,197,94,0.4)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none cursor-pointer"
           aria-label="Expand swap notification"
         >
           <div className="flex gap-0.5">
-            <span className="inline-block h-1.5 w-1.5 rounded-full bg-[color:var(--sf-info-green-title)] animate-pulse" />
-            <span className="inline-block h-1.5 w-1.5 rounded-full bg-[color:var(--sf-info-green-title)] animate-pulse [animation-delay:200ms]" />
-            <span className="inline-block h-1.5 w-1.5 rounded-full bg-[color:var(--sf-info-green-title)] animate-pulse [animation-delay:400ms]" />
+            <span className="inline-block h-1 w-1 rounded-full bg-[color:var(--sf-info-green-title)] animate-pulse" />
+            <span className="inline-block h-1 w-1 rounded-full bg-[color:var(--sf-info-green-title)] animate-pulse [animation-delay:200ms]" />
+            <span className="inline-block h-1 w-1 rounded-full bg-[color:var(--sf-info-green-title)] animate-pulse [animation-delay:400ms]" />
           </div>
         </button>
       </div>
@@ -153,40 +140,14 @@ export default function SwapSuccessNotification({
             </h3>
             <div className="text-sm text-[color:var(--sf-info-green-text)]">
               {t('success.transactionId')}{" "}
-              {countdown > 0 ? (
-                <span
-                  className="font-semibold text-xs tabular-nums"
-                  aria-live="polite"
-                >
-                  ({countdown})
-                </span>
-              ) : (
-                <Link
-                  href={`https://espo.sh/tx/${txId}`}
-                  target="_blank"
-                  className={`font-semibold text-xs break-all hover:underline ${
-                    revealComplete ? "" : "pointer-events-none"
-                  }`}
-                  aria-disabled={!revealComplete}
-                  tabIndex={revealComplete ? 0 : -1}
-                  aria-label={txId}
-                >
-                  {txId.split("").map((ch, i) => {
-                    const denom = Math.max(1, txId.length - 1);
-                    const delay = (i * 1140) / denom;
-                    return (
-                      <span
-                        key={i}
-                        className="sf-snake-char"
-                        style={{ animationDelay: `${delay}ms` }}
-                        aria-hidden="true"
-                      >
-                        {ch}
-                      </span>
-                    );
-                  })}
-                </Link>
-              )}
+              <Link
+                href={`https://espo.sh/tx/${txId}`}
+                target="_blank"
+                className="font-semibold text-xs break-all hover:underline"
+                aria-label={txId}
+              >
+                {txId}
+              </Link>
             </div>
           </div>
 
