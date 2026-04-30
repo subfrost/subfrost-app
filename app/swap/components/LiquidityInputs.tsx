@@ -8,7 +8,7 @@ import { useTheme } from "@/context/ThemeContext";
 import { useModalStore } from "@/stores/modals";
 import { useGlobalStore } from "@/stores/global";
 import type { SlippageSelection } from "@/stores/global";
-import { ChevronDown, Settings } from "lucide-react";
+import { ChevronDown, Settings, Plus, Minus } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import type { FeeSelection } from "@/hooks/useFeeRate";
 import { useTranslation } from '@/hooks/useTranslation';
@@ -193,40 +193,29 @@ export default function LiquidityInputs({
 
   return (
     <>
-      {/* Add/Remove Tabs */}
-      <div className="flex gap-4 mb-6">
+      {/* Add/Remove Tabs — mirrors the Buy/Sell toggle in LimitOrderPanel */}
+      <div className="sf-tab-group w-full mb-3">
         <button
           onClick={() => onModeChange?.('provide')}
-          className={`pb-3 px-1 text-sm font-semibold ${
-            liquidityMode === 'provide'
-              ? 'text-[color:var(--sf-primary)] border-b-2 border-[color:var(--sf-primary)]'
-              : 'text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]'
+          className={`sf-tab-btn flex-1 flex items-center justify-center gap-1.5 ${
+            liquidityMode === 'provide' ? 'sf-tab-btn--active' : ''
           }`}
+          style={liquidityMode === 'provide' ? { '--sf-tab-active-bg': '#16a34a' } as React.CSSProperties : undefined}
         >
+          <Plus className="h-3.5 w-3.5" />
           {t('liquidity.add')}
         </button>
         <button
           onClick={() => onModeChange?.('remove')}
-          className={`pb-3 px-1 text-sm font-semibold ${
-            liquidityMode === 'remove'
-              ? 'text-[color:var(--sf-primary)] border-b-2 border-[color:var(--sf-primary)]'
-              : 'text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]'
+          className={`sf-tab-btn flex-1 flex items-center justify-center gap-1.5 ${
+            liquidityMode === 'remove' ? 'sf-tab-btn--active' : ''
           }`}
+          style={liquidityMode === 'remove' ? { '--sf-tab-active-bg': '#dc2626' } as React.CSSProperties : undefined}
         >
+          <Minus className="h-3.5 w-3.5" />
           {t('liquidity.remove')}
         </button>
       </div>
-
-      {/* Label — outside the card containers, under Add/Remove tabs */}
-      {liquidityMode === 'provide' ? (
-        <span className="mb-4 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">
-          {t('liquidity.selectPair')}
-        </span>
-      ) : (
-        <span className="mb-4 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">
-          {t('liquidity.selectLpPosition')}
-        </span>
-      )}
 
       <div className="relative flex flex-col gap-3">
         {liquidityMode === 'remove' ? (
@@ -327,7 +316,7 @@ export default function LiquidityInputs({
               </div>
 
               {/* Transaction Details - collapsible panel */}
-              <div className="sf-panel relative z-[5] overflow-visible">
+              <div className="sf-panel relative z-[5] overflow-visible mt-3 mb-3">
                 {/* Toggle button */}
                 <button
                   type="button"
@@ -374,8 +363,8 @@ export default function LiquidityInputs({
                             setFocusedField(null);
                             const val = parseInt(deadlineLocal, 10);
                             if (!deadlineLocal || isNaN(val) || val < 1) {
-                              setDeadlineLocal('5');
-                              setDeadlineBlocks(5);
+                              setDeadlineLocal('3');
+                              setDeadlineBlocks(3);
                             } else {
                               setDeadlineBlocks(Math.min(100, val));
                             }
@@ -484,42 +473,26 @@ export default function LiquidityInputs({
           )}
         </>
       ) : (
-        /* Provide Mode: Token Pair Selection — side-by-side with "/" divider */
+        /* Provide Mode: side-by-side sf-input cards matching market/limit design */
         <>
           <div className="relative z-20 flex items-stretch gap-2">
-            {/* Token 0 — selector button OR input field */}
+            {/* Token 0 input — sf-input card (half width) */}
             <div className="flex-1 min-w-0">
-              {!token0 ? (
+              <div className={`relative h-full ${token0Focused ? 'z-30' : ''}`}>
                 <div
-                  className="sf-panel h-full p-4 cursor-pointer flex items-center justify-center hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]"
-                  onClick={() => openTokenSelector('pool0')}
+                  className="sf-input group relative h-full z-20 px-3 pt-3 pb-3 cursor-text"
+                  onClick={() => token0InputRef.current?.focus()}
                 >
-                  <div className="sf-tile flex items-center justify-center gap-2 px-3 py-2.5 !rounded-[0.375rem]">
-                    <span className="font-bold text-sm text-[color:var(--sf-text)] whitespace-nowrap">
-                      {t('liquidity.selectToken')}
-                    </span>
-                    <ChevronDown size={14} className="text-[color:var(--sf-text)]/60" />
-                  </div>
-                </div>
-              ) : (
-                <div className={`relative ${token0Focused ? "z-30" : ""}`}>
-                  <div
-                    className={`sf-panel group relative px-3 pt-3 pb-4 transition-shadow duration-[200ms] cursor-text ${
-                      token0Focused
-                        ? "shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]"
-                        : "hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]"
-                    }`}
-                    onClick={() => token0InputRef.current?.focus()}
+                  {/* Token Selector — floating top-right (compact: icon + chevron) */}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openTokenSelector('pool0');
+                    }}
+                    className="sf-tile absolute right-3 top-3 inline-flex items-center gap-2 px-3 py-2 !rounded-[0.375rem] focus:outline-none z-10"
                   >
-                    {/* Token Selector - floating top-right */}
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openTokenSelector('pool0');
-                      }}
-                      className="sf-tile absolute right-3 top-3 inline-flex items-center gap-1.5 px-2 py-1.5 !rounded-[0.375rem] focus:outline-none z-10"
-                    >
+                    {token0 && (
                       <TokenIcon
                         key={`pool0-${token0.id}-${token0.symbol}`}
                         symbol={token0.symbol}
@@ -528,108 +501,87 @@ export default function LiquidityInputs({
                         size="sm"
                         network={network}
                       />
-                      <ChevronDown size={14} className="text-[color:var(--sf-text)]/60 flex-shrink-0" />
-                    </button>
+                    )}
+                    <span className="font-bold text-sm text-[color:var(--sf-text)] whitespace-nowrap">
+                      {token0?.name || token0?.symbol || t('liquidity.selectToken')}
+                    </span>
+                    <ChevronDown size={16} className="text-[color:var(--sf-text)]/60 flex-shrink-0" />
+                  </button>
 
-                    {/* Main content area */}
-                    <div className="flex flex-col gap-0.5">
-                      <span className="text-[10px] font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70 pr-16 truncate">
-                        {token0.name || token0.symbol}
-                      </span>
-
-                      <div className="pr-16">
-                        <NumberField
-                          ref={token0InputRef}
-                          placeholder="0.00"
-                          align="left"
-                          value={token0Amount}
-                          onChange={onChangeToken0Amount}
-                          onFocus={() => setToken0Focused(true)}
-                          onBlur={() => setToken0Focused(false)}
-                        />
-                      </div>
-
-                      <div className="flex items-center justify-between">
-                        <div className="text-[10px] font-medium text-[color:var(--sf-text)]/50">
-                          {token0FiatText}
-                        </div>
-                        <div className="text-[10px] font-medium text-[color:var(--sf-text)]/60">
-                          {token0BalanceText}
-                        </div>
-                      </div>
-
-                      {onPercentToken0 && (
-                        <div
-                          className="flex items-center justify-end w-full"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <div className={`flex items-center gap-1 transition-opacity duration-300 ${
-                            token0Focused ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-                          }`}>
-                            {[
-                              { label: '25%', value: 0.25 },
-                              { label: '50%', value: 0.5 },
-                              { label: '75%', value: 0.75 },
-                              { label: 'Max', value: 1 },
-                            ].map(({ label, value }) => (
-                              <button
-                                key={label}
-                                type="button"
-                                onClick={() => onPercentToken0(value)}
-                                className={`inline-flex items-center rounded-md px-1 py-0.5 text-[9px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${
-                                  activePercentToken0 === value
-                                    ? "bg-[color:var(--sf-primary)]/20"
-                                    : `${theme === 'dark' ? 'bg-white/[0.03]' : 'bg-[color:var(--sf-surface)]'} hover:bg-white/[0.06]`
-                                }`}
-                              >
-                                {label}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      )}
+                  <div className="flex flex-col gap-1">
+                    <div className="mt-10">
+                      <NumberField
+                        ref={token0InputRef}
+                        placeholder="0.00"
+                        align="left"
+                        value={token0Amount}
+                        onChange={onChangeToken0Amount}
+                        onFocus={() => setToken0Focused(true)}
+                        onBlur={() => setToken0Focused(false)}
+                      />
                     </div>
+
+                    <div className="flex items-center justify-between">
+                      <div className="text-xs font-medium text-[color:var(--sf-text)]/50 truncate">
+                        {token0FiatText}
+                      </div>
+                      <div className="text-xs font-medium text-[color:var(--sf-text)]/60 truncate">
+                        {token0BalanceText}
+                      </div>
+                    </div>
+
+                    {onPercentToken0 && (
+                      <div
+                        className="flex items-center justify-end w-full"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <div className={`flex items-center gap-1.5 transition-opacity duration-300 ${
+                          token0Focused ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                        }`}>
+                          {[
+                            { label: '25%', value: 0.25, max: false },
+                            { label: '50%', value: 0.5, max: false },
+                            { label: '75%', value: 0.75, max: false },
+                            { label: 'MAX', value: 1, max: true },
+                          ].map(({ label, value, max }) => (
+                            <button
+                              key={label}
+                              type="button"
+                              onClick={() => onPercentToken0(value)}
+                              className={`inline-flex items-center rounded-md ${max ? 'px-2 text-[11px]' : 'px-1.5 text-[10px]'} py-0.5 font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${
+                                activePercentToken0 === value
+                                  ? 'bg-[color:var(--sf-primary)]/20'
+                                  : `${theme === 'dark' ? 'bg-white/[0.03]' : 'bg-[color:var(--sf-surface)]'} hover:bg-white/[0.06]`
+                              }`}
+                            >
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
-              )}
+              </div>
             </div>
 
-            {/* "/" Divider */}
-            <span className="flex items-center text-xl font-bold text-[color:var(--sf-text)]/40 select-none">/</span>
-
-            {/* Token 1 — selector button OR input field */}
+            {/* Token 1 input — sf-input card (half width) */}
             <div className="flex-1 min-w-0">
-              {!token1 ? (
+              <div className={`relative h-full ${token1Focused ? 'z-30' : ''}`}>
                 <div
-                  className="sf-panel h-full p-4 cursor-pointer flex items-center justify-center hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]"
-                  onClick={() => openTokenSelector('pool1')}
+                  className="sf-input group relative h-full z-20 px-3 pt-3 pb-3 cursor-text"
+                  onClick={() => token1InputRef.current?.focus()}
                 >
-                  <div className="sf-tile flex items-center justify-center gap-2 px-3 py-2.5 !rounded-[0.375rem]">
-                    <span className="font-bold text-sm text-[color:var(--sf-text)] whitespace-nowrap">
-                      {t('liquidity.selectToken')}
-                    </span>
-                    <ChevronDown size={14} className="text-[color:var(--sf-text)]/60" />
-                  </div>
-                </div>
-              ) : (
-                <div className={`relative ${token1Focused ? "z-30" : ""}`}>
-                  <div
-                    className={`sf-panel group relative px-3 pt-3 pb-4 transition-shadow duration-[200ms] cursor-text ${
-                      token1Focused
-                        ? "shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]"
-                        : "hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]"
-                    }`}
-                    onClick={() => token1InputRef.current?.focus()}
+                  {/* Token Selector — floating top-right (compact: icon + chevron) */}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openTokenSelector('pool1');
+                    }}
+                    className="sf-tile absolute right-3 top-3 inline-flex items-center gap-2 px-3 py-2 !rounded-[0.375rem] focus:outline-none z-10"
                   >
-                    {/* Token Selector - floating top-right */}
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openTokenSelector('pool1');
-                      }}
-                      className="sf-tile absolute right-3 top-3 inline-flex items-center gap-1.5 px-2 py-1.5 !rounded-[0.375rem] focus:outline-none z-10"
-                    >
+                    {token1 && (
                       <TokenIcon
                         key={`pool1-${token1.id}-${token1.symbol}`}
                         symbol={token1.symbol}
@@ -638,70 +590,68 @@ export default function LiquidityInputs({
                         size="sm"
                         network={network}
                       />
-                      <ChevronDown size={14} className="text-[color:var(--sf-text)]/60 flex-shrink-0" />
-                    </button>
+                    )}
+                    <span className="font-bold text-sm text-[color:var(--sf-text)] whitespace-nowrap">
+                      {token1?.name || token1?.symbol || t('liquidity.selectToken')}
+                    </span>
+                    <ChevronDown size={16} className="text-[color:var(--sf-text)]/60 flex-shrink-0" />
+                  </button>
 
-                    {/* Main content area */}
-                    <div className="flex flex-col gap-0.5">
-                      <span className="text-[10px] font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70 pr-16 truncate">
-                        {token1.name || token1.symbol}
-                      </span>
-
-                      <div className="pr-16">
-                        <NumberField
-                          ref={token1InputRef}
-                          placeholder="0.00"
-                          align="left"
-                          value={token1Amount}
-                          onChange={onChangeToken1Amount}
-                          onFocus={() => setToken1Focused(true)}
-                          onBlur={() => setToken1Focused(false)}
-                        />
-                      </div>
-
-                      <div className="flex items-center justify-between">
-                        <div className="text-[10px] font-medium text-[color:var(--sf-text)]/50">
-                          {token1FiatText}
-                        </div>
-                        <div className="text-[10px] font-medium text-[color:var(--sf-text)]/60">
-                          {token1BalanceText}
-                        </div>
-                      </div>
-
-                      {onPercentToken1 && (
-                        <div
-                          className="flex items-center justify-end w-full"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <div className={`flex items-center gap-1 transition-opacity duration-300 ${
-                            token1Focused ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-                          }`}>
-                            {[
-                              { label: '25%', value: 0.25 },
-                              { label: '50%', value: 0.5 },
-                              { label: '75%', value: 0.75 },
-                              { label: 'Max', value: 1 },
-                            ].map(({ label, value }) => (
-                              <button
-                                key={label}
-                                type="button"
-                                onClick={() => onPercentToken1(value)}
-                                className={`inline-flex items-center rounded-md px-1 py-0.5 text-[9px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${
-                                  activePercentToken1 === value
-                                    ? "bg-[color:var(--sf-primary)]/20"
-                                    : `${theme === 'dark' ? 'bg-white/[0.03]' : 'bg-[color:var(--sf-surface)]'} hover:bg-white/[0.06]`
-                                }`}
-                              >
-                                {label}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      )}
+                  <div className="flex flex-col gap-1">
+                    <div className="mt-10">
+                      <NumberField
+                        ref={token1InputRef}
+                        placeholder="0.00"
+                        align="left"
+                        value={token1Amount}
+                        onChange={onChangeToken1Amount}
+                        onFocus={() => setToken1Focused(true)}
+                        onBlur={() => setToken1Focused(false)}
+                      />
                     </div>
+
+                    <div className="flex items-center justify-between">
+                      <div className="text-xs font-medium text-[color:var(--sf-text)]/50 truncate">
+                        {token1FiatText}
+                      </div>
+                      <div className="text-xs font-medium text-[color:var(--sf-text)]/60 truncate">
+                        {token1BalanceText}
+                      </div>
+                    </div>
+
+                    {onPercentToken1 && (
+                      <div
+                        className="flex items-center justify-end w-full"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <div className={`flex items-center gap-1.5 transition-opacity duration-300 ${
+                          token1Focused ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                        }`}>
+                          {[
+                            { label: '25%', value: 0.25, max: false },
+                            { label: '50%', value: 0.5, max: false },
+                            { label: '75%', value: 0.75, max: false },
+                            { label: 'MAX', value: 1, max: true },
+                          ].map(({ label, value, max }) => (
+                            <button
+                              key={label}
+                              type="button"
+                              onClick={() => onPercentToken1(value)}
+                              className={`inline-flex items-center rounded-md ${max ? 'px-2 text-[11px]' : 'px-1.5 text-[10px]'} py-0.5 font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${
+                                activePercentToken1 === value
+                                  ? 'bg-[color:var(--sf-primary)]/20'
+                                  : `${theme === 'dark' ? 'bg-white/[0.03]' : 'bg-[color:var(--sf-surface)]'} hover:bg-white/[0.06]`
+                              }`}
+                            >
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
-              )}
+              </div>
             </div>
           </div>
 
@@ -710,7 +660,7 @@ export default function LiquidityInputs({
             <>
 
           {/* Transaction Details - collapsible panel */}
-          <div className="sf-panel relative z-[5] overflow-visible">
+          <div className="sf-panel relative z-[5] overflow-visible mt-3 mb-3">
             {/* Toggle button */}
             <button
               type="button"
@@ -757,8 +707,8 @@ export default function LiquidityInputs({
                         setFocusedField(null);
                         const val = parseInt(deadlineLocal, 10);
                         if (!deadlineLocal || isNaN(val) || val < 1) {
-                          setDeadlineLocal('5');
-                          setDeadlineBlocks(5);
+                          setDeadlineLocal('3');
+                          setDeadlineBlocks(3);
                         } else {
                           setDeadlineBlocks(Math.min(100, val));
                         }

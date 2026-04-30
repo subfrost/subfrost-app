@@ -78,7 +78,7 @@ export default function BottomPanels({ baseToken, quoteToken, baseTokenId, quote
   // On devnet, mines 1 block after broadcast to keep metashrew synced.
   const cancelMutation = useCancelOrderMutation();
 
-  // Close LP position — remove all liquidity via factory opcode 12 (Burn)
+  // Close LP position — remove all liquidity via pool opcode 2 (WithdrawAndBurn)
   const [closingPositionId, setClosingPositionId] = useState<string | null>(null);
   const { account } = useWallet() as any;
   const handleClosePosition = async (pos: typeof lpPositions[0]) => {

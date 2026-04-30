@@ -181,6 +181,11 @@ export default function LimitOrderPanel({
       });
 
       if (result.transactionId) {
+        // Limit order: side='buy' wants base for quote; side='sell' gives base for quote.
+        const fromSym = side === 'sell' ? (fromToken?.symbol || '') : (toToken?.symbol || '');
+        const toSym = side === 'sell' ? (toToken?.symbol || '') : (fromToken?.symbol || '');
+        const fromId = side === 'sell' ? fromToken?.id : toToken?.id;
+        const toId = side === 'sell' ? toToken?.id : fromToken?.id;
         showNotification(result.transactionId, 'swap' as any);
       }
     } catch (e: any) {
@@ -427,8 +432,8 @@ export default function LimitOrderPanel({
                   onBlur={() => {
                     const val = parseInt(deadlineLocal, 10);
                     if (!deadlineLocal || isNaN(val) || val < 1) {
-                      setDeadlineLocal('5');
-                      setDeadlineBlocks(5);
+                      setDeadlineLocal('3');
+                      setDeadlineBlocks(3);
                     } else {
                       setDeadlineBlocks(Math.min(100, val));
                     }
