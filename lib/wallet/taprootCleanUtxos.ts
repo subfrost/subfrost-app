@@ -1,28 +1,28 @@
 /**
  * Clean BTC UTXO discovery for keystore single-address (taproot-only) wallets.
  *
- * Why this exists:
- *   The SDK's default `protect_taproot=true` excludes ALL taproot UTXOs from
- *   fee-input selection because it can't tell which carry alkanes. For dual-
- *   address wallets (keystore with both segwit and taproot, or browser wallets
- *   like Xverse) this is fine — fees come from segwit. But for single-address
- *   keystores (the boot wallet, or a user who only has a taproot address) the
- *   protection becomes a denial-of-service: zero fee candidates → "Insufficient
- *   funds: have 0 (protect_taproot=true)".
+ * The SDK's default `protect_taproot=true` excludes ALL taproot UTXOs from
+ * fee-input selection because it can't tell which carry alkanes. For dual-
+ * address wallets fees come from segwit, so this is invisible. For single-
+ * address keystore wallets where taproot is the only fee source, the
+ * protection becomes a denial-of-service.
  *
- *   This helper does what `protect_taproot` was protecting us from at the SDK
- *   layer — explicitly enumerate the BTC-only taproot UTXOs (subtracting any
- *   that the alkanes indexer says carry tokens) and hand them back as a list
- *   the SDK can use directly via `payment_utxos`.
+ * This helper enumerates the taproot UTXOs and per-outpoint queries
+ * `alkanes_protorunesbyoutpoint` (the same authoritative pattern used by
+ * `useAddLiquidityMutation.discoverAlkaneUtxos`) to certify each as either
+ * carrying alkanes (exclude) or empty (clean for fee use). The clean ones
+ * are returned in the `txid:vout:satoshis` format expected by the SDK's
+ * `payment_utxos` option.
  *
- *   When `payment_utxos` is set in the SDK options, the SDK uses ONLY those
- *   UTXOs for fees and never falls back to discovery — so `protect_taproot`
- *   becomes a no-op. We've answered its question for it.
+ * Per-outpoint truth is what `useAddLiquidityMutation` already does. We
+ * mirror that here rather than relying on the by-address index, which is
+ * historical and reports an outpoint as alkane-touched even after the
+ * outpoint has been fully drained.
  *
- * Fail-closed: if either the UTXO list or the alkane-outpoint query fails,
- * we return null and the caller should NOT pass `payment_utxos` (let the SDK
- * take its default behavior, which will fail loudly rather than silently
- * spending an alkane UTXO as fee).
+ * Fail-closed: if a per-outpoint query errors, that specific UTXO is
+ * excluded (we don't know if it's clean, so we don't claim it is). If the
+ * top-level UTXO fetch fails, we return null and the caller falls back to
+ * the SDK's default behavior.
  */
 
 const RPC_ENDPOINTS: Record<string, string> = {
@@ -58,13 +58,12 @@ async function fetchAddressUtxos(address: string, networkName?: string): Promise
   const json = await resp.json();
 
   if (networkName === 'devnet') {
-    const utxos = (Array.isArray(json.result) ? json.result : []).map((u: any) => ({
+    return (Array.isArray(json.result) ? json.result : []).map((u: any) => ({
       txid: u.txid,
       vout: u.vout,
       value: u.value,
       confirmed: u.status?.confirmed ?? false,
     }));
-    return utxos;
   }
 
   if (!json.result || !Array.isArray(json.result) || json.result.length === 0) {
@@ -89,65 +88,81 @@ async function fetchAddressUtxos(address: string, networkName?: string): Promise
   }));
 }
 
-async function fetchAlkaneOutpointKeys(address: string, networkName?: string): Promise<Set<string>> {
+/**
+ * Live per-outpoint state check via `alkanes_protorunesbyoutpoint`.
+ * Returns true iff the outpoint currently holds zero alkane balance.
+ *
+ * Mirrors the pattern in `useAddLiquidityMutation.discoverAlkaneUtxos`:
+ * a non-empty `balance_sheet.cached.balances` array means the outpoint
+ * carries alkanes right now, regardless of historical activity.
+ *
+ * Returns false on any error — fail-closed for the individual outpoint.
+ */
+async function isOutpointClean(
+  txid: string,
+  vout: number,
+  networkName?: string,
+): Promise<boolean> {
   const baseUrl = RPC_ENDPOINTS[networkName || 'mainnet'] || RPC_ENDPOINTS.mainnet;
-  const resp = await fetch(baseUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      id: 1,
-      method: 'alkanes_protorunesbyaddress',
-      params: [{ address, protocolTag: '1' }],
-    }),
-  });
-  const json = await resp.json();
-  if (json.error) throw new Error(json.error.message || 'protorunesbyaddress RPC error');
-
-  const outpoints = json?.result?.outpoints || [];
-  const keys = new Set<string>();
-  for (const entry of outpoints) {
-    const op = entry.outpoint;
-    if (!op || typeof op !== 'object') continue;
-    const txid = op.txid;
-    const vout = op.vout;
-    if (!txid || typeof vout !== 'number') continue;
-    // Only mark as alkane-bearing if the balance sheet has at least one non-zero entry
-    const balances = entry?.balance_sheet?.cached?.balances || [];
-    const hasNonZero = balances.some((b: any) => b.amount && BigInt(b.amount) > 0n);
-    if (hasNonZero) keys.add(`${txid}:${vout}`);
+  try {
+    const resp = await fetch(baseUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'alkanes_protorunesbyoutpoint',
+        params: [txid, vout],
+      }),
+    });
+    const json = await resp.json();
+    if (json.error) return false;
+    const balances = json?.result?.balance_sheet?.cached?.balances || [];
+    if (balances.length === 0) return true;
+    // Defensive: a drained outpoint can leave zero-amount entries in the
+    // balance sheet. Treat as clean only if every entry's amount is zero.
+    return balances.every((b: any) => !b.amount || BigInt(b.amount) === 0n);
+  } catch {
+    return false;
   }
-  return keys;
 }
 
 /**
- * Returns clean BTC-only UTXOs at a single taproot address as `txid:vout:satoshis`
- * strings (the format `payment_utxos` expects in the SDK options). Returns null
- * on any error — caller should fall through to default SDK behavior.
+ * Returns clean BTC-only UTXOs at a single taproot address as
+ * `txid:vout:satoshis` strings (the format `payment_utxos` expects in the
+ * SDK options). Returns null if the top-level UTXO fetch fails — caller
+ * falls through to default SDK behavior.
  *
- * Filters applied:
- *   - confirmed only (mempool selection is the SDK's job)
- *   - excludes any outpoint the alkanes indexer reports as carrying tokens
- *   - excludes dust < 600 sats (can't be a useful fee input)
+ * Per-UTXO classification uses `alkanes_protorunesbyoutpoint` (live
+ * authoritative state), the same pattern as
+ * `useAddLiquidityMutation.discoverAlkaneUtxos`.
  */
 export async function getCleanTaprootBtcUtxos(
   taprootAddress: string,
   networkName?: string,
 ): Promise<string[] | null> {
   if (!taprootAddress) return null;
+  let allUtxos: SimpleUtxo[];
   try {
-    const [allUtxos, alkaneKeys] = await Promise.all([
-      fetchAddressUtxos(taprootAddress, networkName),
-      fetchAlkaneOutpointKeys(taprootAddress, networkName),
-    ]);
-    const clean = allUtxos
-      .filter(u => u.confirmed)
-      .filter(u => u.value >= 600)
-      .filter(u => !alkaneKeys.has(`${u.txid}:${u.vout}`))
-      .map(u => `${u.txid}:${u.vout}:${u.value}`);
-    return clean.length > 0 ? clean : null;
+    allUtxos = await fetchAddressUtxos(taprootAddress, networkName);
   } catch (e) {
-    console.warn('[getCleanTaprootBtcUtxos] Failed, falling back to SDK default:', (e as Error)?.message);
+    console.warn('[getCleanTaprootBtcUtxos] UTXO fetch failed, falling back to SDK default:', (e as Error)?.message);
     return null;
   }
+
+  const candidates = allUtxos.filter(u => u.confirmed && u.value >= 600);
+  if (candidates.length === 0) return null;
+
+  const checks = await Promise.all(
+    candidates.map(async u => ({
+      utxo: u,
+      clean: await isOutpointClean(u.txid, u.vout, networkName),
+    })),
+  );
+
+  const clean = checks
+    .filter(c => c.clean)
+    .map(c => `${c.utxo.txid}:${c.utxo.vout}:${c.utxo.value}`);
+
+  return clean.length > 0 ? clean : null;
 }

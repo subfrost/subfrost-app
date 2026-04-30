@@ -214,65 +214,19 @@ export function useUnwrapMutation() {
       console.log('[useUnwrapMutation] To addresses (v0=alkanes-refund, v1=btc-recipient, v2=signer-dust):', toAddresses);
       console.log('[useUnwrapMutation] Change address:', changeAddr);
 
-      // JOURNAL (2026-04-30): Single-address keystore wallets (no segwit) hit
-      // the SDK's protect_taproot=true default, which refuses to use any
-      // taproot UTXO for fees → "Insufficient funds: have 0". Pre-filter the
-      // taproot UTXO set ourselves (excluding alkane-bearing outpoints via the
-      // protorunes index) and pass the clean ones as payment_utxos. With
-      // payment_utxos set, the SDK uses only those for fees, so
-      // protect_taproot becomes a no-op. Fail-closed: if discovery fails,
-      // fall through to default behavior.
-      const isKeystoreSingleAddress = !isBrowserWallet && !!taprootAddress && !segwitAddress;
-      let paymentUtxos: string[] | undefined;
-      if (isKeystoreSingleAddress) {
-        const { getCleanTaprootBtcUtxos } = await import('@/lib/wallet/taprootCleanUtxos');
-        const clean = await getCleanTaprootBtcUtxos(taprootAddress!, network);
-        if (clean) {
-          paymentUtxos = clean;
-          console.log('[useUnwrapMutation] Single-address keystore: passing', clean.length, 'clean BTC UTXOs as payment_utxos');
-        } else {
-          console.warn('[useUnwrapMutation] Single-address keystore: clean UTXO discovery failed, SDK will likely error with protect_taproot');
-        }
-      }
-
-      // The SDK's alkanesExecuteTyped wrapper drops protect_taproot and
-      // payment_utxos before forwarding. Build the options JSON ourselves and
-      // call alkanesExecuteFull directly when we need those flags.
-      const useDirectExecuteFull = isKeystoreSingleAddress && paymentUtxos;
-      let result: any;
-      if (useDirectExecuteFull) {
-        const options: any = {
-          from_addresses: fromAddresses,
-          change_address: changeAddr,
-          alkanes_change_address: alkanesChangeAddr,
-          // Keystore has the mnemonic loaded — auto_confirm: true matches the
-          // pattern used by every other mutation hook (e.g. useSwapMutation
-          // line 419). Without it, the WASM SDK throws "cancelled by user".
-          auto_confirm: true,
-          protect_taproot: false,
-          payment_utxos: paymentUtxos,
-        };
-        const raw = await provider.alkanesExecuteFull(
-          JSON.stringify(toAddresses),
-          inputRequirements,
-          protostone,
-          unwrapData.feeRate ?? null,
-          null,
-          JSON.stringify(options),
-        );
-        result = typeof raw === 'string' ? JSON.parse(raw) : raw;
-      } else {
-        result = await provider.alkanesExecuteTyped({
-          toAddresses,
-          inputRequirements,
-          protostones: protostone,
-          feeRate: unwrapData.feeRate,
-          autoConfirm: false,
-          fromAddresses,
-          changeAddress: changeAddr,
-          alkanesChangeAddress: alkanesChangeAddr,
-        });
-      }
+      // payment_utxos / protect_taproot for keystore single-address wallets
+      // is auto-injected by useSandshrewProvider (the wrapper around
+      // alkanesExecuteTyped). No per-hook handling needed here.
+      const result = await provider.alkanesExecuteTyped({
+        toAddresses,
+        inputRequirements,
+        protostones: protostone,
+        feeRate: unwrapData.feeRate,
+        autoConfirm: walletType === 'keystore',
+        fromAddresses,
+        changeAddress: changeAddr,
+        alkanesChangeAddress: alkanesChangeAddr,
+      });
 
       console.log('[useUnwrapMutation] Called alkanesExecuteTyped (browser:', isBrowserWallet, ')');
 
