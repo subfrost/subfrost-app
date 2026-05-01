@@ -419,6 +419,19 @@ All use `staleTime: Infinity` on mainnet — refetch only on HeightPoller block 
 
 For swap/wrap: SDK uses `payment_utxos` from UniSat `getBitcoinUtxos()` (clean UTXOs only) + espo `get_address_outpoints` for alkane UTXOs. For add liquidity: `discoverAlkaneUtxos()` and `injectAlkaneInputs()` in `hooks/useAddLiquidityMutation.ts`.
 
+### Live per-pool state (slippage-critical surfaces)
+
+`usePoolStateLive(poolId, { enabled })` reads espo's `/get-pool-details` REST endpoint, which serves a per-block snapshot written by the indexer on every block. Unlike the bulk `/get-all-pools-details` aggregate (cached for the markets list, ~30s drift) this endpoint reflects what the contract sees on the latest indexed block — same freshness as `alkanes_simulate` against state trie but with structured JSON instead of raw protobuf.
+
+**Refresh model:** `staleTime: Infinity`, no `refetchInterval`. Espo writes a fresh snapshot per block, so polling between blocks would always return identical data. HeightPoller's existing `invalidateQueries` predicate covers `pool-live-state` keys, so the query auto-refetches when the metashrew height advances. `refetchOnWindowFocus: true` picks up missed blocks if the user was away. `enabled` is gated on `amount > 0` for all surfaces — no background traffic while the form is idle.
+
+**Where it's wired:**
+- **Swap quote** (`useSwapQuotes`): `liveDirect` reserves enter the queryKey, so the quote re-renders automatically each block. `minAmountOut` is applied to the visible quote at submit — no recomputation against newer reserves (price-moved-too-far must revert, Uniswap-style).
+- **Add Liquidity paired** (`SwapShell`): `useEffect` on `addLpLiveState.data` recomputes the displayed paired amount when reserves shift, so the user sees current ratio without retyping. Mutation uses the desired amounts the user saw + slippage applied to those.
+- **Remove Liquidity min0/min1** (`SwapShell.handleRemoveLiquidity`): `await removeLpLiveState.refetch()` immediately before the confirm modal, so the min amounts shown to the user reflect current reserves+supply. After approval, nothing recomputes.
+
+**`/api/pools/cached`:** simplified to passthrough + `Cache-Control: s-maxage=30, stale-while-revalidate=300`. Removed the in-process Map (fresh / lastGood) — useless on serverless cold starts and not invalidated by HeightPoller. CDN edge cache handles bursts now.
+
 ---
 
 ## Common Errors and Solutions

@@ -151,8 +151,9 @@ describe('WalletContext signing architecture (source verification)', () => {
   // ---- Keystore signing uses correct derivation paths ----
 
   it('signTaprootPsbt uses BIP86 derivation path for keystore wallets', () => {
-    // BIP86 path: m/86'/coinType/0'/0/0
-    expect(signTaprootBody).toContain("m/86'/${coinType}'/0'/0/0");
+    // BIP86 path: m/86'/coinType/0'/0/N — N is `taprootAddressIndex` to
+    // support multiple taproot accounts derived from the same mnemonic.
+    expect(signTaprootBody).toMatch(/m\/86'\/\$\{coinType\}'\/0'\/0\/\$\{taprootAddressIndex\}/);
     expect(signTaprootBody).toContain('taprootPath');
   });
 

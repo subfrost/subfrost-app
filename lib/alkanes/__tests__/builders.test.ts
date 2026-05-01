@@ -376,19 +376,15 @@ describe('builder consistency', () => {
   });
 
   it('multi-protostone builders produce comma-separated protostones', () => {
+    // Only chained-protostone builders go here. Factory router calls
+    // (AddLiquidity opcode 11, Burn opcode 12) are deliberately
+    // single-protostone — input alkanes auto-allocate to the cellpack and
+    // the factory reads token_a / token_b from cellpack params. They're
+    // covered by the single-protostone test above.
     const multiProtostones = [
       buildCreateNewPoolProtostone({
         factoryId: FACTORY_ID, token0Id: DIESEL_ID, token1Id: FRBTC_ID,
         amount0: '100', amount1: '50',
-      }),
-      buildFactoryAddLiquidityProtostones({
-        factoryId: FACTORY_ID, tokenA: DIESEL_ID, tokenB: FRBTC_ID,
-        amountADesired: '100', amountBDesired: '50',
-        amountAMin: '99', amountBMin: '49', deadline: '1000',
-      }),
-      buildFactoryBurnProtostone({
-        factoryId: FACTORY_ID, tokenA: DIESEL_ID, tokenB: FRBTC_ID,
-        liquidity: '100', amountAMin: '10', amountBMin: '5', deadline: '1000',
       }),
       buildSwapUnwrapProtostone({
         sellTokenId: DIESEL_ID, sellAmount: '100', frbtcId: FRBTC_ID,
@@ -401,6 +397,26 @@ describe('builder consistency', () => {
       // Should contain at least 2 bracketed sections
       const brackets = ps.match(/\[/g);
       expect(brackets!.length).toBeGreaterThanOrEqual(2);
+    }
+  });
+
+  it('factory router builders (AddLiquidity, Burn) are single-protostone', () => {
+    const singleFactoryRouter = [
+      buildFactoryAddLiquidityProtostones({
+        factoryId: FACTORY_ID, tokenA: DIESEL_ID, tokenB: FRBTC_ID,
+        amountADesired: '100', amountBDesired: '50',
+        amountAMin: '99', amountBMin: '49', deadline: '1000',
+      }),
+      buildFactoryBurnProtostone({
+        factoryId: FACTORY_ID, tokenA: DIESEL_ID, tokenB: FRBTC_ID,
+        liquidity: '100', amountAMin: '10', amountBMin: '5', deadline: '1000',
+      }),
+    ];
+
+    for (const ps of singleFactoryRouter) {
+      const brackets = ps.match(/\[/g);
+      expect(brackets!.length).toBe(1);
+      expect(ps).toMatch(/^\[.+\]:v\d+:v\d+$/);
     }
   });
 });
