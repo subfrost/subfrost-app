@@ -1016,8 +1016,8 @@ export default function SwapShell() {
         const [, needed, tokenId, available] = match;
         return t('errors.insufficientBalance', {
           tokenId,
-          needed: (Number(needed) / 1e8).toFixed(4),
-          available: (Number(available) / 1e8).toFixed(4),
+          needed: (Number(needed) / 1e8).toFixed(8),
+          available: (Number(available) / 1e8).toFixed(8),
         });
       }
     } else if (raw.includes('Insufficient funds')) {
@@ -1206,8 +1206,8 @@ export default function SwapShell() {
           const match = raw.match(/need (\d+) of ([\d:]+), have (\d+)/);
           if (match) {
             const [, needed, tokenId, available] = match;
-            const neededDisplay = (Number(needed) / 1e8).toFixed(4);
-            const availableDisplay = (Number(available) / 1e8).toFixed(4);
+            const neededDisplay = (Number(needed) / 1e8).toFixed(8);
+            const availableDisplay = (Number(available) / 1e8).toFixed(8);
             showSwapError(t('errors.insufficientSpendableDetailed', {
               tokenId,
               requested: neededDisplay,
@@ -1262,8 +1262,8 @@ export default function SwapShell() {
           const match = raw.match(/need (\d+) of ([\d:]+), have (\d+)/);
           if (match) {
             const [, needed, tokenId, available] = match;
-            const neededDisplay = (Number(needed) / 1e8).toFixed(4);
-            const availableDisplay = (Number(available) / 1e8).toFixed(4);
+            const neededDisplay = (Number(needed) / 1e8).toFixed(8);
+            const availableDisplay = (Number(available) / 1e8).toFixed(8);
             showSwapError(t('errors.insufficientSpendableDetailed', {
               tokenId,
               requested: neededDisplay,
@@ -1865,37 +1865,28 @@ export default function SwapShell() {
     if (!fromToken) return;
     if (fromToken.id === 'btc') {
       const sats = Number(btcBalanceSats || 0);
-      const btc = sats / 1e8;
       setDirection('sell');
-      setFromAmount(btc.toFixed(8));
+      setFromAmount((sats / 1e8).toFixed(8));
     } else {
       const cur = idToUserCurrency.get(fromToken.id);
       if (cur?.balance) {
-        const amt = Number(cur.balance) / 1e8;
         setDirection('sell');
-        // Use 8 decimals for frBTC, 2 for other tokens
-        const decimals = (fromToken.id === FRBTC_ALKANE_ID || fromToken.id === FRZEC_ALKANE_ID || fromToken.id === FRETH_ALKANE_ID) ? 8 : 2;
-        setFromAmount(amt.toFixed(decimals));
+        setFromAmount((Number(cur.balance) / 1e8).toFixed(8));
       }
     }
   };
 
-  // Handle percentage of balance click
   const handlePercentFrom = (percent: number) => {
     if (!fromToken) return;
     if (fromToken.id === 'btc') {
       const sats = Number(btcBalanceSats || 0);
-      const btc = (sats * percent) / 1e8;
       setDirection('sell');
-      setFromAmount(btc.toFixed(8));
+      setFromAmount(((sats * percent) / 1e8).toFixed(8));
     } else {
       const cur = idToUserCurrency.get(fromToken.id);
       if (cur?.balance) {
-        const amt = (Number(cur.balance) * percent) / 1e8;
         setDirection('sell');
-        // Use 8 decimals for frBTC, 2 for other tokens
-        const decimals = (fromToken.id === FRBTC_ALKANE_ID || fromToken.id === FRZEC_ALKANE_ID || fromToken.id === FRETH_ALKANE_ID) ? 8 : 2;
-        setFromAmount(amt.toFixed(decimals));
+        setFromAmount(((Number(cur.balance) * percent) / 1e8).toFixed(8));
       }
     }
   };
@@ -2017,9 +2008,7 @@ export default function SwapShell() {
         balance = cur?.balance;
       }
       if (balance) {
-        const amt = (Number(balance) * percent) / 1e8;
-        const decimals = poolToken0.id === FRBTC_ALKANE_ID ? 8 : 4;
-        amount = amt.toFixed(decimals);
+        amount = ((Number(balance) * percent) / 1e8).toFixed(8);
       }
     }
     if (amount !== null) handlePoolToken0AmountChange(amount);
@@ -2039,9 +2028,7 @@ export default function SwapShell() {
         balance = cur?.balance;
       }
       if (balance) {
-        const amt = (Number(balance) * percent) / 1e8;
-        const decimals = poolToken1.id === FRBTC_ALKANE_ID ? 8 : 4;
-        amount = amt.toFixed(decimals);
+        amount = ((Number(balance) * percent) / 1e8).toFixed(8);
       }
     }
     if (amount !== null) handlePoolToken1AmountChange(amount);
