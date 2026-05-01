@@ -1993,10 +1993,33 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
     // X-only pubkey for taproot (remove first byte which is the prefix)
     const xOnlyPubkey = taprootChild.publicKey.slice(1, 33);
 
-    // Tweak the key for taproot key-path spend
-    const tweakedChild = taprootChild.tweak(
-      bitcoin.crypto.taggedHash('TapTweak', xOnlyPubkey)
-    );
+    // BIP-341 key-path tweak — must be applied to the privKey directly, NOT
+    // via bip32.tweak(). bip32's tweak does not negate the privKey when the
+    // internal pubkey has odd y-parity, which BIP-341 requires. Without that
+    // negation the resulting tweaked pubkey doesn't match the on-chain output
+    // key for ~50% of all keys (Y-coordinate ambiguity), so bitcoinjs's
+    // _signTaprootInput silently fails to write tapKeySig and
+    // finalizeAllInputs() throws "Can not finalize taproot input #N. No
+    // tapleaf script signature provided."
+    //
+    // If the compressed pubkey starts with 0x03 (odd y), negate the privKey
+    // before applying the TapTweak. Then sign with an ECPair built from the
+    // tweaked privKey so bitcoinjs gets the right pubkey for its
+    // toXOnly(tweakedPubkey) === witnessUtxo.script[2..34] comparison.
+    const ecc = await import('@bitcoinerlab/secp256k1');
+    const ecpairModule = await import('ecpair');
+    const ECPair = ecpairModule.ECPairFactory(ecc as any);
+
+    let privKeyForTweak = taprootChild.privateKey;
+    if (taprootChild.publicKey[0] === 0x03) {
+      privKeyForTweak = ecc.privateNegate(privKeyForTweak);
+    }
+    const tapTweak = bitcoin.crypto.taggedHash('TapTweak', xOnlyPubkey);
+    const tweakedPriv = ecc.privateAdd(privKeyForTweak, tapTweak);
+    if (!tweakedPriv) {
+      throw new Error('TapTweak produced an invalid private key (overflow)');
+    }
+    const tweakedKeyPair = ECPair.fromPrivateKey(Buffer.from(tweakedPriv), { network: btcNetwork });
 
     // Parse and sign the PSBT
     const psbt = bitcoin.Psbt.fromBase64(psbtBase64, { network: btcNetwork });
@@ -2004,11 +2027,12 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
     console.log('[signTaprootPsbt] Signing', psbt.inputCount, 'inputs with taproot key');
     console.log('[signTaprootPsbt] Taproot path:', taprootPath);
     console.log('[signTaprootPsbt] X-only pubkey:', Buffer.from(xOnlyPubkey).toString('hex'));
+    console.log('[signTaprootPsbt] Internal y-parity:', taprootChild.publicKey[0] === 0x03 ? 'odd (negated)' : 'even');
 
     // Sign each input with the tweaked taproot key
     for (let i = 0; i < psbt.inputCount; i++) {
       try {
-        psbt.signInput(i, tweakedChild);
+        psbt.signInput(i, tweakedKeyPair);
         console.log(`[signTaprootPsbt] Signed input ${i}`);
       } catch (error) {
         console.warn(`[signTaprootPsbt] Could not sign input ${i}:`, error);
