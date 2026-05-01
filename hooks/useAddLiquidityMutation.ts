@@ -567,16 +567,20 @@ export function useAddLiquidityMutation() {
             }
           }
 
-          // For keystore wallets, request user confirmation before signing
+          // For keystore wallets, request user confirmation before signing.
+          // `data.token0Amount` / `data.token1Amount` are already display
+          // values (see param doc on AddLiquidityTransactionData) — do NOT
+          // divide by 1e8. Same bug we fixed in useRemoveLiquidityMutation
+          // a few commits back.
           if (walletType === 'keystore') {
             console.log('[AddLiquidity] Keystore wallet - requesting user confirmation...');
             const approved = await requestConfirmation({
               type: 'addLiquidity',
               title: 'Confirm Add Liquidity',
-              token0Amount: (parseFloat(data.token0Amount) / 1e8).toString(),
+              token0Amount: data.token0Amount,
               token0Symbol: getTokenSymbol(data.token0Id, data.token0Symbol),
               token0Id: data.token0Id,
-              token1Amount: (parseFloat(data.token1Amount) / 1e8).toString(),
+              token1Amount: data.token1Amount,
               token1Symbol: getTokenSymbol(data.token1Id, data.token1Symbol),
               token1Id: data.token1Id,
               feeRate: data.feeRate,
