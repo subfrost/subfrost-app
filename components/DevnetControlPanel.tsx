@@ -8,6 +8,7 @@ import { getBootAddresses } from '@/lib/devnet/boot';
 import { Loader2, RotateCcw, Play, Pause, Square, Activity, Trash2 } from 'lucide-react';
 import { clearDevnetState } from '@/lib/devnet/persistence';
 import type { SimLogEntry } from '@/lib/devnet/types';
+import FrostlendDevPanel from './FrostlendDevPanel';
 
 type BusyAction = 'mine' | 'btc' | 'diesel' | 'fuel' | 'frbtc' | 'usdt' | 'usdc' | 'bridge' | 'reset' | null;
 
@@ -58,7 +59,7 @@ const SPEED_PRESETS = [
 
 export function DevnetControlPanel() {
   const { state, controls, isDevnet, boot, shutdown, coordinator, simulator, simulationState } = useDevnet();
-  const { account } = useWallet();
+  const { account, network } = useWallet();
   const queryClient = useQueryClient();
   const [isExpanded, setIsExpanded] = useState(false);
   const [showSimPanel, setShowSimPanel] = useState(false);
@@ -451,6 +452,9 @@ export function DevnetControlPanel() {
               </ActionButton>
             </div>
           )}
+
+          {/* Frostlend (CDP / liquidations / oracle) */}
+          <FrostlendDevPanel network={network || 'devnet'} />
 
           {/* Reset */}
           <div className="pt-2 border-t border-zinc-800 flex items-center justify-between">

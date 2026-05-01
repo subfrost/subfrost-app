@@ -172,6 +172,61 @@ block lands or the mempool tx is replaced.
 
 ---
 
+## Receipt-Based Auth (Subfrost Stack: boiler / FIRE / frostlend)
+
+Alkanes has no concept of "address X owns position Y". Contracts cannot read who signed the Bitcoin transaction. Ownership is proven by **passing a receipt token** — a unique 1-unit alkane spawned at `[2, sequence_n]` — in `incoming_alkanes`. Whoever holds the receipt at the time of the call IS the owner.
+
+**Reference implementations:**
+- `reference/boiler/alkanes/alk4626-vault-factory/src/lib.rs::authenticate_position` — canonical pattern
+- `reference/fire/alkanes/fire-staking/src/lib.rs::authenticate_position` — same shape
+- `reference/frost-lend/alkanes/frost-lend-borrower-ops/src/lib.rs::verify_auth_token` — same shape
+
+**Issuance side (in the contract):**
+1. User calls `Deposit` / `OpenTrove` / `Stake` with the deposit-token in `incoming_alkanes`
+2. Contract spawns a new auth token via factory cellpack `[6, AUTH_TOKEN_FACTORY_ID]` — the alkanes runtime sequence counter assigns a unique `[2, sequence_n]` AlkaneId
+3. Contract registers the spawned id in its child registry (`/registered_children/...`) and pushes the 1-unit transfer into `response.alkanes.0` so the user receives it
+4. Future owner-ops verify by reading `context.incoming_alkanes.0[0]` and checking the registry
+
+**Verification side:**
+```rust
+fn authenticate_position(&self, context: &Context) -> Result<()> {
+    let transfer = &context.incoming_alkanes.0[0];   // the receipt
+    if transfer.value < 1 { return Err(...); }
+    if !self.is_registered_child_internal(&transfer.id) {
+        return Err(anyhow!("not our registered child — spoof attempt"));
+    }
+    Ok(())
+}
+```
+
+**Owner-op return semantics:**
+- **Non-destructive ops** (adjust trove, top-up SP deposit): contract pushes the receipt back into `response.alkanes.0` so it lands at a new outpoint in the user's wallet
+- **Terminal ops** (close trove, full withdrawal, claim collateral): receipt is consumed (not returned) — wipe local cache after these
+
+### Frontend implications
+
+**There is no "address-based" ownership query.** The wallet IS the owner. To check "does this user have a position?", look at their alkane balances and find receipts in the contract's expected ID range.
+
+**No discovery layer needed for normal owner-ops.** The receipt is just an alkane in the user's wallet — pass it via `inputRequirements: "<block>:<tx>:1"` and the SDK auto-discovers the dust outpoint carrying it via `alkanes_protorunesbyaddress`. Same path the SDK already uses for any fungible alkane input.
+
+**Capture the receipt's AlkaneId at issuance time.** When the issuance tx mines, snapshot the user's `[2, *]` outpoints before submission, fetch them again after, and the new entry is the freshly-spawned receipt. Cache the `(positionId, authTokenId)` tuple in localStorage keyed on `network:address`. Future owner-ops read from this cache.
+
+**Recovery from cold-start.** If localStorage is wiped, the receipt is still in the user's wallet. Two options:
+1. Probe the contract: iterate `[0..count)` calling per-position `GetXxxAuthToken(i)` and intersect with the user's `[2, *]` holdings (works if the contract exposes a count opcode — frostlend TM does via `GetTroveCount`; SP does NOT).
+2. For receipt-issuing contracts that expose `GetAllRegisteredChildren` (boiler-style enumeration), one call gives the full registry; intersect locally.
+
+For devnet pilot scope, localStorage caching is sufficient. Recovery is a "nice to have" for v2.
+
+**Files using this pattern in the app:**
+- `lib/frostlend/troveCache.ts`, `lib/frostlend/spCache.ts` — localStorage caches
+- `lib/frostlend/receipts.ts` — `fetchUserBlock2Receipts`, `diffNewReceipt`, `findDepositorIdByAuthToken`
+- `hooks/frostlend/useOpenTroveMutation.ts` — captures via `GetTroveCount - 1` + `GetTroveAuthToken`
+- `hooks/frostlend/useStabilityPoolMutations.ts` — captures via outpoint diff + auth-token probe
+
+**Do not invent address-based filters.** If you find yourself writing "find this user's positions by address" — stop, you're doing it wrong. The user holds the receipts; their balance query is the lookup.
+
+---
+
 ## Devnet Architecture (CRITICAL — Read Before Touching Devnet Code)
 
 All rules below were established 2026-03-31 after 16+ hours debugging. Each one prevented a bug from being re-introduced. Test enforcement exists for all of them.

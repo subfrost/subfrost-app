@@ -63,7 +63,7 @@
 import type { DeployedContracts } from './types';
 
 // Progress callback type
-type ProgressCallback = (message: string, percent: number) => void;
+export type ProgressCallback = (message: string, percent: number) => void;
 
 // The harness and provider are stored globally so the fetch interceptor
 // routes all RPC calls to the in-process devnet.
@@ -579,7 +579,7 @@ async function fetchAndDeploy(
   // hex string is now eligible for GC — no reference retained
 }
 
-async function fetchWasmHex(name: string): Promise<string> {
+export async function fetchWasmHex(name: string): Promise<string> {
   const resp = await fetch(`/wasm/${name}.wasm`);
   if (!resp.ok) throw new Error(`WASM not found: ${name}.wasm (HTTP ${resp.status})`);
 
@@ -637,7 +637,7 @@ async function fetchWasmHex(name: string): Promise<string> {
  * This behavior was discovered 2026-04-03 after 6+ hours debugging why CLOB
  * order seeding always reported "Insufficient alkanes: have 0".
  */
-async function deployWasm(
+export async function deployWasm(
   provider: any,
   harness: any,
   segwit: string,
@@ -691,7 +691,7 @@ async function deployWasm(
  */
 let _lastTxid = '';
 
-async function executeCall(
+export async function executeCall(
   provider: any,
   harness: any,
   segwit: string,
@@ -744,7 +744,7 @@ async function executeCall(
  * RPC call to the devnet (routed in-process via fetch interceptor).
  */
 let _rpcId = 1;
-async function rpcCall(method: string, params: any[]): Promise<any> {
+export async function rpcCall(method: string, params: any[]): Promise<any> {
   const response = await fetch('http://localhost:18888', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -786,7 +786,7 @@ function parseLeU128BigInt(hex: string, byteOffset: number): bigint {
 /**
  * Simulate an alkane call (read-only query).
  */
-async function simulate(target: string, inputs: string[]): Promise<any> {
+export async function simulate(target: string, inputs: string[]): Promise<any> {
   const [block, tx] = target.split(':');
   return rpcCall('alkanes_simulate', [{
     target: { block, tx }, inputs, alkanes: [],

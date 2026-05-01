@@ -359,6 +359,18 @@ export default function Header() {
               )}
             </div>
             <Link
+              href="/lend"
+              className={`text-sm font-semibold hover:opacity-80 outline-none whitespace-nowrap transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
+                isActive("/lend")
+                  ? theme === "light"
+                    ? "text-[color:var(--sf-text)]/60"
+                    : "text-[color:var(--sf-primary)]"
+                  : "text-[color:var(--sf-text)]"
+              }`}
+            >
+              Lend
+            </Link>
+            <Link
               href="/vaults"
               className={`text-sm font-semibold hover:opacity-80 outline-none whitespace-nowrap transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
                 isActive("/vaults")
