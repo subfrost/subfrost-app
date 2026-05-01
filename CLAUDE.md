@@ -273,13 +273,15 @@ Pool Instances [2:N]  ────via beacon────▶  Pool Logic [4:65496
                                            (Beacon Proxy Template [4:781000])
 ```
 
-### Retired/Broken Deployment (pre-2026-01-28)
+### Retired/Broken Deployment on regtest (pre-2026-01-28)
 
-The original deployment used different slots with INCOMPLETE WASM binaries:
+The original **regtest** deployment used different slots with INCOMPLETE WASM binaries:
 - Factory Proxy [4:65522] → Factory Logic [4:65524] (MISSING opcodes 0, 1, 2)
 - Beacon [4:65523] → Pool Logic [4:65520] (MISSING opcodes 3, 4)
 - These slots still exist on-chain but are NON-FUNCTIONAL for pool creation/swaps.
-- DO NOT use `4:65522` as the factory ID for regtest.
+- DO NOT use `4:65522` as the factory ID **for regtest** — use `4:65498`.
+
+**Note:** On **mainnet** the AMM factory ID is still `4:65522` (`ALKANE_FACTORY_ID` in `getConfig.ts:55`) and is fully functional — that deployment was built from a complete WASM. The regtest 65522 issue is regtest-only. Don't conflate the two when reading code or test fixtures (`MAINNET_FACTORY_ID = '4:65522'` in tests is correct).
 
 ### Complete Slot Map (regtest)
 
@@ -350,51 +352,52 @@ Source: `oyl-amm/alkanes/pool/src/lib.rs` + `oyl-amm/alkanes/alkanes-runtime-poo
 
 ### frBTC Signer Address
 
-The frBTC contract [32:0] has a signer address derived from opcode 103 (GET_SIGNER). This is a P2TR address that must receive BTC for wraps to succeed. The CLI fetches it dynamically; the frontend hardcodes it in `useWrapMutation.ts` and `useWrapSwapMutation.ts`.
+The frBTC contract [32:0] has a signer address derived from opcode 103 (GET_SIGNER). This is a P2TR address that must receive BTC for wraps to succeed.
 
-**Current regtest signer:** `bcrt1p466wtm6hn2llrm02ckx6z03tsygjjyfefdaz6sekczvcr7z00vtsc5gvgz`
+The frontend resolves it **dynamically** via `getSignerAddressDynamic(network)` in `lib/alkanes/helpers.ts` — no per-network hardcoding to maintain. The static map in `lib/alkanes/constants.ts` is `@deprecated` and kept only as a fallback for offline / boot-time paths.
 
-If the frBTC contract is redeployed, update this address in both files.
+If you ever need to verify the resolved address: `alkanes-cli -p subfrost-regtest wrap-btc --amount 1000 --fee-rate 1` and check which P2TR receives BTC at output 0.
 
 ---
 
-## The Two-Protostone Pattern
+## Protostone Patterns
 
-For operations needing tokens as `incomingAlkanes`:
+> **TL;DR:** most AMM ops are **single-protostone** — multi-protostone is only for chained atomic flows (wrap+swap, swap+unwrap) and the legacy `CreateNewPool` builder.
+
+### Single-protostone (default for AMM ops)
+
+For factory router calls (swap opcode 13, AddLiquidity opcode 11, Burn opcode 12) the protostone is just one cellpack:
 
 ```
-p0: Edict protostone - transfers tokens to p1
-p1: Cellpack protostone - calls contract, receives tokens as incomingAlkanes
+[factoryBlock,factoryTx,opcode,...args]:v0:v0
 ```
 
-The CLI's `--inputs` flag auto-generates p0. The frontend manually constructs both protostones.
+Input alkanes from `inputRequirements` **auto-allocate** to the first protostone with matching `protocol_tag` — the SDK constructs an auto-edict for them. The cellpack's `token_a` / `token_b` arguments tell the factory how to treat the incoming tokens. **Do not also construct manual edicts** — that creates double-edicts and breaks the call.
 
-### How It Works in Detail
+### Multi-protostone (chained, for atomic flows)
 
-1. **p0 (edict protostone):** Contains one or more edicts. Each edict transfers a specific alkane token amount to a target protostone index (p1). The `pointer` field on p0 points to the next protostone. p0 has NO cellpack — it is purely a transfer vehicle.
+When tokens need to land at a non-first protostone (atomic chain):
 
-2. **p1 (cellpack protostone):** Contains the actual contract call (cellpack). When the runtime processes p1, any alkanes transferred to it by p0 become `incomingAlkanes` in the called contract's execution context. The contract then reads these to know what tokens it received.
+```
+p0: edict / wrap call - transfers or produces tokens, pointer=p1
+p1: cellpack - receives tokens as incomingAlkanes, runs the next call
+```
 
-### When You Need Multiple Protostones
+Used by:
+- **Atomic wrap+swap:** p0 wraps BTC → frBTC, `CallResponse::forward(incoming_alkanes)` passes through to p1 (`useAtomicWrapSwapMutation`).
+- **Atomic wrap+addLiquidity:** Same forward pattern (`useAtomicWrapAddLiquidityMutation`).
+- **Atomic swap+unwrap:** p1 swap routes incoming alkanes via pointer=p2 to the unwrap cellpack (`useSwapUnwrapMutation` — currently deprecated in favour of `useTokenToBtcSwap`'s two-tx flow, but the builder still illustrates the pattern).
+- **CreateNewPool (factory opcode 1):** kept as two-protostone with explicit edicts — historical, could be simplified to single-protostone the same way opcode 11 was. Functionally fine as-is.
 
-For most AMM operations a **single cellpack protostone is enough** — input alkanes auto-allocate to it and the cellpack's `token_a` / `token_b` parameters tell the contract what to do with them:
+### Manual edicts — when and how
 
-- **Swap (factory opcode 13):** Single protostone — `[factory, 13, ..., sellTokenId, ...]`
-- **AddLiquidity (factory opcode 11):** Single protostone — `[factory, 11, ta, tb, a_des, b_des, a_min, b_min, deadline]`
-- **Burn / RemoveLiquidity (factory opcode 12):** Single protostone — `[factory, 12, ta, tb, liquidity, a_min, b_min, deadline]`
+Edicts are only mandatory when **input alkanes need to land at a non-first protostone** (e.g. p2 in a 3-protostone chain). For single-protostone calls the auto-edict from `inputRequirements` is enough; the cellpack params identify the tokens.
 
-Multi-protostone (chained) is only needed when:
+If you ever construct an edict by hand and its `pointer` is wrong (e.g. `v0` instead of `v1`), the tokens land at output 0 instead of the cellpack protostone — the contract sees zero `incomingAlkanes` and fails with "expected N alkane inputs" or "input amount cannot be zero".
 
-- **Atomic wrap+swap:** p0 wraps BTC → frBTC, pointer=p1 forwards to swap. The frBTC contract uses `CallResponse::forward(incoming_alkanes)`, so any auto-allocated input alkanes also pass through to p1.
-- **Atomic wrap+addLiquidity:** Same pattern — wrap forwards to factory.AddLiquidity at p1.
-- **CreateNewPool (factory opcode 1):** Currently kept as two-protostone with explicit edicts (legacy pattern). Could be simplified to single protostone — same auto-allocation mechanics as opcode 11.
-- **Wrap BTC:** BTC output at v0 + protostone at v1 (different pattern — BTC, not alkanes).
+### Wrap BTC
 
-### When You Actually Need Edicts
-
-Edicts are only mandatory when **input alkanes need to land at a non-first protostone** (e.g. p2 in a 3-protostone chain). For single-protostone calls the edicts are redundant — the cellpack params identify the tokens.
-
-If the edict in p0 has the wrong pointer (e.g., `v0` instead of `v1`), the tokens go to output 0 instead of to the cellpack protostone. The contract receives zero `incomingAlkanes` and fails with "expected N alkane inputs" or "input amount cannot be zero".
+Different pattern — BTC output at v0 + protostone at v1, not an alkane edict.
 
 ---
 
@@ -464,16 +467,16 @@ For swap/wrap: SDK uses `payment_utxos` from UniSat `getBitcoinUtxos()` (clean U
 **Cause:** The contract is trying to transfer tokens it doesn't hold. This is EXPECTED in simulations. In real transactions, ensure the contract receives tokens via `incomingAlkanes` (two-protostone pattern).
 
 ### frBTC wrap sends BTC but never mints frBTC
-**Cause:** Stale hardcoded signer address. The frBTC contract only mints when BTC arrives at the address derived from its GET_SIGNER opcode (103). A wrong address means BTC goes to an unrelated output and the contract sees zero incoming BTC.
-**Fix:** Update signer address in `lib/alkanes/constants.ts`. Get the correct address by running: `alkanes-cli -p subfrost-regtest wrap-btc --amount 1000 --fee-rate 1` and checking which address receives BTC at output 0.
+**Cause:** BTC didn't reach the address from GET_SIGNER (opcode 103). Either `getSignerAddressDynamic()` failed (network down, fallback to deprecated static map with stale value) or the wrap output didn't bind to that signer address.
+**Fix:** Verify `getSignerAddressDynamic(network)` returns the live signer; check the tx output bound to that exact address. The deprecated static map in `lib/alkanes/constants.ts` should not be the source of truth — see "frBTC Signer Address" above.
 
 ### "insufficient output" / swap quote inflated on regtest
 **Cause:** Espo returns mainnet pool data for regtest (shared genesis token IDs).
 **Fix:** Skip Espo on regtest — RPC simulation fallback queries actual on-chain reserves.
 
 ### "EXPIRED deadline" on regtest
-**Cause:** Regtest blocks are mined manually, so a deadline of current_block + 3 can easily expire before the swap tx is mined.
-**Fix:** On regtest, all mutation hooks override `deadlineBlocks` to 1000 regardless of user setting.
+**Cause:** Regtest blocks are mined manually, so a deadline of current_block + 3 can easily expire before the tx is mined.
+**Fix:** `useSwapMutation` and `useRemoveLiquidityMutation` override `deadlineBlocks` to 1000 on `isRegtest` networks. `useAddLiquidityMutation` uses the user's value — if you hit EXPIRED on add, raise the deadline in TransactionSettingsModal.
 
 ### ⚠️ Tokens/BTC sent to wrong addresses (browser wallet)
 **Cause:** Symbolic addresses (`p2tr:0`) resolve to SDK's dummy wallet, not user's.
@@ -506,7 +509,7 @@ See [docs/BACKEND_SETUP.md](docs/BACKEND_SETUP.md) for usage examples and local 
 | Swap | `hooks/useSwapMutation.ts` |
 | Remove Liquidity | `hooks/useRemoveLiquidityMutation.ts` |
 | Wrap/Unwrap | `hooks/useWrapMutation.ts`, `hooks/useUnwrapMutation.ts` |
-| Pool data fetching | `hooks/usePools.ts`, `hooks/useAlkanesTokenPairs.ts` |
+| Pool data fetching | `hooks/usePools.ts` (markets list), `hooks/usePoolStateLive.ts` (per-pool live) |
 | SDK context | `context/AlkanesSDKContext.tsx` |
 | Calldata builder tests | `hooks/__tests__/mutations/calldata.test.ts` |
 
@@ -672,8 +675,10 @@ All input alkanes automatically go to the FIRST protostone with matching `protoc
 - **Symbolic addresses**: NEVER use `p2tr:0`/`p2wpkh:0` for browser wallets — tokens go to SDK dummy wallet
 - **Wallet session**: `ensureWalletSession()` in `lib/wallet/browserWalletSigning.ts` must run before all mutations
 - **Factory router for ALL AMM ops**: Use factory opcode 13 (swap), 11 (addLiquidity), 12 (burn). Never call pool-direct (opcodes 1/2/3) — factory routes give Uniswap-style slippage protection (`amount_a_min`, `amount_b_min`) and a deadline; pool-direct opcodes have no min checks.
+- **Atomic flows are hooks, not inline**: BTC→Token swap is `useAtomicWrapSwapMutation`, BTC+X→LP is `useAtomicWrapAddLiquidityMutation`, Token→BTC is `useTokenToBtcSwap` (two-tx with progress callbacks — replaces deprecated `useSwapUnwrapMutation`'s atomic three-protostone path).
 - **WASM sync**: Always copy `lib/oyl/alkanes/` after SDK rebuild
 - **DUST_VALUE = 600 sats** (not 546) for relay compatibility
+- **frBTC signer is dynamic**: `getSignerAddressDynamic(network)` from `lib/alkanes/helpers.ts`, not the deprecated static map in `lib/alkanes/constants.ts`
 
 ---
 
