@@ -32,7 +32,7 @@ export interface GaugeClaimParams {
 }
 
 export function useGaugeClaimMutation() {
-  const { account, network, isConnected, signSegwitPsbt, signTaprootPsbt, walletType, browserWallet } = useWallet();
+  const { account, network, isConnected, signTaprootPsbt, walletType, browserWallet } = useWallet();
   const provider = useSandshrewProvider();
   const queryClient = useQueryClient();
   const { requestConfirmation } = useTransactionConfirm();
@@ -138,14 +138,9 @@ export function useGaugeClaimMutation() {
           if (!approved) throw new Error('Transaction rejected by user');
         }
 
-        // Sign PSBT
-        let signedPsbtBase64: string;
-        if (isBrowserWallet) {
-          signedPsbtBase64 = await signTaprootPsbt(finalPsbtBase64);
-        } else {
-          signedPsbtBase64 = await signSegwitPsbt(finalPsbtBase64);
-          signedPsbtBase64 = await signTaprootPsbt(signedPsbtBase64);
-        }
+        // Single signing path. Browser wallets sign all input types via the wallet
+        // adapter; keystore is taproot-only (BIP86) — `signSegwitPsbt` throws.
+        const signedPsbtBase64 = await signTaprootPsbt(finalPsbtBase64);
 
         // Finalize and broadcast
         const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtBase64, { network: btcNetwork });

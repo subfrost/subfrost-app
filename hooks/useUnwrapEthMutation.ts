@@ -33,7 +33,7 @@ export type UnwrapEthTransactionData = {
 };
 
 export function useUnwrapEthMutation() {
-  const { account, network, isConnected, signSegwitPsbt, signTaprootPsbt, walletType } = useWallet();
+  const { account, network, isConnected, signTaprootPsbt, walletType } = useWallet();
   const provider = useSandshrewProvider();
   const queryClient = useQueryClient();
   const { requestConfirmation } = useTransactionConfirm();
@@ -130,13 +130,9 @@ export function useUnwrapEthMutation() {
           if (!approved) throw new Error('Transaction rejected by user');
         }
 
-        let signedPsbtBase64: string;
-        if (isBrowserWallet) {
-          signedPsbtBase64 = await signTaprootPsbt(finalPsbtBase64);
-        } else {
-          signedPsbtBase64 = await signSegwitPsbt(finalPsbtBase64);
-          signedPsbtBase64 = await signTaprootPsbt(signedPsbtBase64);
-        }
+        // Single signing path. Browser wallets sign all input types via the wallet
+        // adapter; keystore is taproot-only (BIP86) — `signSegwitPsbt` throws.
+        const signedPsbtBase64 = await signTaprootPsbt(finalPsbtBase64);
 
         const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtBase64, { network: btcNetwork });
         const alreadyFinalized = signedPsbt.data.inputs.every(input =>

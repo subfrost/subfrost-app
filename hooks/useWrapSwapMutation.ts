@@ -95,7 +95,7 @@ export type WrapSwapTransactionData = {
 // ---------------------------------------------------------------------------
 
 export function useWrapSwapMutation() {
-  const { account, network, isConnected, signTaprootPsbt, signSegwitPsbt, walletType, browserWallet } = useWallet();
+  const { account, network, isConnected, signTaprootPsbt, walletType, browserWallet } = useWallet();
   const provider = useSandshrewProvider();
   const queryClient = useQueryClient();
   const { requestConfirmation } = useTransactionConfirm();
@@ -536,26 +536,13 @@ export function useWrapSwapMutation() {
       // ========================================================================
       console.log('[WrapSwap] Signing PSBTs...');
 
-      let signedWrapPsbtBase64: string;
-      let signedSwapPsbtBase64: string;
+      // Single signing path. Browser wallets sign all input types via the wallet
+      // adapter; keystore is taproot-only (BIP86) — `signSegwitPsbt` throws.
+      console.log('[WrapSwap] Signing wrap PSBT...');
+      const signedWrapPsbtBase64 = await signTaprootPsbt(finalWrapPsbtBase64);
 
-      if (isBrowserWallet) {
-        // Browser wallets: sign both PSBTs (may be batch or sequential)
-        console.log('[WrapSwap] Browser wallet: signing wrap PSBT...');
-        signedWrapPsbtBase64 = await signTaprootPsbt(finalWrapPsbtBase64);
-
-        console.log('[WrapSwap] Browser wallet: signing swap PSBT...');
-        signedSwapPsbtBase64 = await signTaprootPsbt(finalSwapPsbtBase64);
-      } else {
-        // Keystore: sign with both SegWit and Taproot keys
-        console.log('[WrapSwap] Keystore: signing wrap PSBT...');
-        signedWrapPsbtBase64 = await signSegwitPsbt(finalWrapPsbtBase64);
-        signedWrapPsbtBase64 = await signTaprootPsbt(signedWrapPsbtBase64);
-
-        console.log('[WrapSwap] Keystore: signing swap PSBT...');
-        signedSwapPsbtBase64 = await signSegwitPsbt(finalSwapPsbtBase64);
-        signedSwapPsbtBase64 = await signTaprootPsbt(signedSwapPsbtBase64);
-      }
+      console.log('[WrapSwap] Signing swap PSBT...');
+      const signedSwapPsbtBase64 = await signTaprootPsbt(finalSwapPsbtBase64);
 
       // ========================================================================
       // Step 12: Finalize and extract transactions

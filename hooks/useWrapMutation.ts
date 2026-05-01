@@ -96,7 +96,7 @@ export type WrapTransactionBaseData = {
 };
 
 export function useWrapMutation() {
-  const { account, network, isConnected, signTaprootPsbt, signSegwitPsbt, walletType, browserWallet } = useWallet();
+  const { account, network, isConnected, signTaprootPsbt, walletType, browserWallet } = useWallet();
   const provider = useSandshrewProvider();
   const queryClient = useQueryClient();
   const { requestConfirmation } = useTransactionConfirm();
@@ -440,15 +440,9 @@ export function useWrapMutation() {
           const inputCount = tempPsbtForCheck.data.inputs.length;
           console.log(`[WRAP] PSBT has ${inputCount} inputs, ${tempPsbtForCheck.txOutputs.length} outputs`);
 
-          let signedPsbtBase64: string;
-          if (walletType === 'browser') {
-            // Browser wallets (OYL, Xverse, Unisat, etc.) sign all inputs in one call
-            signedPsbtBase64 = await signTaprootPsbt(psbtBase64);
-          } else {
-            // Keystore wallets need both signing steps (BIP84 for segwit, BIP86 for taproot)
-            signedPsbtBase64 = await signSegwitPsbt(psbtBase64);
-            signedPsbtBase64 = await signTaprootPsbt(signedPsbtBase64);
-          }
+          // Single signing path. Browser wallets sign all input types via the wallet
+          // adapter; keystore is taproot-only (BIP86) — `signSegwitPsbt` throws.
+          const signedPsbtBase64 = await signTaprootPsbt(psbtBase64);
 
           // Parse the signed PSBT, finalize, and extract the raw transaction
           // JOURNAL ENTRY (2026-02-20): OYL wallet may return a fully finalized PSBT

@@ -36,7 +36,7 @@ export interface FujinBuyParams {
 }
 
 export function useFujinBuyMutation() {
-  const { account, network, isConnected, signTaprootPsbt, signSegwitPsbt, walletType } = useWallet();
+  const { account, network, isConnected, signTaprootPsbt, walletType } = useWallet();
   const provider = useSandshrewProvider();
   const queryClient = useQueryClient();
 
@@ -143,16 +143,9 @@ export function useFujinBuyMutation() {
             }
           }
 
-          // Sign PSBT -- browser wallets sign all input types in a single call
-          let signedPsbtBase64: string;
-          if (isBrowserWallet) {
-            console.log('[FujinBuy] Browser wallet: signing PSBT once (all input types)...');
-            signedPsbtBase64 = await signTaprootPsbt(psbtBase64);
-          } else {
-            console.log('[FujinBuy] Keystore: signing PSBT with SegWit, then Taproot...');
-            signedPsbtBase64 = await signSegwitPsbt(psbtBase64);
-            signedPsbtBase64 = await signTaprootPsbt(signedPsbtBase64);
-          }
+          // Single signing path. Browser wallets sign all input types via the wallet
+          // adapter; keystore is taproot-only (BIP86) — `signSegwitPsbt` throws.
+          const signedPsbtBase64 = await signTaprootPsbt(psbtBase64);
 
           // Finalize and extract transaction
           const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtBase64, { network: btcNetwork });

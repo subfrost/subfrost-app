@@ -260,16 +260,20 @@ describe('Browser wallet address handling in useSwapMutation', () => {
     expect(match![1]).toContain("'p2tr:0'");
   });
 
-  it('should call signTaprootPsbt only once for browser wallets', () => {
-    // Browser wallet path should NOT call signSegwitPsbt
-    expect(src).toContain('if (isBrowserWallet)');
-    // Must call signTaprootPsbt for browser
-    expect(src).toContain('signTaprootPsbt(finalPsbtBase64)');
+  it('should sign via single signTaprootPsbt call (no double-sign)', () => {
+    // Both wallet types now collapse to a single signTaprootPsbt call.
+    // Browser wallets dispatch internally to the right adapter (which signs
+    // taproot + segwit + p2sh in one popup). Keystore is BIP86 taproot-only.
+    expect(src).toMatch(/signTaprootPsbt\s*\(\s*finalPsbtBase64\s*\)/);
   });
 
-  it('should call both signSegwitPsbt and signTaprootPsbt for keystore', () => {
-    expect(src).toContain('signedPsbtBase64 = await signSegwitPsbt(finalPsbtBase64)');
-    expect(src).toContain('signedPsbtBase64 = await signTaprootPsbt(signedPsbtBase64)');
+  it('should NOT call signSegwitPsbt as a function (keystore is taproot-only)', () => {
+    // Strip comments so an inline note that mentions the name doesn't trip
+    // the assertion.
+    const codeOnly = src
+      .replace(/\/\/.*$/gm, '')
+      .replace(/\/\*[\s\S]*?\*\//g, '');
+    expect(codeOnly).not.toMatch(/signSegwitPsbt\s*\(/);
   });
 });
 

@@ -109,7 +109,7 @@ function extractKeystoreBranch(src: string, varName: string): string | null {
   return null;
 }
 
-// All mutation hooks that call alkanesExecuteTyped
+// Mutation hooks that call alkanesExecuteTyped (core AMM + wrap surfaces)
 const ACTIVE_HOOKS = [
   'useSwapMutation.ts',
   'useAddLiquidityMutation.ts',
@@ -118,13 +118,44 @@ const ACTIVE_HOOKS = [
   'useWrapMutation.ts',
 ] as const;
 
-// Hooks that also exist but are deprecated (still should have correct patterns)
+// Hooks that exist but are deprecated (still must follow the same patterns)
 const DEPRECATED_HOOKS = [
   'useSwapUnwrapMutation.ts',
   'useWrapSwapMutation.ts',
 ] as const;
 
+// Every other mutation hook in the app that builds and signs a PSBT.
+// Together with ACTIVE_HOOKS + DEPRECATED_HOOKS this covers all production
+// signing paths. Keep in sync with `find hooks -name '*Mutation.ts'` —
+// excluding hooks that delegate signing to another mutation
+// (`useAtomicWrap*Mutation` are wrappers around their non-atomic siblings).
+const OTHER_SIGNING_HOOKS = [
+  'useBridgeMutation.ts',
+  'useBridgeEthMutation.ts',
+  'useBridgeZecMutation.ts',
+  'useCancelOrderMutation.ts',
+  'useFujinBuyMutation.ts',
+  'useFujinSellMutation.ts',
+  'useGaugeClaimMutation.ts',
+  'useGaugeStakeMutation.ts',
+  'useGaugeUnstakeMutation.ts',
+  'useLimitOrderMutation.ts',
+  'useUnwrapEthMutation.ts',
+  'useUnwrapZecMutation.ts',
+  'useWrapEthMutation.ts',
+  'useWrapZecMutation.ts',
+  'useVaultDeposit.ts',
+  'useVaultWithdraw.ts',
+  'fire/useFireBondClaimMutation.ts',
+  'fire/useFireBondMutation.ts',
+  'fire/useFireClaimMutation.ts',
+  'fire/useFireRedeemMutation.ts',
+  'fire/useFireStakeMutation.ts',
+  'fire/useFireUnstakeMutation.ts',
+] as const;
+
 const ALL_HOOKS = [...ACTIVE_HOOKS, ...DEPRECATED_HOOKS] as const;
+const ALL_SIGNING_HOOKS = [...ALL_HOOKS, ...OTHER_SIGNING_HOOKS] as const;
 
 // Hooks that involve time-sensitive operations (swap, remove liquidity)
 // and need regtest deadline overrides
@@ -421,20 +452,54 @@ describe('fromAddresses browser wallet handling', () => {
 // 7. Browser Wallet Signing Pattern
 // ==========================================================================
 
-describe('Browser wallet signing pattern', () => {
-  describe.each(ALL_HOOKS)('%s', (hookFile) => {
+describe('Single-signing pattern (taproot-only keystore + browser via adapter)', () => {
+  // Keystore wallets are BIP86 taproot-only — `signSegwitPsbt` throws for
+  // them. Browser wallet adapters sign all input types (taproot + segwit +
+  // p2sh) inside a single `signTaprootPsbt` call, so both wallet types
+  // collapse to one signing call. This regression guard asserts that no
+  // mutation hook still calls `signSegwitPsbt` as a function.
+  //
+  // See WalletContext.tsx — signSegwitPsbt body throws with
+  // "signSegwitPsbt called for keystore wallet — keystore is taproot-only"
+  // for `walletType === 'keystore'`.
+
+  describe.each(ALL_SIGNING_HOOKS)('%s', (hookFile) => {
     let src: string;
 
     beforeAll(() => {
       src = readHook(hookFile);
     });
 
-    it('should call signTaprootPsbt for browser wallets', () => {
-      expect(src).toContain('signTaprootPsbt');
+    it('should call signTaprootPsbt', () => {
+      // The unified signing call. Even hooks that only ever sign segwit
+      // routes go through signTaprootPsbt because the WalletContext
+      // dispatches on wallet type internally.
+      expect(src).toMatch(/signTaprootPsbt\s*\(/);
     });
 
-    it('should call signSegwitPsbt for keystore wallets', () => {
-      expect(src).toContain('signSegwitPsbt');
+    it('should NOT call signSegwitPsbt as a function (single-signing path)', () => {
+      // Strip line and block comments so an inline note that *mentions*
+      // `signSegwitPsbt` (explaining why it's not called) doesn't trip the
+      // regex. The pattern below matches the function-call form only.
+      const codeOnly = src
+        .replace(/\/\/.*$/gm, '')
+        .replace(/\/\*[\s\S]*?\*\//g, '');
+      expect(codeOnly).not.toMatch(/signSegwitPsbt\s*\(/);
+    });
+
+    it('should NOT destructure signSegwitPsbt from useWallet (unused after migration)', () => {
+      // After the migration the destructure should drop signSegwitPsbt —
+      // leaving it in the destructure adds a confusing unused-import-style
+      // signal and lets future refactors accidentally re-introduce it.
+      const codeOnly = src
+        .replace(/\/\/.*$/gm, '')
+        .replace(/\/\*[\s\S]*?\*\//g, '');
+      const useWalletDestructure = codeOnly.match(/useWallet\s*\(\s*\)[\s\S]*?(?:\n|;)/);
+      // Find the `const { ... } = useWallet()` pattern more precisely.
+      const destructureLine = codeOnly.match(/const\s*\{[^}]+\}\s*=\s*useWallet\s*\(\s*\)/);
+      if (destructureLine) {
+        expect(destructureLine[0]).not.toContain('signSegwitPsbt');
+      }
     });
   });
 });

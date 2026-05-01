@@ -26,7 +26,7 @@ interface BondParams {
 
 export function useFireBondMutation() {
   const queryClient = useQueryClient();
-  const { network, walletType, account, signTaprootPsbt, signSegwitPsbt } = useWallet();
+  const { network, walletType, account, signTaprootPsbt } = useWallet();
   const { provider, isInitialized } = useAlkanesSDK();
 
   const config = getConfig(network || 'mainnet');
@@ -91,13 +91,9 @@ export function useFireBondMutation() {
           finalPsbtBase64 = patched.psbtBase64;
         }
 
-        let signedPsbtBase64: string;
-        if (isBrowserWallet) {
-          signedPsbtBase64 = await signTaprootPsbt(finalPsbtBase64);
-        } else {
-          signedPsbtBase64 = await signSegwitPsbt(finalPsbtBase64);
-          signedPsbtBase64 = await signTaprootPsbt(signedPsbtBase64);
-        }
+        // Single signing path. Browser wallets sign all input types via the wallet
+        // adapter; keystore is taproot-only (BIP86) — `signSegwitPsbt` throws.
+        const signedPsbtBase64 = await signTaprootPsbt(finalPsbtBase64);
 
         const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtBase64, { network: btcNetwork });
         signedPsbt.finalizeAllInputs();

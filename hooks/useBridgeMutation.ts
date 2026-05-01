@@ -89,7 +89,7 @@ export function buildMintProtostone(
 // ---- Hook: Bridge BTC-side frUSD to EVM ----
 
 export function useBridgeToEvm() {
-  const { account, network, isConnected, signTaprootPsbt, signSegwitPsbt, walletType } = useWallet();
+  const { account, network, isConnected, signTaprootPsbt, walletType } = useWallet();
   const provider = useSandshrewProvider();
   const queryClient = useQueryClient();
 
@@ -182,14 +182,9 @@ export function useBridgeToEvm() {
           finalPsbtBase64 = patched.psbtBase64;
         }
 
-        // Sign
-        let signedPsbtBase64: string;
-        if (isBrowserWallet) {
-          signedPsbtBase64 = await signTaprootPsbt(finalPsbtBase64);
-        } else {
-          signedPsbtBase64 = await signSegwitPsbt(finalPsbtBase64);
-          signedPsbtBase64 = await signTaprootPsbt(signedPsbtBase64);
-        }
+        // Single signing path. Browser wallets sign all input types via the wallet
+        // adapter; keystore is taproot-only (BIP86) — `signSegwitPsbt` throws.
+        const signedPsbtBase64 = await signTaprootPsbt(finalPsbtBase64);
 
         // Finalize and broadcast
         const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtBase64, { network: btcNetwork });
@@ -213,7 +208,7 @@ export function useBridgeToEvm() {
 // ---- Hook: Bridge from EVM (mint frUSD on Bitcoin) ----
 
 export function useBridgeFromEvm() {
-  const { account, network, isConnected, signTaprootPsbt, signSegwitPsbt, walletType } = useWallet();
+  const { account, network, isConnected, signTaprootPsbt, walletType } = useWallet();
   const provider = useSandshrewProvider();
   const queryClient = useQueryClient();
 
@@ -296,13 +291,9 @@ export function useBridgeFromEvm() {
           finalPsbtBase64 = patched.psbtBase64;
         }
 
-        let signedPsbtBase64: string;
-        if (isBrowserWallet) {
-          signedPsbtBase64 = await signTaprootPsbt(finalPsbtBase64);
-        } else {
-          signedPsbtBase64 = await signSegwitPsbt(finalPsbtBase64);
-          signedPsbtBase64 = await signTaprootPsbt(signedPsbtBase64);
-        }
+        // Single signing path. Browser wallets sign all input types via the wallet
+        // adapter; keystore is taproot-only (BIP86) — `signSegwitPsbt` throws.
+        const signedPsbtBase64 = await signTaprootPsbt(finalPsbtBase64);
 
         const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtBase64, { network: btcNetwork });
         signedPsbt.finalizeAllInputs();

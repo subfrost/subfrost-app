@@ -197,6 +197,17 @@ describe('WalletContext signing architecture (source verification)', () => {
     expect(signSegwitBody).toContain("throw new Error('Wallet not connected')");
   });
 
+  it('signSegwitPsbt rejects keystore wallets with an informative message', () => {
+    // Keystore is BIP86 taproot-only — there's no segwit derivation path
+    // available. The guard must throw before any signing logic runs so that
+    // mutation hooks calling signSegwitPsbt against a keystore see a clear
+    // error pointing them at signTaprootPsbt.
+    expect(signSegwitBody).toContain("walletType === 'keystore'");
+    expect(signSegwitBody).toMatch(
+      /keystore is taproot-only|Use signTaprootPsbt instead/i,
+    );
+  });
+
   // ---- Taproot-specific: x-only pubkey and tweak ----
 
   it('signTaprootPsbt derives x-only pubkey (slice 1,33) for taproot', () => {

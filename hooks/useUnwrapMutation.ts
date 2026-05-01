@@ -83,7 +83,7 @@ export type UnwrapTransactionBaseData = {
 };
 
 export function useUnwrapMutation() {
-  const { account, network, isConnected, signSegwitPsbt, signTaprootPsbt, walletType, browserWallet } = useWallet();
+  const { account, network, isConnected, signTaprootPsbt, walletType, browserWallet } = useWallet();
   const provider = useSandshrewProvider();
   const queryClient = useQueryClient();
   const { requestConfirmation } = useTransactionConfirm();
@@ -305,17 +305,9 @@ export function useUnwrapMutation() {
           console.log('[useUnwrapMutation] User approved transaction');
         }
 
-        // Sign PSBT — browser wallets sign all input types in a single call,
-        // so we must NOT call signPsbt twice (causes "inputType: sh without redeemScript").
-        let signedPsbtBase64: string;
-        if (isBrowserWallet) {
-          console.log('[useUnwrapMutation] Browser wallet: signing PSBT once (all input types)...');
-          signedPsbtBase64 = await signTaprootPsbt(finalPsbtBase64);
-        } else {
-          console.log('[useUnwrapMutation] Keystore: signing PSBT with SegWit, then Taproot...');
-          signedPsbtBase64 = await signSegwitPsbt(finalPsbtBase64);
-          signedPsbtBase64 = await signTaprootPsbt(signedPsbtBase64);
-        }
+        // Single signing path. Browser wallets sign all input types via the wallet
+        // adapter; keystore is taproot-only (BIP86) — `signSegwitPsbt` throws.
+        const signedPsbtBase64 = await signTaprootPsbt(finalPsbtBase64);
 
         // Finalize and extract transaction. Some wallets (UniSat with
         // autoFinalized: true) return PSBTs that are already finalized —

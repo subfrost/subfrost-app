@@ -35,7 +35,7 @@ export interface CancelOrderParams {
 }
 
 export function useCancelOrderMutation() {
-  const { account, network, isConnected, signTaprootPsbt, signSegwitPsbt, walletType, browserWallet } = useWallet();
+  const { account, network, isConnected, signTaprootPsbt, walletType, browserWallet } = useWallet();
   const provider = useSandshrewProvider();
   const queryClient = useQueryClient();
 
@@ -148,16 +148,10 @@ export function useCancelOrderMutation() {
             }
           }
 
-          // Sign PSBT -- browser wallets sign all input types in a single call
-          let signedPsbtBase64: string;
-          if (isBrowserWallet) {
-            console.log('[CancelOrder] Browser wallet: signing PSBT once (all input types)...');
-            signedPsbtBase64 = await signTaprootPsbt(psbtBase64);
-          } else {
-            console.log('[CancelOrder] Keystore: signing PSBT with SegWit, then Taproot...');
-            signedPsbtBase64 = await signSegwitPsbt(psbtBase64);
-            signedPsbtBase64 = await signTaprootPsbt(signedPsbtBase64);
-          }
+          // Single signing path. Browser wallets sign all input types via the wallet
+          // adapter; keystore is taproot-only (BIP86) — `signSegwitPsbt` throws.
+          console.log('[CancelOrder] Signing PSBT...');
+          const signedPsbtBase64 = await signTaprootPsbt(psbtBase64);
 
           // Finalize and extract transaction
           const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtBase64, { network: btcNetwork });

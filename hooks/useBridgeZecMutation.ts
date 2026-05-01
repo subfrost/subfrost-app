@@ -74,7 +74,7 @@ function validateZecTAddress(address: string): string | null {
 // ---- Hook ----
 
 export function useBridgeZecMutation() {
-  const { account, network, isConnected, signTaprootPsbt, signSegwitPsbt, walletType } = useWallet();
+  const { account, network, isConnected, signTaprootPsbt, walletType } = useWallet();
   const provider = useSandshrewProvider();
   const queryClient = useQueryClient();
   const { requestConfirmation } = useTransactionConfirm();
@@ -213,14 +213,9 @@ export function useBridgeZecMutation() {
           if (!approved) throw new Error('Transaction rejected by user');
         }
 
-        // Sign
-        let signedPsbtBase64: string;
-        if (isBrowserWallet) {
-          signedPsbtBase64 = await signTaprootPsbt(psbtBase64);
-        } else {
-          signedPsbtBase64 = await signSegwitPsbt(psbtBase64);
-          signedPsbtBase64 = await signTaprootPsbt(signedPsbtBase64);
-        }
+        // Single signing path. Browser wallets sign all input types via the wallet
+        // adapter; keystore is taproot-only (BIP86) — `signSegwitPsbt` throws.
+        const signedPsbtBase64 = await signTaprootPsbt(psbtBase64);
 
         // Finalize and broadcast
         const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtBase64, { network: btcNetwork });

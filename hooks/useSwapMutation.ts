@@ -226,7 +226,7 @@ export type SwapTransactionBaseData = {
  */
 
 export function useSwapMutation() {
-  const { account, network, isConnected, signTaprootPsbt, signSegwitPsbt, walletType, browserWallet } = useWallet();
+  const { account, network, isConnected, signTaprootPsbt, walletType, browserWallet } = useWallet();
   const provider = useSandshrewProvider();
   const queryClient = useQueryClient();
   const { requestConfirmation } = useTransactionConfirm();
@@ -589,22 +589,18 @@ export function useSwapMutation() {
           //
           // See WalletContext.tsx OYL WALLET BEHAVIOR DOCUMENTATION for full details.
           // ============================================================================
+          // Single signing path. Browser wallets sign all input types via the wallet
+          // adapter; keystore is taproot-only (BIP86) — `signSegwitPsbt` throws.
           let signedPsbtBase64: string;
-          if (isBrowserWallet) {
-
-            const signStartTime = Date.now();
-            try {
-              signedPsbtBase64 = await signTaprootPsbt(finalPsbtBase64);
-            } catch (signErr: any) {
-              console.error('[useSwapMutation][OYL-DEBUG] ===== signTaprootPsbt FAILED =====');
-              console.error('[useSwapMutation][OYL-DEBUG] Error:', signErr?.message || signErr);
-              console.error('[useSwapMutation][OYL-DEBUG] Error type:', signErr?.constructor?.name);
-              console.error('[useSwapMutation][OYL-DEBUG] Full error:', signErr);
-              throw signErr;
-            }
-          } else {
-            signedPsbtBase64 = await signSegwitPsbt(finalPsbtBase64);
-            signedPsbtBase64 = await signTaprootPsbt(signedPsbtBase64);
+          const signStartTime = Date.now();
+          try {
+            signedPsbtBase64 = await signTaprootPsbt(finalPsbtBase64);
+          } catch (signErr: any) {
+            console.error('[useSwapMutation][OYL-DEBUG] ===== signTaprootPsbt FAILED =====');
+            console.error('[useSwapMutation][OYL-DEBUG] Error:', signErr?.message || signErr);
+            console.error('[useSwapMutation][OYL-DEBUG] Error type:', signErr?.constructor?.name);
+            console.error('[useSwapMutation][OYL-DEBUG] Full error:', signErr);
+            throw signErr;
           }
 
           // Parse the signed PSBT, finalize, and extract the raw transaction
