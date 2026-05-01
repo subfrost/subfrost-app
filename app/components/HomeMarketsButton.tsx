@@ -13,6 +13,10 @@ const MarketsSidepanel = lazy(() => import('@/app/swap/components/MarketsSidepan
 export default function HomeMarketsButton() {
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
+  // Once opened, keep the panel mounted so its own exit transition (handled
+  // by MarketsSidepanel via mounted/visible state) gets a chance to play —
+  // unmounting on `!isOpen` would skip the close animation.
+  const [hasOpenedOnce, setHasOpenedOnce] = useState(false);
   const [volumePeriod, setVolumePeriod] = useState<'24h' | '30d'>('30d');
 
   const { data: poolsData } = usePools({ sortBy: 'tvl', order: 'desc' });
@@ -48,10 +52,15 @@ export default function HomeMarketsButton() {
     router.push('/swap');
   };
 
+  const handleOpen = () => {
+    setHasOpenedOnce(true);
+    setIsOpen(true);
+  };
+
   return (
     <>
       <button
-        onClick={() => setIsOpen(true)}
+        onClick={handleOpen}
         className="sf-tab-btn flex w-full items-center justify-between px-3 py-2 text-left"
       >
         <span className="text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]">
@@ -60,7 +69,7 @@ export default function HomeMarketsButton() {
         <ChevronRight size={14} className="text-[color:var(--sf-text)]/60" />
       </button>
 
-      {isOpen && (
+      {hasOpenedOnce && (
         <Suspense fallback={null}>
           <MarketsSidepanel
             isOpen={isOpen}

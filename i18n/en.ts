@@ -144,20 +144,6 @@ const en: Record<string, string> = {
   'wallet.skipBackup': 'Skip Google Drive Backup',
   'wallet.inviteCode': 'Invite Code',
 
-  // Transaction Settings Modal
-  'txSettings.title': 'Transaction Settings',
-  'txSettings.maxSlippage': 'Max Slippage',
-  'txSettings.deadlineBlocks': 'Deadline (blocks)',
-  'txSettings.minerFee': 'Miner Fee',
-  'txSettings.slow': 'slow',
-  'txSettings.medium': 'medium',
-  'txSettings.fast': 'fast',
-  'txSettings.custom': 'Custom',
-  'txSettings.crossChainNote': 'Both Bitcoin and Ethereum Network fees are auto-calculated for cross-chain swaps.',
-  'txSettings.selected': 'Selected:',
-  'txSettings.satsVb': 'sats/vB',
-  'txSettings.done': 'Done',
-
   // Swap Success Notification
   'success.swap': 'Swap',
   'success.wrap': 'Wrap',

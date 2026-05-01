@@ -74,10 +74,8 @@
  * ### FILES AFFECTED (ALL MUST USE THIS PATTERN)
  *
  * - hooks/useSwapMutation.ts ✅ Fixed 2026-03-01
- * - hooks/useSwapUnwrapMutation.ts ✅ Fixed 2026-03-01
  * - hooks/useRemoveLiquidityMutation.ts ✅ Fixed 2026-03-01
  * - hooks/useAddLiquidityMutation.ts ✅ Fixed 2026-03-01
- * - hooks/useWrapSwapMutation.ts ✅ Fixed 2026-03-01
  * - hooks/useUnwrapMutation.ts ✅ Fixed 2026-03-01
  * - hooks/useWrapMutation.ts - Uses different pattern (fixedOutputs for signer)
  *
@@ -142,8 +140,7 @@
  *
  * FIX: Changed buildSwapProtostone from calling pool with opcode 3 to calling
  * factory with opcode 13 (SwapExactTokensForTokens). Same two-protostone pattern,
- * but p1 now targets the factory instead of the pool. Applied same fix to
- * useWrapSwapMutation (BTC→token) and useSwapUnwrapMutation (token→BTC).
+ * but p1 now targets the factory instead of the pool.
  *
  * VERIFIED: User-tested DIESEL → frBTC swap — correct frBTC amount received.
  *

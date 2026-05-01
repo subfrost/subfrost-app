@@ -1,9 +1,7 @@
 /**
  * Shared constants for alkanes operations.
  *
- * Single source of truth — imported by both React hooks and integration tests.
- * Previously duplicated across useSwapMutation, useWrapMutation,
- * useSwapUnwrapMutation, useAddLiquidityMutation, useRemoveLiquidityMutation.
+ * Single source of truth — imported by React hooks and integration tests.
  */
 
 /** Factory router opcode for SwapExactTokensForTokens */
