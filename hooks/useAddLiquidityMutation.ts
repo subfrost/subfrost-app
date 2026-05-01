@@ -315,7 +315,7 @@ function injectAlkaneInputs(
 }
 
 export function useAddLiquidityMutation() {
-  const { account, network, isConnected, signTaprootPsbt, signSegwitPsbt, walletType, browserWallet } = useWallet();
+  const { account, network, isConnected, signTaprootPsbt, walletType, browserWallet } = useWallet();
   const provider = useSandshrewProvider();
   const queryClient = useQueryClient();
   const { requestConfirmation } = useTransactionConfirm();
@@ -593,17 +593,11 @@ export function useAddLiquidityMutation() {
             console.log('[AddLiquidity] User approved transaction');
           }
 
-          // Sign PSBT — browser wallets sign all input types in a single call,
-          // so we must NOT call signPsbt twice (causes "inputType: sh without redeemScript").
-          let signedPsbtBase64: string;
-          if (isBrowserWallet) {
-            console.log('[AddLiquidity] Browser wallet: signing PSBT once (all input types)...');
-            signedPsbtBase64 = await signTaprootPsbt(psbtBase64);
-          } else {
-            console.log('[AddLiquidity] Keystore: signing PSBT with SegWit, then Taproot...');
-            signedPsbtBase64 = await signSegwitPsbt(psbtBase64);
-            signedPsbtBase64 = await signTaprootPsbt(signedPsbtBase64);
-          }
+          // Single signing path. Browser wallets handle all input types in one
+          // signPsbt call. Keystore is taproot-only (BIP86) and `signSegwitPsbt`
+          // throws — so the same `signTaprootPsbt` is correct for both.
+          console.log('[AddLiquidity] Signing PSBT…');
+          const signedPsbtBase64 = await signTaprootPsbt(psbtBase64);
 
           // Finalize and extract transaction
           const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtBase64, { network: btcNetwork });
