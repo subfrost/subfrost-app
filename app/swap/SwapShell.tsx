@@ -53,7 +53,6 @@ import { consumeSwapPair } from "./swapPair";
 // Lazy loaded components - split into separate chunks
 const PoolDetailsCard = lazy(() => import("./components/PoolDetailsCard"));
 const SwapSummary = lazy(() => import("./components/SwapSummary"));
-const TransactionSettingsModal = lazy(() => import("@/app/components/TransactionSettingsModal"));
 const TokenSelectorModal = lazy(() => import("@/app/components/TokenSelectorModal"));
 const LPPositionSelectorModal = lazy(() => import("./components/LPPositionSelectorModal"));
 const TransactionStepper = lazy(() => import("./components/TransactionStepper"));
@@ -1154,9 +1153,8 @@ export default function SwapShell() {
     if (isCrossChainSwap && crossChainDirection) {
       const { from: srcChain, to: dstChain } = crossChainDirection;
 
-      // For now, show a message that cross-chain bridge UI is coming
-      // The full flow will use CrossChainBridgePanel component
-      // which handles the multi-step deposit → swap → withdraw pipeline
+      // For now, show a message that cross-chain bridge UI is coming.
+      // The full deposit → swap → withdraw pipeline lives in BridgeDepositFlow.
       showSwapError(
         `Cross-chain swap: ${srcChain.toUpperCase()} → ${dstChain.toUpperCase()}\n\n` +
         `This will route through: ${getBridgeRoute(srcChain, dstChain)}\n\n` +
@@ -1223,12 +1221,8 @@ export default function SwapShell() {
       return;
     }
 
-    // Token → BTC swap: Two-step flow (swap Token→frBTC, then unwrap frBTC→BTC).
-    // Previously used useSwapUnwrapMutation (atomic single-tx), which had the same
-    // protostone pointer issue as useWrapSwapMutation — the swap cellpack's pointer=p2
-    // didn't deliver frBTC to the unwrap cellpack's incomingAlkanes.
-    //
-    // JOURNAL (2026-03-15): Added state machine + TransactionStepper for clear UX feedback.
+    // Token → BTC swap: two-step flow (swap Token→frBTC, then unwrap frBTC→BTC).
+    // State machine + TransactionStepper drive the UX feedback.
     if (isTokenToBtcSwap) {
       if (!quote || !quote.poolId) {
         console.error('[SWAP] Token → BTC swap requires quote with poolId');
@@ -2268,15 +2262,6 @@ export default function SwapShell() {
       />
 
       <Suspense fallback={null}>
-      <TransactionSettingsModal
-        selection={fee.selection}
-        setSelection={fee.setSelection}
-        custom={fee.custom}
-        setCustom={fee.setCustom}
-        feeRate={fee.feeRate}
-        isCrossChainFrom={['ETH', 'ZEC', 'USDT', 'USDC'].includes(fromToken?.symbol ?? '')}
-      />
-
       <TokenSelectorModal
         isOpen={isTokenSelectorOpen}
         onClose={closeTokenSelector}

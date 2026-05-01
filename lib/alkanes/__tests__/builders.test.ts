@@ -10,8 +10,6 @@ import {
   buildWrapProtostone,
   buildUnwrapProtostone,
   buildUnwrapInputRequirements,
-  buildWrapSwapProtostone,
-  buildSwapUnwrapProtostone,
   buildTransferProtostone,
   buildTransferInputRequirements,
   buildCreateNewPoolProtostone,
@@ -192,44 +190,6 @@ describe('buildUnwrapInputRequirements', () => {
   });
 });
 
-describe('buildWrapSwapProtostone (deprecated — kept for reference)', () => {
-  it('builds chained wrap+swap with two protostones', () => {
-    const result = buildWrapSwapProtostone({
-      frbtcId: FRBTC_ID,
-      factoryId: FACTORY_ID,
-      buyTokenId: DIESEL_ID,
-      frbtcAmount: '100000',
-      minOutput: '50000',
-      deadline: '2000',
-    });
-    // p0: wrap with pointer=p1
-    expect(result).toContain('[32,0,77]:p1:v0');
-    // p1: swap with factory opcode 13
-    expect(result).toContain('[4,65498,13,2,32,0,2,0,100000,50000,2000]:v0:v0');
-    // Two protostones in result
-    const bracketCount = (result.match(/\[/g) || []).length;
-    expect(bracketCount).toBeGreaterThanOrEqual(2);
-  });
-});
-
-describe('buildSwapUnwrapProtostone', () => {
-  it('builds chained swap+unwrap with two cellpack protostones', () => {
-    const result = buildSwapUnwrapProtostone({
-      sellTokenId: DIESEL_ID,
-      sellAmount: '1000000',
-      frbtcId: FRBTC_ID,
-      factoryId: FACTORY_ID,
-      minFrbtcOutput: '50000',
-      deadline: '2000',
-      dustVout: 2,
-    });
-    // p1: swap, pointer=p2 (chains to unwrap)
-    expect(result).toContain('[4,65498,13,2,2,0,32,0,1000000,50000,2000]:p2:v0');
-    // p2: unwrap with dustVout + amount carried in cellpack (2026-04-29 fix)
-    expect(result).toContain('[32,0,78,2,50000]:v0:v0');
-  });
-});
-
 describe('buildTransferProtostone', () => {
   it('builds edict protostone for alkane transfer', () => {
     const result = buildTransferProtostone({
@@ -385,11 +345,6 @@ describe('builder consistency', () => {
       buildCreateNewPoolProtostone({
         factoryId: FACTORY_ID, token0Id: DIESEL_ID, token1Id: FRBTC_ID,
         amount0: '100', amount1: '50',
-      }),
-      buildSwapUnwrapProtostone({
-        sellTokenId: DIESEL_ID, sellAmount: '100', frbtcId: FRBTC_ID,
-        factoryId: FACTORY_ID, minFrbtcOutput: '50', deadline: '100',
-        dustVout: 2,
       }),
     ];
 

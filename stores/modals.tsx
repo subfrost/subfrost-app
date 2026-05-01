@@ -8,10 +8,6 @@ export type ModalStoreShape = {
   setConnectWalletOpen: (open: boolean) => void;
   openConnectWallet: () => void;
   closeConnectWallet: () => void;
-  isTxSettingsOpen: boolean;
-  setTxSettingsOpen: (open: boolean) => void;
-  openTxSettings: () => void;
-  closeTxSettings: () => void;
   isTokenSelectorOpen: boolean;
   tokenSelectorMode: TokenSelectorMode | null;
   setTokenSelectorOpen: (open: boolean, mode?: TokenSelectorMode) => void;
@@ -24,10 +20,6 @@ const ModalContext = createContext<ModalStoreShape>({
   setConnectWalletOpen: () => {},
   openConnectWallet: () => {},
   closeConnectWallet: () => {},
-  isTxSettingsOpen: false,
-  setTxSettingsOpen: () => {},
-  openTxSettings: () => {},
-  closeTxSettings: () => {},
   isTokenSelectorOpen: false,
   tokenSelectorMode: null,
   setTokenSelectorOpen: () => {},
@@ -37,16 +29,12 @@ const ModalContext = createContext<ModalStoreShape>({
 
 export function ModalStore(props: { children: ReactNode }) {
   const [isConnectWalletOpen, setIsConnectWalletOpen] = useState(false);
-  const [isTxSettingsOpen, setIsTxSettingsOpen] = useState(false);
   const [isTokenSelectorOpen, setIsTokenSelectorOpen] = useState(false);
   const [tokenSelectorMode, setTokenSelectorMode] = useState<TokenSelectorMode | null>(null);
 
   const setConnectWalletOpen = (open: boolean) => setIsConnectWalletOpen(open);
   const openConnectWallet = () => setIsConnectWalletOpen(true);
   const closeConnectWallet = () => setIsConnectWalletOpen(false);
-  const setTxSettingsOpen = (open: boolean) => setIsTxSettingsOpen(open);
-  const openTxSettings = () => setIsTxSettingsOpen(true);
-  const closeTxSettings = () => setIsTxSettingsOpen(false);
   const setTokenSelectorOpen = (open: boolean, mode?: TokenSelectorMode) => {
     setIsTokenSelectorOpen(open);
     if (mode) setTokenSelectorMode(mode);
@@ -68,10 +56,6 @@ export function ModalStore(props: { children: ReactNode }) {
         setConnectWalletOpen,
         openConnectWallet,
         closeConnectWallet,
-        isTxSettingsOpen,
-        setTxSettingsOpen,
-        openTxSettings,
-        closeTxSettings,
         isTokenSelectorOpen,
         tokenSelectorMode,
         setTokenSelectorOpen,

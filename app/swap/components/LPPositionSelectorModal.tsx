@@ -46,22 +46,19 @@ export default function LPPositionSelectorModal({
   if (!isOpen) return null;
 
   return (
-    <div
-      className="fixed inset-0 z-50 grid place-items-center bg-black/50 px-4 backdrop-blur-sm"
-      onClick={onClose}
-    >
+    <div className="sf-popup-overlay px-4" onClick={onClose}>
       <div
-        className="flex h-[80vh] max-h-[600px] w-full max-w-[480px] flex-col overflow-hidden rounded-3xl bg-[color:var(--sf-glass-bg)] shadow-[0_24px_96px_rgba(0,0,0,0.4)] backdrop-blur-xl"
+        className="sf-popup w-full max-w-[480px] h-[80vh] max-h-[600px]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between bg-[color:var(--sf-panel-bg)] px-6 py-5 shadow-[0_2px_12px_rgba(0,0,0,0.08)]">
+        <div className="sf-popup-header flex items-center justify-between px-6 py-5">
           <h2 className="text-xl font-extrabold tracking-wider uppercase text-[color:var(--sf-text)]">
             {t('lpSelector.title')}
           </h2>
           <button
             onClick={onClose}
-            className="flex h-8 w-8 items-center justify-center rounded-lg bg-[color:var(--sf-input-bg)] shadow-[0_2px_12px_rgba(0,0,0,0.08)] text-[color:var(--sf-text)]/70 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)] hover:text-[color:var(--sf-text)] focus:outline-none"
+            className="sf-popup-close"
             aria-label="Close"
           >
             <X size={18} />
@@ -86,7 +83,7 @@ export default function LPPositionSelectorModal({
         </div>
 
         {/* Position List */}
-        <div className="flex-1 overflow-y-auto px-4 py-3">
+        <div className="sf-popup-body px-4 py-3">
           {filteredPositions.length === 0 ? (
             <div className="flex h-full items-center justify-center">
               <p className="text-sm font-medium text-[color:var(--sf-text)]/50">
@@ -102,10 +99,8 @@ export default function LPPositionSelectorModal({
                   <button
                     key={position.id}
                     onClick={() => handleSelect(position)}
-                    className={`group w-full rounded-xl p-4 text-left shadow-[0_2px_12px_rgba(0,0,0,0.08)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none focus:outline-none ${
-                      isSelected
-                        ? 'bg-[color:var(--sf-primary)]/10 hover:shadow-md'
-                        : 'bg-[color:var(--sf-input-bg)] hover:bg-[color:var(--sf-surface)]/60 hover:shadow-md'
+                    className={`sf-popup-row group p-4 ${
+                      isSelected ? 'bg-[color:var(--sf-primary)]/10' : ''
                     }`}
                   >
                     <div className="flex items-center justify-between">

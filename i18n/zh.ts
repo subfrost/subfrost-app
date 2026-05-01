@@ -144,20 +144,6 @@ const zh: Record<string, string> = {
   'wallet.skipBackup': '\u8df3\u8fc7 Google Drive \u5907\u4efd',
   'wallet.inviteCode': '\u9080\u8bf7\u7801',
 
-  // Transaction Settings Modal
-  'txSettings.title': '\u4ea4\u6613\u8bbe\u7f6e',
-  'txSettings.maxSlippage': '\u6700\u5927\u6ed1\u70b9',
-  'txSettings.deadlineBlocks': '\u622a\u6b62\u533a\u5757',
-  'txSettings.minerFee': '\u77ff\u5de5\u8d39',
-  'txSettings.slow': '\u6162\u901f',
-  'txSettings.medium': '\u4e2d\u901f',
-  'txSettings.fast': '\u5feb\u901f',
-  'txSettings.custom': '\u81ea\u5b9a\u4e49',
-  'txSettings.crossChainNote': '\u8de8\u94fe\u5151\u6362\u7684\u6bd4\u7279\u5e01\u548c\u4ee5\u592a\u574a\u7f51\u7edc\u8d39\u7528\u5c06\u81ea\u52a8\u8ba1\u7b97\u3002',
-  'txSettings.selected': '\u5df2\u9009\u62e9\uff1a',
-  'txSettings.satsVb': 'sats/vB',
-  'txSettings.done': '\u5b8c\u6210',
-
   // Swap Success Notification
   'success.swap': '\u5151\u6362',
   'success.wrap': '\u5305\u88c5',

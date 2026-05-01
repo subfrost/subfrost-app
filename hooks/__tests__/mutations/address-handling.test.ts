@@ -118,17 +118,11 @@ const ACTIVE_HOOKS = [
   'useWrapMutation.ts',
 ] as const;
 
-// Hooks that exist but are deprecated (still must follow the same patterns)
-const DEPRECATED_HOOKS = [
-  'useSwapUnwrapMutation.ts',
-  'useWrapSwapMutation.ts',
-] as const;
-
 // Every other mutation hook in the app that builds and signs a PSBT.
-// Together with ACTIVE_HOOKS + DEPRECATED_HOOKS this covers all production
-// signing paths. Keep in sync with `find hooks -name '*Mutation.ts'` —
-// excluding hooks that delegate signing to another mutation
-// (`useAtomicWrap*Mutation` are wrappers around their non-atomic siblings).
+// Together with ACTIVE_HOOKS this covers all production signing paths.
+// Keep in sync with `find hooks -name '*Mutation.ts'` — excluding hooks that
+// delegate signing to another mutation (`useAtomicWrap*Mutation` are wrappers
+// around their non-atomic siblings).
 const OTHER_SIGNING_HOOKS = [
   'useBridgeMutation.ts',
   'useBridgeEthMutation.ts',
@@ -154,7 +148,7 @@ const OTHER_SIGNING_HOOKS = [
   'fire/useFireUnstakeMutation.ts',
 ] as const;
 
-const ALL_HOOKS = [...ACTIVE_HOOKS, ...DEPRECATED_HOOKS] as const;
+const ALL_HOOKS = ACTIVE_HOOKS;
 const ALL_SIGNING_HOOKS = [...ALL_HOOKS, ...OTHER_SIGNING_HOOKS] as const;
 
 // Hooks that involve time-sensitive operations (swap, remove liquidity)
@@ -162,8 +156,6 @@ const ALL_SIGNING_HOOKS = [...ALL_HOOKS, ...OTHER_SIGNING_HOOKS] as const;
 const DEADLINE_HOOKS = [
   'useSwapMutation.ts',
   'useRemoveLiquidityMutation.ts',
-  'useSwapUnwrapMutation.ts',
-  'useWrapSwapMutation.ts',
 ] as const;
 
 // ==========================================================================

@@ -6,11 +6,10 @@
  *   2. Wait for swap confirmation
  *   3. Unwrap frBTC → BTC
  *
- * Why two-tx instead of atomic: the SDK's atomic three-protostone path
- * (useSwapUnwrapMutation) is deprecated — slippage uncertainty between
- * swap and unwrap, plus complex PSBT signing made it unreliable. Two-tx
- * is simpler and lets the user partially recover (swap succeeded, unwrap
- * failed → user has frBTC, can retry unwrap).
+ * Why two-tx instead of atomic: the previous atomic three-protostone path
+ * had slippage uncertainty between swap and unwrap, plus complex PSBT
+ * signing. Two-tx is simpler and lets the user partially recover (swap
+ * succeeded, unwrap failed → user has frBTC, can retry unwrap).
  *
  * Why a hook: the UI shouldn't own confirmation polling, devnet-specific
  * mining, or the cross-tx state transitions (swapping →
