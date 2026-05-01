@@ -36,6 +36,7 @@ import { useAtomicWrapSwapMutation } from "@/hooks/useAtomicWrapSwapMutation";
 import { useAtomicWrapAddLiquidityMutation } from "@/hooks/useAtomicWrapAddLiquidityMutation";
 import { useTokenToBtcSwap } from "@/hooks/useTokenToBtcSwap";
 import { useMatchedLpPool } from "@/hooks/useMatchedLpPool";
+import { usePoolStateLive } from "@/hooks/usePoolStateLive";
 import { computePairedLpAmount, computeRemoveLiquidityMinAmounts } from "@/lib/alkanes/liquidity-math";
 import { useTokenNames, resolveTokenDisplay } from "@/hooks/useTokenNames";
 import { useRemoveLiquidityMutation } from "@/hooks/useRemoveLiquidityMutation";
@@ -153,9 +154,21 @@ export default function SwapShell() {
   const [poolToken1, setPoolToken1] = useState<TokenMeta | undefined>();
   const [poolToken0Amount, setPoolToken0Amount] = useState<string>("");
   const [poolToken1Amount, setPoolToken1Amount] = useState<string>("");
+  // Which side the user typed last — drives auto-recalculation of the paired
+  // amount when live reserves change. `null` = neither (no recompute).
+  const [lpTypedSide, setLpTypedSide] = useState<0 | 1 | null>(null);
   const [selectedLPPosition, setSelectedLPPosition] = useState<LPPosition | null>(null);
   const [isLPSelectorOpen, setIsLPSelectorOpen] = useState(false);
   const [removeAmount, setRemoveAmount] = useState<string>("");
+
+  // Live pool state for the selected LP position. Polls /get-pool-details every
+  // 5s and on every block (HeightPoller). Used to compute slippage-protected
+  // min amounts against the *current* indexer snapshot rather than the bulk
+  // markets cache (~30s aggregate). Only enabled once the user has typed an
+  // amount — no point polling while the form is idle.
+  const removeLpLiveState = usePoolStateLive(selectedLPPosition?.id, {
+    enabled: !!selectedLPPosition && !!removeAmount && parseFloat(removeAmount) > 0,
+  });
 
   // Multi-step swap flow state (BTC→Token, Token→BTC)
   // JOURNAL (2026-03-15): Added to track progress and show TransactionStepper UI
@@ -1426,21 +1439,42 @@ export default function SwapShell() {
       return;
     }
 
-    // Compute slippage-protected min amounts. Aborts if pool data is missing
-    // — proceeding with min=0 would expose the user to MEV / sandwich.
-    const removePool = markets.find(p => p.id === selectedLPPosition.id);
-    if (!removePool?.token0Amount || !removePool?.token1Amount || !removePool?.lpTotalSupply) {
+    // Force a fresh opcode 999 read right before submit so slippage params are
+    // computed against current state-trie reserves/supply, not the indexer-
+    // aggregated markets cache. Falls back to markets only if the live read
+    // genuinely fails (RPC error). See usePoolStateLive.
+    let reserve0: string | undefined;
+    let reserve1: string | undefined;
+    let lpTotalSupply: string | undefined;
+    try {
+      const fresh = await removeLpLiveState.refetch();
+      if (fresh.data) {
+        reserve0 = fresh.data.reserve0;
+        reserve1 = fresh.data.reserve1;
+        lpTotalSupply = fresh.data.totalSupply;
+      }
+    } catch (e) {
+      console.warn('[handleRemoveLiquidity] live pool refetch failed, falling back to cache:', e);
+    }
+    if (!reserve0 || !reserve1 || !lpTotalSupply) {
+      const cached = markets.find(p => p.id === selectedLPPosition.id);
+      reserve0 = cached?.token0Amount;
+      reserve1 = cached?.token1Amount;
+      lpTotalSupply = cached?.lpTotalSupply;
+    }
+    if (!reserve0 || !reserve1 || !lpTotalSupply) {
       showSwapError('Pool reserves or LP total supply unavailable — refresh and retry');
       return;
     }
+
     let minAmount0: string;
     let minAmount1: string;
     try {
       ({ minAmount0, minAmount1 } = computeRemoveLiquidityMinAmounts({
         lpAmountDisplay: removeAmount,
-        reserve0: removePool.token0Amount,
-        reserve1: removePool.token1Amount,
-        lpTotalSupply: removePool.lpTotalSupply,
+        reserve0,
+        reserve1,
+        lpTotalSupply,
         maxSlippagePercent: maxSlippage,
       }));
     } catch (e: any) {
@@ -1899,19 +1933,34 @@ export default function SwapShell() {
   // selectors, so we compute the match fresh from the markets list.
   const matchedLpPool = useMatchedLpPool(poolToken0, poolToken1, markets, FRBTC_ALKANE_ID);
 
+  // Live reserves for the matched pool — used to compute the paired LP amount
+  // against the current state-trie ratio rather than the cached one. Without
+  // this, users typing in the AddLiquidity inputs see a stale paired value
+  // and can hit `amountBMin` reverts even at moderate slippage when supply
+  // has drifted since the markets snapshot. Enabled only when at least one
+  // side has been typed — idle pair selection shouldn't trigger polling.
+  const addLpHasAmount =
+    (!!poolToken0Amount && parseFloat(poolToken0Amount) > 0) ||
+    (!!poolToken1Amount && parseFloat(poolToken1Amount) > 0);
+  const addLpLiveState = usePoolStateLive(matchedLpPool?.id, {
+    enabled: !!matchedLpPool && addLpHasAmount,
+  });
+
   // Auto-calculate the paired LP amount based on the matched pool's reserve
   // ratio. Pure math is in lib/alkanes/liquidity-math.ts.
   const computePaired = (typedSide: 0 | 1, value: string): string | null => {
     if (!matchedLpPool || !poolToken0 || !poolToken1) return null;
-    if (!matchedLpPool.token0Amount || !matchedLpPool.token1Amount) return null;
+    const reserve0 = addLpLiveState.data?.reserve0 ?? matchedLpPool.token0Amount;
+    const reserve1 = addLpLiveState.data?.reserve1 ?? matchedLpPool.token1Amount;
+    if (!reserve0 || !reserve1) return null;
     return computePairedLpAmount({
       typedSide,
       typedDisplay: value,
       uiToken0Id: poolToken0.id,
       uiToken1Id: poolToken1.id,
       poolToken0Id: matchedLpPool.token0.id,
-      reserve0: matchedLpPool.token0Amount,
-      reserve1: matchedLpPool.token1Amount,
+      reserve0,
+      reserve1,
       frbtcId: FRBTC_ALKANE_ID,
       wrapFeePerThousand: premiumData?.wrapFeePerThousand ?? FRBTC_WRAP_FEE_PER_1000,
     });
@@ -1919,6 +1968,7 @@ export default function SwapShell() {
 
   const handlePoolToken0AmountChange = (value: string) => {
     setPoolToken0Amount(value);
+    setLpTypedSide(value ? 0 : null);
     if (!value) { setPoolToken1Amount(''); return; }
     const paired = computePaired(0, value);
     if (paired !== null) setPoolToken1Amount(paired);
@@ -1926,10 +1976,32 @@ export default function SwapShell() {
 
   const handlePoolToken1AmountChange = (value: string) => {
     setPoolToken1Amount(value);
+    setLpTypedSide(value ? 1 : null);
     if (!value) { setPoolToken0Amount(''); return; }
     const paired = computePaired(1, value);
     if (paired !== null) setPoolToken0Amount(paired);
   };
+
+  // Auto-recompute the paired amount when live reserves shift on a new block.
+  // Without this the user sees a stale paired number for as long as they keep
+  // the form open — same UX as Uniswap's "price has changed" auto-update. Only
+  // depends on the live reserves so it doesn't loop on its own setState.
+  useEffect(() => {
+    if (lpTypedSide === null) return;
+    const reserve0 = addLpLiveState.data?.reserve0;
+    const reserve1 = addLpLiveState.data?.reserve1;
+    if (!reserve0 || !reserve1) return;
+    const typedValue = lpTypedSide === 0 ? poolToken0Amount : poolToken1Amount;
+    if (!typedValue || parseFloat(typedValue) <= 0) return;
+    const paired = computePaired(lpTypedSide, typedValue);
+    if (paired === null) return;
+    if (lpTypedSide === 0) {
+      setPoolToken1Amount(prev => (prev === paired ? prev : paired));
+    } else {
+      setPoolToken0Amount(prev => (prev === paired ? prev : paired));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [addLpLiveState.data?.reserve0, addLpLiveState.data?.reserve1]);
 
   // Handle percentage of balance click for LP token 0
   const handlePercentToken0 = (percent: number) => {

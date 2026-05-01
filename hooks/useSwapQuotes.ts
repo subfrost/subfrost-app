@@ -43,6 +43,9 @@ import { FRBTC_UNWRAP_FEE_PER_1000, FRBTC_WRAP_FEE_PER_1000 } from '@/constants/
 import { calculateMaximumFromSlippage, calculateMinimumFromSlippage } from '@/utils/amm';
 import { useFrbtcPremium } from '@/hooks/useFrbtcPremium';
 import { fetchRouterQuote } from '@/hooks/useRouterQuote';
+import { usePoolStateLive } from '@/hooks/usePoolStateLive';
+import type { LivePoolState } from '@/lib/alkanes/poolState';
+import { swapCalculateOut, swapCalculateIn } from '@/lib/alkanes/swapMath';
 
 type Direction = 'buy' | 'sell';
 
@@ -96,44 +99,6 @@ const fromAlks = (alks: string, displayPlaces = 8): string => {
     .toFixed(displayPlaces);
 };
 
-const swapCalculateOut = ({
-  amountIn,
-  reserveIn,
-  reserveOut,
-  feePercentage,
-}: {
-  amountIn: number;
-  reserveIn: number;
-  reserveOut: number;
-  feePercentage: number;
-}): number => {
-  if (amountIn <= 0) throw new Error('INSUFFICIENT_INPUT_AMOUNT');
-  if (reserveIn <= 0 || reserveOut <= 0) throw new Error('INSUFFICIENT_LIQUIDITY');
-  const amountInWithFee = amountIn * (1 - feePercentage);
-  const numerator = amountInWithFee * reserveOut;
-  const denominator = reserveIn + amountInWithFee;
-  return Math.floor(numerator / denominator);
-};
-
-const swapCalculateIn = ({
-  amountOut,
-  reserveIn,
-  reserveOut,
-  feePercentage,
-}: {
-  amountOut: number;
-  reserveIn: number;
-  reserveOut: number;
-  feePercentage: number;
-}): number => {
-  if (amountOut <= 0) throw new Error('INSUFFICIENT_OUTPUT_AMOUNT');
-  if (reserveIn <= 0 || reserveOut <= 0) throw new Error('INSUFFICIENT_LIQUIDITY');
-  if (amountOut >= reserveOut) throw new Error('INSUFFICIENT_LIQUIDITY');
-  const amountInWithFee = (amountOut * reserveIn) / (reserveOut - amountOut);
-  const amountIn = amountInWithFee / (1 - feePercentage);
-  return Math.ceil(amountIn);
-};
-
 // WebProvider type for the function signature
 type WebProvider = import('@alkanes/ts-sdk/wasm').WebProvider;
 
@@ -149,6 +114,7 @@ async function calculateSwapPrice(
   unwrapFee: number = FRBTC_UNWRAP_FEE_PER_1000,
   originalSellCurrency?: string,
   originalBuyCurrency?: string,
+  liveState?: LivePoolState | null,
 ) {
   const effectiveSell = originalSellCurrency ?? sellCurrency;
   const effectiveBuy = originalBuyCurrency ?? buyCurrency;
@@ -175,8 +141,12 @@ async function calculateSwapPrice(
   }
 
   const isSellToken0 = pool?.token0.id === sellCurrency;
-  const reserveIn = isSellToken0 ? Number(pool?.token0Amount) : Number(pool?.token1Amount);
-  const reserveOut = isSellToken0 ? Number(pool?.token1Amount) : Number(pool?.token0Amount);
+  // Prefer live state-trie reserves when available — falls back to the cached
+  // markets snapshot if the live fetch failed.
+  const r0 = liveState?.reserve0 ?? pool?.token0Amount;
+  const r1 = liveState?.reserve1 ?? pool?.token1Amount;
+  const reserveIn = isSellToken0 ? Number(r0) : Number(r1);
+  const reserveOut = isSellToken0 ? Number(r1) : Number(r0);
 
   if (direction === 'sell') {
     let amountIn = Number(amountInAlks);
@@ -260,6 +230,28 @@ export function useSwapQuotes(
   const wrapFee = premiumData?.wrapFeePerThousand ?? FRBTC_WRAP_FEE_PER_1000;
   const unwrapFee = premiumData?.unwrapFeePerThousand ?? FRBTC_UNWRAP_FEE_PER_1000;
 
+  // Find direct pool for the pair upfront so we can subscribe to its live state
+  // outside of queryFn (hook order must be stable). Multi-hop quotes still rely
+  // on the cached markets reserves — they're a preview only, the actual
+  // amount_out_min is recomputed in useSwapMutation right before submit.
+  const directPool = useMemo(() => {
+    if (!sellPairs?.length) return undefined;
+    return sellPairs.find(p =>
+      (p.token0.id === sellCurrencyId && p.token1.id === buyCurrencyId) ||
+      (p.token0.id === buyCurrencyId && p.token1.id === sellCurrencyId),
+    );
+  }, [sellPairs, sellCurrencyId, buyCurrencyId]);
+
+  // Live reserves for the direct pool. Only polls while the user has typed an
+  // amount (avoids background traffic when the swap form is idle). HeightPoller
+  // also invalidates this on every new block.
+  const hasAmount = !!debouncedAmount && parseFloat(debouncedAmount) > 0;
+  const liveDirect = usePoolStateLive(directPool?.id, {
+    enabled: !!directPool && hasAmount,
+  });
+  const liveReserve0 = liveDirect.data?.reserve0;
+  const liveReserve1 = liveDirect.data?.reserve1;
+
   return useQuery<SwapQuote>({
     queryKey: [
       'swap-quotes',
@@ -272,6 +264,8 @@ export function useSwapQuotes(
       maxSlippage,
       wrapFee,
       unwrapFee,
+      liveReserve0,
+      liveReserve1,
     ],
     enabled: !!sellCurrencyId && !!buyCurrencyId && isInitialized && !!provider,
     queryFn: async () => {
@@ -389,11 +383,7 @@ export function useSwapQuotes(
       // DIAGNOSTIC disabled — re-render spam
       // console.log('[useSwapQuotes] Looking for direct pool:', { sellCurrencyId, buyCurrencyId });
 
-      const direct = sellPairs.find(
-        (p: any) =>
-          (p.token0.id === sellCurrencyId && p.token1.id === buyCurrencyId) ||
-          (p.token0.id === buyCurrencyId && p.token1.id === sellCurrencyId),
-      );
+      const direct = directPool;
       // console.log('[useSwapQuotes] Direct pool found:', direct ? { poolId: direct.poolId, token0: direct.token0.id, token1: direct.token1.id } : 'NONE');
       if (direct) {
         const ammQuote = await calculateSwapPrice(
@@ -408,6 +398,7 @@ export function useSwapQuotes(
           unwrapFee,
           sellCurrency,
           buyCurrency,
+          liveDirect.data,
         );
 
         // Check if Universal Router offers a better price (hybrid CLOB+AMM).

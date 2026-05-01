@@ -304,7 +304,13 @@ export function useSwapMutation() {
           : swapData.buyAmount;
 
 
-      // Calculate slippage limits
+      // Slippage is applied to the quote the user actually saw in the UI.
+      // The quote is already kept fresh on each block via usePoolStateLive in
+      // useSwapQuotes — we should NOT recompute it here from a newer snapshot.
+      // If the price moves further than the user's tolerance between submit
+      // and mining, the contract reverts on min-out and the user retries with
+      // a fresh quote (standard Uniswap-style UX). Recomputing here would
+      // silently deliver less than what the user agreed to.
       const minAmountOut = calculateMinimumFromSlippage({ amount: ammBuyAmount, maxSlippage: swapData.maxSlippage });
 
 

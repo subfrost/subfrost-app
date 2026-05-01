@@ -61,6 +61,8 @@ export const queryKeys = {
       ['poolFee', network, alkaneId] as const,
     metadata: (network: string, poolIdsKey: string) =>
       ['poolsMetadata', network, poolIdsKey] as const,
+    liveState: (network: string, poolId: string) =>
+      ['pool-live-state', network, poolId] as const,
   },
 
   // -------------------------------------------------------------------------
