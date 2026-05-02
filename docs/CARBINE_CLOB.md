@@ -132,16 +132,16 @@ const { provider: sdkProvider } = useAlkanesSDK();
 await sdkProvider.alkanesExecuteTyped({ ... });  // ← do not do this
 ```
 
-## useActualAddresses pattern (MANDATORY)
+## Address handling — pass `txContext`
 
-Every Carbine mutation hook must use:
-```typescript
-const useActualAddresses = isBrowserWallet || network === 'devnet';
-```
+Every Carbine mutation hook destructures `txContext` from `useWallet()` and
+forwards it to `alkanesExecuteTyped`. The wrapper unpacks fee-source / change /
+ordinals-strategy fields per wallet type. See CLAUDE.md "Address Handling —
+pass `txContext` from `useWallet()`" for the full mechanism and rationale.
 
-On devnet, symbolic addresses (`p2tr:0`) resolve to the SDK's dummy wallet
-derivation, not the connected wallet. Tokens end up at wrong addresses →
-"insufficient balance" even with real balance.
+Symbolic addresses (`p2tr:0`, `p2wpkh:0`) must never appear in mutation hooks —
+they resolve to the SDK provider's *internal* wallet, not the connected user's.
+This caused real token loss on mainnet (tx `985436b5...`).
 
 ## Console noise — filter __get_len MISS spam
 

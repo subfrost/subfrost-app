@@ -157,18 +157,8 @@ describe('WalletContext signing architecture (source verification)', () => {
     expect(signTaprootBody).toContain('taprootPath');
   });
 
-  it('signSegwitPsbt uses BIP84 derivation path for keystore wallets', () => {
-    // BIP84 path: m/84'/coinType/0'/0/0
-    expect(signSegwitBody).toContain("m/84'/${coinType}'/0'/0/0");
-    expect(signSegwitBody).toContain('segwitPath');
-  });
-
   it('signTaprootPsbt uses coinType 0 for mainnet and 1 for testnet/regtest', () => {
     expect(signTaprootBody).toContain("network === 'mainnet' ? 0 : 1");
-  });
-
-  it('signSegwitPsbt uses coinType 0 for mainnet and 1 for testnet/regtest', () => {
-    expect(signSegwitBody).toContain("network === 'mainnet' ? 0 : 1");
   });
 
   // ---- Keystore signing requires mnemonic from sessionStorage ----
@@ -176,11 +166,6 @@ describe('WalletContext signing architecture (source verification)', () => {
   it('signTaprootPsbt reads mnemonic from sessionStorage for keystore', () => {
     expect(signTaprootBody).toContain('sessionStorage.getItem');
     expect(signTaprootBody).toContain('SESSION_MNEMONIC');
-  });
-
-  it('signSegwitPsbt reads mnemonic from sessionStorage for keystore', () => {
-    expect(signSegwitBody).toContain('sessionStorage.getItem');
-    expect(signSegwitBody).toContain('SESSION_MNEMONIC');
   });
 
   // ---- Keystore signing throws if wallet not connected or mnemonic missing ----
@@ -191,10 +176,6 @@ describe('WalletContext signing architecture (source verification)', () => {
 
   it('signTaprootPsbt throws if mnemonic expired (keystore path)', () => {
     expect(signTaprootBody).toContain('Wallet session expired');
-  });
-
-  it('signSegwitPsbt throws if wallet not connected (keystore path)', () => {
-    expect(signSegwitBody).toContain("throw new Error('Wallet not connected')");
   });
 
   it('signSegwitPsbt rejects keystore wallets with an informative message', () => {
@@ -448,16 +429,6 @@ describe('Keystore signing path validation', () => {
     expect(body).toContain("import('bip39')");
   });
 
-  it('signSegwitPsbt uses dynamic imports for bitcoinjs-lib, bip32, bip39, tiny-secp256k1', () => {
-    const src = readWalletContextSource();
-    const body = extractCallbackBody(src, 'signSegwitPsbt');
-
-    expect(body).toContain("import('bitcoinjs-lib')");
-    expect(body).toContain("import('tiny-secp256k1')");
-    expect(body).toContain("import('bip32')");
-    expect(body).toContain("import('bip39')");
-  });
-
   it('signTaprootPsbt initializes ECC library before signing', () => {
     const src = readWalletContextSource();
     const body = extractCallbackBody(src, 'signTaprootPsbt');
@@ -494,27 +465,11 @@ describe('Keystore signing path validation', () => {
     expect(body).toContain('Could not sign input');
   });
 
-  it('signSegwitPsbt signs all inputs in a loop (skips failures)', () => {
-    const src = readWalletContextSource();
-    const body = extractCallbackBody(src, 'signSegwitPsbt');
-
-    expect(body).toContain('psbt.inputCount');
-    expect(body).toContain('psbt.signInput(i');
-    expect(body).toContain('Could not sign input');
-  });
-
   it('signTaprootPsbt returns base64 after signing (keystore path)', () => {
     const src = readWalletContextSource();
     const body = extractCallbackBody(src, 'signTaprootPsbt');
 
     // After the signing loop, returns psbt.toBase64()
-    expect(body).toContain('return psbt.toBase64()');
-  });
-
-  it('signSegwitPsbt returns base64 after signing (keystore path)', () => {
-    const src = readWalletContextSource();
-    const body = extractCallbackBody(src, 'signSegwitPsbt');
-
     expect(body).toContain('return psbt.toBase64()');
   });
 });

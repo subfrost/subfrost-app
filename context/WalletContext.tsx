@@ -2235,90 +2235,16 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
     }
 
     // Keystore is taproot-only by policy. Native segwit derivation is intentionally
-    // disabled to ensure all keystore funds live at a single (taproot) address.
-    // Callers should never reach this branch — if they do, that means a code path
-    // is still treating keystore as dual-address. Surface the bug rather than
-    // silently producing a half-signed PSBT.
+    // disabled so all keystore funds live at a single taproot address. The
+    // browser-wallet branches above handle the only legitimate segwit-signing
+    // paths; falling through here means the caller is treating keystore as
+    // dual-address (or the browser adapter wasn't initialized).
     if (walletType === 'keystore') {
       throw new Error('signSegwitPsbt called for keystore wallet — keystore is taproot-only. Use signTaprootPsbt instead.');
     }
 
-    if (!wallet) {
-      throw new Error('Wallet not connected');
-    }
-
-    // Get mnemonic from session storage
-    const mnemonic = sessionStorage.getItem(STORAGE_KEYS.SESSION_MNEMONIC);
-    if (!mnemonic) {
-      throw new Error('Wallet session expired. Please unlock wallet again.');
-    }
-
-    // Dynamic imports to avoid SSR issues
-    const [bitcoin, tinysecp, BIP32Factory, bip39] = await Promise.all([
-      import('bitcoinjs-lib'),
-      import('tiny-secp256k1'),
-      import('bip32').then(m => m.default),
-      import('bip39'),
-    ]);
-
-    // Initialize ECC library
-    bitcoin.initEccLib(tinysecp);
-
-    // Determine bitcoin network
-    const getBitcoinNetwork = () => {
-      switch (network) {
-        case 'mainnet':
-          return bitcoin.networks.bitcoin;
-        case 'testnet':
-        case 'signet':
-          return bitcoin.networks.testnet;
-        case 'regtest':
-        case 'regtest-local':
-        case 'subfrost-regtest':
-        case 'oylnet':
-        case 'devnet':
-          return bitcoin.networks.regtest;
-        default:
-          return bitcoin.networks.bitcoin;
-      }
-    };
-
-    const btcNetwork = getBitcoinNetwork();
-
-    // Derive segwit key using BIP84 path (browser wallets that need it use SDK adapter above)
-    const seed = bip39.mnemonicToSeedSync(mnemonic);
-    const bip32 = BIP32Factory(tinysecp);
-    const root = bip32.fromSeed(seed, btcNetwork);
-
-    // BIP84 path: m/84'/coinType/0'/0/0
-    // coinType: 0 for mainnet, 1 for testnet/regtest
-    const coinType = network === 'mainnet' ? 0 : 1;
-    const segwitPath = `m/84'/${coinType}'/0'/0/0`;
-    const segwitChild = root.derivePath(segwitPath);
-
-    if (!segwitChild.privateKey) {
-      throw new Error('Failed to derive segwit private key');
-    }
-
-    // Parse and sign the PSBT
-    const psbt = bitcoin.Psbt.fromBase64(psbtBase64, { network: btcNetwork });
-
-    console.log('[signSegwitPsbt] Signing', psbt.inputCount, 'inputs with segwit key');
-    console.log('[signSegwitPsbt] Segwit path:', segwitPath);
-    console.log('[signSegwitPsbt] Pubkey:', Buffer.from(segwitChild.publicKey).toString('hex'));
-
-    // Sign each input with the segwit key
-    for (let i = 0; i < psbt.inputCount; i++) {
-      try {
-        psbt.signInput(i, segwitChild);
-        console.log(`[signSegwitPsbt] Signed input ${i}`);
-      } catch (error) {
-        console.warn(`[signSegwitPsbt] Could not sign input ${i}:`, error);
-      }
-    }
-
-    return psbt.toBase64();
-  }, [wallet, network, walletAdapter, walletType]);
+    throw new Error('signSegwitPsbt: no signing path available — browser wallet adapter not initialized.');
+  }, [network, walletAdapter, walletType, browserWallet, browserWalletAddresses]);
 
   // Sign multiple PSBTs - supports both keystore and browser wallets
   // Uses SDK wallet adapters for all browser wallet signing

@@ -83,6 +83,16 @@ interface WalletCapabilities {
    * Returns `null` if the wallet API is unavailable or fails.
    */
   getCleanBtcUtxos?: () => Promise<PaymentUtxoString[] | null>;
+
+  /**
+   * Native BTC send. The wallet picks UTXOs (skipping inscriptions / runes /
+   * alkanes per its own asset detection), builds, signs, and broadcasts a
+   * transaction internally; returns the broadcast txid. Resolves to `null`
+   * when the wallet doesn't expose the API on this version — caller falls
+   * back to a manual PSBT path. Errors (user rejection, network failure,
+   * insufficient funds) are bubbled up via `throw`.
+   */
+  sendBtc?: (toAddress: string, satoshis: number, feeRate: number) => Promise<string | null>;
 }
 
 /**
@@ -103,6 +113,13 @@ const unisatCapabilities: WalletCapabilities = {
       // Wallet rejected, locked, or API errored — let the SDK fall back to lua.
       return null;
     }
+  },
+  async sendBtc(toAddress, satoshis, feeRate) {
+    if (typeof window === 'undefined') return null;
+    const unisat = (window as any).unisat;
+    if (!unisat?.sendBitcoin) return null;
+    // Errors (user rejection, insufficient funds, network) propagate to caller.
+    return await unisat.sendBitcoin(toAddress, satoshis, { feeRate });
   },
 };
 
@@ -159,4 +176,27 @@ export async function getCleanBtcUtxosForWallet(
   const fn = getCapability(walletId, 'getCleanBtcUtxos');
   if (!fn) return null;
   return fn();
+}
+
+/**
+ * Public helper: ask the connected wallet to send BTC natively. Returns the
+ * broadcast txid on success, or `null` when the wallet doesn't expose the
+ * API (caller should fall back to a manual PSBT pipeline). Errors are
+ * thrown — not swallowed — so user rejection / insufficient funds / network
+ * failures surface to the caller.
+ *
+ * UniSat is the only wallet supported today (`window.unisat.sendBitcoin`).
+ * UniSat's own asset detection guarantees no UTXO carrying inscriptions /
+ * runes / alkanes is spent, which is the safety property we'd otherwise
+ * need to enforce client-side via per-UTXO `protorunesbyoutpoint` lookups.
+ */
+export async function sendBtcViaWallet(
+  walletId: ConnectedWalletId,
+  toAddress: string,
+  satoshis: number,
+  feeRate: number,
+): Promise<string | null> {
+  const fn = getCapability(walletId, 'sendBtc');
+  if (!fn) return null;
+  return fn(toAddress, satoshis, feeRate);
 }

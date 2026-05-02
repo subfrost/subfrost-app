@@ -123,6 +123,7 @@ import {
 import { getBitcoinNetwork, extractPsbtBase64 } from '@/lib/alkanes/helpers';
 import { alkanesExecuteTyped } from '@/lib/alkanes/execute';
 import { getProtectOrdinalsAndRunes } from '@/utils/walletSettings';
+import { useBtcSendMutation, BtcSendStaleUtxosError } from '@/hooks/useBtcSendMutation';
 
 bitcoin.initEccLib(ecc);
 
@@ -246,7 +247,16 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
   // "insufficient funds" errors when most BTC was on Taproot address. Now we aggregate UTXOs
   // from both addresses while still protecting special UTXOs (inscriptions, alkanes, runes).
   const btcChangeAddress = paymentAddress || taprootAddress; // Prefer SegWit for change
-  const allBtcAddresses = [paymentAddress, taprootAddress].filter(Boolean) as string[];
+  // BTC sends source UTXOs ONLY from the segwit "payment" address on
+  // dual-address browser wallets (Xverse / OYL / Leather). Taproot is
+  // reserved for alkanes — picking a taproot UTXO for a BTC fee risks
+  // burning alkanes that share the dust output. Single-address wallets
+  // (UniSat / OKX) and keystore use whichever address they have.
+  const isDualAddressBrowser =
+    walletType === 'browser' && !!paymentAddress && !!taprootAddress && paymentAddress !== taprootAddress;
+  const btcFromAddresses = isDualAddressBrowser
+    ? [paymentAddress as string]
+    : ([paymentAddress, taprootAddress].filter(Boolean) as string[]);
   const alkaneSendAddress = taprootAddress;
   // Legacy alias for compatibility with existing code paths (alkane transfers)
   const btcSendAddress = btcChangeAddress;
@@ -256,6 +266,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
   const { showError } = useNotification();
   const { t } = useTranslation();
   const { balances, refresh } = useEnrichedWalletData();
+  const btcSendMutation = useBtcSendMutation();
 
   // Translate raw broadcast/signing errors into user-readable toast messages.
   // Mirrors SwapShell.humanizeError for consistent error UX across the app.
@@ -409,21 +420,24 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
 
   const frozenUtxos = getFrozenUtxos();
 
-  // Filter available UTXOs for BTC sends:
-  // - Only confirmed UTXOs (pending cannot be reliably spent)
-  // - From either SegWit or Taproot address (aggregate both for full balance)
-  // - Exclude frozen, inscriptions, runes, alkanes (protect special UTXOs)
+  // BTC-send UTXO candidates: confirmed, on a btcFromAddresses entry, not
+  // frozen. inscriptions/runes/alkanes filter is conditional — for
+  // dual-address browser the segwit payment address by design doesn't
+  // hold those, and the enrichment data is unreliable on mainnet anyway
+  // (ord_outputs RPC disabled). For keystore / single-address browser the
+  // address may share alkanes with BTC, so the filter stays.
   const availableUtxos = utxos.all.filter((utxo) => {
-    // Only include confirmed UTXOs - pending UTXOs cannot be reliably spent
     if (!utxo.status.confirmed) return false;
-    // Include UTXOs from either SegWit or Taproot address
-    if (!allBtcAddresses.includes(utxo.address)) return false;
+    if (!btcFromAddresses.includes(utxo.address)) return false;
 
     const utxoKey = `${utxo.txid}:${utxo.vout}`;
     if (frozenUtxos.has(utxoKey)) return showFrozenUtxos;
-    if (utxo.inscriptions && utxo.inscriptions.length > 0) return false;
-    if (utxo.runes && Object.keys(utxo.runes).length > 0) return false;
-    if (utxo.alkanes && Object.keys(utxo.alkanes).length > 0) return false;
+
+    if (!isDualAddressBrowser) {
+      if (utxo.inscriptions && utxo.inscriptions.length > 0) return false;
+      if (utxo.runes && Object.keys(utxo.runes).length > 0) return false;
+      if (utxo.alkanes && Object.keys(utxo.alkanes).length > 0) return false;
+    }
     return true;
   });
 
@@ -670,19 +684,15 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
 
     const estimatedFeeSats = feeResult.fee;
 
-    // Safety checks:
-    // 1. Fee is more than 2% of amount
-    // 2. Fee is more than 0.01 BTC
-    // 3. Fee rate is more than 1000 sat/vbyte
-    // 4. Using more than 100 UTXOs
-    const feePercentage = (estimatedFeeSats / amountSats) * 100;
-    const feeTooHigh = estimatedFeeSats > 0.01 * 100000000; // 0.01 BTC
-    const feeRateTooHigh = feeRateNum > 1000;
-    const tooManyInputs = numInputs > 100;
-    const feePercentageTooHigh = feePercentage > 2;
+    // Safety checks: warn only on genuinely irrational fees.
+    // (A fee/amount % check is not useful — for small sends the minimum-size tx
+    // always produces a high ratio, so it would warn on every legitimate dust send.)
+    const feeTooHigh = estimatedFeeSats > 0.01 * 100000000; // > 0.01 BTC absolute
+    const feeRateTooHigh = feeRateNum > 1000;               // > 1000 sat/vB
+    const tooManyInputs = numInputs > 100;                   // bloated tx
 
     // Skip fee warning if user already acknowledged it (prevents looping on retry)
-    if (!feeWarningAcknowledged && (feeTooHigh || feeRateTooHigh || tooManyInputs || feePercentageTooHigh)) {
+    if (!feeWarningAcknowledged && (feeTooHigh || feeRateTooHigh || tooManyInputs)) {
       setShowFeeWarning(true);
       setFeeWarningCountdown(3);
     } else {
@@ -702,229 +712,20 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
   const handleBroadcast = async () => {
     setError('');
 
-    try {
-      const amountSats = Math.floor(parseFloat(amount) * 100000000);
+    const amountSats = Math.floor(parseFloat(amount) * 100000000);
 
-      // For browser wallets, build and sign PSBT manually
-      if (walletType === 'browser') {
-        console.log('[SendModal] Browser wallet - building PSBT...');
-        console.log('[SendModal] Recipient:', recipientAddress);
-        console.log('[SendModal] Amount:', amount, 'BTC (', amountSats, 'sats)');
-        console.log('[SendModal] Fee rate:', feeRate, 'sat/vB');
-        console.log('[SendModal] From addresses:', allBtcAddresses);
-
-        // Fetch fresh UTXOs from ALL addresses to verify selected UTXOs still exist
-        // Use the esplora REST API proxy, not JSON-RPC (which returns 0 results on mainnet)
-        console.log('[SendModal] Fetching fresh UTXOs from esplora for all addresses...');
-        const freshUtxos: Array<{ txid: string; vout: number; value: number; status: { confirmed: boolean } }> = [];
-
-        for (const addr of allBtcAddresses) {
-          const freshUtxosResponse = await fetch(`/api/esplora/address/${addr}/utxo?network=${network}`);
-          if (!freshUtxosResponse.ok) {
-            console.error(`[SendModal] Failed to fetch UTXOs for ${addr}: ${freshUtxosResponse.status}`);
-            continue;
-          }
-          const addrUtxos = await freshUtxosResponse.json();
-          const mappedUtxos = (Array.isArray(addrUtxos) ? addrUtxos : []).map((u: any) => ({
-            txid: u.txid,
-            vout: u.vout,
-            value: u.value,
-            status: u.status || { confirmed: true },
-          }));
-          freshUtxos.push(...mappedUtxos);
-        }
-
-        console.log('[SendModal] Fresh UTXOs fetched:', freshUtxos.length);
-
-        // Verify selected UTXOs still exist in fresh data
-        const freshUtxoKeys = new Set(freshUtxos.map(u => `${u.txid}:${u.vout}`));
-        const missingUtxos = Array.from(selectedUtxos).filter(key => !freshUtxoKeys.has(key));
-
-        if (missingUtxos.length > 0) {
-          console.error('[SendModal] Selected UTXOs no longer exist:', missingUtxos);
-          console.log('[SendModal] Refreshing wallet data and returning to input step...');
-          // Invalidate cache and reset to input step so user must re-select UTXOs
-          // NOTE: We do NOT reset feeWarningAcknowledged here - if user already acknowledged
-          // the high fee, we preserve that for the retry so they don't see the warning again
-          await refresh();
-          setSelectedUtxos(new Set());
-          setShowFeeWarning(false);
-          setStep('input');
-          setError(t('send.utxosStale'));
-          return; // Exit early - don't throw, just reset state
-        }
-
-        // Determine Bitcoin network
-        const btcNetwork = getBitcoinNetwork(network);
-
-        // Create PSBT
-        const psbt = new bitcoin.Psbt({ network: btcNetwork });
-
-        // Add inputs from selected UTXOs (now verified to exist in fresh data)
-        // JOURNAL (2026-03-01): Must add proper signing metadata for each input type:
-        // - Taproot (P2TR): requires tapInternalKey for wallet to identify signing key
-        // - SegWit (P2WPKH): witnessUtxo is sufficient, but bip32Derivation helps
-        // Without tapInternalKey, OYL fails with "Can not sign for input #N with the key..."
-        let totalInputValue = 0;
-        const tapInternalKeyHex = account?.taproot?.pubKeyXOnly;
-        // Use pure Uint8Array — wallets reject Buffer with "Expected Uint8Array" error
-        const tapInternalKey = tapInternalKeyHex ? new Uint8Array(Buffer.from(tapInternalKeyHex, 'hex')) : undefined;
-
-        for (const utxoKey of Array.from(selectedUtxos)) {
-          const [txid, voutStr] = utxoKey.split(':');
-          const vout = parseInt(voutStr);
-
-          // Find the UTXO in our cached data to get its address
-          const cachedUtxo = availableUtxos.find(u => u.txid === txid && u.vout === vout);
-          const utxoAddress = cachedUtxo?.address;
-
-          // Use fresh UTXO data for value
-          const freshUtxo = freshUtxos.find(u => u.txid === txid && u.vout === vout);
-          if (!freshUtxo) {
-            throw new Error(`UTXO not found in fresh data: ${utxoKey}`);
-          }
-
-          // Fetch transaction hex for witness UTXO via local API proxy (avoids CORS)
-          const txHexUrl = `/api/esplora/tx/${txid}/hex?network=${network}`;
-          console.log('[SendModal] Fetching tx hex from:', txHexUrl);
-
-          const txHexResponse = await fetch(txHexUrl);
-          if (!txHexResponse.ok) {
-            throw new Error(`Failed to fetch transaction ${txid}: ${txHexResponse.statusText}`);
-          }
-          const txHex = await txHexResponse.text();
-          const tx = bitcoin.Transaction.fromHex(txHex);
-
-          // Determine if this is a Taproot input based on the UTXO's address
-          const isTaprootInput = utxoAddress && (
-            utxoAddress.startsWith('bc1p') ||
-            utxoAddress.startsWith('tb1p') ||
-            utxoAddress.startsWith('bcrt1p')
-          );
-
-          const inputData: any = {
-            hash: txid,
-            index: vout,
-            witnessUtxo: {
-              script: tx.outs[vout].script,
-              value: BigInt(freshUtxo.value),
-            },
-          };
-
-          // Add tapInternalKey for Taproot inputs so wallet knows which key to use
-          if (isTaprootInput && tapInternalKey) {
-            inputData.tapInternalKey = tapInternalKey;
-            console.log(`[SendModal] Input ${psbt.txInputs.length}: Taproot from ${utxoAddress}`);
-          } else {
-            console.log(`[SendModal] Input ${psbt.txInputs.length}: SegWit from ${utxoAddress}`);
-          }
-
-          psbt.addInput(inputData);
-          totalInputValue += freshUtxo.value;
-        }
-
-        // Add recipient output
-        psbt.addOutput({
-          address: normalizedRecipientAddress,
-          value: BigInt(amountSats),
-        });
-
-        // Compute fee and change, accounting for dust threshold
-        const txFeeResult = computeSendFee({ inputCount: psbt.txInputs.length, sendAmount: amountSats, totalInputValue, feeRate });
-
-        if (txFeeResult.numOutputs === 2 && txFeeResult.change > 0) {
-          psbt.addOutput({
-            address: btcChangeAddress,
-            value: BigInt(txFeeResult.change),
-          });
-        }
-
-        // Convert PSBT to base64 for signing
-        let psbtBase64 = psbt.toBase64();
-        console.log('[SendModal] PSBT created, signing with browser wallet...');
-
-        // Inject redeemScript for P2SH-P2WPKH wallets (see lib/psbt-patching.ts)
-        if (account?.nativeSegwit?.pubkey && paymentAddress) {
-          const psbtForPatch = bitcoin.Psbt.fromBase64(psbtBase64, { network: btcNetwork });
-          const patched = injectRedeemScripts(psbtForPatch, {
-            paymentAddress: paymentAddress,
-            pubkeyHex: account.nativeSegwit.pubkey,
-            network: btcNetwork,
-          });
-          if (patched > 0) {
-            console.log('[SendModal] BTC send: patched', patched, 'P2SH inputs with redeemScript');
-          }
-          psbtBase64 = psbtForPatch.toBase64();
-        }
-
-        // Browser wallets sign all input types in a single call.
-        // Use signTaprootPsbt which has the Xverse direct-call bypass.
-        const signedPsbtBase64 = await signTaprootPsbt(psbtBase64);
-
-        // Show broadcasting spinner now that signing is complete
-        setStep('broadcasting');
-
-        // Finalize and extract transaction
-        // JOURNAL (2026-03-03): UniSat with autoFinalized: true returns already-finalized PSBTs.
-        // Calling finalizeAllInputs() on a finalized PSBT throws an error.
-        // We try to extract directly first; if that fails, try finalizing.
-        const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtBase64, { network: btcNetwork });
-        let txObj;
-        try {
-          // Try extracting directly (works if already finalized)
-          txObj = signedPsbt.extractTransaction();
-          console.log('[SendModal] PSBT was already finalized by wallet');
-        } catch (extractError: any) {
-          // If extraction fails, try finalizing first
-          console.log('[SendModal] PSBT not finalized yet, finalizing...', extractError.message);
-          try {
-            signedPsbt.finalizeAllInputs();
-            txObj = signedPsbt.extractTransaction();
-          } catch (finalizeError: any) {
-            console.error('[SendModal] Failed to finalize PSBT:', finalizeError);
-            throw new Error(`Failed to finalize transaction: ${finalizeError.message}`);
-          }
-        }
-        const txHex = txObj.toHex();
-        const computedTxid = txObj.getId();
-
-        // Log actual vsize and effective fee rate for verification
-        const actualVsize = txObj.virtualSize();
-        const actualFee = totalInputValue - amountSats - (txFeeResult.numOutputs === 2 ? txFeeResult.change : 0);
-        console.log(`[SendModal] Actual vsize: ${actualVsize}, fee: ${actualFee} sats, effective rate: ${(actualFee / actualVsize).toFixed(2)} sat/vB`);
-        console.log('[SendModal] Broadcasting...');
-
-        // Broadcast using provider
-        if (!alkaneProvider) {
-          throw new Error(t('send.providerNotInitialized'));
-        }
-
-        const broadcastTxid = await alkaneProvider.broadcastTransaction(txHex);
-        console.log('[SendModal] Transaction broadcast successful, txid:', broadcastTxid);
-
-        setTxid(broadcastTxid || computedTxid);
-        setStep('success');
-        onSuccess?.(broadcastTxid || computedTxid);
-
-        setTimeout(() => {
-          refresh();
-        }, 1000);
-
+    // Keystore wallets show an in-app confirmation modal (browser wallets
+    // surface their own popup at sign time, so we don't double-prompt).
+    if (walletType === 'keystore') {
+      if (!provider || !isInitialized) {
+        setError(t('send.providerNotInitialized'));
+        return;
+      }
+      if (!provider.walletIsLoaded()) {
+        setError(t('send.walletNotLoaded'));
         return;
       }
 
-      // For keystore wallets, use WASM provider
-      if (!provider || !isInitialized) {
-        throw new Error(t('send.providerNotInitialized'));
-      }
-
-      // Check if wallet is loaded in provider
-      if (!provider.walletIsLoaded()) {
-        throw new Error(t('send.walletNotLoaded'));
-      }
-
-      // Request user confirmation before broadcasting
-      console.log('[SendModal] Keystore wallet - requesting user confirmation...');
       const approved = await requestConfirmation({
         type: 'send',
         title: t('send.confirmSend'),
@@ -933,79 +734,61 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
         recipient: recipientAddress,
         feeRate: feeRate,
       });
-
       if (!approved) {
-        console.log('[SendModal] User rejected transaction');
         setError(t('send.transactionRejected'));
         return;
       }
-      console.log('[SendModal] User approved transaction');
-
-      setStep('broadcasting');
-
-      console.log('[SendModal] Sending via WASM provider...');
-      console.log('[SendModal] Recipient:', recipientAddress);
-      console.log('[SendModal] Amount:', amount, 'BTC (', amountSats, 'sats)');
-      console.log('[SendModal] Fee rate:', feeRate, 'sat/vB');
-
-      if (!txContext) throw new Error('Wallet not connected');
-
-      const matureUtxoStrings = esploraUtxos
-        .filter(u => u.status?.confirmed)
-        .map(u => `${u.txid}:${u.vout}:${u.value}`);
-
-      // Safety output at v1 (546 sats to sender) + protostone pointer/refund to v1.
-      // If any input UTXOs carry alkanes, they route to v1 instead of burning —
-      // alkanesChangeAddress comes from txContext (taproot for keystore).
-      // SDK output layout: v0=recipient, v1=safety, v2=change (appended by SDK).
-      const execResult = await alkanesExecuteTyped(provider, {
-        txContext,
-        inputRequirements: `B:${amountSats}:v0,B:546:v1`,
-        protostones: 'v1:v1',
-        feeRate,
-        toAddresses: [normalizedRecipientAddress, txContext.alkanesChangeAddress],
-        paymentUtxos: matureUtxoStrings,
-        autoConfirm: true,
-        network,
-      });
-
-      console.log('[SendModal] Raw execResult:', JSON.stringify(execResult, null, 2));
-
-      // Extract txid — SDK returns different shapes depending on path
-      const txidResult = execResult?.txid
-        || execResult?.reveal_txid
-        || execResult?.tx_id
-        || execResult?.result?.txid
-        || execResult?.data?.txid
-        || (typeof execResult === 'string' ? execResult : null);
-
-      if (!txidResult) {
-        // Transaction likely succeeded but response format is unexpected.
-        // Log full result for debugging but don't block user.
-        console.warn('[SendModal] No txid found in result, transaction may have succeeded:', execResult);
-      }
-
-      setTxid(txidResult);
-      setStep('success');
-      onSuccess?.(txidResult);
-
-      // Refresh wallet data
-      setTimeout(() => {
-        refresh();
-      }, 1000);
-    } catch (err: any) {
-      console.error('[SendModal] Transaction failed:', err);
-
-      const rawMessage = err?.message || String(err) || t('send.failedBroadcast');
-      const friendlyMessage = humanizeError(rawMessage);
-      showError(friendlyMessage);
-      setError(friendlyMessage);
-      // Go back to input step to allow re-selection of UTXOs
-      // This prevents looping between confirm and error states
-      setSelectedUtxos(new Set());
-      setShowFeeWarning(false);
-      setStep('input');
     }
+
+    setStep('broadcasting');
+
+    btcSendMutation.mutate(
+      {
+        recipientAddress: normalizedRecipientAddress,
+        amountSats,
+        feeRate,
+        selectedUtxoKeys: Array.from(selectedUtxos),
+        fromAddresses: btcFromAddresses,
+      },
+      {
+        onSuccess: (result) => {
+          const finalTxid = result.transactionId || '';
+          setTxid(finalTxid);
+          setStep('success');
+          onSuccess?.(finalTxid);
+          // Explicit refresh in addition to the mutation's queryClient
+          // invalidation — useEnrichedWalletData has its own polling cycle
+          // and benefits from an immediate nudge after a send.
+          setTimeout(() => {
+            refresh();
+          }, 1000);
+        },
+        onError: (err: any) => {
+          console.error('[SendModal] BTC send failed:', err);
+
+          // Selected UTXOs disappeared between auto-select and broadcast
+          // (likely spent by another session). Reset UI for re-selection.
+          if (err instanceof BtcSendStaleUtxosError) {
+            refresh();
+            setSelectedUtxos(new Set());
+            setShowFeeWarning(false);
+            setStep('input');
+            setError(t('send.utxosStale'));
+            return;
+          }
+
+          const rawMessage = err?.message || String(err) || t('send.failedBroadcast');
+          const friendlyMessage = humanizeError(rawMessage);
+          showError(friendlyMessage);
+          setError(friendlyMessage);
+          // Go back to input step so user can re-select UTXOs and retry
+          // without bouncing between confirm and error states.
+          setSelectedUtxos(new Set());
+          setShowFeeWarning(false);
+          setStep('input');
+        },
+      },
+    );
   };
 
   /**

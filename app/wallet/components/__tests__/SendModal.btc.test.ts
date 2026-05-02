@@ -73,6 +73,14 @@ function createFundingTx(address: string, valueSats: number): bitcoin.Transactio
 // ---------- 1. Source Code Analysis ----------
 
 describe('Source code analysis — SendModal.tsx', () => {
+  // SendModal.tsx now delegates BTC sending to `useBtcSendMutation`. The
+  // PSBT-construction assertions (tapInternalKey detection, esplora REST
+  // fetch, smart finalize) moved with the code — they live in
+  // `hooks/__tests__/mutations/btc-send-mutation.test.ts` against the hook
+  // source. Tests in this block stay scoped to UI-level concerns that
+  // remain in SendModal: UTXO aggregation for the auto-select algorithm,
+  // fee-warning state machine, alkane-branch finalize pattern, recipient
+  // normalization, and SDK fee-helper imports.
   const sendModalPath = path.resolve(
     __dirname,
     '..',
@@ -80,22 +88,21 @@ describe('Source code analysis — SendModal.tsx', () => {
   );
   const source = fs.readFileSync(sendModalPath, 'utf-8');
 
-  it('sets tapInternalKey for taproot inputs (bc1p/tb1p/bcrt1p)', () => {
-    // The source must detect taproot addresses and attach tapInternalKey
-    expect(source).toContain('isTaprootInput');
-    expect(source).toContain('tapInternalKey');
-    // Specific pattern: tapInternalKey is added conditionally for taproot inputs
-    expect(source).toMatch(/if\s*\(\s*isTaprootInput\s*&&\s*tapInternalKey\s*\)/);
-    expect(source).toContain('inputData.tapInternalKey = tapInternalKey');
+  it('restricts dual-address browser BTC sends to the segwit payment address', () => {
+    // Dual-address browser wallets (Xverse / OYL / Leather) source BTC fee
+    // inputs only from the segwit "payment" address — taproot is reserved
+    // for alkanes. Single-address wallets (UniSat / OKX) and keystore use
+    // whichever address is available.
+    expect(source).toMatch(/const isDualAddressBrowser\s*=/);
+    expect(source).toMatch(/const btcFromAddresses\s*=\s*isDualAddressBrowser\s*\?\s*\[paymentAddress as string\]/);
+    expect(source).toContain('btcFromAddresses.includes(utxo.address)');
   });
 
-  it('aggregates UTXOs from both segwit and taproot addresses', () => {
-    // allBtcAddresses should include both paymentAddress and taprootAddress
-    expect(source).toContain(
-      'const allBtcAddresses = [paymentAddress, taprootAddress].filter(Boolean)'
-    );
-    // UTXO filtering includes both addresses
-    expect(source).toContain('allBtcAddresses.includes(utxo.address)');
+  it('skips inscriptions/runes/alkanes filter for dual-address browser (segwit by design has none)', () => {
+    // Filter still runs for keystore / single-address browser as a defensive
+    // measure; for dual-address browser the segwit payment address doesn't
+    // hold these by design.
+    expect(source).toMatch(/if \(!isDualAddressBrowser\)\s*\{[\s\S]*?utxo\.inscriptions[\s\S]*?utxo\.runes[\s\S]*?utxo\.alkanes/);
   });
 
   it('has fee warning logic with feeWarningAcknowledged state', () => {
@@ -110,18 +117,23 @@ describe('Source code analysis — SendModal.tsx', () => {
     expect(source).toContain('setFeeWarningAcknowledged(false)');
   });
 
-  it('has smart finalization: try extractTransaction first, fallback to finalizeAllInputs', () => {
-    // The pattern: try extract first (for pre-finalized PSBTs like UniSat autoFinalized)
+  it('has smart finalization in the alkane branch (try extract → fallback finalize)', () => {
+    // Same pattern as the BTC hook, kept inline for the alkane-send branch.
     expect(source).toContain('signedPsbt.extractTransaction()');
     expect(source).toContain('signedPsbt.finalizeAllInputs()');
-    // The try-catch pattern for smart finalization
     expect(source).toMatch(/try\s*\{[^}]*extractTransaction[^}]*\}\s*catch/s);
   });
 
-  it('fetches UTXOs via esplora REST API (not JSON-RPC)', () => {
-    // Must use /api/esplora/ proxy, not JSON-RPC
-    expect(source).toContain('/api/esplora/address/');
-    expect(source).toContain('/utxo?network=');
+  it('delegates BTC sending to useBtcSendMutation', () => {
+    expect(source).toMatch(
+      /import\s+\{[^}]*useBtcSendMutation[^}]*\}\s+from\s+['"]@\/hooks\/useBtcSendMutation['"]/,
+    );
+    expect(source).toMatch(/btcSendMutation\.mutate\(/);
+  });
+
+  it('handles BtcSendStaleUtxosError to reset UI for re-selection', () => {
+    expect(source).toMatch(/BtcSendStaleUtxosError/);
+    expect(source).toMatch(/instanceof BtcSendStaleUtxosError/);
   });
 
   it('excludes inscriptions, runes, and alkanes from BTC UTXO selection', () => {
@@ -136,7 +148,7 @@ describe('Source code analysis — SendModal.tsx', () => {
     expect(source).toMatch(/\.toLowerCase\(\)/);
   });
 
-  it('uses computeSendFee from SDK for fee calculation', () => {
+  it('uses computeSendFee from SDK for the auto-select algorithm', () => {
     expect(source).toContain('computeSendFee');
     expect(source).toContain("import { computeSendFee, estimateSelectionFee, DUST_THRESHOLD } from '@alkanes/ts-sdk'");
   });
