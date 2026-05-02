@@ -26,7 +26,7 @@ interface UnstakeParams {
 
 export function useFireUnstakeMutation() {
   const queryClient = useQueryClient();
-  const { network, walletType, account, signTaprootPsbt } = useWallet();
+  const { network, walletType, account, signTaprootPsbt, txContext } = useWallet();
   const { provider, isInitialized } = useAlkanesSDK();
 
   const config = getConfig(network || 'mainnet');
@@ -37,31 +37,27 @@ export function useFireUnstakeMutation() {
       if (!provider || !isInitialized || !stakingId) {
         throw new Error('Provider or FIRE staking contract not ready');
       }
+      // See `WalletContext.TxContext` jsdoc for the address-fallback semantics.
+      if (!txContext) throw new Error('Wallet not connected');
 
       const isBrowserWallet = walletType === 'browser';
-      const useActualAddresses = isBrowserWallet || network === 'devnet' || network === 'regtest-local' || network === 'qubitcoin-regtest';
       const taprootAddress = account?.taproot?.address;
-      const segwitAddress = account?.nativeSegwit?.address;
 
       if (!taprootAddress) throw new Error('Taproot address required');
 
       const [stakingBlock, stakingTx] = stakingId.split(':').map(Number);
       const protostonesStr = `[${stakingBlock},${stakingTx},${FIRE_STAKING_OPCODES.Unstake}]:v0:v0`;
 
-      const toAddresses = useActualAddresses ? [taprootAddress] : ['p2tr:0'];
-      const changeAddr = useActualAddresses ? (segwitAddress || taprootAddress) : 'p2wpkh:0';
-      const alkanesChangeAddr = useActualAddresses ? taprootAddress : 'p2tr:0';
+      const toAddresses = [txContext.alkanesChangeAddress];
 
       // Position NFT must be sent as incomingAlkanes for Unstake
       const result = await (provider as any).alkanesExecuteTyped({
+        txContext,
         inputRequirements: `${positionTokenId}:1`,
         protostones: protostonesStr,
         feeRate,
         autoConfirm: false,
         toAddresses,
-        changeAddress: changeAddr,
-        alkanesChangeAddress: alkanesChangeAddr,
-        ordinalsStrategy: 'burn',
       });
 
       // Auto-completed by SDK

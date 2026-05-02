@@ -38,7 +38,7 @@ function getFrethSignerAddress(network: string | undefined): string {
 }
 
 export function useWrapEthMutation() {
-  const { account, network, isConnected, signTaprootPsbt, walletType } = useWallet();
+  const { account, network, isConnected, signTaprootPsbt, walletType, txContext } = useWallet();
   const provider = useSandshrewProvider();
   const queryClient = useQueryClient();
   const { requestConfirmation } = useTransactionConfirm();
@@ -53,6 +53,8 @@ export function useWrapEthMutation() {
       if (!provider.walletIsLoaded()) {
         throw new Error('Provider wallet not loaded. Please reconnect your wallet.');
       }
+      // See `WalletContext.TxContext` jsdoc for the address-fallback semantics.
+      if (!txContext) throw new Error('Wallet not connected');
 
       const amountStr = String(wrapData.amount).replace(/,/g, '').trim();
       const wrapAmountSats = Math.floor(parseFloat(amountStr) * 100000000);
@@ -75,25 +77,17 @@ export function useWrapEthMutation() {
       }
 
       const isBrowserWallet = walletType === 'browser';
-      const useActualAddresses = isBrowserWallet || network === 'devnet' || network === 'regtest-local' || network === 'qubitcoin-regtest';
-      const fromAddresses = useActualAddresses
-        ? [userSegwitAddress, userTaprootAddress].filter(Boolean) as string[]
-        : ['p2wpkh:0', 'p2tr:0'];
-
-      const toAddresses = useActualAddresses
-        ? [signerAddress, userTaprootAddress]
-        : [signerAddress, 'p2tr:0'];
+      // toAddresses: [signer (BTC), user (frETH)] — same layout as BTC wrap.
+      const toAddresses = [signerAddress, userTaprootAddress];
 
       console.log('[WRAP-ETH] signer:', signerAddress, 'user:', userTaprootAddress);
 
       const result = await provider.alkanesExecuteTyped({
+        txContext,
         toAddresses,
         inputRequirements,
         protostones: protostone,
         feeRate: wrapData.feeRate,
-        fromAddresses,
-        changeAddress: useActualAddresses ? (userSegwitAddress || userTaprootAddress) : 'p2wpkh:0',
-        alkanesChangeAddress: useActualAddresses ? userTaprootAddress : 'p2tr:0',
         autoConfirm: false,
         mineEnabled: false,
       });

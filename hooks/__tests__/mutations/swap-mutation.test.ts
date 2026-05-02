@@ -240,24 +240,39 @@ describe('Browser wallet address handling in useSwapMutation', () => {
     expect(src).toContain("isBrowserWallet = walletType === 'browser'");
   });
 
-  it('should use actual primaryAddress for browser wallet toAddresses', () => {
-    const match = src.match(/toAddresses\s*=\s*(?:isBrowserWallet|useActualAddresses)\s*\n\s*\?\s*(.+)\n/);
-    expect(match).toBeTruthy();
-    expect(match![1]).toContain('primaryAddress');
-    expect(match![1]).not.toContain("'p2tr:0'");
+  // Address-fallback chains were consolidated into `txContext` (2026-04-30).
+  // The hook must source its address parameters from txContext rather than
+  // recomputing the per-wallet-type fallback locally.
+  it('should destructure txContext from useWallet()', () => {
+    expect(src).toMatch(/const\s*\{[^}]*txContext[^}]*\}\s*=\s*useWallet\s*\(\s*\)/);
   });
 
-  it('should use segwitAddress fallback for browser wallet changeAddr', () => {
-    const match = src.match(/changeAddr\s*=\s*(?:isBrowserWallet|useActualAddresses)\s*\n\s*\?\s*(.+)\n/);
-    expect(match).toBeTruthy();
-    expect(match![1]).toContain('segwitAddress');
-    expect(match![1]).toContain('taprootAddress');
+  it('should pass txContext into alkanesExecuteTyped (single-field consolidation)', () => {
+    // After 2026-04-30 the wrapper unpacks `txContext` into the WASM
+    // options_json; the hook passes the single `txContext` field instead
+    // of `fromAddresses` / `changeAddress` / `alkanesChangeAddress` /
+    // `protectTaproot` / `ordinalsStrategy` separately.
+    expect(src).toMatch(/alkanesExecuteTyped\(\s*\{[\s\S]*?\btxContext\b/);
   });
 
-  it('should use symbolic p2tr:0 for keystore wallet toAddresses', () => {
-    const match = src.match(/toAddresses\s*=\s*(?:isBrowserWallet|useActualAddresses)\s*\n\s*\?.+\n\s*:\s*(.+);/);
-    expect(match).toBeTruthy();
-    expect(match![1]).toContain("'p2tr:0'");
+  it('should not redundantly pass individual txContext fields', () => {
+    expect(src).not.toMatch(/fromAddresses:\s*txContext\.feeSourceAddresses/);
+    expect(src).not.toMatch(/changeAddress:\s*txContext\.btcChangeAddress/);
+    expect(src).not.toMatch(/alkanesChangeAddress:\s*txContext\.alkanesChangeAddress/);
+    expect(src).not.toMatch(/protectTaproot:\s*txContext\.shouldProtectTaproot/);
+  });
+
+  it('should never pass symbolic p2tr:0 / p2wpkh:0 to alkanesExecuteTyped', () => {
+    // Strip comments first — header comments still reference the historical
+    // symbolic-address pattern; live code paths must not.
+    const codeOnly = src
+      .replace(/\/\/.*$/gm, '')
+      .replace(/\/\*[\s\S]*?\*\//g, '');
+    const calls = codeOnly.match(/alkanesExecuteTyped\s*\(\s*\{?[\s\S]*?\}\s*\)/g) || [];
+    for (const call of calls) {
+      expect(call).not.toContain("'p2tr:0'");
+      expect(call).not.toContain("'p2wpkh:0'");
+    }
   });
 
   it('should sign via single signTaprootPsbt call (no double-sign)', () => {
@@ -420,13 +435,16 @@ describe('ordinalsStrategy in swap hook', () => {
     src = fs.readFileSync(path.resolve(__dirname, '../../useSwapMutation.ts'), 'utf-8');
   });
 
-  it('should set ordinalsStrategy to exclude', () => {
-    expect(src).toContain("ordinalsStrategy: 'exclude'");
+  it('should inherit ordinalsStrategy via txContext', () => {
+    // After 2026-04-30 ordinalsStrategy is unpacked from `txContext` inside
+    // the wrapper. Keystore → 'burn' (skips inscription/rune lookup),
+    // browser → 'exclude'. Per-call overrides still take precedence.
+    const execCall = src.match(/alkanesExecuteTyped\(\{[\s\S]*?\btxContext\b[\s\S]*?\}\)/);
+    expect(execCall).toBeTruthy();
   });
 
-  it('should pass ordinalsStrategy to alkanesExecuteTyped', () => {
-    // Verify it's inside the alkanesExecuteTyped call
-    const execCall = src.match(/alkanesExecuteTyped\(\{[\s\S]*?ordinalsStrategy[\s\S]*?\}\)/);
-    expect(execCall).toBeTruthy();
+  it('should not hardcode the legacy ordinalsStrategy: txContext.defaultOrdinalsStrategy field', () => {
+    // The whole point of the consolidation was to remove this boilerplate.
+    expect(src).not.toContain('ordinalsStrategy: txContext.defaultOrdinalsStrategy');
   });
 });

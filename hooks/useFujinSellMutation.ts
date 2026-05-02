@@ -38,7 +38,7 @@ export interface FujinSellParams {
 }
 
 export function useFujinSellMutation() {
-  const { account, network, isConnected, signTaprootPsbt, walletType } = useWallet();
+  const { account, network, isConnected, signTaprootPsbt, walletType, txContext } = useWallet();
   const provider = useSandshrewProvider();
   const queryClient = useQueryClient();
 
@@ -55,13 +55,13 @@ export function useFujinSellMutation() {
         throw new Error('Provider wallet not loaded. Please reconnect your wallet.');
       }
 
-      // Get addresses - support single-address wallets (UniSat, OKX)
-      const taprootAddress = account?.taproot?.address;
-      const segwitAddress = account?.nativeSegwit?.address;
-      if (!taprootAddress && !segwitAddress) {
+      // See `WalletContext.TxContext` jsdoc for the address-fallback semantics.
+      if (!txContext) {
         throw new Error('No wallet address available. Please connect a wallet first.');
       }
-      const primaryAddress = taprootAddress || segwitAddress;
+      const taprootAddress = account?.taproot?.address;
+      const segwitAddress = account?.nativeSegwit?.address;
+      const primaryAddress = (taprootAddress || segwitAddress)!;
       console.log('[FujinSell] Using addresses:', { taprootAddress, segwitAddress, primaryAddress });
 
       // Parse pool ID
@@ -80,39 +80,20 @@ export function useFujinSellMutation() {
 
       const btcNetwork = getBitcoinNetwork(network);
       const isBrowserWallet = walletType === 'browser';
-      const useActualAddresses = isBrowserWallet || network === 'devnet' || network === 'regtest-local' || network === 'qubitcoin-regtest';
 
-      // Browser wallets need ACTUAL addresses, not symbolic
-      const fromAddresses = useActualAddresses
-        ? [segwitAddress, taprootAddress].filter(Boolean) as string[]
-        : ['p2wpkh:0', 'p2tr:0'];
+      const toAddresses = [primaryAddress];
 
-      const toAddresses = useActualAddresses
-        ? [primaryAddress!]
-        : ['p2tr:0'];
-
-      const changeAddr = useActualAddresses
-        ? (segwitAddress || taprootAddress)
-        : 'p2wpkh:0';
-
-      const alkanesChangeAddr = useActualAddresses
-        ? primaryAddress
-        : 'p2tr:0';
-
-      console.log('[FujinSell] From addresses:', fromAddresses, '(browser:', isBrowserWallet, ')');
+      console.log('[FujinSell] From addresses:', txContext.feeSourceAddresses, '(browser:', isBrowserWallet, ')');
       console.log('[FujinSell] To addresses:', toAddresses);
 
       try {
         const result = await provider.alkanesExecuteTyped({
+          txContext,
           inputRequirements,
           protostones: protostone,
           feeRate: params.feeRate,
           autoConfirm: false,
-          fromAddresses,
           toAddresses,
-          changeAddress: changeAddr,
-          alkanesChangeAddress: alkanesChangeAddr,
-          ordinalsStrategy: 'burn',
         });
 
         console.log('[FujinSell] Execute result:', JSON.stringify(result, null, 2));

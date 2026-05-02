@@ -57,10 +57,9 @@ export function buildVaultWithdrawInputRequirements(params: {
  * Uses opcode 2 (Redeem) to burn vault units and receive tokens back
  */
 export function useVaultWithdraw() {
-  const { isConnected, walletType, account, signTaprootPsbt, network } = useWallet();
+  const { isConnected, walletType, account, signTaprootPsbt, network, txContext } = useWallet();
   const provider = useSandshrewProvider();
   const isBrowserWallet = walletType === 'browser';
-  const useActualAddresses = isBrowserWallet || network === 'devnet' || network === 'regtest-local' || network === 'qubitcoin-regtest';
 
   return useMutation({
     mutationFn: async (withdrawData: VaultWithdrawData) => {
@@ -71,6 +70,7 @@ export function useVaultWithdraw() {
       if (!provider.walletIsLoaded()) {
         throw new Error('Wallet not loaded in provider');
       }
+      if (!txContext) throw new Error('Wallet not connected');
 
       // Build protostone for vault withdrawal
       const protostone = buildVaultWithdrawProtostone({
@@ -83,21 +83,16 @@ export function useVaultWithdraw() {
         amount: new BigNumber(withdrawData.amount).toFixed(0),
       });
 
-      const taprootAddress = account?.taproot?.address;
-      const segwitAddress = account?.nativeSegwit?.address;
-
-      const toAddresses = useActualAddresses ? [taprootAddress || ''] : ['p2tr:0'];
-      const changeAddr = useActualAddresses ? (segwitAddress || taprootAddress || '') : 'p2tr:0';
-      const alkanesChangeAddr = useActualAddresses ? (taprootAddress || '') : 'p2tr:0';
+      // Withdrawn tokens are P2TR alkanes — receive at the alkanes change address.
+      const toAddresses = [txContext.alkanesChangeAddress];
 
       const result = await provider.alkanesExecuteTyped({
+        txContext,
         inputRequirements,
         protostones: protostone,
         feeRate: withdrawData.feeRate,
         autoConfirm: !isBrowserWallet,
         toAddresses,
-        changeAddress: changeAddr,
-        alkanesChangeAddress: alkanesChangeAddr,
       });
 
       // Auto-completed by SDK (keystore wallets with autoConfirm=true)

@@ -350,6 +350,58 @@ const STORAGE_KEYS = {
   TAPROOT_ADDRESS_INDEX: 'subfrost_taproot_address_index', // BIP86 address index (last segment) for keystore
 } as const;
 
+/**
+ * TxContext — single source of truth for address-fallback chains used when
+ * building alkanes / Bitcoin transactions.
+ *
+ * Every mutation hook used to recompute `fromAddresses`, `changeAddress`,
+ * `alkanesChangeAddress` and `protectTaproot` from a wallet-type-specific
+ * fallback chain (`paymentAddress || taprootAddress`, `[segwit, taproot]
+ * .filter(Boolean)`, `isBrowserWallet || network === 'devnet' || …`). Those
+ * accidentally produced the right keystore behaviour because keystore wallets
+ * are taproot-only (`account.nativeSegwit === undefined`), but a future
+ * contributor adding a new mutation could easily forget a fallback and break
+ * keystore. `txContext` collapses all of that into one computed object.
+ *
+ * Wallet-type semantics:
+ *   - **keystore** — taproot-only by design. All four fields point at the
+ *     single taproot address; `shouldProtectTaproot=false` because there is
+ *     no second address to spend BTC fees from.
+ *   - **browser dual-address** (Xverse / Leather / OYL) — fee inputs come
+ *     from `[segwit, taproot]`, BTC change goes to segwit, alkane change to
+ *     taproot, `shouldProtectTaproot=true` reserves taproot UTXOs for alkanes.
+ *   - **browser single-address** (UniSat / OKX) — only one address; we use
+ *     it for everything and disable protect_taproot.
+ *
+ * `null` when the wallet isn't connected — consumers must guard via
+ * `isConnected` (or the `if (!txContext)` shortcut).
+ */
+export type TxContext = {
+  /** Addresses to source UTXOs from. Browser-dual: [segwit, taproot]. Single-address: [primary]. Keystore: [taproot]. */
+  feeSourceAddresses: string[];
+  /** Where BTC change goes. Segwit when available, otherwise the primary single address. Keystore: taproot. */
+  btcChangeAddress: string;
+  /** Where unwanted alkane change goes. Always the taproot address (alkanes are P2TR). */
+  alkanesChangeAddress: string;
+  /** Whether SDK should reserve taproot UTXOs for alkanes only and source BTC fees from segwit. True only for browser-dual wallets. */
+  shouldProtectTaproot: boolean;
+  /**
+   * SDK ordinals_strategy default for this wallet. Controls whether
+   * `alkanesExecuteTyped` runs the inscription/rune lookup pass.
+   *
+   * - `'burn'` for keystore: keystore is BIP86 taproot-only and wallet-internal,
+   *   never receives inscriptions. Skipping the ord check is purely a perf win
+   *   (one fewer RPC per UTXO + no split-tx codepath ever entered).
+   * - `'exclude'` for browser wallets: matches the SDK's own default, but stated
+   *   explicitly so future SDK changes can't silently shift behaviour.
+   *
+   * Per-operation overrides (e.g. SendModal's `'preserve'` for users who
+   * opted into split-tx inscription protection) take precedence at the call
+   * site — pass `ordinalsStrategy` explicitly to override.
+   */
+  defaultOrdinalsStrategy: 'burn' | 'exclude' | 'preserve';
+};
+
 type WalletContextType = {
   // Connection state
   isConnectModalOpen: boolean;
@@ -370,6 +422,11 @@ type WalletContextType = {
   account: Account;
   network: Network;
   wallet: AlkanesWallet | null;
+  /**
+   * Computed transaction-context addresses. `null` when the wallet isn't
+   * connected. See `TxContext` jsdoc for semantics.
+   */
+  txContext: TxContext | null;
 
   // Browser wallet data
   browserWallet: ConnectedWallet | null;
@@ -809,6 +866,67 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       network: NetworkMap[network],
     };
   }, [addresses, network]);
+
+  // Compute transaction-context addresses. See `TxContext` jsdoc for the
+  // wallet-type semantics this codifies. `null` when neither address is
+  // available (wallet not connected); consumers should guard via the
+  // `isConnected` flag they already check.
+  const txContext: TxContext | null = useMemo(() => {
+    const segwit = account.nativeSegwit?.address;
+    const taproot = account.taproot?.address;
+
+    if (walletType === 'keystore') {
+      // Keystore is BIP86 taproot-only by design — no segwit derivation.
+      // All addresses funnel to the single taproot, and protect_taproot is
+      // moot because there's no second address to source BTC fees from.
+      if (!taproot) return null;
+      return {
+        feeSourceAddresses: [taproot],
+        btcChangeAddress: taproot,
+        alkanesChangeAddress: taproot,
+        shouldProtectTaproot: false,
+        // Keystore never holds inscriptions — skip the ord lookup entirely.
+        // 'burn' makes `check_utxos_for_inscriptions_with_provider` return
+        // early before any per-UTXO ord_outputs RPC call.
+        defaultOrdinalsStrategy: 'burn',
+      };
+    }
+
+    // Browser wallet (or unconnected — both addresses absent → null below).
+    if (!segwit && !taproot) return null;
+
+    // Dual-address wallets (Xverse, Leather, OYL) expose distinct segwit +
+    // taproot addresses. Single-address wallets (UniSat, OKX) expose only
+    // one — `isDualAddress` is false and we collapse the BTC + alkane
+    // change destinations to that single address.
+    const isDualAddress = !!segwit && !!taproot && segwit !== taproot;
+    const primary = (taproot || segwit)!;
+
+    return {
+      // Browser-dual: source from both. Single-address: just the one.
+      // `Set` dedupes when the wallet returns the same address for both
+      // purposes (some configurations of UniSat).
+      feeSourceAddresses: Array.from(new Set([segwit, taproot].filter(Boolean) as string[])),
+      // BTC change goes to segwit when available — taproot UTXOs are reserved
+      // for alkanes on dual-address wallets. Falls back to whatever single
+      // address exists.
+      btcChangeAddress: segwit || primary,
+      // Alkane change always goes to taproot (alkanes are P2TR). Single-
+      // address segwit-only wallets fall back to that address — there's
+      // nowhere else to send it.
+      alkanesChangeAddress: taproot || primary,
+      // Only meaningful when there's a separate segwit address to source
+      // BTC fees from. Single-address wallets must spend taproot UTXOs for
+      // both alkanes and fees, so reserving them would block fee selection.
+      shouldProtectTaproot: isDualAddress,
+      // Browser wallets may hold inscriptions/runes — keep the SDK's default
+      // exclude behaviour, but state it explicitly so a future SDK upgrade
+      // can't silently change it. Per-operation overrides (e.g. SendModal's
+      // 'preserve' when user has the WalletSettings "Protect ordinals" toggle
+      // on) take precedence at the call site.
+      defaultOrdinalsStrategy: 'exclude',
+    };
+  }, [account, walletType]);
 
   // Create new wallet
   const createNewWallet = useCallback(async (password: string): Promise<{ mnemonic: string }> => {
@@ -2496,6 +2614,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       account,
       network,
       wallet,
+      txContext,
 
       // Browser wallet data
       browserWallet,
@@ -2535,6 +2654,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       isInitializing,
       addresses,
       account,
+      txContext,
       network,
       installedBrowserWallets,
       createNewWallet,

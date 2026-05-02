@@ -81,21 +81,29 @@ export async function alkanesExecuteTyped(
 
   const options: Record<string, any> = {};
 
-  // SDK requires BOTH 'from' and 'from_addresses' for reliable UTXO discovery
-  const fromAddrs = params.fromAddresses ?? ['p2wpkh:0', 'p2tr:0'];
+  // Per-call overrides win over txContext defaults. If neither is set we fall
+  // back to symbolic SDK defaults (only safe for the dummy-wallet boot path —
+  // every browser/keystore caller passes txContext or explicit addresses).
+  const fromAddrs =
+    params.fromAddresses ?? params.txContext?.feeSourceAddresses ?? ['p2wpkh:0', 'p2tr:0'];
   options.from = fromAddrs;
   options.from_addresses = fromAddrs;
-  options.change_address = params.changeAddress ?? 'p2wpkh:0';
-  options.alkanes_change_address = params.alkanesChangeAddress ?? 'p2tr:0';
-
-
+  options.change_address =
+    params.changeAddress ?? params.txContext?.btcChangeAddress ?? 'p2wpkh:0';
+  options.alkanes_change_address =
+    params.alkanesChangeAddress ?? params.txContext?.alkanesChangeAddress ?? 'p2tr:0';
 
   if (params.traceEnabled !== undefined) options.trace_enabled = params.traceEnabled;
   if (params.mineEnabled !== undefined) options.mine_enabled = params.mineEnabled;
   if (params.autoConfirm !== undefined) options.auto_confirm = params.autoConfirm;
   if (params.rawOutput !== undefined) options.raw_output = params.rawOutput;
-  if (params.ordinalsStrategy !== undefined) options.ordinals_strategy = params.ordinalsStrategy;
-  if (params.protectTaproot !== undefined) options.protect_taproot = params.protectTaproot;
+
+  const ordinalsStrategy = params.ordinalsStrategy ?? params.txContext?.defaultOrdinalsStrategy;
+  if (ordinalsStrategy !== undefined) options.ordinals_strategy = ordinalsStrategy;
+
+  const protectTaproot = params.protectTaproot ?? params.txContext?.shouldProtectTaproot;
+  if (protectTaproot !== undefined) options.protect_taproot = protectTaproot;
+
   if (params.paymentUtxos?.length) options.payment_utxos = params.paymentUtxos;
 
   const toAddressesJson = JSON.stringify(toAddresses);

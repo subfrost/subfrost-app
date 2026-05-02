@@ -4,8 +4,17 @@
  * Single source of truth — imported by both React hooks and integration tests.
  */
 
+import type { TxContext } from '@/context/WalletContext';
+
 /**
  * Parameters for alkanesExecuteTyped — the primary PSBT-building interface.
+ *
+ * Most callers should pass `txContext` (from `useWallet()`) instead of the
+ * five individual address / strategy fields. The wrapper unpacks `txContext`
+ * into the underlying WASM `options_json`. Per-call overrides (`fromAddresses`,
+ * `changeAddress`, `alkanesChangeAddress`, `protectTaproot`, `ordinalsStrategy`)
+ * still take precedence when set — used by atomic flows and SendModal's
+ * `'preserve'` ordinals override.
  */
 export interface AlkanesExecuteTypedParams {
   toAddresses?: string[];
@@ -13,6 +22,18 @@ export interface AlkanesExecuteTypedParams {
   protostones: string;
   feeRate?: number;
   envelopeHex?: string;
+
+  /**
+   * Wallet-specific defaults — pass once via txContext, the individual fields
+   * below override per-call site if needed. See `WalletContext.TxContext` jsdoc
+   * for semantics. When `txContext` is set, `fromAddresses`, `changeAddress`,
+   * `alkanesChangeAddress`, `protectTaproot`, and `ordinalsStrategy` are all
+   * inherited from it unless explicitly overridden.
+   */
+  txContext?: TxContext;
+
+  // Per-call overrides. When set, take precedence over the matching txContext
+  // field. Leave unset to inherit from txContext.
   fromAddresses?: string[];
   changeAddress?: string;
   alkanesChangeAddress?: string;

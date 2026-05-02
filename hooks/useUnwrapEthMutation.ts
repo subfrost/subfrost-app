@@ -33,7 +33,7 @@ export type UnwrapEthTransactionData = {
 };
 
 export function useUnwrapEthMutation() {
-  const { account, network, isConnected, signTaprootPsbt, walletType } = useWallet();
+  const { account, network, isConnected, signTaprootPsbt, walletType, txContext } = useWallet();
   const provider = useSandshrewProvider();
   const queryClient = useQueryClient();
   const { requestConfirmation } = useTransactionConfirm();
@@ -46,12 +46,10 @@ export function useUnwrapEthMutation() {
       if (!isConnected) throw new Error('Wallet not connected');
       if (!provider) throw new Error('Provider not available');
 
+      // See `WalletContext.TxContext` jsdoc for the address-fallback semantics.
+      if (!txContext) throw new Error('No wallet address available');
       const taprootAddress = account?.taproot?.address;
       const segwitAddress = account?.nativeSegwit?.address;
-      if (!taprootAddress && !segwitAddress) {
-        throw new Error('No wallet address available');
-      }
-      const primaryAddress = taprootAddress || segwitAddress;
 
       if (!provider.walletIsLoaded()) {
         throw new Error('Wallet not loaded in provider');
@@ -66,35 +64,19 @@ export function useUnwrapEthMutation() {
 
       const btcNetwork = getBitcoinNetwork(network);
       const isBrowserWallet = walletType === 'browser';
-      const useActualAddresses = isBrowserWallet || network === 'devnet' || network === 'regtest-local' || network === 'qubitcoin-regtest';
 
-      const fromAddresses = useActualAddresses
-        ? [segwitAddress, taprootAddress].filter(Boolean) as string[]
-        : ['p2wpkh:0', 'p2tr:0'];
+      // Unwrap deposits BTC to the BTC change address (segwit when available).
+      const toAddresses = [txContext.btcChangeAddress];
 
-      const toAddresses = useActualAddresses
-        ? [(segwitAddress || taprootAddress)!]
-        : ['p2wpkh:0'];
-
-      const changeAddr = useActualAddresses
-        ? (segwitAddress || taprootAddress)
-        : 'p2wpkh:0';
-
-      const alkanesChangeAddr = useActualAddresses
-        ? primaryAddress
-        : 'p2tr:0';
-
-      console.log('[UNWRAP-ETH] amount:', unwrapAmount, 'from:', fromAddresses);
+      console.log('[UNWRAP-ETH] amount:', unwrapAmount, 'from:', txContext.feeSourceAddresses);
 
       const result = await provider.alkanesExecuteTyped({
+        txContext,
         toAddresses,
         inputRequirements,
         protostones: protostone,
         feeRate: unwrapData.feeRate,
         autoConfirm: false,
-        fromAddresses,
-        changeAddress: changeAddr,
-        alkanesChangeAddress: alkanesChangeAddr,
       });
 
       if (result?.txid || result?.reveal_txid) {

@@ -514,19 +514,27 @@ describe('Devnet E2E: Full Swap Coverage', () => {
         return;
       }
 
-      const { buildAddLiquidityToPoolProtostone, buildAddLiquidityInputRequirements } = await import('@/lib/alkanes/builders');
+      const { buildFactoryAddLiquidityProtostones, buildAddLiquidityInputRequirements } = await import('@/lib/alkanes/builders');
 
-      const [pBlock, pTx] = poolId.split(':').map(Number);
       const dieselAmount = '500000000'; // 500M DIESEL in alks
       const frbtcAmount = '25000'; // some frBTC in alks
 
-      // This is the exact code path the UI uses
-      const protostone = buildAddLiquidityToPoolProtostone({
-        poolId: { block: pBlock, tx: pTx },
-        token0Id: '2:0',
-        token1Id: '32:0',
-        amount0: dieselAmount,
-        amount1: frbtcAmount,
+      // 0.5% slippage, 1000-block deadline (regtest manual mining)
+      const slippageFactor = (10000 - 50) / 10000;
+      const amount0Min = BigInt(Math.floor(Number(dieselAmount) * slippageFactor)).toString();
+      const amount1Min = BigInt(Math.floor(Number(frbtcAmount) * slippageFactor)).toString();
+      const deadline = '999999999';
+
+      // Same factory router path the UI uses (opcode 11)
+      const protostone = buildFactoryAddLiquidityProtostones({
+        factoryId,
+        tokenA: '2:0',
+        tokenB: '32:0',
+        amountADesired: dieselAmount,
+        amountBDesired: frbtcAmount,
+        amountAMin: amount0Min,
+        amountBMin: amount1Min,
+        deadline,
       });
       const inputRequirements = buildAddLiquidityInputRequirements({
         token0Id: '2:0',
@@ -563,11 +571,11 @@ describe('Devnet E2E: Full Swap Coverage', () => {
 
       // This test exercises the EXACT code path of useAddLiquidityMutation:
       // 1. findPoolId via alkanesSimulate (factory opcode 2)
-      // 2. buildAddLiquidityToPoolProtostone
+      // 2. buildFactoryAddLiquidityProtostones (factory opcode 11)
       // 3. alkanesExecuteTyped (returns PSBT, not auto-signed)
       // 4. sign + broadcast
 
-      const { buildAddLiquidityToPoolProtostone, buildAddLiquidityInputRequirements } = await import('@/lib/alkanes/builders');
+      const { buildFactoryAddLiquidityProtostones, buildAddLiquidityInputRequirements } = await import('@/lib/alkanes/builders');
       const { encodeSimulateCalldata } = await import('@/utils/simulateCalldata');
 
       const FACTORY_ID = factoryId;
@@ -616,12 +624,20 @@ describe('Devnet E2E: Full Swap Coverage', () => {
       const dieselAmount = '300000000';
       const frbtcAmount = '15000';
 
-      const protostone = buildAddLiquidityToPoolProtostone({
-        poolId: resolvedPoolId!,
-        token0Id: '2:0',
-        token1Id: '32:0',
-        amount0: dieselAmount,
-        amount1: frbtcAmount,
+      const slippageFactor = (10000 - 50) / 10000;
+      const amount0Min = BigInt(Math.floor(Number(dieselAmount) * slippageFactor)).toString();
+      const amount1Min = BigInt(Math.floor(Number(frbtcAmount) * slippageFactor)).toString();
+      const deadline = '999999999';
+
+      const protostone = buildFactoryAddLiquidityProtostones({
+        factoryId,
+        tokenA: '2:0',
+        tokenB: '32:0',
+        amountADesired: dieselAmount,
+        amountBDesired: frbtcAmount,
+        amountAMin: amount0Min,
+        amountBMin: amount1Min,
+        deadline,
       });
       const inputRequirements = buildAddLiquidityInputRequirements({
         token0Id: '2:0',

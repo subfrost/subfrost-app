@@ -83,27 +83,21 @@
  * - Fee: 141 sats, ~1.08 sat/vB
  *
  * ============================================================================
- * ALKANE TRANSFER BUG FIX (2026-03-03)
+ * ALKANE TRANSFER — SDK PATH (replaces 650 LOC of manual PSBT construction)
  * ============================================================================
  *
- * **THE BUG:**
- * When sending alkanes (e.g., 0.1 DIESEL), UniSat showed "Spending 2 Inscriptions,
- * 21 Runes, 10 Alkanes" — the transaction would have spent ALL user's assets!
+ * Alkane sends now route through `alkanesExecuteTyped` (lib/alkanes/execute.ts),
+ * the same path used by every other mutation hook in this app and by the
+ * tier-1 integration test (`__tests__/tier1/send-alkane.test.ts`).
  *
- * **ROOT CAUSE:**
- * `buildAlkaneTransferPsbt()` was including ALL dust UTXOs (≤1000 sats) as inputs,
- * assuming they all contained the target alkane. But dust UTXOs can contain any
- * asset type: inscriptions, runes, or different alkanes.
+ * Inscription/rune protection is delegated to the SDK via `ordinalsStrategy`:
+ *   - `'preserve'` (default — driven by the WalletSettings toggle): SDK splits
+ *     inscribed/rune-bearing UTXOs into two outputs so the asset stays intact.
+ *   - `'burn'`: SDK is allowed to spend inscribed UTXOs as fee inputs.
  *
- * **THE FIX (in lib/alkanes/buildAlkaneTransferPsbt.ts):**
- * 1. Query `alkanes_protorunesbyaddress` to get alkane-specific outpoints
- * 2. Filter to find UTXOs containing the TARGET alkane ID only
- * 3. Only include those specific UTXOs as inputs
- *
- * **VERIFICATION:**
- * After fix, sending 0.1 DIESEL should only show spending alkanes (not inscriptions/runes).
- *
- * **Source:** User screenshot showing UniSat spending all assets when only sending DIESEL
+ * Historical context: a previous ad-hoc implementation (deleted) bundled ALL
+ * dust UTXOs as inputs and shipped a "collateral warning" UI to ask users for
+ * consent — both responsibilities now live in the SDK.
  */
 
 import { useState, useEffect, useRef, useMemo, forwardRef } from 'react';
@@ -121,10 +115,14 @@ import { useTranslation } from '@/hooks/useTranslation';
 import { computeSendFee, estimateSelectionFee, DUST_THRESHOLD } from '@alkanes/ts-sdk';
 import * as bitcoin from 'bitcoinjs-lib';
 import * as ecc from '@bitcoinerlab/secp256k1';
-import { injectRedeemScripts } from '@/lib/psbt-patching';
-import { buildAlkaneTransferPsbt } from '@/lib/alkanes/buildAlkaneTransferPsbt';
-import { buildTransferProtostone } from '@/lib/alkanes/builders';
-import { getBitcoinNetwork } from '@/lib/alkanes/helpers';
+import { injectRedeemScripts, patchInputsOnly } from '@/lib/psbt-patching';
+import {
+  buildTransferProtostone,
+  buildTransferInputRequirements,
+} from '@/lib/alkanes/builders';
+import { getBitcoinNetwork, extractPsbtBase64 } from '@/lib/alkanes/helpers';
+import { alkanesExecuteTyped } from '@/lib/alkanes/execute';
+import { getProtectOrdinalsAndRunes } from '@/utils/walletSettings';
 
 bitcoin.initEccLib(ecc);
 
@@ -238,7 +236,7 @@ function addressToSymbolic(address: string): string {
 }
 
 export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }: SendModalProps) {
-  const { address: taprootAddress, paymentAddress, network, walletType, account, signTaprootPsbt, signSegwitPsbt } = useWallet() as any;
+  const { address: taprootAddress, paymentAddress, network, walletType, account, signTaprootPsbt, signSegwitPsbt, browserWallet, txContext } = useWallet() as any;
   // Address strategy:
   // - BTC sends: Use UTXOs from BOTH SegWit and Taproot addresses (excluding those with alkanes/inscriptions/runes).
   //   Change goes to SegWit if available, otherwise Taproot.
@@ -355,21 +353,10 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
   // SEND TRANSACTION because small amounts (1000 sats) always have >2% fee ratio.
   // If user already clicked "PROCEED ANYWAY", we bypass the check on retry.
   const [feeWarningAcknowledged, setFeeWarningAcknowledged] = useState(false);
-  // JOURNAL (2026-03-03): Collateral asset warning for alkane transfers.
-  // If the UTXOs containing the target alkane ALSO contain inscriptions/runes,
-  // those assets will be transferred to the recipient (not returned to sender).
-  // JOURNAL (2026-03-03): Added unverifiedInscriptionRunes for mainnet where
-  // ord_outputs RPC returns "JSON API disabled" - we can't verify what's on UTXOs.
-  const [collateralWarning, setCollateralWarning] = useState<{
-    hasInscriptions: boolean;
-    hasRunes: boolean;
-    otherAlkanesCount: number;
-    utxoCount: number;
-    unverifiedInscriptionRunes?: boolean;
-  } | null>(null);
-  const [showCollateralWarning, setShowCollateralWarning] = useState(false);
-  const [collateralAcknowledged, setCollateralAcknowledged] = useState(false);
-  const [pendingPsbtBase64, setPendingPsbtBase64] = useState<string | null>(null);
+  // Collateral warning state was removed when alkane transfers moved off the manual
+  // buildAlkaneTransferPsbt path. The SDK now handles inscription/rune protection
+  // internally via `ordinalsStrategy` ('preserve' | 'burn'); see WalletSettings
+  // toggle wired through utils/walletSettings.ts.
   const [estimatedFee, setEstimatedFee] = useState(0);
   const [estimatedFeeRate, setEstimatedFeeRate] = useState(0);
   const [focusedField, setFocusedField] = useState<string | null>(null);
@@ -469,11 +456,6 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
       setIsProcessing(false);
       setFeeWarningAcknowledged(false);
       setShowFeeWarning(false);
-      // Reset collateral warning state
-      setCollateralWarning(null);
-      setShowCollateralWarning(false);
-      setCollateralAcknowledged(false);
-      setPendingPsbtBase64(null);
     }
   }, [isOpen]);
 
@@ -715,25 +697,6 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
     // if broadcast fails and user has to retry
     setFeeWarningAcknowledged(true);
     handleBroadcast();
-  };
-
-  // JOURNAL (2026-03-03): Handler for proceeding with collateral warning acknowledgment
-  // This is called when user confirms they want to proceed despite inscriptions/runes
-  // being on the same UTXOs as their alkanes.
-  const proceedWithCollateralWarning = () => {
-    console.log('[SendModal] User acknowledged collateral warning, proceeding...');
-    setShowCollateralWarning(false);
-    setCollateralAcknowledged(true);
-    // Re-trigger the alkane send flow - it will now skip the warning
-    handleBroadcast();
-  };
-
-  const cancelCollateralWarning = () => {
-    console.log('[SendModal] User cancelled due to collateral warning');
-    setShowCollateralWarning(false);
-    setCollateralWarning(null);
-    setPendingPsbtBase64(null);
-    setStep('input');
   };
 
   const handleBroadcast = async () => {
@@ -984,25 +947,23 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
       console.log('[SendModal] Recipient:', recipientAddress);
       console.log('[SendModal] Amount:', amount, 'BTC (', amountSats, 'sats)');
       console.log('[SendModal] Fee rate:', feeRate, 'sat/vB');
-      console.log('[SendModal] From address:', btcSendAddress);
+
+      if (!txContext) throw new Error('Wallet not connected');
 
       const matureUtxoStrings = esploraUtxos
         .filter(u => u.status?.confirmed)
         .map(u => `${u.txid}:${u.vout}:${u.value}`);
 
-      const { alkanesExecuteTyped } = await import('@/lib/alkanes/execute');
       // Safety output at v1 (546 sats to sender) + protostone pointer/refund to v1.
-      // If any input UTXOs carry alkanes, they route to v1 instead of burning.
+      // If any input UTXOs carry alkanes, they route to v1 instead of burning —
+      // alkanesChangeAddress comes from txContext (taproot for keystore).
       // SDK output layout: v0=recipient, v1=safety, v2=change (appended by SDK).
       const execResult = await alkanesExecuteTyped(provider, {
+        txContext,
         inputRequirements: `B:${amountSats}:v0,B:546:v1`,
         protostones: 'v1:v1',
         feeRate,
-        toAddresses: [normalizedRecipientAddress, btcSendAddress],
-        fromAddresses: [btcSendAddress],
-        changeAddress: btcSendAddress,
-        alkanesChangeAddress: btcSendAddress,
-        protectTaproot: false,
+        toAddresses: [normalizedRecipientAddress, txContext.alkanesChangeAddress],
         paymentUtxos: matureUtxoStrings,
         autoConfirm: true,
         network,
@@ -1058,6 +1019,12 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
 
     try {
       if (!alkaneProvider) {
+        throw new Error(t('send.providerNotInitialized'));
+      }
+
+      // alkanesExecuteTyped runs against the SDK's WebProvider (constructs the PSBT).
+      // Both keystore and browser wallets need it initialized.
+      if (!provider || !isInitialized) {
         throw new Error(t('send.providerNotInitialized'));
       }
 
@@ -1131,77 +1098,133 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
       // Determine Bitcoin network for PSBT operations
       const btcNetwork = getBitcoinNetwork(network);
 
-      // Determine wallet mode
-      const hasBothAddresses = !!btcSendAddress && !!alkaneSendAddress && btcSendAddress !== alkaneSendAddress;
-      const isSingleAddressMode = !hasBothAddresses;
-      const primaryAddress = alkaneSendAddress || btcSendAddress;
-      const primaryAddressType = detectAddressType(primaryAddress);
+      const isBrowserWallet = walletType === 'browser';
+      const isKeystoreWallet = walletType === 'keystore';
 
-      console.log('[SendModal] Wallet mode:', isSingleAddressMode
-        ? `Single-address (${primaryAddressType.type})`
-        : `Dual-address (taproot: ${alkaneSendAddress}, payment: ${btcSendAddress})`);
+      // ============================================================================
+      // SDK-driven alkane transfer (replaces 650+ LOC of manual buildAlkaneTransferPsbt).
+      // The SDK handles UTXO discovery, ordinals/runes protection, fee accounting,
+      // and protostone encoding internally — see lib/alkanes/execute.ts.
+      // Pattern matches __tests__/tier1/send-alkane.test.ts.
+      // ============================================================================
+      const protostones = buildTransferProtostone({
+        alkaneId: selectedAlkaneId,
+        amount: amountBaseUnits.toString(),
+      });
+      const inputRequirements = buildTransferInputRequirements({
+        alkaneId: selectedAlkaneId,
+        amount: amountBaseUnits.toString(),
+      });
+      console.log('[SendModal] protostones:', protostones);
+      console.log('[SendModal] inputRequirements:', inputRequirements);
 
-      // Build PSBT in pure JS (bypasses WASM/metashrew entirely)
-      console.log('[SendModal] Calling buildAlkaneTransferPsbt...');
-      let rawPsbtBase64: string;
-      let estimatedFee: number;
-      try {
-        const result = await buildAlkaneTransferPsbt({
-          alkaneId: selectedAlkaneId,
-          amount: amountBaseUnits,
-          senderTaprootAddress: alkaneSendAddress,
-          senderPaymentAddress: hasBothAddresses ? btcSendAddress : undefined,
-          recipientAddress: normalizedRecipientAddress,
-          tapInternalKeyHex: account?.taproot?.pubKeyXOnly,
-          paymentPubkeyHex: account?.nativeSegwit?.pubkey,
-          feeRate,
-          network: btcNetwork,
-          networkName: network,
-        });
-        rawPsbtBase64 = result.psbtBase64;
-        estimatedFee = result.estimatedFee;
-        console.log('[SendModal] buildAlkaneTransferPsbt SUCCESS');
-        console.log('[SendModal] Estimated fee:', estimatedFee, 'sats');
-        console.log('[SendModal] PSBT base64 length:', rawPsbtBase64.length);
+      // Output layout (driven by buildTransferProtostone):
+      //   v0 = sender taproot (alkane change — receives unedicted remainder via pointer=v0)
+      //   v1 = recipient (receives the edict transfer of `amountBaseUnits`)
+      // SDK appends BTC change at v2.
+      //
+      // Address-fallback chain consolidated into `txContext` (see
+      // WalletContext.TxContext jsdoc). Keystore is taproot-only;
+      // browser-dual splits into segwit (BTC fees) + taproot (alkanes);
+      // browser single-address wallets get the same address for both.
+      if (!txContext) throw new Error('Wallet not connected');
 
-        // JOURNAL (2026-03-03): Check for collateral assets on the selected UTXOs.
-        // JOURNAL (2026-03-14): Collateral warning is gated on the "Ignore Ordinals/Runes"
-        // setting in WalletSettings. Currently hardcoded to ON (ord backend not yet available),
-        // meaning we treat all UTXOs as spendable and skip the warning. When ord detection
-        // becomes available and the toggle is made functional, set ignoreOrdinals=false to
-        // activate this warning for verified inscriptions/runes.
-        const ignoreOrdinals = true;  // TODO: Read from WalletSettings context when toggle is functional
-        const ignoreRunes = true;     // TODO: Read from WalletSettings context when toggle is functional
-
-        const needsWarning = !ignoreOrdinals && !ignoreRunes && result.collateralWarning && (
-          result.collateralWarning.hasInscriptions ||
-          result.collateralWarning.hasRunes ||
-          result.collateralWarning.unverifiedInscriptionRunes
-        );
-        if (needsWarning && result.collateralWarning) {
-          console.warn('[SendModal] COLLATERAL WARNING: UTXOs may contain inscriptions/runes!');
-          console.warn('[SendModal] collateralWarning:', result.collateralWarning);
-
-          // If user hasn't acknowledged the collateral warning, show it and stop
-          if (!collateralAcknowledged) {
-            setCollateralWarning(result.collateralWarning);
-            setShowCollateralWarning(true);
-            setPendingPsbtBase64(rawPsbtBase64);
-            setIsProcessing(false);
-            return; // Stop here and wait for user acknowledgment
-          }
+      // paymentUtxos still depends on wallet type:
+      //  - Keystore is wallet-internal — no clean-UTXO API.
+      //  - Browser wallets can fetch wallet-verified clean BTC UTXOs
+      //    (UniSat-style).
+      //
+      // ordinalsStrategy uses the wallet-default from `txContext` as the floor
+      // ('burn' for keystore, 'exclude' for browser) and only escalates to
+      // 'preserve' when the user has the WalletSettings "Protect ordinals/
+      // runes" toggle ON. The toggle is only meaningful for browser wallets;
+      // keystore stays at the 'burn' default.
+      const protectFromSetting = !isKeystoreWallet && getProtectOrdinalsAndRunes();
+      const ordinalsStrategy: 'preserve' | 'exclude' | 'burn' =
+        protectFromSetting ? 'preserve' : txContext.defaultOrdinalsStrategy;
+      let paymentUtxos: string[] | undefined;
+      if (isKeystoreWallet) {
+        console.log('[SendModal] Wallet mode: Keystore (taproot-only)', taprootAddress);
+      } else {
+        console.log('[SendModal] Wallet mode:',
+          txContext.shouldProtectTaproot
+            ? `Dual-address (taproot: ${taprootAddress}, payment: ${paymentAddress})`
+            : `Single-address (${taprootAddress || paymentAddress})`);
+        try {
+          const { getCleanBtcUtxosForWallet } = await import('@/lib/wallet/walletCapabilities');
+          const clean = await getCleanBtcUtxosForWallet(browserWallet?.info?.id);
+          paymentUtxos = clean ?? undefined;
+        } catch (e) {
+          console.warn('[SendModal] getCleanBtcUtxosForWallet failed, falling back to SDK selection:', e);
         }
-      } catch (psbtError: any) {
-        console.error('[SendModal] buildAlkaneTransferPsbt FAILED:', psbtError);
-        console.error('[SendModal] Error message:', psbtError.message);
-        console.error('[SendModal] Error stack:', psbtError.stack);
-        throw psbtError;
       }
 
-      // Inject redeemScripts for P2SH-P2WPKH wallets (Xverse) if needed
-      let psbtBase64 = rawPsbtBase64;
-      if (btcSendAddress && account?.nativeSegwit?.pubkey &&
+      const toAddresses: string[] = [txContext.alkanesChangeAddress, normalizedRecipientAddress];
+
+      console.log('[SendModal] Calling alkanesExecuteTyped...');
+      const execResult = await alkanesExecuteTyped(provider, {
+        txContext,
+        protostones,
+        inputRequirements,
+        feeRate,
+        toAddresses,
+        ordinalsStrategy, // per-call: escalates to 'preserve' when WalletSettings toggle is on
+        paymentUtxos,
+        autoConfirm: isKeystoreWallet,
+        network,
+      });
+      console.log('[SendModal] alkanesExecuteTyped result:', execResult);
+
+      // Keystore (autoConfirm=true) — SDK signs + broadcasts internally.
+      if (isKeystoreWallet) {
+        const keystoreTxid = execResult?.txid
+          || execResult?.reveal_txid
+          || execResult?.complete?.reveal_txid
+          || execResult?.complete?.commit_txid
+          || (typeof execResult === 'string' ? execResult : null);
+        if (!keystoreTxid) {
+          console.warn('[SendModal] Keystore: no txid in result:', execResult);
+        }
+        setTxid(keystoreTxid || '');
+        setStep('success');
+        onSuccess?.(keystoreTxid || '');
+        setTimeout(() => { refresh(); }, 1000);
+        return;
+      }
+
+      // Browser wallet — SDK returned a readyToSign PSBT or auto-confirmed result.
+      if (execResult?.txid || execResult?.reveal_txid) {
+        const autoTxid = execResult.txid || execResult.reveal_txid;
+        setTxid(autoTxid);
+        setStep('success');
+        onSuccess?.(autoTxid);
+        setTimeout(() => { refresh(); }, 1000);
+        return;
+      }
+      const readyToSign = execResult?.readyToSign;
+      if (!readyToSign?.psbt) {
+        throw new Error('SDK did not return a signable PSBT');
+      }
+      let psbtBase64: string = extractPsbtBase64(readyToSign.psbt);
+      console.log('[SendModal] Got PSBT base64 length:', psbtBase64.length);
+
+      // Patch inputs (witnessUtxo scripts + redeemScript injection for Xverse P2SH-P2WPKH).
+      // Outputs are NOT patched — we passed actual addresses to the SDK.
+      if (isBrowserWallet) {
+        const patchResult = patchInputsOnly({
+          psbtBase64,
+          network: btcNetwork,
+          taprootAddress: alkaneSendAddress!,
+          segwitAddress: btcSendAddress,
+          paymentPubkeyHex: account?.nativeSegwit?.pubkey,
+        });
+        psbtBase64 = patchResult.psbtBase64;
+        if (patchResult.inputsPatched > 0) {
+          console.log('[SendModal] Patched', patchResult.inputsPatched, 'input(s) for browser wallet');
+        }
+      } else if (btcSendAddress && account?.nativeSegwit?.pubkey &&
           (btcSendAddress.startsWith('3') || btcSendAddress.startsWith('2'))) {
+        // Keystore-only fallback for P2SH-P2WPKH (rare).
         const psbtObj = bitcoin.Psbt.fromBase64(psbtBase64, { network: btcNetwork });
         const patched = injectRedeemScripts(psbtObj, {
           paymentAddress: btcSendAddress,
@@ -1214,41 +1237,15 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
         psbtBase64 = psbtObj.toBase64();
       }
 
-      const isBrowserWallet = walletType === 'browser';
-      const isKeystoreWallet = walletType === 'keystore';
-
-      // Sign the PSBT
-      let signedPsbtBase64: string;
-      if (isBrowserWallet) {
-        console.log('[SendModal] Browser wallet: signing all inputs in single call...');
-        signedPsbtBase64 = await signTaprootPsbt(psbtBase64);
-      } else if (isKeystoreWallet) {
-        // Keystore is taproot-only — all inputs are taproot, sign with taproot key.
-        // The dual-key path was a legacy artifact from when keystore exposed both
-        // segwit + taproot; double signing on a taproot input can leave the PSBT
-        // half-signed and finalize fails with "No tapleaf script signature provided".
-        console.log('[SendModal] Keystore (taproot-only): signing with taproot key...');
-        signedPsbtBase64 = await signTaprootPsbt(psbtBase64);
-      } else if (isSingleAddressMode) {
-        console.log(`[SendModal] Signing PSBT with ${primaryAddressType.signingMethod} key (single-address mode)...`);
-        if (primaryAddressType.signingMethod === 'taproot') {
-          signedPsbtBase64 = await signTaprootPsbt(psbtBase64);
-        } else {
-          signedPsbtBase64 = await signSegwitPsbt(psbtBase64);
-        }
-      } else {
-        // Dual-address browser wallet (Xverse, Leather): sign with both keys.
-        console.log('[SendModal] Dual-address: signing with both keys...');
-        signedPsbtBase64 = await signSegwitPsbt(psbtBase64);
-        signedPsbtBase64 = await signTaprootPsbt(signedPsbtBase64);
-      }
+      // Single signing path — both browser wallets and keystore use signTaprootPsbt
+      // (it dispatches to the right wallet adapter for browser, taproot key for keystore).
+      console.log('[SendModal] Signing PSBT...');
+      const signedPsbtBase64 = await signTaprootPsbt(psbtBase64);
 
       // Show broadcasting spinner now that signing is complete
       setStep('broadcasting');
 
-      // Parse the signed PSBT, finalize, and extract the raw transaction
-      // JOURNAL (2026-03-03): UniSat with autoFinalized: true returns already-finalized PSBTs.
-      // Try to extract directly first; if that fails, try finalizing.
+      // Parse, finalize (if not already), extract — UniSat returns finalized PSBTs.
       const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtBase64, { network: btcNetwork });
       let tx;
       try {
@@ -1381,9 +1378,6 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
               // Reset fee warning acknowledgment when amount changes
               // so user sees warning again for new fee ratio
               setFeeWarningAcknowledged(false);
-              // Reset collateral warning acknowledgment when amount changes
-              // because different UTXOs might be selected
-              setCollateralAcknowledged(false);
               // Clear any previous error when user starts typing
               if (error) setError('');
             }}
@@ -1919,72 +1913,10 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
           )}
           {sendMode === 'alkanes' && (
             <>
-              {/* JOURNAL (2026-03-03): Collateral warning for alkane transfers when UTXOs
-                  also contain inscriptions/runes. These assets WILL be transferred to
-                  the recipient (they don't have protostone pointer logic).
-                  JOURNAL (2026-03-03): Also handles mainnet case where ord_outputs RPC is disabled
-                  and we can't verify what assets are on the UTXOs. */}
-              {showCollateralWarning && collateralWarning && (
-                <div className="space-y-4">
-                  <div className="rounded-xl bg-[color:var(--sf-info-red-bg)] border-2 border-[color:var(--sf-info-red-border)] p-4 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
-                    <div className="flex items-center gap-2 mb-3">
-                      <AlertCircle size={24} className="text-amber-400" />
-                      <span className="font-bold text-amber-400 uppercase tracking-wide text-lg">
-                        {t('send.collateralWarning', { defaultValue: 'CONFIRM TRANSFER' })}
-                      </span>
-                    </div>
-                    <div className="space-y-2 text-sm text-[color:var(--sf-text-secondary)]">
-                      <p className="font-medium">
-                        {t('send.collateralDescription', {
-                          defaultValue: 'The selected UTXOs contain other assets bundled alongside your alkane tokens.'
-                        })}
-                      </p>
-                      {collateralWarning.hasInscriptions && (
-                        <p className="text-amber-400">
-                          {t('send.collateralInscriptions', { defaultValue: 'Inscriptions (ordinals) on these UTXOs will be transferred to the recipient.' })}
-                        </p>
-                      )}
-                      {collateralWarning.hasRunes && (
-                        <p className="text-amber-400">
-                          {t('send.collateralRunes', { defaultValue: 'Runes on these UTXOs will be transferred to the recipient.' })}
-                        </p>
-                      )}
-                      {/* Other alkanes are always safe due to protostone pointer */}
-                      {collateralWarning.otherAlkanesCount > 0 && (
-                        <p className="text-[color:var(--sf-muted)]">
-                          {t('send.collateralOtherAlkanes', { count: collateralWarning.otherAlkanesCount, defaultValue: `${collateralWarning.otherAlkanesCount} other alkane token(s) on these UTXOs will be returned to you via the protostone pointer.` })}
-                        </p>
-                      )}
-                      <p className="mt-3 p-2 bg-black/20 rounded-lg text-[color:var(--sf-muted)]">
-                        {t('send.collateralNote', { defaultValue: 'You can enable "Ignore Ordinals" and "Ignore Runes" in Wallet Settings to skip this warning and treat all UTXOs as spendable.' })}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex gap-3">
-                    <button
-                      onClick={cancelCollateralWarning}
-                      className="flex-1 px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:bg-[color:var(--sf-surface)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)] font-bold uppercase tracking-wide"
-                    >
-                      {t('send.cancel', { defaultValue: 'CANCEL' })}
-                    </button>
-                    <button
-                      onClick={proceedWithCollateralWarning}
-                      className="flex-1 px-4 py-3 rounded-xl bg-[color:var(--sf-info-red-bg)] border border-[color:var(--sf-info-red-border)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-info-red-title)] font-bold uppercase tracking-wide"
-                    >
-                      {t('send.proceedAnyway', { defaultValue: 'I UNDERSTAND, PROCEED' })}
-                    </button>
-                  </div>
-                </div>
-              )}
-              {!showCollateralWarning && (
-                <>
-                  {step === 'input' && renderAlkanesInput()}
-                  {step === 'confirm' && renderConfirm()}
-                  {step === 'broadcasting' && renderBroadcasting()}
-                  {step === 'success' && renderSuccess()}
-                </>
-              )}
+              {step === 'input' && renderAlkanesInput()}
+              {step === 'confirm' && renderConfirm()}
+              {step === 'broadcasting' && renderBroadcasting()}
+              {step === 'success' && renderSuccess()}
             </>
           )}
         </div>

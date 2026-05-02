@@ -96,7 +96,7 @@ export type WrapTransactionBaseData = {
 };
 
 export function useWrapMutation() {
-  const { account, network, isConnected, signTaprootPsbt, walletType, browserWallet } = useWallet();
+  const { account, network, isConnected, signTaprootPsbt, walletType, browserWallet, txContext } = useWallet();
   const provider = useSandshrewProvider();
   const queryClient = useQueryClient();
   const { requestConfirmation } = useTransactionConfirm();
@@ -136,9 +136,10 @@ export function useWrapMutation() {
       // B:amount:v0 tells the SDK to set output 0's value to the wrap amount
       const inputRequirements = `B:${wrapAmountSats}:v0`;
 
-      // Get user's addresses
+      // Get user's addresses (still needed for PSBT diagnostics + wallet-specific patching paths)
       const userTaprootAddress = account?.taproot?.address;
       const userSegwitAddress = account?.nativeSegwit?.address;
+      if (!txContext) throw new Error('Wallet not connected');
       if (!userTaprootAddress) throw new Error('No taproot address available');
 
       // Get bitcoin network for PSBT parsing
@@ -150,43 +151,19 @@ export function useWrapMutation() {
       const signerAddress = await getSignerAddressDynamic(network);
 
       const isBrowserWallet = walletType === 'browser';
-      const useActualAddresses = isBrowserWallet || network === 'devnet' || network === 'regtest-local' || network === 'qubitcoin-regtest';
 
-      // For browser wallets, use actual addresses for UTXO discovery (passed as
-      // opaque strings to esplora — no Address parsing, no LegacyAddressTooLong).
-      // For keystore wallets, symbolic addresses resolve correctly via loaded mnemonic.
-      // Keystore is taproot-only — no segwit.
-      const fromAddresses = useActualAddresses
-        ? [userSegwitAddress, userTaprootAddress].filter(Boolean) as string[]
-        : ['p2tr:0'];
-
-      // toAddresses: [signer (actual), user (actual/symbolic)]
+      // toAddresses: [signer, user]
       // Matches CLI wrap_btc.rs output ordering:
       //   Output 0 (v0): signer (receives BTC via B:amount:v0)
       //   Output 1 (v1): user (receives minted frBTC via pointer=v1)
-      // JOURNAL ENTRY (2026-02-20): Use actual signer address directly (working version from commit 2fac01f3).
-      // The PSBT patching approach was over-engineered and caused signing issues.
-      // JOURNAL ENTRY (2026-02-20): For browser wallets, 'p2tr:0' resolves to the SDK dummy wallet address,
-      // not the user's address. Must use actual userTaprootAddress for browser wallets.
-      //
-      // **BUG (2026-02-20): Despite passing correct addresses here, transaction outputs BOTH go to user**
-      // Expected: [bcrt1p466wtm... (signer), bcrt1pvu3q2v... (user)]
-      // Actual result: [bcrt1pvu3q2v... (user), bcrt1pvu3q2v... (user)]
-      // Verified via 15+ tests on regtest. PR #251 fix at execute.rs:1348 did not resolve.
-      // Diagnostic logs confirm correct addresses here. Bug is downstream in SDK execution.
-      // See provider.rs:654 (WASM) and execute.rs:1278 (Rust) for diagnostic logging.
-      const toAddresses = useActualAddresses
-        ? [signerAddress, userTaprootAddress]
-        : [signerAddress, 'p2tr:0'];
+      const toAddresses = [signerAddress, userTaprootAddress];
 
       console.log('[WRAP] ============ alkanesExecuteTyped CALL ============');
       console.log('[WRAP] DIAGNOSTIC: signerAddress =', signerAddress);
       console.log('[WRAP] DIAGNOSTIC: userTaprootAddress =', userTaprootAddress);
       console.log('[WRAP] DIAGNOSTIC: isBrowserWallet =', isBrowserWallet);
       console.log('[WRAP] to_addresses:', JSON.stringify(toAddresses));
-      console.log('[WRAP] to_addresses[0] (should be signer):', toAddresses[0]);
-      console.log('[WRAP] to_addresses[1] (should be user):', toAddresses[1]);
-      console.log('[WRAP] from_addresses:', fromAddresses);
+      console.log('[WRAP] from_addresses:', txContext.feeSourceAddresses);
       console.log('[WRAP] input_requirements:', inputRequirements);
       console.log('[WRAP] protostone:', protostone);
       console.log('[WRAP] fee_rate:', wrapData.feeRate);
@@ -204,28 +181,25 @@ export function useWrapMutation() {
         // Returns `null` for wallets without the capability — SDK then falls back
         // to its own lua/esplora UTXO selection.
         const { getCleanBtcUtxosForWallet } = await import('@/lib/wallet/walletCapabilities');
-        const isDualAddress = Boolean(userSegwitAddress && userTaprootAddress);
         const cleanUtxos = isBrowserWallet
           ? await getCleanBtcUtxosForWallet(browserWallet?.info?.id)
           : null;
-        if (isBrowserWallet && !isDualAddress && !cleanUtxos?.length) {
+        // Single-address wallets (no second address to fund fees from) need a clean
+        // UTXO list — otherwise the SDK might burn an alkane-bearing UTXO as fee.
+        if (isBrowserWallet && !txContext.shouldProtectTaproot && !cleanUtxos?.length) {
           throw new Error('No clean BTC UTXOs available. Send some BTC to your wallet first — inscription/rune UTXOs cannot be used for fees.');
         }
         const paymentUtxos: string[] | undefined = cleanUtxos ?? undefined;
 
         const result = await provider.alkanesExecuteTyped({
+          txContext,
           toAddresses,
           inputRequirements,
           protostones: protostone,
           feeRate: wrapData.feeRate,
-          fromAddresses,
-          changeAddress: useActualAddresses ? (userSegwitAddress || userTaprootAddress) : 'p2tr:0',
-          alkanesChangeAddress: useActualAddresses ? userTaprootAddress : 'p2tr:0',
           autoConfirm: walletType === 'keystore',
           traceEnabled: walletType !== 'keystore',
           mineEnabled: false,
-          ordinalsStrategy: 'exclude' as const,
-          protectTaproot: Boolean(userSegwitAddress && userTaprootAddress),
           paymentUtxos,
         });
 
