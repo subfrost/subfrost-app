@@ -69,9 +69,10 @@ When the SDK builds a PSBT, it selects UTXOs from `from_addresses` to fund BTC f
 |------|------|-----------|
 | `lib/devnet/boot.ts` — `deployWasm()` | Consumes alkane UTXOs as fee inputs | Phase 10a re-mints tokens after all deploys |
 | `lib/devnet/boot.ts` — `executeCall()` | Same risk for any non-deploy call | Document risk, re-mint if needed |
-| `app/wallet/components/SendModal.tsx` (alkane branch) | User sends DIESEL, SDK picks inscription UTXO | `ordinalsStrategy: 'preserve'` when WalletSettings "Protect ordinals" is on |
+| `hooks/useAlkaneSendMutation.ts` | Inscription on alkane UTXO is silently spent | SDK auto-applies `'preserve'` for browser → `build_split_psbt` with alkane-aware routing |
 | `hooks/useSwapMutation.ts` | Swap PSBT picks wrong UTXOs | SDK handles via `alkanesExecuteTyped` with `txContext.feeSourceAddresses` |
 | Any frontend mutation hook | Browser wallet PSBT construction | `patchInputsOnly` for witnessUtxo scripts |
+| WASM `select_utxos` | Pending mempool tx UTXO picked again → double-spend | `get_address_txs_mempool` filter strips outpoints already spent in our own mempool txs |
 
 ### Diagnostic: "Insufficient alkanes: have 0"
 
@@ -116,7 +117,7 @@ The Alkanes SDK has **two separate derivation systems** that use **different coi
 - `@alkanes/ts-sdk` JS — coinType=0 always (immutable without SDK source change)
 
 ### Address Handling — pass `txContext` from `useWallet()`
-Every mutation hook destructures `txContext` from `useWallet()` and forwards it to `alkanesExecuteTyped`. The wrapper unpacks it into `from_addresses` / `change_address` / `alkanes_change_address` / `protect_taproot` / `ordinals_strategy`. Per-call overrides win (`params.X ?? txContext.X`) — used by atomic flows and SendModal `'preserve'`.
+Every mutation hook destructures `txContext` from `useWallet()` and forwards it to `alkanesExecuteTyped`. The wrapper unpacks it into `from_addresses` / `change_address` / `alkanes_change_address` / `protect_taproot` / `ordinals_strategy`, and for browser wallets auto-applies `'preserve'` ord-strategy + UniSat clean BTC UTXOs (via `getCleanBtcUtxosForWallet(browserWalletId)` from the capability registry) as `payment_utxos`. Per-call overrides win (`params.X ?? txContext.X`) — used by atomic flows.
 
 **Why centralized:** Symbolic addresses (`p2tr:0`, `p2wpkh:0`) resolve to the SDK provider's *internal* wallet, not the user's. On mainnet this lost real tokens (tx `985436b5...`); on devnet the WASM provider loads the boot mnemonic which derives different addresses than `WalletContext` even from the same seed. The previous fix was a 28-hook duplicated `paymentAddress || taproot` ternary chain. `txContext` collapses that into one computed object on `WalletContext` so a new hook physically can't forget the fallback.
 
@@ -505,10 +506,13 @@ See [docs/BACKEND_SETUP.md](docs/BACKEND_SETUP.md) for usage examples and local 
 | SDK WASM alias config | `next.config.mjs` (lines 7-21) |
 | Local WASM files | `lib/oyl/alkanes/` |
 | Factory/Pool opcode constants | `constants/index.ts` |
-| Add Liquidity | `hooks/useAddLiquidityMutation.ts` |
-| Swap | `hooks/useSwapMutation.ts` |
-| Remove Liquidity | `hooks/useRemoveLiquidityMutation.ts` |
+| Add Liquidity / Create New Pool (factory opcode 11 / 1, branched on `findPoolId`) | `hooks/useAddLiquidityMutation.ts` |
+| Swap (factory opcode 13 exact-in / 14 exact-out, branched on `direction`) | `hooks/useSwapMutation.ts` |
+| Remove Liquidity (factory opcode 12) | `hooks/useRemoveLiquidityMutation.ts` |
 | Wrap/Unwrap | `hooks/useWrapMutation.ts`, `hooks/useUnwrapMutation.ts` |
+| Plain BTC send (UniSat native / browser manual PSBT / keystore via alkanesExecuteTyped) | `hooks/useBtcSendMutation.ts` |
+| Plain alkane transfer | `hooks/useAlkaneSendMutation.ts` |
+| Atomic wrap+addLiquidity / wrap+createPool (single tx BTC + Token X → LP) | `hooks/useAtomicWrapAddLiquidityMutation.ts` |
 | Pool data fetching | `hooks/usePools.ts` (markets list), `hooks/usePoolStateLive.ts` (per-pool live) |
 | SDK context | `context/AlkanesSDKContext.tsx` |
 | Calldata builder tests | `hooks/__tests__/mutations/calldata.test.ts` |
@@ -621,11 +625,11 @@ if (taprootPubKey) {
 See "Address Handling — pass `txContext` from `useWallet()`" above. This rule was established after **actual token loss on mainnet** (tx `985436b5...`).
 
 `WalletContext` computes `txContext` per `walletType`:
-- **keystore** (BIP86 taproot-only): all four address fields = taproot; `protectTaproot=false`; `'burn'` ord-strategy (skips ord lookup, perf win).
-- **browser dual-address** (Xverse / Leather / OYL): `feeSourceAddresses=[segwit, taproot]`, BTC change → segwit, alkane change → taproot, `protectTaproot=true`, `'exclude'`.
-- **browser single-address** (UniSat / OKX): one address for everything, `protectTaproot=false`.
+- **keystore** (BIP86 taproot-only): all four address fields = taproot; `protectTaproot=false`; `'burn'` ord-strategy (skips per-UTXO ord lookup, perf win — keystore is wallet-internal, never receives inscriptions).
+- **browser dual-address** (Xverse / Leather / OYL): `feeSourceAddresses=[segwit, taproot]`, BTC change → segwit, alkane change → taproot, `protectTaproot=true`, `'preserve'` (split-tx with alkane-aware routing).
+- **browser single-address** (UniSat / OKX): one address for everything, `protectTaproot=false`, `'preserve'`.
 
-Hooks just pass `txContext` — no inline ternaries. Per-operation overrides (e.g. SendModal `ordinalsStrategy: 'preserve'`) take precedence at the call site.
+Hooks just pass `txContext` — `alkanesExecuteTyped` wrapper auto-applies the wallet-type-specific ord-strategy + UniSat clean payment_utxos for browser. Per-call overrides at the call site still win (`params.X ?? txContext.X`).
 
 ### Wallet-Specific Quirks
 
@@ -638,10 +642,11 @@ Hooks just pass `txContext` — no inline ternaries. Per-operation overrides (e.
 
 ### Alkane Transfer UTXO Safety
 
-Dust UTXOs can carry inscriptions, runes, AND alkanes simultaneously. SendModal's alkane branch goes through `alkanesExecuteTyped` (the manual `buildAlkaneTransferPsbt.ts` path was removed in the txContext refactor). Inscription/rune protection is delegated to the SDK via `ordinalsStrategy`:
+Dust UTXOs can carry inscriptions, runes, AND alkanes simultaneously. All alkane operations (transfer / swap / wrap / addLiquidity / etc.) route through `alkanesExecuteTyped` and inherit two layers of protection:
 
-- **Default:** `txContext.defaultOrdinalsStrategy` (`'exclude'` for browser, `'burn'` for keystore which is wallet-internal and never receives inscriptions).
-- **Per-call override:** SendModal passes `ordinalsStrategy: 'preserve'` when the user has the WalletSettings "Protect ordinals & runes" toggle on (`utils/walletSettings.ts`). This makes the SDK run a split-tx codepath that never spends UTXOs carrying inscriptions/runes.
+- **Browser → `'preserve'`** (auto-applied): SDK runs alkane-aware `build_split_psbt`. When an inscribed UTXO also carries an alkane, the split routes the alkane to a clean output via protostone OP_RETURN, atomically broadcast alongside the main tx. Both inscription and alkane survive.
+- **Keystore → `'burn'`** (auto-applied): wallet-internal, never receives inscriptions, ord lookup skipped.
+- **Mempool-spent filter** (`select_utxos`): outpoints already spent in our own mempool transactions are stripped from the candidate set via `address/{addr}/txs/mempool` before coin selection. Indexers (espo / metashrew / protorunesbyaddress) only see confirmed state — without this, a quick double-submit picks the same UTXO twice and broadcasts a mempool conflict.
 
 **DUST_VALUE = 600 sats** (not 546) to avoid node dust rejection.
 
@@ -667,8 +672,9 @@ All input alkanes automatically go to the FIRST protostone with matching `protoc
 - **tapInternalKey**: SDK adapters can't patch it — frontend `patchTapInternalKeys()` is mandatory before signing
 - **Symbolic addresses**: NEVER use `p2tr:0`/`p2wpkh:0` for browser wallets — tokens go to SDK dummy wallet
 - **Wallet session**: `ensureWalletSession()` in `lib/wallet/browserWalletSigning.ts` must run before all mutations
-- **Factory router for ALL AMM ops**: Use factory opcode 13 (swap), 11 (addLiquidity), 12 (burn). Never call pool-direct (opcodes 1/2/3) — factory routes give Uniswap-style slippage protection (`amount_a_min`, `amount_b_min`) and a deadline; pool-direct opcodes have no min checks.
-- **Atomic flows are hooks, not inline**: BTC→Token swap is `useAtomicWrapSwapMutation`, BTC+X→LP is `useAtomicWrapAddLiquidityMutation`, Token→BTC is `useTokenToBtcSwap` (two-tx with progress callbacks — replaces deprecated `useSwapUnwrapMutation`'s atomic three-protostone path).
+- **Factory router for ALL AMM ops**: opcode 13 (swap exact-in), 14 (swap exact-out — when user types into the buy field), 11 (addLiquidity into existing pool), 12 (burn/removeLiquidity), 1 (CreateNewPool when no pool exists yet — `useAddLiquidityMutation` and `useAtomicWrapAddLiquidityMutation` both branch on `findPoolId`). Never call pool-direct (opcodes 1/2/3 on the pool contract) — factory routes give Uniswap-style slippage protection (`amount_a_min`, `amount_b_min`) and a deadline.
+- **Atomic flows are hooks, not inline**: BTC→Token swap is `useAtomicWrapSwapMutation`; BTC+X→LP is `useAtomicWrapAddLiquidityMutation` (branches AddLiquidity ↔ CreateNewPool atomically with the wrap); Token→BTC is `useTokenToBtcSwap`. Plain BTC send is `useBtcSendMutation` (UniSat → `unisat.sendBitcoin` native, others → manual PSBT, keystore → `alkanesExecuteTyped` + v1 safety output). Plain alkane transfer is `useAlkaneSendMutation`.
+- **Mempool-spent filter** in WASM `select_utxos`: SDK fetches `address/{addr}/txs/mempool`, builds a set of pending-spent outpoints, removes them from the candidate UTXO set before coin selection. Closes the «second swap reuses the same alkane UTXO that's still in mempool» double-spend window.
 - **WASM sync**: Always copy `lib/oyl/alkanes/` after SDK rebuild
 - **DUST_VALUE = 600 sats** (not 546) for relay compatibility
 - **frBTC signer is dynamic**: `getSignerAddressDynamic(network)` from `lib/alkanes/helpers.ts`, not the deprecated static map in `lib/alkanes/constants.ts`
