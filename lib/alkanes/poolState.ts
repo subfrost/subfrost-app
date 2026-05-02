@@ -1,17 +1,27 @@
 /**
- * Live pool state via espo's `/get-pool-details` REST endpoint.
+ * Live pool state via on-chain `metashrew_view("simulate")` against pool
+ * opcode 999 (PoolDetails). NO espo dependency.
  *
- * Espo writes a fresh pool snapshot every indexed block (see
- * espo/src/modules/ammdata/utils/index_pool_metrics.rs:565). The endpoint is
- * not TTL-cached — it just returns whatever the indexer wrote at the latest
- * block. Lag = indexer lag (~1-2 sec after block), same magnitude as
- * `alkanes_simulate` against state trie.
+ * Why this changed: previously fetched espo's `/get-pool-details` REST
+ * endpoint, which on mainnet was returning stale / mismatched reserves and
+ * poisoning swap quotes — atomic wrap+swap shipped a `minimumReceived`
+ * that the factory contract rejected, silently returning the input alkanes
+ * to the user (no DIESEL produced; see AUDIT_REPORT.md §5).
  *
- * Use whenever a downstream computation must agree with what the contract
- * sees at submit time — slippage params for AddLiquidity / RemoveLiquidity
- * are the canonical case.
+ * The `simulate` view returns the pool contract's *canonical* reserves
+ * (whatever the AMM math will see at submit time). PoolInfo byte layout
+ * (oyl-amm/alkanes/oylswap-library/src/lib.rs::PoolInfo::try_to_vec):
+ *
+ *   [  0.. 32]  token_a.block + token_a.tx   (2× u128 LE)
+ *   [ 32.. 64]  token_b.block + token_b.tx   (2× u128 LE)
+ *   [ 64.. 80]  reserve_a                    (u128 LE)
+ *   [ 80.. 96]  reserve_b                    (u128 LE)
+ *   [ 96..112]  total_supply                 (u128 LE)
+ *   [112..116]  name_length                  (u32 LE)
+ *   [116.. ]    pool_name                    (utf-8)
  */
 import { getRpcUrl } from '@/utils/getConfig';
+import { simulateContract, extractField3Data, parseU128LE } from '@/lib/fujin/rpc';
 
 export interface LivePoolState {
   poolId: string;
@@ -23,22 +33,37 @@ export interface LivePoolState {
   name: string;
 }
 
-function asString(value: unknown): string {
-  if (value == null) return '0';
-  return String(value);
+/** Parse a u32 (little-endian) from a hex string at a hex-character offset. */
+function parseU32LE(hexData: string, offset: number): number {
+  const bytes = hexData.slice(offset, offset + 8);
+  if (bytes.length !== 8) return 0;
+  let value = 0;
+  for (let i = 0; i < 4; i++) {
+    const byte = parseInt(bytes.slice(i * 2, i * 2 + 2), 16);
+    if (!isNaN(byte)) value |= byte << (i * 8);
+  }
+  return value >>> 0;
 }
 
-function buildAlkaneIdString(obj: any): string {
-  if (!obj) return '';
-  const block = obj.block ?? obj.alkaneId?.block;
-  const tx = obj.tx ?? obj.alkaneId?.tx;
-  if (block == null || tx == null) return '';
-  return `${block}:${tx}`;
+/** Decode a utf-8 string from a hex-encoded run of bytes. */
+function hexToUtf8(hex: string): string {
+  let out = '';
+  for (let i = 0; i + 1 < hex.length; i += 2) {
+    const byte = parseInt(hex.slice(i, i + 2), 16);
+    if (Number.isNaN(byte) || byte === 0) break;
+    out += String.fromCharCode(byte);
+  }
+  return out;
 }
 
 /**
- * Fetch fresh pool reserves + LP supply from espo. Returns null on transport /
- * shape errors so callers can fall back to cached markets data.
+ * Fetch fresh pool reserves + LP supply directly from the pool contract via
+ * metashrew_view simulate. Returns null on transport / shape errors so
+ * callers can fall back to cached markets data.
+ *
+ * `factoryId` is no longer needed by the on-chain call (kept in the
+ * signature so existing callers don't have to change), but we still
+ * validate it for parity with the prior contract.
  */
 export async function fetchLivePoolState(
   network: string,
@@ -49,45 +74,45 @@ export async function fetchLivePoolState(
   const [poolBlock, poolTx] = poolId.split(':');
   if (!factoryBlock || !factoryTx || !poolBlock || !poolTx) return null;
 
-  let resp: Response;
+  const rpcUrl = getRpcUrl(network);
+
+  let detailsHex: string;
   try {
-    resp = await fetch(`${getRpcUrl(network)}/get-pool-details`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        factoryId: { block: factoryBlock, tx: factoryTx },
-        poolId: { block: poolBlock, tx: poolTx },
-      }),
-      signal: AbortSignal.timeout(5_000),
-    });
+    detailsHex = await simulateContract(rpcUrl, poolId, 999);
   } catch (err) {
-    console.warn('[poolState] /get-pool-details fetch failed:', err);
+    console.warn('[poolState] opcode-999 simulate failed:', err);
     return null;
   }
 
-  if (!resp.ok) return null;
-  const json = await resp.json().catch(() => null);
-  const data = json?.data ?? json;
-  if (!data) return null;
+  // PoolInfo serialization is exactly 116 bytes + variable name → 232 hex
+  // chars minimum. Anything shorter is either a revert payload or a stub
+  // implementation we can't decode.
+  const poolInfo = extractField3Data(detailsHex, 116);
+  if (!poolInfo || poolInfo.length < 232) {
+    console.warn('[poolState] unexpected PoolDetails payload', { poolId, length: poolInfo?.length ?? 0 });
+    return null;
+  }
 
-  const token0Id = buildAlkaneIdString(data.token0);
-  const token1Id = buildAlkaneIdString(data.token1);
-  if (!token0Id || !token1Id) return null;
+  const token0Block = parseU128LE(poolInfo, 0);
+  const token0Tx = parseU128LE(poolInfo, 32);
+  const token1Block = parseU128LE(poolInfo, 64);
+  const token1Tx = parseU128LE(poolInfo, 96);
+  const reserve0 = parseU128LE(poolInfo, 128);
+  const reserve1 = parseU128LE(poolInfo, 160);
+  const totalSupply = parseU128LE(poolInfo, 192);
 
-  // Espo emits both `token0Amount`/`token1Amount` and lower-level reserves —
-  // accept whichever shape the network returns.
-  const reserve0 = data.token0Amount ?? data.reserve0 ?? data.token0?.token0Amount;
-  const reserve1 = data.token1Amount ?? data.reserve1 ?? data.token1?.token1Amount;
-  const totalSupply = data.tokenSupply ?? data.lpTotalSupply ?? data.totalSupply;
-  if (reserve0 == null || reserve1 == null || totalSupply == null) return null;
+  const nameLength = parseU32LE(poolInfo, 224);
+  const nameStart = 232;
+  const nameEnd = Math.min(nameStart + nameLength * 2, poolInfo.length);
+  const name = hexToUtf8(poolInfo.slice(nameStart, nameEnd));
 
   return {
     poolId,
-    token0Id,
-    token1Id,
-    reserve0: asString(reserve0),
-    reserve1: asString(reserve1),
-    totalSupply: asString(totalSupply),
-    name: typeof data.poolName === 'string' ? data.poolName : '',
+    token0Id: `${token0Block}:${token0Tx}`,
+    token1Id: `${token1Block}:${token1Tx}`,
+    reserve0: reserve0.toString(),
+    reserve1: reserve1.toString(),
+    totalSupply: totalSupply.toString(),
+    name,
   };
 }
