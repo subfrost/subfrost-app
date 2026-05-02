@@ -4,6 +4,7 @@ import { useState, useMemo } from 'react';
 import { Loader2 } from 'lucide-react';
 import { useNormalPool, type NormalPoolHolding } from '@/hooks/useNormalPool';
 import { useWallet } from '@/context/WalletContext';
+import { useDemoGate } from '@/hooks/useDemoGate';
 import { useEnrichedWalletData } from '@/hooks/useEnrichedWalletData';
 import {
   computeVolBtcSwapQuote,
@@ -155,6 +156,7 @@ function PremiumCurveSection({ coefficients, selectedT }: { coefficients: CubicC
 export default function VolatilityView() {
   const { data: pool, isLoading: poolLoading } = useNormalPool();
   const { isConnected } = useWallet();
+  const isDemoGated = useDemoGate();
   const walletData = useEnrichedWalletData();
 
   // State
@@ -360,9 +362,13 @@ export default function VolatilityView() {
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
+                              if (isDemoGated) return;
                               setSelectedFtr(h.ftrId);
                             }}
-                            className="sf-btn-primary px-3 py-1.5 text-[10px]"
+                            disabled={isDemoGated}
+                            className={`sf-btn-primary px-3 py-1.5 text-[10px] ${
+                              isDemoGated ? 'opacity-30 cursor-not-allowed' : ''
+                            }`}
                           >
                             Deposit
                           </button>
@@ -394,9 +400,13 @@ export default function VolatilityView() {
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
+                              if (isDemoGated) return;
                               setSelectedFtr(h.ftrId);
                             }}
-                            className="sf-btn-primary px-2.5 py-1.5 text-[10px]"
+                            disabled={isDemoGated}
+                            className={`sf-btn-primary px-2.5 py-1.5 text-[10px] ${
+                              isDemoGated ? 'opacity-30 cursor-not-allowed' : ''
+                            }`}
                           >
                             Deposit
                           </button>
@@ -456,10 +466,10 @@ export default function VolatilityView() {
 
               <button
                 type="button"
-                disabled={!depositAmount || parseFloat(depositAmount) <= 0}
-                className="sf-btn-primary w-full py-3"
+                disabled={!depositAmount || parseFloat(depositAmount) <= 0 || isDemoGated}
+                className={`sf-btn-primary w-full py-3 ${isDemoGated ? 'opacity-30 cursor-not-allowed' : ''}`}
               >
-                Deposit to Pool
+                {isDemoGated ? 'Coming Soon' : 'Deposit to Pool'}
               </button>
             </div>
           )}
@@ -589,10 +599,10 @@ export default function VolatilityView() {
 
           <button
             type="button"
-            disabled={!swapIn || !swapOut || !swapAmount || parseFloat(swapAmount) <= 0}
-            className="sf-btn-primary w-full py-3"
+            disabled={!swapIn || !swapOut || !swapAmount || parseFloat(swapAmount) <= 0 || isDemoGated}
+            className={`sf-btn-primary w-full py-3 ${isDemoGated ? 'opacity-30 cursor-not-allowed' : ''}`}
           >
-            Execute Swap
+            {isDemoGated ? 'Coming Soon' : 'Execute Swap'}
           </button>
         </div>
       )}

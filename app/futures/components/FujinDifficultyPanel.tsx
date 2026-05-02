@@ -3,6 +3,7 @@
 import { useState, useMemo, useCallback } from 'react';
 import { useFujinMarkets } from '@/hooks/useFujinMarkets';
 import { useWallet } from '@/context/WalletContext';
+import { useDemoGate } from '@/hooks/useDemoGate';
 import { getConfig, getRpcUrl } from '@/utils/getConfig';
 import { Loader2, TrendingUp, TrendingDown, X } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -21,6 +22,7 @@ function formatDifficulty(diff: number): string {
 export default function FujinDifficultyPanel() {
   const { data: fujinData, isLoading: fujinLoading } = useFujinMarkets();
   const { isConnected, network, account } = useWallet();
+  const isDemoGated = useDemoGate();
   const queryClient = useQueryClient();
   const [swapDirection, setSwapDirection] = useState<'LONG' | 'SHORT'>('LONG');
   const [amount, setAmount] = useState('');
@@ -158,6 +160,7 @@ export default function FujinDifficultyPanel() {
   // with WASM provider's own mnemonic + symbolic addresses (p2tr:0, p2wpkh:0)
   // so UTXO discovery uses the WASM provider's internal derived addresses.
   const handleBuy = useCallback(async () => {
+    if (isDemoGated) return;
     if (!quote || !activeMarket || dieselSats <= 0n || !taprootAddress) return;
     setBuying(true);
     try {
@@ -218,13 +221,14 @@ export default function FujinDifficultyPanel() {
     } finally {
       setBuying(false);
     }
-  }, [quote, activeMarket, dieselSats, swapDirection, network, taprootAddress, directRpcUrl, queryClient]);
+  }, [isDemoGated, quote, activeMarket, dieselSats, swapDirection, network, taprootAddress, directRpcUrl, queryClient]);
 
   // Close position state
   const [closingSide, setClosingSide] = useState<'LONG' | 'SHORT' | null>(null);
   const [closing, setClosing] = useState(false);
 
   const handleClose = useCallback(async (side: 'LONG' | 'SHORT') => {
+    if (isDemoGated) return;
     if (!activeMarket || !taprootAddress) return;
     const balance = side === 'LONG' ? userLongBalance : userShortBalance;
     if (balance <= 0n) return;
@@ -282,7 +286,7 @@ export default function FujinDifficultyPanel() {
       setClosing(false);
       setClosingSide(null);
     }
-  }, [activeMarket, network, taprootAddress, segwitAddress, directRpcUrl, longTokenId, shortTokenId, userLongBalance, userShortBalance, queryClient]);
+  }, [isDemoGated, activeMarket, network, taprootAddress, segwitAddress, directRpcUrl, longTokenId, shortTokenId, userLongBalance, userShortBalance, queryClient]);
 
   // Percentage buttons
   const handlePct = (pct: number) => {
@@ -431,11 +435,11 @@ export default function FujinDifficultyPanel() {
         {/* CTA */}
         <button
           onClick={handleBuy}
-          disabled={!isConnected || !amount || !quote || buying}
-          className="sf-btn-primary w-full py-3"
+          disabled={!isConnected || !amount || !quote || buying || isDemoGated}
+          className={`sf-btn-primary w-full py-3 ${isDemoGated ? 'opacity-30 cursor-not-allowed' : ''}`}
         >
           {buying ? <Loader2 className="h-4 w-4 animate-spin inline mr-2" /> : null}
-          {!isConnected ? 'Connect Wallet' : buying ? 'Buying...' : `Buy ${swapDirection}`}
+          {isDemoGated ? 'Coming Soon' : !isConnected ? 'Connect Wallet' : buying ? 'Buying...' : `Buy ${swapDirection}`}
         </button>
       </div>
 
@@ -468,8 +472,10 @@ export default function FujinDifficultyPanel() {
               <div className="w-[60px] flex justify-end">
                 <button
                   onClick={() => handleClose('LONG')}
-                  disabled={closing}
-                  className="sf-btn-ghost text-[10px] font-semibold px-2 py-1 rounded-md text-red-400 hover:bg-red-500/10"
+                  disabled={closing || isDemoGated}
+                  className={`sf-btn-ghost text-[10px] font-semibold px-2 py-1 rounded-md text-red-400 hover:bg-red-500/10 ${
+                    isDemoGated ? 'opacity-30 cursor-not-allowed' : ''
+                  }`}
                 >
                   {closing && closingSide === 'LONG' ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Close'}
                 </button>
@@ -493,8 +499,10 @@ export default function FujinDifficultyPanel() {
               <div className="w-[60px] flex justify-end">
                 <button
                   onClick={() => handleClose('SHORT')}
-                  disabled={closing}
-                  className="sf-btn-ghost text-[10px] font-semibold px-2 py-1 rounded-md text-red-400 hover:bg-red-500/10"
+                  disabled={closing || isDemoGated}
+                  className={`sf-btn-ghost text-[10px] font-semibold px-2 py-1 rounded-md text-red-400 hover:bg-red-500/10 ${
+                    isDemoGated ? 'opacity-30 cursor-not-allowed' : ''
+                  }`}
                 >
                   {closing && closingSide === 'SHORT' ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Close'}
                 </button>

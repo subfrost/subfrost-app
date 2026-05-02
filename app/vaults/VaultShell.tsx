@@ -4,6 +4,7 @@ import { useState, useMemo, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { useWallet } from "@/context/WalletContext";
 import { useTranslation } from "@/hooks/useTranslation";
+import { useDemoGate } from "@/hooks/useDemoGate";
 import { AVAILABLE_VAULTS, VaultConfig } from "./constants";
 import VaultListItem from "./components/VaultListItem";
 import VaultDetail from "./components/VaultDetail";
@@ -20,6 +21,7 @@ const ALTS_VAULT_IDS = ['ve-diesel', 've-ordi'];
 export default function VaultShell() {
   const { t } = useTranslation();
   const { network } = useWallet();
+  const isDemoGated = useDemoGate();
   const searchParams = useSearchParams();
   const [selectedVault, setSelectedVault] = useState<VaultConfig | null>(null);
 
@@ -170,7 +172,8 @@ export default function VaultShell() {
 
           {/* Vault List */}
           {filteredVaults.map((vault) => {
-            const isClickable = vault.id === 'dx-btc' || vault.id === 've-diesel';
+            // Demo mode: FIRE (ve-diesel) and dxBTC are greyed out alongside the rest
+            const isClickable = !isDemoGated && (vault.id === 'dx-btc' || vault.id === 've-diesel');
             return (
               <VaultListItem
                 key={vault.id}

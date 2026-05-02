@@ -4,6 +4,7 @@ import { useState, useMemo } from 'react';
 import TokenIcon from './TokenIcon';
 import { Search, X } from 'lucide-react';
 import { useTranslation } from '@/hooks/useTranslation';
+import { useDemoGate } from '@/hooks/useDemoGate';
 
 
 // Import Network type from constants
@@ -79,7 +80,8 @@ type Props = {
 };
 
 // Bridge token definitions
-const BRIDGE_TOKENS = [
+type BridgeToken = { symbol: string; name: string; enabled: boolean };
+const BRIDGE_TOKENS: readonly BridgeToken[] = [
   { symbol: 'USDT', name: 'USDT', enabled: true },
   { symbol: 'USDC', name: 'USDC', enabled: true },
   { symbol: 'ETH', name: 'ETH', enabled: true },
@@ -102,9 +104,20 @@ export default function TokenSelectorModal({
   activePercent,
 }: Props) {
   const { t } = useTranslation();
+  const isDemoGated = useDemoGate();
   const [searchQuery, setSearchQuery] = useState('');
   const [showComingSoon, setShowComingSoon] = useState(false);
   const [showAlreadySelected, setShowAlreadySelected] = useState(false);
+
+  // Demo mode greys out all cross-chain bridge tokens (BTC stays enabled — handled
+  // outside this modal's bridge section, since BTC is a native token)
+  const bridgeTokens: readonly BridgeToken[] = useMemo(
+    () =>
+      isDemoGated
+        ? BRIDGE_TOKENS.map((t) => ({ ...t, enabled: false }))
+        : BRIDGE_TOKENS,
+    [isDemoGated],
+  );
 
   const filteredTokens = useMemo(() => {
     if (!searchQuery.trim()) return tokens;
@@ -171,7 +184,7 @@ export default function TokenSelectorModal({
                 )}
               </div>
               <div className="flex items-center gap-2 flex-wrap">
-                {BRIDGE_TOKENS.map((token) => {
+                {bridgeTokens.map((token) => {
                   const isSelectedInOther = selectedBridgeTokenFromOther === token.symbol;
 
                   return (

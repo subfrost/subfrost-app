@@ -15,11 +15,13 @@ import FuturesHeaderTabs, { type FuturesTabKey } from './components/FuturesHeade
 import VolatilityView from './components/VolatilityView';
 import { useFutures } from '@/hooks/useFutures';
 import { useTranslation } from '@/hooks/useTranslation';
+import { useDemoGate } from '@/hooks/useDemoGate';
 
 import FujinDifficultyPanel from './components/FujinDifficultyPanel';
 
 export default function FuturesPage() {
   const { t } = useTranslation();
+  const isDemoGated = useDemoGate();
   const [activeTab, setActiveTab] = useState<FuturesTabKey>('futures');
   const [selectedContract, setSelectedContract] = useState<{ id: string; blocksLeft: number } | null>(null);
   const [showHowItWorks, setShowHowItWorks] = useState(false);
@@ -66,6 +68,7 @@ export default function FuturesPage() {
 
   // Handle generate future button
   const handleGenerateFuture = async () => {
+    if (isDemoGated) return;
     try {
       await generateFuture();
       // Auto-refresh after generating
@@ -122,9 +125,11 @@ export default function FuturesPage() {
                     <button
                       type="button"
                       onClick={handleGenerateFuture}
-                      disabled={loading}
-                      className="sf-tab-btn sf-tab-btn--active sm:px-6 sm:py-2 sm:text-sm"
-                      title="Generate a new future on regtest (requires local node)"
+                      disabled={loading || isDemoGated}
+                      className={`sf-tab-btn sf-tab-btn--active sm:px-6 sm:py-2 sm:text-sm ${
+                        isDemoGated ? 'opacity-30 cursor-not-allowed' : ''
+                      }`}
+                      title={isDemoGated ? t('common.comingSoon') : 'Generate a new future on regtest (requires local node)'}
                     >
                       {t('futures.generateFuture')}
                     </button>

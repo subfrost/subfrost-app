@@ -42,6 +42,7 @@ import { useTokenNames, resolveTokenDisplay } from "@/hooks/useTokenNames";
 import { useRemoveLiquidityMutation } from "@/hooks/useRemoveLiquidityMutation";
 import { useLPPositions } from "@/hooks/useLPPositions";
 import { useTranslation } from '@/hooks/useTranslation';
+import { useDemoGate } from "@/hooks/useDemoGate";
 import { KNOWN_TOKENS } from "@/lib/alkanes-client";
 
 // New unified layout components
@@ -209,6 +210,7 @@ export default function SwapShell() {
 
   // Wallet/config
   const { address, network } = useWallet();
+  const isDemoGated = useDemoGate();
   const config = getConfig(network);
   const { FRBTC_ALKANE_ID, BUSD_ALKANE_ID } = config;
   const FRZEC_ALKANE_ID = (config as any).FRZEC_ALKANE_ID as string | undefined;
@@ -2283,6 +2285,8 @@ export default function SwapShell() {
             // Also exclude tokens with no symbol/name (unknown metadata = likely NFT).
             if (t.balance && BigInt(t.balance) === BigInt(1) && !sym && !nm) return false;
             if (t.balance && BigInt(t.balance) === BigInt(1) && (nm.startsWith('Token ') || nm.match(/^\d+:\d+$/))) return false;
+            // Demo mode: hide bUSD from the supported token list
+            if (isDemoGated && BUSD_ALKANE_ID && t.id === BUSD_ALKANE_ID) return false;
             return true;
           })
         }
