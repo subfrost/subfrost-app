@@ -5,6 +5,8 @@ import { Minus, Send } from "lucide-react";
 import Link from "next/link";
 import { useTranslation } from '@/hooks/useTranslation';
 import { useTxConfirmed } from '@/hooks/useTxConfirmed';
+import { useWallet } from '@/context/WalletContext';
+import { getTxExplorerUrl } from '@/utils/getConfig';
 
 export type OperationType = 'swap' | 'wrap' | 'unwrap' | 'addLiquidity' | 'removeLiquidity' | 'send';
 
@@ -27,12 +29,14 @@ export default function SwapSuccessNotification({
   stepContext,
 }: Props) {
   const { t } = useTranslation();
+  const { network } = useWallet() as any;
   const [isFlashing, setIsFlashing] = useState(true);
   const [isVisible, setIsVisible] = useState(false);
   const [isExpanded, setIsExpanded] = useState(true);
   const autoCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const confirmed = useTxConfirmed(autoCloseAfterConfirmed ? txId : undefined);
+  const txExplorerHref = getTxExplorerUrl(network, txId);
 
   const OPERATION_LABELS: Record<OperationType, string> = {
     swap: t('success.swap'),
@@ -140,13 +144,17 @@ export default function SwapSuccessNotification({
             </h3>
             <div className="text-sm text-[color:var(--sf-info-green-text)]">
               {t('success.transactionId')}{" "}
-              <Link
-                href={`https://espo.sh/tx/${txId}`}
-                target="_blank"
-                className="font-semibold text-xs break-all hover:underline"
-              >
-                {txId}
-              </Link>
+              {txExplorerHref ? (
+                <Link
+                  href={txExplorerHref}
+                  target="_blank"
+                  className="font-semibold text-xs break-all hover:underline"
+                >
+                  {txId}
+                </Link>
+              ) : (
+                <span className="font-semibold text-xs break-all">{txId}</span>
+              )}
             </div>
           </div>
 

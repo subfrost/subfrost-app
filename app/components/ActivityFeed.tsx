@@ -12,6 +12,7 @@ import TokenIcon from "@/app/components/TokenIcon";
 import Link from "next/link";
 import { useTranslation } from "@/hooks/useTranslation";
 import { useWallet } from "@/context/WalletContext";
+import { getTxExplorerUrl } from "@/utils/getConfig";
 
 type AmmRow =
   | {
@@ -498,15 +499,16 @@ export default function ActivityFeed({
               nameResolved(pairNames.leftId) &&
               nameResolved(pairNames.rightId);
 
-            const txExplorerHref = network === 'devnet' || network === 'regtest' || network === 'regtest-local'
-              ? '#' // No block explorer for devnet/regtest
-              : `https://espo.sh/tx/${(row as any).transactionId}`;
+            const txExplorerHref = getTxExplorerUrl(network, (row as any).transactionId);
+            const RowEl: any = txExplorerHref ? Link : 'div';
+            const rowProps: any = txExplorerHref
+              ? { href: txExplorerHref, target: '_blank', rel: 'noopener noreferrer' }
+              : {};
 
             return (
-              <Link
+              <RowEl
                 key={(row as any).transactionId + "-" + idx}
-                href={txExplorerHref}
-                target={txExplorerHref === '#' ? undefined : '_blank'}
+                {...rowProps}
                 className="block px-6 py-2 text-[11px] leading-[20px] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-primary)]/10 border-b border-[color:var(--sf-row-border)]"
               >
                 {/* Mobile layout (xs only) - 2 rows */}
@@ -804,7 +806,7 @@ export default function ActivityFeed({
                     <span className="hidden lg:inline">{timeLabel}</span>
                   </div>
                 </div>
-              </Link>
+              </RowEl>
             );
           })}
           {(isLoading || isFetchingNextPage) && (

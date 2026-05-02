@@ -5,6 +5,7 @@ import { useWallet } from '@/context/WalletContext';
 import { useTransactionHistory } from '@/hooks/useTransactionHistory';
 import { RefreshCw, Zap, Loader2 } from 'lucide-react';
 import { useTranslation } from '@/hooks/useTranslation';
+import { getTxExplorerUrl } from '@/utils/getConfig';
 
 export interface TransactionHistoryHandle {
   refresh: () => Promise<void>;
@@ -12,7 +13,7 @@ export interface TransactionHistoryHandle {
 }
 
 const TransactionHistory = forwardRef<TransactionHistoryHandle>(function TransactionHistory(_props, ref) {
-  const { account } = useWallet() as any;
+  const { account, network } = useWallet() as any;
   const { t } = useTranslation();
 
   const addresses = [
@@ -92,13 +93,17 @@ const TransactionHistory = forwardRef<TransactionHistoryHandle>(function Transac
       <div ref={scrollRef} className="space-y-2 max-h-[308px] lg:max-h-[752px] overflow-y-auto pr-1 no-scrollbar">
         {transactions.length > 0 ? (
           <>
-            {transactions.map((tx) => (
-              <a
+            {transactions.map((tx) => {
+              const txUrl = getTxExplorerUrl(network, tx.txid);
+              const TxEl: any = txUrl ? 'a' : 'div';
+              const txProps: any = txUrl
+                ? { href: txUrl, target: '_blank', rel: 'noopener noreferrer' }
+                : {};
+              return (
+              <TxEl
                 key={tx.txid}
-                href={`https://espo.sh/tx/${tx.txid}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="block rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none cursor-pointer p-3"
+                {...txProps}
+                className={`block rounded-lg bg-[color:var(--sf-primary)]/5 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none p-3 ${txUrl ? 'hover:bg-[color:var(--sf-primary)]/10 cursor-pointer' : ''}`}
               >
                 {/* Transaction Header */}
                 <div className="flex items-center justify-between">
@@ -130,8 +135,9 @@ const TransactionHistory = forwardRef<TransactionHistoryHandle>(function Transac
                     tx.fee ? `${t('txHistory.fee')} ${tx.fee.toLocaleString()} ${t('txHistory.sats')}` : null,
                   ].filter(Boolean).join(' • ')}
                 </div>
-              </a>
-            ))}
+              </TxEl>
+              );
+            })}
             {/* Loading more indicator */}
             {isLoadingMore && (
               <div className="flex items-center justify-center py-3">

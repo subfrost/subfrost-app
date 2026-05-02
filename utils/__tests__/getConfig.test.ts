@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getConfig, SUBFROST_API_URLS, BLOCK_EXPLORER_URLS } from '../getConfig';
+import { getConfig, SUBFROST_API_URLS, BLOCK_EXPLORER_URLS, getTxExplorerUrl } from '../getConfig';
 
 describe('getConfig', () => {
   // --- Factory IDs ---
@@ -143,5 +143,60 @@ describe('getConfig', () => {
   it('regtest has empty ETH explorer', () => {
     const config = getConfig('regtest');
     expect(config.BLOCK_EXPLORER_URL_ETH).toBe('');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getTxExplorerUrl — user-facing transaction link policy
+// ---------------------------------------------------------------------------
+describe('getTxExplorerUrl', () => {
+  const sampleTxid = 'b9b179ebc676cce55fd6892eb41159ac02cadc4a6124c65e573a9de128b3697d';
+
+  it('mainnet uses public espo.sh domain', () => {
+    expect(getTxExplorerUrl('mainnet', sampleTxid)).toBe(`https://espo.sh/tx/${sampleTxid}`);
+  });
+
+  it('regtest routes to subfrost-hosted explorer', () => {
+    expect(getTxExplorerUrl('regtest', sampleTxid)).toBe(`https://espo.subfrost.io/regtest/tx/${sampleTxid}`);
+  });
+
+  it('subfrost-regtest matches regtest', () => {
+    expect(getTxExplorerUrl('subfrost-regtest', sampleTxid)).toBe(`https://espo.subfrost.io/regtest/tx/${sampleTxid}`);
+  });
+
+  it('testnet routes to subfrost-hosted explorer', () => {
+    expect(getTxExplorerUrl('testnet', sampleTxid)).toBe(`https://espo.subfrost.io/testnet/tx/${sampleTxid}`);
+  });
+
+  it('signet routes to subfrost-hosted explorer', () => {
+    expect(getTxExplorerUrl('signet', sampleTxid)).toBe(`https://espo.subfrost.io/signet/tx/${sampleTxid}`);
+  });
+
+  it('oylnet routes to mainnet-flavored subfrost explorer', () => {
+    expect(getTxExplorerUrl('oylnet', sampleTxid)).toBe(`https://espo.subfrost.io/mainnet/tx/${sampleTxid}`);
+  });
+
+  it('devnet returns null (no public explorer)', () => {
+    expect(getTxExplorerUrl('devnet', sampleTxid)).toBeNull();
+  });
+
+  it('regtest-local returns null (no public explorer)', () => {
+    expect(getTxExplorerUrl('regtest-local', sampleTxid)).toBeNull();
+  });
+
+  it('qubitcoin-regtest returns null (no public explorer)', () => {
+    expect(getTxExplorerUrl('qubitcoin-regtest', sampleTxid)).toBeNull();
+  });
+
+  it('empty txid returns null', () => {
+    expect(getTxExplorerUrl('mainnet', '')).toBeNull();
+  });
+
+  it('undefined network falls back to mainnet (production-leaning default)', () => {
+    expect(getTxExplorerUrl(undefined, sampleTxid)).toBe(`https://espo.sh/tx/${sampleTxid}`);
+  });
+
+  it('unknown network falls back to mainnet (production-leaning default)', () => {
+    expect(getTxExplorerUrl('unknown-network', sampleTxid)).toBe(`https://espo.sh/tx/${sampleTxid}`);
   });
 });

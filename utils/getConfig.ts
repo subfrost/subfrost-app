@@ -32,6 +32,24 @@ export const BLOCK_EXPLORER_URLS: Record<string, string> = {
   devnet: '', // No external block explorer for devnet
 };
 
+// User-facing transaction explorer base per network. Decoupled from
+// BLOCK_EXPLORER_URLS (which is consumed by infra/diagnostic paths) because
+// the user-facing link policy is its own concern: mainnet keeps the public
+// neutral domain (espo.sh) for the decentralization signal, while non-mainnet
+// public networks route to the subfrost-hosted explorer that's actually
+// indexing those networks. Local networks have no public link.
+const TX_EXPLORER_BASES: Record<string, string> = {
+  mainnet: 'https://espo.sh/tx',
+  testnet: 'https://espo.subfrost.io/testnet/tx',
+  signet: 'https://espo.subfrost.io/signet/tx',
+  regtest: 'https://espo.subfrost.io/regtest/tx',
+  'subfrost-regtest': 'https://espo.subfrost.io/regtest/tx',
+  oylnet: 'https://espo.subfrost.io/mainnet/tx',
+  'regtest-local': '',
+  'qubitcoin-regtest': '',
+  devnet: '',
+};
+
 /**
  * Get the RPC URL for a network. For devnet, returns the localhost URL
  * that the fetch interceptor routes to the in-process server.
@@ -40,6 +58,22 @@ export const BLOCK_EXPLORER_URLS: Record<string, string> = {
 export function getRpcUrl(network: string): string {
   if (network === 'devnet') return 'http://localhost:18888';
   return `/api/rpc/${network}`;
+}
+
+/**
+ * Get the user-facing transaction explorer URL for a given network and txid.
+ * Returns `null` when no public explorer exists (local networks). Callers
+ * should render the txid as plain text in that case rather than a dead link.
+ *
+ * Single point of control: change a network's link target here, not at every
+ * call site. Defaults to mainnet for unknown networks so production-leaning
+ * misconfigurations still produce a working link rather than a broken one.
+ */
+export function getTxExplorerUrl(network: string | undefined, txid: string): string | null {
+  if (!txid) return null;
+  const base = TX_EXPLORER_BASES[network ?? 'mainnet'] ?? TX_EXPLORER_BASES.mainnet;
+  if (!base) return null;
+  return `${base}/${txid}`;
 }
 
 export function getConfig(network: string) {
