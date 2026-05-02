@@ -1,11 +1,13 @@
 /**
  * SendModal Alkane Send — Source Analysis Tests
  *
- * Verifies the alkane sending flow in SendModal.tsx now routes through the
- * SDK's `alkanesExecuteTyped` path (replacing the deleted manual
- * `buildAlkaneTransferPsbt` implementation).
- *
- * Tests are pure source assertions via fs.readFileSync — no DOM rendering.
+ * SendModal now delegates the alkane transfer pipeline to
+ * `useAlkaneSendMutation`. The SDK-call shape, PSBT patching, and
+ * signing/broadcast assertions live alongside the hook in
+ * `hooks/__tests__/mutations/alkane-send-mutation.test.ts`. Tests in this
+ * file stay scoped to UI-level concerns: imports/wiring, prop shape, mode
+ * switching, recipient validation, and the legacy concerns that should not
+ * regress.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -22,39 +24,22 @@ const sendModalSource = fs.readFileSync(SEND_MODAL_PATH, 'utf-8');
 // ========================================================================
 
 describe('SendModal.tsx — imports and SDK wiring', () => {
-  it('imports alkanesExecuteTyped from lib/alkanes/execute', () => {
+  it('delegates alkane sending to useAlkaneSendMutation', () => {
     expect(sendModalSource).toMatch(
-      /import\s+\{\s*alkanesExecuteTyped\s*\}\s+from\s+['"]@\/lib\/alkanes\/execute['"]/,
+      /import\s+\{[^}]*useAlkaneSendMutation[^}]*\}\s+from\s+['"]@\/hooks\/useAlkaneSendMutation['"]/,
     );
-  });
-
-  it('imports buildTransferProtostone and buildTransferInputRequirements from builders', () => {
-    expect(sendModalSource).toMatch(/buildTransferProtostone/);
-    expect(sendModalSource).toMatch(/buildTransferInputRequirements/);
-  });
-
-  it('imports getProtectOrdinalsAndRunes from utils/walletSettings', () => {
-    expect(sendModalSource).toMatch(
-      /import\s+\{\s*getProtectOrdinalsAndRunes\s*\}\s+from\s+['"]@\/utils\/walletSettings['"]/,
-    );
-  });
-
-  it('imports patchInputsOnly + injectRedeemScripts for browser wallet PSBTs', () => {
-    expect(sendModalSource).toMatch(
-      /import\s+\{[^}]*patchInputsOnly[^}]*\}\s+from\s+['"]@\/lib\/psbt-patching['"]/,
-    );
-    expect(sendModalSource).toMatch(/injectRedeemScripts/);
-  });
-
-  it('imports extractPsbtBase64 to handle SDK PSBT formats', () => {
-    expect(sendModalSource).toMatch(
-      /import\s+\{[^}]*extractPsbtBase64[^}]*\}\s+from\s+['"]@\/lib\/alkanes\/helpers['"]/,
-    );
+    expect(sendModalSource).toMatch(/alkaneSendMutation\.mutateAsync\(/);
   });
 
   it('does NOT import the deleted buildAlkaneTransferPsbt module', () => {
     expect(sendModalSource).not.toMatch(
       /import\s+\{[^}]*buildAlkaneTransferPsbt[^}]*\}\s+from/,
+    );
+  });
+
+  it('does NOT inline alkanesExecuteTyped (logic moved to hook)', () => {
+    expect(sendModalSource).not.toMatch(
+      /import\s+\{\s*alkanesExecuteTyped\s*\}\s+from\s+['"]@\/lib\/alkanes\/execute['"]/,
     );
   });
 });
@@ -93,97 +78,28 @@ describe('SendModal.tsx — high-level behaviour', () => {
 });
 
 // ========================================================================
-// 3. SDK call shape (alkanesExecuteTyped invocation)
+// 3. Caller responsibilities that stay in SendModal
 // ========================================================================
 
-describe('SendModal.tsx — alkanesExecuteTyped invocation', () => {
-  it('calls alkanesExecuteTyped with provider and params object', () => {
-    // Both branches (BTC + alkane) hand provider to alkanesExecuteTyped.
-    expect(sendModalSource).toMatch(/alkanesExecuteTyped\(\s*provider,\s*\{/);
+describe('SendModal.tsx — alkane caller responsibilities', () => {
+  it('shows the keystore-only confirmation modal before invoking the hook', () => {
+    expect(sendModalSource).toMatch(/walletType === ['"]keystore['"]/);
+    expect(sendModalSource).toMatch(/requestConfirmation\(\{[\s\S]*?title:\s*t\(['"]send\.confirmAlkaneSend['"]\)/);
   });
 
-  it('builds protostones via buildTransferProtostone with alkaneId + amount', () => {
-    expect(sendModalSource).toMatch(
-      /buildTransferProtostone\(\{[\s\S]*?alkaneId:\s*selectedAlkaneId[\s\S]*?amount:\s*amountBaseUnits\.toString\(\)/,
-    );
+  it('converts amount to base units (decimals-aware) before passing to the hook', () => {
+    expect(sendModalSource).toMatch(/Math\.pow\(10,\s*decimals\)/);
+    expect(sendModalSource).toMatch(/amountBaseUnits:\s*amountBaseUnits\.toString\(\)/);
   });
 
-  it('builds inputRequirements via buildTransferInputRequirements', () => {
-    expect(sendModalSource).toMatch(/buildTransferInputRequirements\(\{/);
-  });
-
-  it('passes ordinalsStrategy driven by getProtectOrdinalsAndRunes() with txContext default as floor', () => {
-    // Browser wallets use the txContext default ('exclude') unless the user
-    // has the WalletSettings "Protect ordinals/runes" toggle ON, in which
-    // case it escalates to 'preserve'. Keystore stays at the txContext
-    // default ('burn') — the toggle is browser-only.
-    expect(sendModalSource).toMatch(/getProtectOrdinalsAndRunes\(\)/);
-    expect(sendModalSource).toMatch(/protectFromSetting\s*\?\s*['"]preserve['"]\s*:\s*txContext\.defaultOrdinalsStrategy/);
-  });
-
-  it('passes txContext into the alkane alkanesExecuteTyped call', () => {
-    // After 2026-04-30 the wrapper unpacks `txContext` into options_json;
-    // the alkane branch passes the single `txContext` field (and a per-call
-    // `ordinalsStrategy` override that escalates to 'preserve' when the
-    // WalletSettings toggle is on).
-    expect(sendModalSource).toMatch(
-      /alkanesExecuteTyped\(\s*provider,\s*\{[\s\S]*?\btxContext\b[\s\S]*?\}\s*\)/,
-    );
-  });
-
-  it('passes paymentUtxos sourced from getCleanBtcUtxosForWallet', () => {
-    expect(sendModalSource).toMatch(/getCleanBtcUtxosForWallet/);
-    expect(sendModalSource).toMatch(/paymentUtxos[,]/);
-  });
-
-  it('passes autoConfirm = isKeystoreWallet', () => {
-    expect(sendModalSource).toMatch(/autoConfirm:\s*isKeystoreWallet/);
-  });
-
-  it('passes the network to alkanesExecuteTyped', () => {
-    expect(sendModalSource).toMatch(/network[,\s]/);
-  });
-
-  it('passes recipient as v1 (toAddresses[1])', () => {
-    // Post-2026-04-30 migration: toAddresses[0] is the alkane-change dest
-    // sourced from `txContext.alkanesChangeAddress`; toAddresses[1] is the
-    // recipient (v1, where the edict transfer lands).
-    expect(sendModalSource).toMatch(
-      /toAddresses[^=]*=\s*\[\s*txContext\.alkanesChangeAddress,\s*normalizedRecipientAddress\s*\]/,
-    );
+  it('passes the normalized recipient + selected alkaneId to the hook', () => {
+    expect(sendModalSource).toMatch(/recipientAddress:\s*normalizedRecipientAddress/);
+    expect(sendModalSource).toMatch(/alkaneId:\s*selectedAlkaneId/);
   });
 });
 
 // ========================================================================
-// 4. Browser wallet signing path
-// ========================================================================
-
-describe('SendModal.tsx — browser wallet signing path', () => {
-  it('extracts the readyToSign PSBT from the SDK result', () => {
-    expect(sendModalSource).toMatch(/readyToSign\s*=\s*execResult\?\.readyToSign/);
-    expect(sendModalSource).toMatch(/extractPsbtBase64\(readyToSign\.psbt\)/);
-  });
-
-  it('patches PSBT inputs for browser wallets', () => {
-    expect(sendModalSource).toMatch(/patchInputsOnly\(\{/);
-  });
-
-  it('signs via signTaprootPsbt (single signing path)', () => {
-    expect(sendModalSource).toMatch(/signTaprootPsbt\(psbtBase64\)/);
-  });
-
-  it('broadcasts the signed transaction via alkaneProvider', () => {
-    expect(sendModalSource).toMatch(/alkaneProvider\.broadcastTransaction\(txHex\)/);
-  });
-
-  it('handles already-finalized PSBTs (UniSat autoFinalized: true)', () => {
-    expect(sendModalSource).toContain('signedPsbt.extractTransaction()');
-    expect(sendModalSource).toContain('signedPsbt.finalizeAllInputs()');
-  });
-});
-
-// ========================================================================
-// 5. Removed legacy concerns — should NOT regress
+// 4. Removed legacy concerns — should NOT regress
 // ========================================================================
 
 describe('SendModal.tsx — removed legacy concerns', () => {

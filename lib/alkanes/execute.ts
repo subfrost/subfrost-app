@@ -104,7 +104,22 @@ export async function alkanesExecuteTyped(
   const protectTaproot = params.protectTaproot ?? params.txContext?.shouldProtectTaproot;
   if (protectTaproot !== undefined) options.protect_taproot = protectTaproot;
 
-  if (params.paymentUtxos?.length) options.payment_utxos = params.paymentUtxos;
+  if (params.paymentUtxos?.length) {
+    options.payment_utxos = params.paymentUtxos;
+  } else if (params.txContext?.walletType === 'browser') {
+    // Browser auto-default: pull wallet-side clean BTC UTXOs (UniSat today)
+    // so SDK's coinselect skips inscription/rune-bearing UTXOs for fee
+    // inputs. Wallets without the capability (`getCleanBtcUtxos` adapter
+    // returns null) fall through to SDK's own UTXO discovery — still safe,
+    // just slower and dependent on the SDK ord-check for protection.
+    try {
+      const { getCleanBtcUtxosForWallet } = await import('@/lib/wallet/walletCapabilities');
+      const clean = await getCleanBtcUtxosForWallet(params.txContext.browserWalletId);
+      if (clean?.length) options.payment_utxos = clean;
+    } catch (e) {
+      console.warn('[alkanesExecuteTyped] getCleanBtcUtxosForWallet failed:', e);
+    }
+  }
 
   const toAddressesJson = JSON.stringify(toAddresses);
   const optionsJson = JSON.stringify(options);

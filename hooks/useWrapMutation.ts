@@ -171,26 +171,9 @@ export function useWrapMutation() {
       console.log('[WRAP] ===================================================');
 
       try {
-        // Clean BTC UTXOs (no inscriptions, no runes, no alkanes) — wallet-verified.
-        // Routed through the wallet capability registry so the call only fires for
-        // wallets that actually expose this API. Reaching into `window.<provider>`
-        // directly was unsafe: e.g. `window.unisat` exists whenever the UniSat
-        // extension is installed, even if the user is connected via Xverse, and
-        // calling its API triggered a stray UniSat "connect site" popup before
-        // the real Xverse signing prompt (regression caught 2026-04-28).
-        // Returns `null` for wallets without the capability — SDK then falls back
-        // to its own lua/esplora UTXO selection.
-        const { getCleanBtcUtxosForWallet } = await import('@/lib/wallet/walletCapabilities');
-        const cleanUtxos = isBrowserWallet
-          ? await getCleanBtcUtxosForWallet(browserWallet?.info?.id)
-          : null;
-        // Single-address wallets (no second address to fund fees from) need a clean
-        // UTXO list — otherwise the SDK might burn an alkane-bearing UTXO as fee.
-        if (isBrowserWallet && !txContext.shouldProtectTaproot && !cleanUtxos?.length) {
-          throw new Error('No clean BTC UTXOs available. Send some BTC to your wallet first — inscription/rune UTXOs cannot be used for fees.');
-        }
-        const paymentUtxos: string[] | undefined = cleanUtxos ?? undefined;
-
+        // ordinals_strategy + paymentUtxos auto-applied by alkanesExecuteTyped
+        // from txContext.walletType. Browser → 'preserve' + UniSat-clean-utxos
+        // (when capability available); keystore → 'burn'. See lib/alkanes/execute.ts.
         const result = await provider.alkanesExecuteTyped({
           txContext,
           toAddresses,
@@ -200,7 +183,6 @@ export function useWrapMutation() {
           autoConfirm: walletType === 'keystore',
           traceEnabled: walletType !== 'keystore',
           mineEnabled: false,
-          paymentUtxos,
         });
 
         console.log('[WRAP] Execute result:', result);

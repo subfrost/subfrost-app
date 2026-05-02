@@ -93,7 +93,7 @@ export type AddLiquidityTransactionData = {
  * Uses SDK's alkanesSimulate to call the factory without a real transaction.
  * Returns the pool AlkaneId if found, or null if not.
  */
-async function findPoolId(
+export async function findPoolId(
   provider: any,
   factoryId: string,
   token0Id: string,

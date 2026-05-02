@@ -386,20 +386,29 @@ export type TxContext = {
   /** Whether SDK should reserve taproot UTXOs for alkanes only and source BTC fees from segwit. True only for browser-dual wallets. */
   shouldProtectTaproot: boolean;
   /**
-   * SDK ordinals_strategy default for this wallet. Controls whether
-   * `alkanesExecuteTyped` runs the inscription/rune lookup pass.
+   * SDK ordinals_strategy default for this wallet. Used by
+   * `alkanesExecuteTyped` to decide what to do when an inscribed UTXO must
+   * be spent.
    *
-   * - `'burn'` for keystore: keystore is BIP86 taproot-only and wallet-internal,
-   *   never receives inscriptions. Skipping the ord check is purely a perf win
-   *   (one fewer RPC per UTXO + no split-tx codepath ever entered).
-   * - `'exclude'` for browser wallets: matches the SDK's own default, but stated
-   *   explicitly so future SDK changes can't silently shift behaviour.
-   *
-   * Per-operation overrides (e.g. SendModal's `'preserve'` for users who
-   * opted into split-tx inscription protection) take precedence at the call
-   * site — pass `ordinalsStrategy` explicitly to override.
+   * - `'burn'` for keystore: BIP86 taproot-only, wallet-internal, never
+   *   receives inscriptions. Skipping the ord check is a pure perf win.
+   * - `'preserve'` for browser wallets: SDK runs alkane-aware split-tx so
+   *   inscriptions and alkanes survive even if they share a UTXO. Per-call
+   *   overrides take precedence at the call site if needed.
    */
   defaultOrdinalsStrategy: 'burn' | 'exclude' | 'preserve';
+  /**
+   * Wallet kind. Lets `alkanesExecuteTyped` apply browser-only auto-defaults
+   * (auto `'preserve'` strategy + auto `payment_utxos` from wallet capability)
+   * without every mutation hook duplicating the same boilerplate.
+   */
+  walletType: 'browser' | 'keystore';
+  /**
+   * Browser wallet ID (`unisat` / `xverse` / `oyl` / etc.) for capability
+   * dispatch. `undefined` for keystore. Used by `alkanesExecuteTyped` to look
+   * up `getCleanBtcUtxos` adapters in the capability registry.
+   */
+  browserWalletId?: string;
 };
 
 type WalletContextType = {
@@ -889,6 +898,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
         // 'burn' makes `check_utxos_for_inscriptions_with_provider` return
         // early before any per-UTXO ord_outputs RPC call.
         defaultOrdinalsStrategy: 'burn',
+        walletType: 'keystore',
       };
     }
 
@@ -919,14 +929,15 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       // BTC fees from. Single-address wallets must spend taproot UTXOs for
       // both alkanes and fees, so reserving them would block fee selection.
       shouldProtectTaproot: isDualAddress,
-      // Browser wallets may hold inscriptions/runes — keep the SDK's default
-      // exclude behaviour, but state it explicitly so a future SDK upgrade
-      // can't silently change it. Per-operation overrides (e.g. SendModal's
-      // 'preserve' when user has the WalletSettings "Protect ordinals" toggle
-      // on) take precedence at the call site.
-      defaultOrdinalsStrategy: 'exclude',
+      // Browser wallets opt into split-tx by default — SDK's alkane-aware
+      // `build_split_psbt` keeps both inscriptions and alkanes intact even
+      // when they share a UTXO. Per-call overrides at the call site still
+      // win if some operation needs different semantics.
+      defaultOrdinalsStrategy: 'preserve',
+      walletType: 'browser',
+      browserWalletId: browserWallet?.info?.id,
     };
-  }, [account, walletType]);
+  }, [account, walletType, browserWallet?.info?.id]);
 
   // Create new wallet
   const createNewWallet = useCallback(async (password: string): Promise<{ mnemonic: string }> => {

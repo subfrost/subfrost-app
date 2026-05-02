@@ -117,11 +117,11 @@ describe('Source code analysis — SendModal.tsx', () => {
     expect(source).toContain('setFeeWarningAcknowledged(false)');
   });
 
-  it('has smart finalization in the alkane branch (try extract → fallback finalize)', () => {
-    // Same pattern as the BTC hook, kept inline for the alkane-send branch.
-    expect(source).toContain('signedPsbt.extractTransaction()');
-    expect(source).toContain('signedPsbt.finalizeAllInputs()');
-    expect(source).toMatch(/try\s*\{[^}]*extractTransaction[^}]*\}\s*catch/s);
+  it('delegates alkane sending to useAlkaneSendMutation', () => {
+    // Smart-finalize logic moved to the hook along with the rest of the
+    // alkane pipeline; assertions live in alkane-send-mutation.test.ts.
+    expect(source).toMatch(/useAlkaneSendMutation/);
+    expect(source).toMatch(/alkaneSendMutation\.mutateAsync/);
   });
 
   it('delegates BTC sending to useBtcSendMutation', () => {

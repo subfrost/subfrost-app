@@ -7,10 +7,6 @@ import { Network, Key, Save, Eye, EyeOff, Copy, Check, ChevronDown, ChevronUp, D
 import { initGoogleDrive, isDriveConfigured, backupWalletToDrive } from '@/utils/clientSideDrive';
 import { unlockKeystore } from '@alkanes/ts-sdk';
 import { useTranslation } from '@/hooks/useTranslation';
-import {
-  getProtectOrdinalsAndRunes,
-  setProtectOrdinalsAndRunes,
-} from '@/utils/walletSettings';
 
 type NetworkType = 'mainnet' | 'signet' | 'regtest' | 'regtest-local' | 'qubitcoin-regtest' | 'subfrost-regtest' | 'oylnet' | 'devnet' | 'custom';
 
@@ -124,18 +120,6 @@ export default function WalletSettings() {
   const [backupSuccess, setBackupSuccess] = useState(false);
   const [backupProgress, setBackupProgress] = useState(0);
   const [backupError, setBackupError] = useState<string | null>(null);
-
-  // Advanced options — protect ordinals/runes when spending alkane UTXOs.
-  // Backed by localStorage via utils/walletSettings.ts; consumed by SendModal.
-  const [protectOrdinalsAndRunes, setProtectOrdinalsAndRunesState] = useState<boolean>(true);
-  useEffect(() => {
-    setProtectOrdinalsAndRunesState(getProtectOrdinalsAndRunes());
-  }, []);
-  const toggleProtectOrdinalsAndRunes = () => {
-    const next = !protectOrdinalsAndRunes;
-    setProtectOrdinalsAndRunesState(next);
-    setProtectOrdinalsAndRunes(next);
-  };
 
   // Compute derivation paths
   const taprootPath = useMemo(() => {
@@ -714,62 +698,6 @@ export default function WalletSettings() {
               )}
             </div>
           )}
-        </div>
-        {/* Advanced Options */}
-        <div className="rounded-xl bg-[color:var(--sf-primary)]/5 p-6">
-          <div className="flex items-center gap-3 mb-4">
-            <Settings size={24} className="text-[color:var(--sf-primary)]" />
-            <h3 className="text-xl font-bold text-[color:var(--sf-text)]">{t('settings.advancedOptions')}</h3>
-          </div>
-
-          <div className="space-y-4">
-            {/* Ignore Ordinals & Runes — single toggle (SDK ordinalsStrategy: 'preserve' vs 'burn').
-                Toggle ON  = ignore (allow spending UTXOs that may carry inscriptions/runes).
-                Toggle OFF = protect (default — SDK splits inscribed/rune UTXOs to preserve them). */}
-            <div className="flex items-center justify-between p-4 rounded-lg bg-[color:var(--sf-primary)]/5 border border-[color:var(--sf-outline)]">
-              <div className="flex-1 mr-4">
-                <div className="text-sm font-medium text-[color:var(--sf-text)]">{t('settings.ignoreOrdinals')}</div>
-                <div className="text-xs text-[color:var(--sf-text)]/60 mt-1">{t('settings.ignoreOrdinalsDescription')}</div>
-              </div>
-              <button
-                onClick={toggleProtectOrdinalsAndRunes}
-                aria-pressed={!protectOrdinalsAndRunes}
-                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full transition-colors ${
-                  !protectOrdinalsAndRunes ? 'bg-[color:var(--sf-primary)]' : 'bg-[color:var(--sf-outline)]'
-                }`}
-                title={protectOrdinalsAndRunes ? 'Off — UTXOs with inscriptions/runes are preserved' : 'On — inscribed/rune UTXOs may be spent for fees'}
-              >
-                <span
-                  className={`inline-block h-4 w-4 rounded-full bg-white transition-transform ${
-                    !protectOrdinalsAndRunes ? 'translate-x-6' : 'translate-x-1'
-                  }`}
-                />
-              </button>
-            </div>
-
-            {/* Ignore Runes — driven by the SAME setting as Ignore Ordinals (SDK does not separate
-                inscriptions from runes when selecting UTXOs to protect). */}
-            <div className="flex items-center justify-between p-4 rounded-lg bg-[color:var(--sf-primary)]/5 border border-[color:var(--sf-outline)]">
-              <div className="flex-1 mr-4">
-                <div className="text-sm font-medium text-[color:var(--sf-text)]">{t('settings.ignoreRunes')}</div>
-                <div className="text-xs text-[color:var(--sf-text)]/60 mt-1">{t('settings.ignoreRunesDescription')}</div>
-              </div>
-              <button
-                onClick={toggleProtectOrdinalsAndRunes}
-                aria-pressed={!protectOrdinalsAndRunes}
-                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full transition-colors ${
-                  !protectOrdinalsAndRunes ? 'bg-[color:var(--sf-primary)]' : 'bg-[color:var(--sf-outline)]'
-                }`}
-                title={protectOrdinalsAndRunes ? 'Off — UTXOs with inscriptions/runes are preserved' : 'On — inscribed/rune UTXOs may be spent for fees'}
-              >
-                <span
-                  className={`inline-block h-4 w-4 rounded-full bg-white transition-transform ${
-                    !protectOrdinalsAndRunes ? 'translate-x-6' : 'translate-x-1'
-                  }`}
-                />
-              </button>
-            </div>
-          </div>
         </div>
       </div>
 

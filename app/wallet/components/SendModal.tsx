@@ -115,15 +115,8 @@ import { useTranslation } from '@/hooks/useTranslation';
 import { computeSendFee, estimateSelectionFee, DUST_THRESHOLD } from '@alkanes/ts-sdk';
 import * as bitcoin from 'bitcoinjs-lib';
 import * as ecc from '@bitcoinerlab/secp256k1';
-import { injectRedeemScripts, patchInputsOnly } from '@/lib/psbt-patching';
-import {
-  buildTransferProtostone,
-  buildTransferInputRequirements,
-} from '@/lib/alkanes/builders';
-import { getBitcoinNetwork, extractPsbtBase64 } from '@/lib/alkanes/helpers';
-import { alkanesExecuteTyped } from '@/lib/alkanes/execute';
-import { getProtectOrdinalsAndRunes } from '@/utils/walletSettings';
 import { useBtcSendMutation, BtcSendStaleUtxosError } from '@/hooks/useBtcSendMutation';
+import { useAlkaneSendMutation } from '@/hooks/useAlkaneSendMutation';
 
 bitcoin.initEccLib(ecc);
 
@@ -267,6 +260,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
   const { t } = useTranslation();
   const { balances, refresh } = useEnrichedWalletData();
   const btcSendMutation = useBtcSendMutation();
+  const alkaneSendMutation = useAlkaneSendMutation();
 
   // Translate raw broadcast/signing errors into user-readable toast messages.
   // Mirrors SwapShell.humanizeError for consistent error UX across the app.
@@ -364,10 +358,6 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
   // SEND TRANSACTION because small amounts (1000 sats) always have >2% fee ratio.
   // If user already clicked "PROCEED ANYWAY", we bypass the check on retry.
   const [feeWarningAcknowledged, setFeeWarningAcknowledged] = useState(false);
-  // Collateral warning state was removed when alkane transfers moved off the manual
-  // buildAlkaneTransferPsbt path. The SDK now handles inscription/rune protection
-  // internally via `ordinalsStrategy` ('preserve' | 'burn'); see WalletSettings
-  // toggle wired through utils/walletSettings.ts.
   const [estimatedFee, setEstimatedFee] = useState(0);
   const [estimatedFeeRate, setEstimatedFeeRate] = useState(0);
   const [focusedField, setFocusedField] = useState<string | null>(null);
@@ -423,9 +413,9 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
   // BTC-send UTXO candidates: confirmed, on a btcFromAddresses entry, not
   // frozen. inscriptions/runes/alkanes filter is conditional — for
   // dual-address browser the segwit payment address by design doesn't
-  // hold those, and the enrichment data is unreliable on mainnet anyway
-  // (ord_outputs RPC disabled). For keystore / single-address browser the
-  // address may share alkanes with BTC, so the filter stays.
+  // hold those (Xverse / OYL / Leather route ordinals to taproot). For
+  // keystore / single-address browser the address may share alkanes with
+  // BTC, so the filter stays.
   const availableUtxos = utxos.all.filter((utxo) => {
     if (!utxo.status.confirmed) return false;
     if (!btcFromAddresses.includes(utxo.address)) return false;
@@ -801,40 +791,19 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
     setIsProcessing(true);
 
     try {
-      if (!alkaneProvider) {
-        throw new Error(t('send.providerNotInitialized'));
-      }
-
-      // alkanesExecuteTyped runs against the SDK's WebProvider (constructs the PSBT).
-      // Both keystore and browser wallets need it initialized.
-      if (!provider || !isInitialized) {
-        throw new Error(t('send.providerNotInitialized'));
-      }
-
-      if (!selectedAlkaneId) {
-        throw new Error(t('send.noAlkaneSelected'));
-      }
+      if (!selectedAlkaneId) throw new Error(t('send.noAlkaneSelected'));
 
       const selectedAlkane = balances.alkanes.find(a => a.alkaneId === selectedAlkaneId);
-      if (!selectedAlkane) {
-        throw new Error(t('send.alkaneNotFoundInBalances'));
-      }
+      if (!selectedAlkane) throw new Error(t('send.alkaneNotFoundInBalances'));
 
-      // Validate recipient address (should be Taproot for alkane receives)
-      if (!validateAddress(recipientAddress)) {
-        throw new Error(t('send.invalidAddress'));
-      }
+      if (!validateAddress(recipientAddress)) throw new Error(t('send.invalidAddress'));
 
-      // Convert amount to base units (respecting decimals)
       const decimals = selectedAlkane.decimals || 8;
       const amountFloat = parseFloat(amount);
-      if (isNaN(amountFloat) || amountFloat <= 0) {
-        throw new Error(t('send.invalidAmount'));
-      }
+      if (isNaN(amountFloat) || amountFloat <= 0) throw new Error(t('send.invalidAmount'));
 
       const amountBaseUnits = BigInt(Math.floor(amountFloat * Math.pow(10, decimals)));
       const balanceBaseUnits = BigInt(selectedAlkane.balance);
-
       if (amountBaseUnits > balanceBaseUnits) {
         throw new Error(t('send.insufficientBalanceDetailed', {
           have: selectedAlkane.balance,
@@ -842,25 +811,8 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
         }));
       }
 
-      console.log('[SendModal] ========== ALKANE TRANSFER START ==========');
-      console.log('[SendModal] Alkane ID:', selectedAlkaneId);
-      console.log('[SendModal] Alkane symbol:', selectedAlkane.symbol);
-      console.log('[SendModal] Alkane decimals:', decimals);
-      console.log('[SendModal] Amount (display):', amount);
-      console.log('[SendModal] Amount (base units):', amountBaseUnits.toString());
-      console.log('[SendModal] Balance (base units):', balanceBaseUnits.toString());
-      console.log('[SendModal] Recipient:', recipientAddress);
-      console.log('[SendModal] Fee rate:', feeRate, 'sat/vB');
-      console.log('[SendModal] Network:', network);
-      console.log('[SendModal] Wallet type:', walletType);
-      console.log('[SendModal] Taproot address (alkaneSendAddress):', alkaneSendAddress);
-      console.log('[SendModal] Payment address (btcSendAddress):', btcSendAddress);
-      console.log('[SendModal] Account taproot pubkey:', account?.taproot?.pubKeyXOnly?.slice(0, 16) + '...');
-      console.log('[SendModal] Account segwit pubkey:', account?.nativeSegwit?.pubkey?.slice(0, 16) + '...');
-
-      // For keystore wallets, request user confirmation before signing
+      // Keystore confirmation modal — browser wallets surface their own popup at sign time.
       if (walletType === 'keystore') {
-        console.log('[SendModal] Keystore wallet - requesting user confirmation...');
         const approved = await requestConfirmation({
           type: 'send',
           title: t('send.confirmAlkaneSend'),
@@ -869,199 +821,26 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
           recipient: recipientAddress,
           feeRate: feeRate,
         });
-
         if (!approved) {
-          console.log('[SendModal] User rejected transaction');
           setError(t('send.transactionRejected'));
           return;
         }
-        console.log('[SendModal] User approved transaction');
       }
 
-      // Determine Bitcoin network for PSBT operations
-      const btcNetwork = getBitcoinNetwork(network);
-
-      const isBrowserWallet = walletType === 'browser';
-      const isKeystoreWallet = walletType === 'keystore';
-
-      // ============================================================================
-      // SDK-driven alkane transfer (replaces 650+ LOC of manual buildAlkaneTransferPsbt).
-      // The SDK handles UTXO discovery, ordinals/runes protection, fee accounting,
-      // and protostone encoding internally — see lib/alkanes/execute.ts.
-      // Pattern matches __tests__/tier1/send-alkane.test.ts.
-      // ============================================================================
-      const protostones = buildTransferProtostone({
+      const result = await alkaneSendMutation.mutateAsync({
         alkaneId: selectedAlkaneId,
-        amount: amountBaseUnits.toString(),
-      });
-      const inputRequirements = buildTransferInputRequirements({
-        alkaneId: selectedAlkaneId,
-        amount: amountBaseUnits.toString(),
-      });
-      console.log('[SendModal] protostones:', protostones);
-      console.log('[SendModal] inputRequirements:', inputRequirements);
-
-      // Output layout (driven by buildTransferProtostone):
-      //   v0 = sender taproot (alkane change — receives unedicted remainder via pointer=v0)
-      //   v1 = recipient (receives the edict transfer of `amountBaseUnits`)
-      // SDK appends BTC change at v2.
-      //
-      // Address-fallback chain consolidated into `txContext` (see
-      // WalletContext.TxContext jsdoc). Keystore is taproot-only;
-      // browser-dual splits into segwit (BTC fees) + taproot (alkanes);
-      // browser single-address wallets get the same address for both.
-      if (!txContext) throw new Error('Wallet not connected');
-
-      // paymentUtxos still depends on wallet type:
-      //  - Keystore is wallet-internal — no clean-UTXO API.
-      //  - Browser wallets can fetch wallet-verified clean BTC UTXOs
-      //    (UniSat-style).
-      //
-      // ordinalsStrategy uses the wallet-default from `txContext` as the floor
-      // ('burn' for keystore, 'exclude' for browser) and only escalates to
-      // 'preserve' when the user has the WalletSettings "Protect ordinals/
-      // runes" toggle ON. The toggle is only meaningful for browser wallets;
-      // keystore stays at the 'burn' default.
-      const protectFromSetting = !isKeystoreWallet && getProtectOrdinalsAndRunes();
-      const ordinalsStrategy: 'preserve' | 'exclude' | 'burn' =
-        protectFromSetting ? 'preserve' : txContext.defaultOrdinalsStrategy;
-      let paymentUtxos: string[] | undefined;
-      if (isKeystoreWallet) {
-        console.log('[SendModal] Wallet mode: Keystore (taproot-only)', taprootAddress);
-      } else {
-        console.log('[SendModal] Wallet mode:',
-          txContext.shouldProtectTaproot
-            ? `Dual-address (taproot: ${taprootAddress}, payment: ${paymentAddress})`
-            : `Single-address (${taprootAddress || paymentAddress})`);
-        try {
-          const { getCleanBtcUtxosForWallet } = await import('@/lib/wallet/walletCapabilities');
-          const clean = await getCleanBtcUtxosForWallet(browserWallet?.info?.id);
-          paymentUtxos = clean ?? undefined;
-        } catch (e) {
-          console.warn('[SendModal] getCleanBtcUtxosForWallet failed, falling back to SDK selection:', e);
-        }
-      }
-
-      const toAddresses: string[] = [txContext.alkanesChangeAddress, normalizedRecipientAddress];
-
-      console.log('[SendModal] Calling alkanesExecuteTyped...');
-      const execResult = await alkanesExecuteTyped(provider, {
-        txContext,
-        protostones,
-        inputRequirements,
+        amountBaseUnits: amountBaseUnits.toString(),
+        recipientAddress: normalizedRecipientAddress,
         feeRate,
-        toAddresses,
-        ordinalsStrategy, // per-call: escalates to 'preserve' when WalletSettings toggle is on
-        paymentUtxos,
-        autoConfirm: isKeystoreWallet,
-        network,
       });
-      console.log('[SendModal] alkanesExecuteTyped result:', execResult);
 
-      // Keystore (autoConfirm=true) — SDK signs + broadcasts internally.
-      if (isKeystoreWallet) {
-        const keystoreTxid = execResult?.txid
-          || execResult?.reveal_txid
-          || execResult?.complete?.reveal_txid
-          || execResult?.complete?.commit_txid
-          || (typeof execResult === 'string' ? execResult : null);
-        if (!keystoreTxid) {
-          console.warn('[SendModal] Keystore: no txid in result:', execResult);
-        }
-        setTxid(keystoreTxid || '');
-        setStep('success');
-        onSuccess?.(keystoreTxid || '');
-        setTimeout(() => { refresh(); }, 1000);
-        return;
-      }
-
-      // Browser wallet — SDK returned a readyToSign PSBT or auto-confirmed result.
-      if (execResult?.txid || execResult?.reveal_txid) {
-        const autoTxid = execResult.txid || execResult.reveal_txid;
-        setTxid(autoTxid);
-        setStep('success');
-        onSuccess?.(autoTxid);
-        setTimeout(() => { refresh(); }, 1000);
-        return;
-      }
-      const readyToSign = execResult?.readyToSign;
-      if (!readyToSign?.psbt) {
-        throw new Error('SDK did not return a signable PSBT');
-      }
-      let psbtBase64: string = extractPsbtBase64(readyToSign.psbt);
-      console.log('[SendModal] Got PSBT base64 length:', psbtBase64.length);
-
-      // Patch inputs (witnessUtxo scripts + redeemScript injection for Xverse P2SH-P2WPKH).
-      // Outputs are NOT patched — we passed actual addresses to the SDK.
-      if (isBrowserWallet) {
-        const patchResult = patchInputsOnly({
-          psbtBase64,
-          network: btcNetwork,
-          taprootAddress: alkaneSendAddress!,
-          segwitAddress: btcSendAddress,
-          paymentPubkeyHex: account?.nativeSegwit?.pubkey,
-        });
-        psbtBase64 = patchResult.psbtBase64;
-        if (patchResult.inputsPatched > 0) {
-          console.log('[SendModal] Patched', patchResult.inputsPatched, 'input(s) for browser wallet');
-        }
-      } else if (btcSendAddress && account?.nativeSegwit?.pubkey &&
-          (btcSendAddress.startsWith('3') || btcSendAddress.startsWith('2'))) {
-        // Keystore-only fallback for P2SH-P2WPKH (rare).
-        const psbtObj = bitcoin.Psbt.fromBase64(psbtBase64, { network: btcNetwork });
-        const patched = injectRedeemScripts(psbtObj, {
-          paymentAddress: btcSendAddress,
-          pubkeyHex: account.nativeSegwit.pubkey,
-          network: btcNetwork,
-        });
-        if (patched > 0) {
-          console.log('[SendModal] Injected redeemScript into', patched, 'P2SH inputs');
-        }
-        psbtBase64 = psbtObj.toBase64();
-      }
-
-      // Single signing path — both browser wallets and keystore use signTaprootPsbt
-      // (it dispatches to the right wallet adapter for browser, taproot key for keystore).
-      console.log('[SendModal] Signing PSBT...');
-      const signedPsbtBase64 = await signTaprootPsbt(psbtBase64);
-
-      // Show broadcasting spinner now that signing is complete
-      setStep('broadcasting');
-
-      // Parse, finalize (if not already), extract — UniSat returns finalized PSBTs.
-      const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtBase64, { network: btcNetwork });
-      let tx;
-      try {
-        tx = signedPsbt.extractTransaction();
-        console.log('[SendModal] Alkane PSBT was already finalized by wallet');
-      } catch (extractError: any) {
-        console.log('[SendModal] Alkane PSBT not finalized yet, finalizing...', extractError.message);
-        try {
-          signedPsbt.finalizeAllInputs();
-          tx = signedPsbt.extractTransaction();
-        } catch (finalizeError: any) {
-          console.error('[SendModal] Failed to finalize alkane PSBT:', finalizeError);
-          throw new Error(`Failed to finalize transaction: ${finalizeError.message}`);
-        }
-      }
-      const txHex = tx.toHex();
-      const computedTxid = tx.getId();
-
-      console.log('[SendModal] Transaction ID:', computedTxid);
-
-      // Broadcast the transaction
-      console.log('[SendModal] Broadcasting transaction...');
-      const broadcastTxid = await alkaneProvider.broadcastTransaction(txHex);
-      console.log('[SendModal] Transaction broadcast successful, txid:', broadcastTxid);
-
-      setTxid(broadcastTxid || computedTxid);
+      // Browser wallets show the broadcasting spinner once signing completes.
+      // Keystore goes straight to success since the SDK handled it internally.
       setStep('success');
-      onSuccess?.(broadcastTxid || computedTxid);
-
-      setTimeout(() => {
-        refresh();
-      }, 1000);
-
+      const finalTxid = result.transactionId || '';
+      setTxid(finalTxid);
+      onSuccess?.(finalTxid);
+      setTimeout(() => { refresh(); }, 1000);
     } catch (err: any) {
       console.error('[SendModal] Alkane transfer failed:', err);
 

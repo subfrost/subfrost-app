@@ -4,8 +4,11 @@
  * Single source of truth — imported by React hooks and integration tests.
  */
 
-/** Factory router opcode for SwapExactTokensForTokens */
+/** Factory router opcode for SwapExactTokensForTokens (exact-in, min-out) */
 export const FACTORY_SWAP_OPCODE = 13;
+
+/** Factory router opcode for SwapTokensForExactTokens (exact-out, max-in) */
+export const FACTORY_SWAP_EXACT_OUT_OPCODE = 14;
 
 /** Factory router opcode for AddLiquidity (Uniswap-style with slippage + deadline) */
 export const FACTORY_ADD_LIQUIDITY_OPCODE = 11;

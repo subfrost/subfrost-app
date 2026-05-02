@@ -6,6 +6,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   buildSwapProtostone,
+  buildSwapExactOutputProtostone,
   buildSwapInputRequirements,
   buildWrapProtostone,
   buildUnwrapProtostone,
@@ -17,6 +18,8 @@ import {
   buildAddLiquidityInputRequirements,
   buildFactoryBurnProtostone,
   buildRemoveLiquidityInputRequirements,
+  buildAtomicWrapAddLiquidityProtostones,
+  buildAtomicWrapCreatePoolProtostones,
 } from '../builders';
 
 // Use the same IDs as the app's regtest config
@@ -216,6 +219,75 @@ describe('buildTransferInputRequirements', () => {
       amount: '5000000',
     });
     expect(result).toBe('2:0:5000000');
+  });
+});
+
+describe('buildSwapExactOutputProtostone', () => {
+  it('builds factory opcode 14 cellpack with amount_out + amount_in_max', () => {
+    const result = buildSwapExactOutputProtostone({
+      factoryId: FACTORY_ID,
+      sellTokenId: DIESEL_ID,
+      buyTokenId: FRBTC_ID,
+      amountOut: '500000',     // exact frBTC user wants
+      amountInMax: '1000000',  // max DIESEL user agrees to spend
+      deadline: '2000',
+    });
+    // Same shape as opcode 13 but opcode=14 and the two amount slots are semantically swapped.
+    expect(result).toBe('[4,65498,14,2,2,0,32,0,500000,1000000,2000]:v0:v0');
+  });
+
+  it('respects custom pointer / refund overrides (atomic flows)', () => {
+    const result = buildSwapExactOutputProtostone({
+      factoryId: FACTORY_ID,
+      sellTokenId: DIESEL_ID,
+      buyTokenId: FRBTC_ID,
+      amountOut: '100',
+      amountInMax: '200',
+      deadline: '1',
+      pointer: 'v1',
+      refund: 'v1',
+    });
+    expect(result).toBe('[4,65498,14,2,2,0,32,0,100,200,1]:v1:v1');
+  });
+});
+
+describe('buildAtomicWrapAddLiquidityProtostones', () => {
+  it('builds wrap → factory.AddLiquidity (opcode 11) with full Uniswap params', () => {
+    const result = buildAtomicWrapAddLiquidityProtostones({
+      factoryId: FACTORY_ID,
+      tokenA: FRBTC_ID,
+      tokenB: DIESEL_ID,
+      amountADesired: '99500',
+      amountBDesired: '1000000',
+      amountAMin: '99000',
+      amountBMin: '995000',
+      deadline: '12345',
+    });
+
+    // p0: wrap with pointer=p1, refund=v1
+    expect(result).toContain('[32,0,77]:p1:v1');
+    // p1: factory opcode 11 with all 11 args (factory, opcode, tokenA, tokenB, desired×2, min×2, deadline)
+    expect(result).toContain('[4,65498,11,32,0,2,0,99500,1000000,99000,995000,12345]:v1:v1');
+  });
+});
+
+describe('buildAtomicWrapCreatePoolProtostones', () => {
+  it('builds wrap → factory.CreateNewPool (opcode 1) — shorter cellpack, no mins / deadline', () => {
+    const result = buildAtomicWrapCreatePoolProtostones({
+      factoryId: FACTORY_ID,
+      tokenA: FRBTC_ID,
+      tokenB: DIESEL_ID,
+      amountA: '99500',
+      amountB: '1000000',
+    });
+
+    // p0: identical wrap protostone as the addLiquidity flavour
+    expect(result).toContain('[32,0,77]:p1:v1');
+    // p1: factory opcode 1 — only 8 args (factory, opcode, tokenA, tokenB, amountA, amountB)
+    expect(result).toContain('[4,65498,1,32,0,2,0,99500,1000000]:v1:v1');
+    // No min-amounts / deadline leaked into the cellpack
+    expect(result).not.toMatch(/995000/);
+    expect(result).not.toMatch(/12345/);
   });
 });
 
