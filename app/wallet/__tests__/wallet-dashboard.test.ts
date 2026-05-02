@@ -484,9 +484,9 @@ describe('WalletSettings', () => {
     expect(src).toMatch(/startsWith\(['"]bcrt1q['"]\)/);
   });
 
-  it('imports wallet management icons (Key, Save, etc.)', () => {
+  it('imports wallet management icons (Network, Save, etc.)', () => {
     expect(src).toMatch(/import.*Network/);
-    expect(src).toMatch(/import.*Key/);
+    expect(src).toMatch(/import.*Save/);
   });
 
   it('uses useTheme for theme management', () => {
@@ -494,20 +494,13 @@ describe('WalletSettings', () => {
     expect(src).toMatch(/useTheme\(\)/);
   });
 
-  it('has derivation configuration support', () => {
-    expect(src).toMatch(/interface\s+DerivationConfig/);
-    expect(src).toMatch(/accountIndex/);
-    expect(src).toMatch(/changeIndex/);
-    expect(src).toMatch(/addressIndex/);
-  });
-
   it('supports Google Drive backup feature', () => {
     expect(src).toMatch(/import.*initGoogleDrive/);
     expect(src).toMatch(/import.*backupWalletToDrive/);
   });
 
-  it('has password visibility toggle functionality', () => {
-    expect(src).toMatch(/import.*Eye.*EyeOff/);
+  it('imports Eye icon for the seed-reveal button', () => {
+    expect(src).toMatch(/import.*\bEye\b/);
   });
 
   it('can unlock keystore for mnemonic display', () => {

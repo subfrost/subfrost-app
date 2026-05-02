@@ -69,7 +69,7 @@ export default function StakerPieChart({ data, size = 140 }: StakerPieChartProps
               style={{ backgroundColor: COLORS[i % COLORS.length] }}
             />
             <span className="text-[10px] sm:text-xs text-[color:var(--sf-muted)] whitespace-nowrap">
-              {staker.address} <span className="font-semibold text-[color:var(--sf-text)]/70">{staker.percentage}%</span>
+              {staker.address} <span className="font-semibold text-[color:var(--sf-text)]/70">{staker.percentage.toFixed(2)}%</span>
             </span>
           </div>
         ))}

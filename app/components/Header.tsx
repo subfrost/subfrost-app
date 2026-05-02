@@ -12,6 +12,7 @@ import AddressAvatar from "./AddressAvatar";
 import ThemeToggle from "./ThemeToggle";
 import LanguageToggle from "./LanguageToggle";
 import { useTranslation } from "@/hooks/useTranslation";
+import { useDemoGate } from "@/hooks/useDemoGate";
 
 
 export default function Header() {
@@ -27,13 +28,16 @@ export default function Header() {
   } = useWallet() as any;
   const { theme } = useTheme();
   const { t } = useTranslation();
+  const isDemoGated = useDemoGate();
   const { balances, btcFast, isBtcFastLoading: isBalanceLoading } = useEnrichedWalletData();
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [swapMenuOpen, setSwapMenuOpen] = useState(false);
   const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
   const menuRootRef = useRef<HTMLDivElement | null>(null);
   const mobileWalletRef = useRef<HTMLDivElement | null>(null);
   const menuCloseTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const swapMenuCloseTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const truncate = (a: string) => (a ? `${a.slice(0, 6)}…${a.slice(-4)}` : "");
   const walletConnected =
     typeof connected === "boolean" ? connected : isConnected;
@@ -76,10 +80,27 @@ export default function Header() {
     }, 100);
   }, []);
 
+  const handleSwapMenuMouseEnter = useCallback(() => {
+    if (swapMenuCloseTimeoutRef.current) {
+      clearTimeout(swapMenuCloseTimeoutRef.current);
+      swapMenuCloseTimeoutRef.current = null;
+    }
+    setSwapMenuOpen(true);
+  }, []);
+
+  const handleSwapMenuMouseLeave = useCallback(() => {
+    swapMenuCloseTimeoutRef.current = setTimeout(() => {
+      setSwapMenuOpen(false);
+    }, 100);
+  }, []);
+
   useEffect(() => {
     return () => {
       if (menuCloseTimeoutRef.current) {
         clearTimeout(menuCloseTimeoutRef.current);
+      }
+      if (swapMenuCloseTimeoutRef.current) {
+        clearTimeout(swapMenuCloseTimeoutRef.current);
       }
     };
   }, []);
@@ -293,18 +314,50 @@ export default function Header() {
             >
               {t("nav.home")}
             </Link>
-            <Link
-              href="/swap"
-              className={`text-sm font-semibold hover:opacity-80 outline-none whitespace-nowrap transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
-                isActive("/swap")
-                  ? theme === "light"
-                    ? "text-[color:var(--sf-text)]/60"
-                    : "text-[color:var(--sf-primary)]"
-                  : "text-[color:var(--sf-text)]"
-              }`}
+            <div
+              className="relative"
+              onMouseEnter={handleSwapMenuMouseEnter}
+              onMouseLeave={handleSwapMenuMouseLeave}
             >
-              {t("nav.swap")}
-            </Link>
+              <Link
+                href="/swap"
+                className={`text-sm font-semibold hover:opacity-80 outline-none whitespace-nowrap transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
+                  isActive("/swap")
+                    ? theme === "light"
+                      ? "text-[color:var(--sf-text)]/60"
+                      : "text-[color:var(--sf-primary)]"
+                    : "text-[color:var(--sf-text)]"
+                }`}
+              >
+                {t("nav.swap")}
+              </Link>
+              {swapMenuOpen && (
+                <div className="absolute left-0 top-full z-50 pt-1 w-44">
+                  <div className="overflow-hidden rounded-xl bg-[color:var(--sf-surface)] backdrop-blur-xl shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
+                    {isDemoGated ? (
+                      <span
+                        aria-disabled="true"
+                        className="block w-full px-4 py-1.5 text-left text-sm font-medium text-[color:var(--sf-text)]/30 cursor-not-allowed"
+                      >
+                        {t("nav.advancedTrader")}
+                      </span>
+                    ) : (
+                      <Link
+                        href="/swap/advanced"
+                        onClick={() => setSwapMenuOpen(false)}
+                        className={`block w-full px-4 py-1.5 text-left text-sm font-medium transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
+                          pathname === "/swap/advanced"
+                            ? "bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]"
+                            : "text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10"
+                        }`}
+                      >
+                        {t("nav.advancedTrader")}
+                      </Link>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
             <Link
               href="/vaults"
               className={`text-sm font-semibold hover:opacity-80 outline-none whitespace-nowrap transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
@@ -317,18 +370,27 @@ export default function Header() {
             >
               {t("nav.vaults")}
             </Link>
-            <Link
-              href="/futures"
-              className={`text-sm font-semibold hover:opacity-80 outline-none whitespace-nowrap transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
-                isActive("/futures")
-                  ? theme === "light"
-                    ? "text-[color:var(--sf-text)]/60"
-                    : "text-[color:var(--sf-primary)]"
-                  : "text-[color:var(--sf-text)]"
-              }`}
-            >
-              {t("nav.futures")}
-            </Link>
+            {isDemoGated ? (
+              <span
+                aria-disabled="true"
+                className="text-sm font-semibold whitespace-nowrap text-[color:var(--sf-text)]/30 cursor-not-allowed"
+              >
+                {t("nav.futures")}
+              </span>
+            ) : (
+              <Link
+                href="/futures"
+                className={`text-sm font-semibold hover:opacity-80 outline-none whitespace-nowrap transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
+                  isActive("/futures")
+                    ? theme === "light"
+                      ? "text-[color:var(--sf-text)]/60"
+                      : "text-[color:var(--sf-primary)]"
+                    : "text-[color:var(--sf-text)]"
+                }`}
+              >
+                {t("nav.futures")}
+              </Link>
+            )}
           </nav>
 
           {/* Desktop CTA */}

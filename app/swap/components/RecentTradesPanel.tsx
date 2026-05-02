@@ -5,6 +5,7 @@ import { useInfiniteQuery } from '@tanstack/react-query';
 import { usePools } from '@/hooks/usePools';
 import TokenIcon from '@/app/components/TokenIcon';
 import { useWallet } from '@/context/WalletContext';
+import { useTranslation } from '@/hooks/useTranslation';
 import type { Network } from '@/utils/constants';
 
 interface Trade {
@@ -49,6 +50,7 @@ function formatAmount(raw: string, decimals = 8, tokenSymbol?: string, opts?: { 
 }
 
 export default function RecentTradesPanel({ baseToken, quoteToken, poolId: poolIdProp, isWrapPair }: Props) {
+  const { t } = useTranslation();
   const { network } = useWallet() as { network: Network };
   const { data: poolsData, isLoading: isPoolsLoading } = usePools();
 
@@ -247,17 +249,17 @@ export default function RecentTradesPanel({ baseToken, quoteToken, poolId: poolI
   }, [handleScroll]);
 
   const emptyMessage = isWrapPair
-    ? 'No recent wraps or unwraps'
-    : (!poolId && (isPoolsLoading || !poolsData) ? 'Loading...' : 'No recent trades for this pair');
+    ? t('trades.noWraps')
+    : (!poolId && (isPoolsLoading || !poolsData) ? t('common.loading') : t('trades.noTrades'));
 
   return (
     <div>
-      <div className="sf-table-header grid grid-cols-[0.5fr_0.7fr_0.7fr_1fr_0.6fr] gap-1 px-3 py-2">
-        <span>Type</span>
-        <span>From</span>
-        <span>To</span>
-        <span className="text-right">Amounts</span>
-        <span className="text-right">Time</span>
+      <div className="sf-table-header grid grid-cols-[0.5fr_0.7fr_0.7fr_1fr_0.6fr] gap-1 px-4 py-2">
+        <span>{t('trades.type')}</span>
+        <span>{t('trades.from')}</span>
+        <span>{t('trades.to')}</span>
+        <span className="text-right">{t('trades.amounts')}</span>
+        <span className="text-right">{t('trades.time')}</span>
       </div>
 
       <div ref={scrollRef} className="max-h-[240px] overflow-y-auto">
@@ -265,12 +267,18 @@ export default function RecentTradesPanel({ baseToken, quoteToken, poolId: poolI
           <div className="flex flex-col items-center justify-center py-8 text-[color:var(--sf-text)]/20">
             <span className="text-xs">{emptyMessage}</span>
           </div>
-        ) : trades.map(trade => (
+        ) : trades.map(trade => {
+          const typeLabel =
+            trade.type === 'Market' ? t('trades.swap') :
+            trade.type === 'Limit' ? t('swap.limit') :
+            trade.type === 'Wrap' ? t('myActivity.wrap') :
+            t('myActivity.unwrap');
+          return (
           <div
             key={trade.id}
-            className="sf-row grid grid-cols-[0.5fr_0.7fr_0.7fr_1fr_0.6fr] gap-1 text-[11px] leading-[20px] px-3 py-1.5 items-center"
+            className="sf-row grid grid-cols-[0.5fr_0.7fr_0.7fr_1fr_0.6fr] gap-1 text-[11px] leading-[20px] px-4 py-1.5 items-center"
           >
-            <span className="text-[color:var(--sf-text)]/40">{trade.type}</span>
+            <span className="text-[color:var(--sf-text)]/40">{typeLabel}</span>
 
             <div className="flex items-center gap-1 min-w-0">
               <TokenIcon symbol={trade.fromSymbol} id={trade.fromId} size="sm" network={network} />
@@ -290,9 +298,10 @@ export default function RecentTradesPanel({ baseToken, quoteToken, poolId: poolI
 
             <span className="text-[color:var(--sf-text)]/25 tabular-nums text-right">{trade.time}</span>
           </div>
-        ))}
+          );
+        })}
         {isFetchingNextPage && (
-          <div className="py-2 text-center text-xs text-[color:var(--sf-text)]/20">Loading...</div>
+          <div className="py-2 text-center text-xs text-[color:var(--sf-text)]/20">{t('common.loading')}</div>
         )}
       </div>
     </div>

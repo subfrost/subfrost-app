@@ -80,54 +80,34 @@ export function useFireChartData(): FireChartData {
     const priceHistory = generateHistorySeries(currentPrice, 30, 0.03, 0.005);
     const tvlHistory = generateHistorySeries(currentTvl, 30, 0.02, 0.003);
 
-    // Staker distribution: use real data if available, otherwise show protocol breakdown
+    // FIRE allocations: protocol-level breakdown across staked / emission pool / treasury.
     const stakerDistribution: StakerDistribution[] = [];
-    if (totalStaked.gt(0)) {
-      // Show protocol-level breakdown instead of individual addresses
-      const stakedAmount = totalStaked.multipliedBy(1e8).toNumber();
-      const emissionPool = new BigNumber(tokenStats?.emissionPoolRemaining || '0').toNumber();
-      const treasuryAmount = new BigNumber(treasury?.totalBacking || '0').toNumber();
+    const stakedAmount = totalStaked.multipliedBy(1e8).toNumber();
+    const emissionPool = new BigNumber(tokenStats?.emissionPoolRemaining || '0').toNumber();
+    const treasuryAmount = new BigNumber(treasury?.totalBacking || '0').toNumber();
 
-      const total = stakedAmount + emissionPool + treasuryAmount || 1;
+    const total = stakedAmount + emissionPool + treasuryAmount || 1;
 
-      if (stakedAmount > 0) {
-        stakerDistribution.push({
-          address: 'Staked',
-          amount: stakedAmount,
-          percentage: (stakedAmount / total) * 100,
-        });
-      }
-      if (emissionPool > 0) {
-        stakerDistribution.push({
-          address: 'Emission Pool',
-          amount: emissionPool,
-          percentage: (emissionPool / total) * 100,
-        });
-      }
-      if (treasuryAmount > 0) {
-        stakerDistribution.push({
-          address: 'Treasury',
-          amount: treasuryAmount,
-          percentage: (treasuryAmount / total) * 100,
-        });
-      }
+    if (stakedAmount > 0) {
+      stakerDistribution.push({
+        address: 'Staked',
+        amount: stakedAmount,
+        percentage: (stakedAmount / total) * 100,
+      });
     }
-
-    // Fallback if no on-chain data
-    if (stakerDistribution.length === 0) {
-      // Demo: 10 top stakers holding 40% collectively, remainder grouped as Others
-      stakerDistribution.push(
-        { address: 'bc1pqxy...demo', amount: 16_800_000_000_000, percentage: 8.0 },
-        { address: 'bc1qzr4...demo', amount: 13_650_000_000_000, percentage: 6.5 },
-        { address: 'bc1p3fh...demo', amount: 11_550_000_000_000, percentage: 5.5 },
-        { address: 'bc1pke7...demo', amount:  9_450_000_000_000, percentage: 4.5 },
-        { address: 'bc1q9ts...demo', amount:  8_400_000_000_000, percentage: 4.0 },
-        { address: 'bc1pkl2...demo', amount:  7_350_000_000_000, percentage: 3.5 },
-        { address: 'bc1p2sv...demo', amount:  6_300_000_000_000, percentage: 3.0 },
-        { address: 'bc1q4mx...demo', amount:  5_250_000_000_000, percentage: 2.5 },
-        { address: 'bc1pxvn...demo', amount:  3_150_000_000_000, percentage: 1.5 },
-        { address: 'bc1q7nd...demo', amount:  2_100_000_000_000, percentage: 1.0 },
-      );
+    if (emissionPool > 0) {
+      stakerDistribution.push({
+        address: 'Emission Pool',
+        amount: emissionPool,
+        percentage: (emissionPool / total) * 100,
+      });
+    }
+    if (treasuryAmount > 0) {
+      stakerDistribution.push({
+        address: 'Treasury',
+        amount: treasuryAmount,
+        percentage: (treasuryAmount / total) * 100,
+      });
     }
 
     return { priceHistory, tvlHistory, stakerDistribution };

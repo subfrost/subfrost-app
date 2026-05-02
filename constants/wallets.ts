@@ -51,8 +51,13 @@ const LOCAL_WALLETS: BrowserWalletInfo[] = [
 ];
 
 // Desired display order (by wallet id)
+// NOTE: 'okx' is listed but disabled in the UI (see ENABLED_WALLET_IDS in
+// ConnectWalletModal.tsx). It renders as "COMING SOON" because OKX is a
+// single-address wallet with no getBitcoinUtxos API — connecting it would
+// risk spending inscription/rune UTXOs as fees. See commit 5d8bc5f3.
 const WALLET_ORDER = [
   'oyl',
+  'okx',
   'unisat',
   'xverse',
   'phantom',

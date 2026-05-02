@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo, useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { useWallet } from '@/context/WalletContext';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { useEnrichedWalletData } from '@/hooks/useEnrichedWalletData';
@@ -10,10 +11,13 @@ import TokenIcon from '@/app/components/TokenIcon';
 import { useTranslation } from '@/hooks/useTranslation';
 import { usePositionMetadata, isEnrichablePosition } from '@/hooks/usePositionMetadata';
 import { useFuelAllocation } from '@/hooks/useFuelAllocation';
+import { saveSwapIntent } from '@/app/swap/swapPair';
+import type { TokenMeta } from '@/app/swap/types';
 
 import type { AlkaneAsset } from '@/hooks/useEnrichedWalletData';
 
 const FRBTC_ID = '32:0';
+const DIESEL_ID = '2:0';
 
 interface AlkanesBalancesCardProps {
   onSendAlkane?: (alkane: AlkaneAsset) => void;
@@ -23,6 +27,7 @@ export default function AlkanesBalancesCard({ onSendAlkane }: AlkanesBalancesCar
   const { network } = useWallet() as any;
   const { bitcoinPrice } = useAlkanesSDK();
   const { t } = useTranslation();
+  const router = useRouter();
   const { balances, isAlkanesLoading, error, refreshAlkanes } = useEnrichedWalletData();
   const { data: poolsData } = usePools();
   const { data: positionMeta } = usePositionMetadata(balances.alkanes);
@@ -82,6 +87,32 @@ export default function AlkanesBalancesCard({ onSendAlkane }: AlkanesBalancesCar
   };
 
   const isLoadingData = isAlkanesLoading || isRefreshing;
+
+  // Click "Swap" under a token row → hand off a swap pair to /swap.
+  // Pair convention: clicked token → frBTC. If the user clicks frBTC itself,
+  // pair is frBTC → DIESEL so the selectors aren't both frBTC.
+  const handleSwapToken = (alkane: AlkaneAsset) => {
+    const tokenMeta: TokenMeta = {
+      id: alkane.alkaneId,
+      symbol: alkane.symbol || alkane.alkaneId,
+      name: alkane.name || alkane.symbol || alkane.alkaneId,
+    };
+    const frbtcMeta: TokenMeta = { id: FRBTC_ID, symbol: 'frBTC', name: 'frBTC' };
+    const dieselMeta: TokenMeta = { id: DIESEL_ID, symbol: 'DIESEL', name: 'DIESEL' };
+    const isFrbtc = alkane.alkaneId === FRBTC_ID || alkane.symbol === 'frBTC';
+    const intent = isFrbtc
+      ? { kind: 'swap' as const, from: frbtcMeta, to: dieselMeta }
+      : { kind: 'swap' as const, from: tokenMeta, to: frbtcMeta };
+    saveSwapIntent(intent);
+    router.push('/swap');
+  };
+
+  // Click "Remove" under an LP position row → open /swap with the liquidity
+  // panel in remove mode and this position pre-selected.
+  const handleRemoveLiquidity = (alkane: AlkaneAsset) => {
+    saveSwapIntent({ kind: 'removeLiquidity', positionId: alkane.alkaneId });
+    router.push('/swap');
+  };
 
   // Auto-retry when balances loaded but alkanes are empty — catches cases where
   // the alkane-balances API was slow or timed out on the initial fetch.
@@ -418,11 +449,30 @@ export default function AlkanesBalancesCard({ onSendAlkane }: AlkanesBalancesCar
                             {t('walletDash.send')}
                           </button>
                           <button
+                            data-testid="remove-button"
+                            onClick={(e) => { e.stopPropagation(); handleRemoveLiquidity(alkane); }}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[color:var(--sf-primary)] text-white text-xs font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
+                          >
+                            <ArrowUpFromLine size={12} />
+                            {t('walletDash.remove')}
+                          </button>
+                        </>
+                      ) : isStakedPosition(alkane) ? (
+                        <>
+                          <button
+                            data-testid="send-button"
+                            onClick={(e) => { e.stopPropagation(); onSendAlkane?.(alkane); }}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[color:var(--sf-primary)] text-white text-xs font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
+                          >
+                            <Send size={12} />
+                            {t('walletDash.send')}
+                          </button>
+                          <button
                             disabled
                             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)]/30 text-xs font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] cursor-not-allowed"
                           >
-                            <ArrowUpFromLine size={12} />
-                            {t('walletDash.withdraw')}
+                            <ArrowLeftRight size={12} />
+                            {t('walletDash.swap')}
                           </button>
                         </>
                       ) : (
@@ -436,8 +486,9 @@ export default function AlkanesBalancesCard({ onSendAlkane }: AlkanesBalancesCar
                             {t('walletDash.send')}
                           </button>
                           <button
-                            disabled
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)]/30 text-xs font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] cursor-not-allowed"
+                            data-testid="swap-button"
+                            onClick={(e) => { e.stopPropagation(); handleSwapToken(alkane); }}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[color:var(--sf-primary)] text-white text-xs font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
                           >
                             <ArrowLeftRight size={12} />
                             {t('walletDash.swap')}

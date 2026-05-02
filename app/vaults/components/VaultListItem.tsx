@@ -119,7 +119,7 @@ export default function VaultListItem({ vault, isSelected, onClick, interactive 
           {/* Row 1: EST. APY and RISK LEVEL */}
           <div className="h-[42px]">
             <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">{t('vaultList.estApy')}</div>
-            <span className="sf-badge-apy">{formatApyBadge(vault.estimatedApy)}</span>
+            <span className="sf-badge-apy">TBD</span>
           </div>
           <div className={`h-[42px] ${interactive ? 'flex flex-col items-center' : ''}`}>
             <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">{t('vaultList.riskLevel')}</div>
@@ -183,7 +183,7 @@ export default function VaultListItem({ vault, isSelected, onClick, interactive 
         {/* APY */}
         <div className="flex flex-col items-end min-w-[70px] lg:min-w-[90px] xl:min-w-[90px] flex-shrink-0">
           <div className="text-xs text-[color:var(--sf-text)]/60 mb-1 whitespace-nowrap">{t('vaultList.estApy')}</div>
-          <span className="sf-badge-apy">{formatApyBadge(vault.estimatedApy)}</span>
+          <span className="sf-badge-apy">TBD</span>
         </div>
 
         {/* Historical APY */}

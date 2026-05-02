@@ -248,11 +248,13 @@ export default function WalletDashboardPage() {
                 {/* BalancesPanel removed — BRC20/Runes/Ordinals not supported yet */}
                 {activeTab === 'utxos' && <UTXOManagement />}
                 {activeTab === 'transactions' && <TransactionHistory ref={txHistoryRef} />}
-                {activeTab === 'settings' && <WalletSettings />}
+                {activeTab === 'settings' && (
+                  <>
+                    <WalletSettings />
+                    <RegtestControls />
+                  </>
+                )}
               </div>
-
-              {/* Regtest Controls */}
-              <RegtestControls />
             </div>
           </div>
 

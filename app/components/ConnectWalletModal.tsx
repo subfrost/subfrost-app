@@ -834,6 +834,9 @@ export default function ConnectWalletModal() {
 
           {view === 'restore-mnemonic' && (
             <div className="flex flex-col gap-4">
+              <div className="rounded-xl bg-[color:var(--sf-info-yellow-bg)] p-4 shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-sm font-medium text-[color:var(--sf-info-yellow-text)]">
+                {t('wallet.restoreMnemonicWarning')}
+              </div>
               <div>
                 <label className="mb-2 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">{t('wallet.recoveryPhrase')}</label>
                 <textarea
@@ -968,7 +971,7 @@ export default function ConnectWalletModal() {
               <div className="max-h-96 overflow-y-auto space-y-4 px-6 -mx-6">
                 {/* Enabled wallet IDs - only these wallets are fully supported */}
                 {(() => {
-                  const ENABLED_WALLET_IDS = new Set(['oyl', 'xverse', 'okx', 'unisat']);
+                  const ENABLED_WALLET_IDS = new Set(['oyl', 'xverse', 'unisat']);
                   const installedIds = new Set(installedWallets.map(w => w.id));
 
                   // Separate installed wallets into enabled and coming soon
