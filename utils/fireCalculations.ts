@@ -170,11 +170,21 @@ export function estimateDailyRewards(
 }
 
 /**
- * Format large numbers with K/M/B suffixes.
+ * Format large numbers with K/M/B/T/Q suffixes; falls back to 2-decimal
+ * scientific notation for anything beyond 1e18 to avoid raw exponent strings
+ * like "1.4771249801895418e+24M".
  */
 export function formatCompact(value: number): string {
-  if (value >= 1e9) return `${(value / 1e9).toFixed(2)}B`;
-  if (value >= 1e6) return `${(value / 1e6).toFixed(2)}M`;
-  if (value >= 1e3) return `${(value / 1e3).toFixed(2)}K`;
+  const abs = Math.abs(value);
+  if (abs >= 1e18) {
+    const exp = Math.floor(Math.log10(abs));
+    const mantissa = value / Math.pow(10, exp);
+    return `${mantissa.toFixed(2)}e${exp}`;
+  }
+  if (abs >= 1e15) return `${(value / 1e15).toFixed(2)}Q`;
+  if (abs >= 1e12) return `${(value / 1e12).toFixed(2)}T`;
+  if (abs >= 1e9) return `${(value / 1e9).toFixed(2)}B`;
+  if (abs >= 1e6) return `${(value / 1e6).toFixed(2)}M`;
+  if (abs >= 1e3) return `${(value / 1e3).toFixed(2)}K`;
   return value.toFixed(2);
 }

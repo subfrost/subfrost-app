@@ -1,9 +1,10 @@
 'use client';
 
 import { lazy, Suspense } from 'react';
-import type { TokenMeta } from '../types';
+import type { SelectedOrder, TokenMeta } from '../types';
 import type { Network } from '@/utils/constants';
 import type { ComponentProps } from 'react';
+import { useTranslation } from '@/hooks/useTranslation';
 
 const SwapInputs = lazy(() => import('./SwapInputs'));
 const LimitOrderPanel = lazy(() => import('./LimitOrderPanel'));
@@ -15,8 +16,7 @@ interface Props {
   swapInputsProps: any;
   baseToken: string;
   quoteToken: string;
-  limitSelectedPrice?: string;
-  onLimitPriceSelect: (price: string) => void;
+  limitSelectedOrder?: SelectedOrder;
   liquidityProps: ComponentProps<typeof LiquidityInputs>;
   fromToken?: TokenMeta;
   toToken?: TokenMeta;
@@ -38,8 +38,7 @@ export default function TradeForm({
   swapInputsProps,
   baseToken,
   quoteToken,
-  limitSelectedPrice,
-  onLimitPriceSelect,
+  limitSelectedOrder,
   liquidityProps,
   fromToken,
   toToken,
@@ -47,6 +46,7 @@ export default function TradeForm({
   orderType,
   onOrderTypeChange,
 }: Props) {
+  const { t } = useTranslation();
   return (
     <div className="sf-card flex flex-col h-full overflow-visible">
       {/* Tabs row: Market / Limit / Liquidity — top of panel */}
@@ -55,19 +55,19 @@ export default function TradeForm({
           onClick={() => onOrderTypeChange('market')}
           className={`sf-tab-btn flex-1 basis-0 ${orderType === 'market' ? 'sf-tab-btn--active' : ''}`}
         >
-          Market
+          {t('swap.market')}
         </button>
         <button
           onClick={() => onOrderTypeChange('limit')}
           className={`sf-tab-btn flex-1 basis-0 ${orderType === 'limit' ? 'sf-tab-btn--active' : ''}`}
         >
-          Limit
+          {t('swap.limit')}
         </button>
         <button
           onClick={() => onOrderTypeChange('liquidity')}
           className={`sf-tab-btn flex-1 basis-0 ${orderType === 'liquidity' ? 'sf-tab-btn--active' : ''}`}
         >
-          Liquidity
+          {t('swap.liquidity')}
         </button>
       </div>
 
@@ -81,7 +81,7 @@ export default function TradeForm({
             <LimitOrderPanel
               baseToken={baseToken}
               quoteToken={quoteToken}
-              selectedPrice={limitSelectedPrice}
+              selectedOrder={limitSelectedOrder}
               fromToken={fromToken}
               toToken={toToken}
               fromBalanceText={swapInputsProps.fromBalanceText}

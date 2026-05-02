@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useEffect, useRef, lazy, Suspense } from "react";
-import type { PoolSummary, TokenMeta } from "./types";
+import type { PoolSummary, SelectedOrder, TokenMeta } from "./types";
 import type { TokenOption } from "@/app/components/TokenSelectorModal";
 import type { LPPosition } from "./components/LiquidityInputs";
 import { useNotification } from "@/context/NotificationContext";
@@ -48,7 +48,7 @@ import { KNOWN_TOKENS } from "@/lib/alkanes-client";
 import TradeForm, { type OrderType } from "./components/TradeForm";
 import BottomPanels from "./components/BottomPanels";
 import MobileDataPanels from "./components/MobileDataPanels";
-import { consumeSwapPair } from "./swapPair";
+import { consumeSwapIntent } from "./swapPair";
 
 // Lazy loaded components - split into separate chunks
 const PoolDetailsCard = lazy(() => import("./components/PoolDetailsCard"));
@@ -123,12 +123,18 @@ export default function SwapShell() {
 
   const marketType = 'spot' as const;
 
-  // Limit order price from orderbook click
-  const [limitSelectedPrice, setLimitSelectedPrice] = useState<string | undefined>();
-
   // Order type drives the desktop left panel default: market/liquidity → chart, limit → orderbook.
   // Users can still manually flip the panel via the Chart / Order Book buttons.
   const [orderType, setOrderType] = useState<OrderType>('market');
+
+  // Order selected from the orderbook. Clicking a row jumps to the limit tab and
+  // populates price/amount/side. A fresh object reference per click ensures
+  // re-clicking the same row re-syncs the inputs in LimitOrderPanel.
+  const [limitSelectedOrder, setLimitSelectedOrder] = useState<SelectedOrder | undefined>();
+  const handleOrderbookSelect = (order: SelectedOrder) => {
+    setLimitSelectedOrder(order);
+    setOrderType('limit');
+  };
   const [desktopLeftView, setDesktopLeftView] = useState<'chart' | 'orderbook'>('chart');
   useEffect(() => {
     setDesktopLeftView(orderType === 'limit' ? 'orderbook' : 'chart');
@@ -343,7 +349,7 @@ export default function SwapShell() {
 
   // Initialize swap tokens to the trending pair (highest volume) on every visit.
   // A saved pair is only honored as a one-shot handoff from explicit cross-page
-  // navigation (e.g. HomeMarketsButton): consumeSwapPair() reads and clears it.
+  // navigation (e.g. HomeMarketsButton): consumeSwapIntent() reads and clears it.
   // User selections within the swap page are NOT persisted — entering /swap
   // always lands on the current trending pair.
   //
@@ -354,19 +360,44 @@ export default function SwapShell() {
   const trendingPoolInitializedRef = useRef(false);
   const usedSessionRef = useRef(false);
 
-  // Immediately consume any one-shot saved pair (set by HomeMarketsButton).
-  // No fallback to BTC/USDC or anything else — undefined tokens render as
-  // "Select" until the trending-pool effect below populates them.
+  // Immediately consume any one-shot saved intent (set by HomeMarketsButton or
+  // the wallet dashboard token/position rows). No fallback to BTC/USDC or
+  // anything else — undefined tokens render as "Select" until the
+  // trending-pool effect below populates them.
+  //
+  // For 'removeLiquidity' intents we synchronously flip into the liquidity tab
+  // in remove mode and stash the position id, then a useEffect below resolves
+  // it against `lpPositions` once that hook has data.
   const sessionRestoredRef = useRef(false);
+  const pendingPositionIdRef = useRef<string | null>(null);
   if (!sessionRestoredRef.current && !fromToken && !toToken) {
-    const saved = consumeSwapPair();
-    if (saved) {
-      setFromToken(saved.from);
-      setToToken(saved.to);
+    const intent = consumeSwapIntent();
+    if (intent?.kind === 'swap') {
+      setFromToken(intent.from);
+      setToToken(intent.to);
+      sessionRestoredRef.current = true;
+      usedSessionRef.current = true;
+    } else if (intent?.kind === 'removeLiquidity') {
+      setOrderType('liquidity');
+      setLiquidityMode('remove');
+      pendingPositionIdRef.current = intent.positionId;
       sessionRestoredRef.current = true;
       usedSessionRef.current = true;
     }
   }
+
+  // Resolve a pending removeLiquidity intent once LP positions load.
+  // If the position can't be found after positions finish loading, silently
+  // give up — the user can pick from the LP selector themselves.
+  useEffect(() => {
+    if (!pendingPositionIdRef.current) return;
+    if (isLoadingLPPositions) return;
+    const match = lpPositions.find(p => p.id === pendingPositionIdRef.current);
+    if (match) {
+      setSelectedLPPosition(match);
+    }
+    pendingPositionIdRef.current = null;
+  }, [lpPositions, isLoadingLPPositions]);
 
   useEffect(() => {
     if (trendingPoolInitializedRef.current) return;
@@ -1988,13 +2019,26 @@ export default function SwapShell() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [addLpLiveState.data?.reserve0, addLpLiveState.data?.reserve1]);
 
+  // For 25/50/75% buttons: render the result with 8 total digits (excluding the
+  // decimal point) so high-value tokens show 8 decimals (e.g. "0.00000000") and
+  // lower-value tokens trade decimals for integer digits (e.g. "100.00000").
+  // MAX (percent=1) keeps full 8-decimal precision so the user can spend their
+  // whole balance.
+  const formatPercentAmount = (value: number, percent: number): string => {
+    if (percent === 1) return value.toFixed(8);
+    if (!Number.isFinite(value) || value <= 0) return '0.00000000';
+    const intDigits = value >= 1 ? Math.floor(value).toString().length : 0;
+    const decimals = Math.max(0, 8 - intDigits);
+    return value.toFixed(decimals);
+  };
+
   // Handle percentage of balance click for LP token 0
   const handlePercentToken0 = (percent: number) => {
     if (!poolToken0) return;
     let amount: string | null = null;
     if (poolToken0.id === 'btc') {
       const sats = Number(btcBalanceSats || 0);
-      amount = ((sats * percent) / 1e8).toFixed(8);
+      amount = formatPercentAmount((sats * percent) / 1e8, percent);
     } else {
       let balance = walletAlkaneBalances.get(poolToken0.id);
       if (!balance) {
@@ -2002,7 +2046,7 @@ export default function SwapShell() {
         balance = cur?.balance;
       }
       if (balance) {
-        amount = ((Number(balance) * percent) / 1e8).toFixed(8);
+        amount = formatPercentAmount((Number(balance) * percent) / 1e8, percent);
       }
     }
     if (amount !== null) handlePoolToken0AmountChange(amount);
@@ -2014,7 +2058,7 @@ export default function SwapShell() {
     let amount: string | null = null;
     if (poolToken1.id === 'btc') {
       const sats = Number(btcBalanceSats || 0);
-      amount = ((sats * percent) / 1e8).toFixed(8);
+      amount = formatPercentAmount((sats * percent) / 1e8, percent);
     } else {
       let balance = walletAlkaneBalances.get(poolToken1.id);
       if (!balance) {
@@ -2022,7 +2066,7 @@ export default function SwapShell() {
         balance = cur?.balance;
       }
       if (balance) {
-        amount = ((Number(balance) * percent) / 1e8).toFixed(8);
+        amount = formatPercentAmount((Number(balance) * percent) / 1e8, percent);
       }
     }
     if (amount !== null) handlePoolToken1AmountChange(amount);
@@ -2124,8 +2168,7 @@ export default function SwapShell() {
               }}
               baseToken={fromToken?.symbol || 'DIESEL'}
               quoteToken={toToken?.symbol || 'frBTC'}
-              limitSelectedPrice={limitSelectedPrice}
-              onLimitPriceSelect={setLimitSelectedPrice}
+              limitSelectedOrder={limitSelectedOrder}
               liquidityProps={{
                 token0: poolToken0,
                 token1: poolToken1,
@@ -2206,7 +2249,7 @@ export default function SwapShell() {
                 <OrderbookPanel
                   baseToken={fromToken?.id || '2:0'}
                   quoteToken={toToken?.id || '32:0'}
-                  onPriceSelect={setLimitSelectedPrice}
+                  onOrderSelect={handleOrderbookSelect}
                   bare
                 />
               </Suspense>
@@ -2217,13 +2260,13 @@ export default function SwapShell() {
               onClick={() => setDesktopLeftView('chart')}
               className={`sf-tab-btn pointer-events-auto ${desktopLeftView === 'chart' ? 'sf-tab-btn--active' : ''}`}
             >
-              Chart
+              {t('swap.chart')}
             </button>
             <button
               onClick={() => setDesktopLeftView('orderbook')}
               className={`sf-tab-btn pointer-events-auto ${desktopLeftView === 'orderbook' ? 'sf-tab-btn--active' : ''}`}
             >
-              Order Book
+              {t('swap.orderBook')}
             </button>
           </div>
         </div>
@@ -2236,7 +2279,7 @@ export default function SwapShell() {
             isWrapPair={!chartPool && (isWrapPair || isUnwrapPair || isWrapZecPair || isUnwrapZecPair || isWrapEthPair || isUnwrapEthPair)}
             baseTokenId={fromToken?.id || '2:0'}
             quoteTokenId={toToken?.id || '32:0'}
-            onPriceSelect={setLimitSelectedPrice}
+            onOrderSelect={handleOrderbookSelect}
           />
         </div>
       </div>
@@ -2257,6 +2300,11 @@ export default function SwapShell() {
             setPoolToken1({ id: pair.token1Id, symbol: pair.token1Symbol, name: pair.token1Symbol });
           }
           setLiquidityMode('provide');
+          setOrderType('liquidity');
+        }}
+        onRemoveLiquidity={(pos) => {
+          setSelectedLPPosition(pos);
+          setLiquidityMode('remove');
           setOrderType('liquidity');
         }}
       />

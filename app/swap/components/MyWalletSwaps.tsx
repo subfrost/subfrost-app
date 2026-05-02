@@ -116,12 +116,12 @@ export default function MyWalletSwaps() {
       ) : (
         <>
           {/* Column Headers */}
-          <div className="sf-table-header grid grid-cols-[0.5fr_0.7fr_0.7fr_1fr_0.6fr] gap-1 px-3 py-2">
-            <span>Type</span>
-            <span>From</span>
-            <span>To</span>
-            <span className="text-right">{t('myActivity.amounts')}</span>
-            <span className="text-right">Date</span>
+          <div className="sf-table-header grid grid-cols-[0.5fr_0.7fr_0.7fr_1fr_0.6fr] gap-1 px-4 py-2">
+            <span>{t('trades.type')}</span>
+            <span>{t('trades.from')}</span>
+            <span>{t('trades.to')}</span>
+            <span className="text-right">{t('trades.amounts')}</span>
+            <span className="text-right">{t('trades.date')}</span>
           </div>
 
           <div className="overflow-auto no-scrollbar max-h-[240px]">
@@ -229,7 +229,7 @@ export default function MyWalletSwaps() {
                       rel="noopener noreferrer"
                       className="sf-row block"
                     >
-                      <div className="grid grid-cols-[0.5fr_0.7fr_0.7fr_1fr_0.6fr] gap-1 text-[11px] leading-[20px] px-3 py-1.5 items-center">
+                      <div className="grid grid-cols-[0.5fr_0.7fr_0.7fr_1fr_0.6fr] gap-1 text-[11px] leading-[20px] px-4 py-1.5 items-center">
                         {/* TXN */}
                         <span className="text-[color:var(--sf-text)]/40">{typeLabel}</span>
 

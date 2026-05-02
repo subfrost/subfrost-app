@@ -40,7 +40,7 @@ export default function SwapHeaderTabs({ selectedTab, onTabChange }: Props) {
         }`}
         onClick={() => onTabChange("limit")}
       >
-        LIMIT
+        {t('swap.limitTab')}
       </button>
       <button
         type="button"

@@ -62,7 +62,7 @@ function buildIframeUrl(symbol: string, quote: 'usd' | 'btc'): string {
   const params = new URLSearchParams({
     symbol,
     timeframe: '1d',
-    type: 'mcap',
+    type: 'price',
     pool: 'all',
     quote,
     metaprotocol: 'alkanes',

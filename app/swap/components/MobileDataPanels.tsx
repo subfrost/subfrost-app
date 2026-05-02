@@ -2,7 +2,8 @@
 
 import { useState, lazy, Suspense } from 'react';
 import { ChevronDown } from 'lucide-react';
-import type { PoolSummary } from '../types';
+import type { PoolSummary, SelectedOrder } from '../types';
+import { useTranslation } from '@/hooks/useTranslation';
 
 const PoolDetailsCard = lazy(() => import('./PoolDetailsCard'));
 const OrderbookPanel = lazy(() => import('./OrderbookPanel'));
@@ -13,7 +14,7 @@ interface Props {
   isWrapPair?: boolean;
   baseTokenId?: string;
   quoteTokenId?: string;
-  onPriceSelect?: (price: string) => void;
+  onOrderSelect?: (order: SelectedOrder) => void;
 }
 
 export default function MobileDataPanels({
@@ -22,8 +23,9 @@ export default function MobileDataPanels({
   isWrapPair,
   baseTokenId,
   quoteTokenId,
-  onPriceSelect,
+  onOrderSelect,
 }: Props) {
+  const { t } = useTranslation();
   const [chartOpen, setChartOpen] = useState(false);
   const [orderbookOpen, setOrderbookOpen] = useState(false);
 
@@ -35,7 +37,7 @@ export default function MobileDataPanels({
           onClick={() => setChartOpen(!chartOpen)}
           className="sf-collapsible-trigger"
         >
-          <span>{chartOpen ? 'Hide Chart' : 'Show Chart'}</span>
+          <span>{chartOpen ? t('swap.hideChart') : t('swap.showChart')}</span>
           <ChevronDown
             size={14}
             className={`transition-transform duration-300 ${chartOpen ? 'rotate-180' : ''}`}
@@ -72,7 +74,7 @@ export default function MobileDataPanels({
           onClick={() => setOrderbookOpen(!orderbookOpen)}
           className="sf-collapsible-trigger"
         >
-          <span>{orderbookOpen ? 'Hide Order Book' : 'Show Order Book'}</span>
+          <span>{orderbookOpen ? t('swap.hideOrderBook') : t('swap.showOrderBook')}</span>
           <ChevronDown
             size={14}
             className={`transition-transform duration-300 ${orderbookOpen ? 'rotate-180' : ''}`}
@@ -95,7 +97,7 @@ export default function MobileDataPanels({
                 <OrderbookPanel
                   baseToken={baseTokenId || '2:0'}
                   quoteToken={quoteTokenId || '32:0'}
-                  onPriceSelect={onPriceSelect}
+                  onOrderSelect={onOrderSelect}
                 />
               </Suspense>
             </div>

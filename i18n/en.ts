@@ -2,6 +2,7 @@ const en: Record<string, string> = {
   // Navigation
   'nav.home': 'Home',
   'nav.swap': 'Swap',
+  'nav.advancedTrader': 'Advanced Trader',
   'nav.vaults': 'Vaults',
   'nav.futures': 'Futures',
   'nav.pools': 'Pools',
@@ -60,7 +61,15 @@ const en: Record<string, string> = {
   'swap.hideChart': 'Hide Chart',
   'swap.showChart': 'Show Chart',
   'swap.swapTab': 'SWAP',
+  'swap.limitTab': 'LIMIT',
   'swap.liquidityTab': 'LIQUIDITY',
+  'swap.market': 'Market',
+  'swap.limit': 'Limit',
+  'swap.liquidity': 'Liquidity',
+  'swap.chart': 'Chart',
+  'swap.orderBook': 'Order Book',
+  'swap.hideOrderBook': 'Hide Order Book',
+  'swap.showOrderBook': 'Show Order Book',
   'swap.ethWalletAddress': 'Receive At (ETH Address)',
   'swap.enterUsdtRecipient': 'Enter recipient address (0x...)',
   'swap.enterEthAddress': 'Enter the Ethereum address where you want to receive your tokens.',
@@ -185,6 +194,7 @@ const en: Record<string, string> = {
   'walletDash.send': 'Send',
   'walletDash.swap': 'Swap',
   'walletDash.withdraw': 'Withdraw',
+  'walletDash.remove': 'Remove',
   'walletDash.receive': 'Receive',
   'walletDash.nativeSegwit': 'Native SegWit:',
   'walletDash.taproot': 'Taproot:',
@@ -323,7 +333,7 @@ const en: Record<string, string> = {
   'settings.ignoreRunesDescription': 'Treat all UTXOs as spendable, ignoring any runes. Disable this to protect rune-bearing UTXOs from being spent.',
 
   // Vaults
-  'vaults.title': 'DeFi Vaults',
+  'vaults.title': 'Defi Vaults (Preview)',
   'vaults.comingSoon': '(Coming Soon)',
   'vaults.backToOverview': 'Back to Vaults Overview',
   'vaults.all': 'All',
@@ -475,6 +485,40 @@ const en: Record<string, string> = {
   'settingsPage.maxSlippage': 'Max slippage (%)',
   'settingsPage.deadlineBlocks': 'Deadline (blocks)',
 
+  // Bottom Panels (Swap page tabs)
+  'bottomPanels.globalTrades': 'Global Trades',
+  'bottomPanels.myActivity': 'My Activity',
+  'bottomPanels.positions': 'Positions',
+  'bottomPanels.openOrders': 'Open Orders',
+  'bottomPanels.connectWalletOrders': 'Connect wallet to view orders',
+  'bottomPanels.connectWalletPositions': 'Connect wallet to view positions',
+  'bottomPanels.loadingOrders': 'Loading orders...',
+  'bottomPanels.loadingPositions': 'Loading positions...',
+  'bottomPanels.noOpenOrders': 'No open orders',
+  'bottomPanels.noPositions': 'No LP positions',
+  'bottomPanels.side': 'Side',
+  'bottomPanels.price': 'Price',
+  'bottomPanels.amount': 'Amount',
+  'bottomPanels.filled': 'Filled',
+  'bottomPanels.sell': 'SELL',
+  'bottomPanels.buy': 'BUY',
+  'bottomPanels.cancelOrder': 'Cancel order',
+  'bottomPanels.pool': 'Pool',
+  'bottomPanels.add': 'Add',
+  'bottomPanels.close': 'Close',
+  'bottomPanels.id': 'ID',
+
+  // Recent Trades / My Activity tables
+  'trades.type': 'Type',
+  'trades.from': 'From',
+  'trades.to': 'To',
+  'trades.amounts': 'Amounts',
+  'trades.time': 'Time',
+  'trades.date': 'Date',
+  'trades.noTrades': 'No recent trades for this pair',
+  'trades.noWraps': 'No recent wraps or unwraps',
+  'trades.swap': 'Swap',
+
   // Activity Feed
   'activity.globalActivity': 'Global Activity',
   'activity.allTypes': 'All Types',
@@ -622,7 +666,7 @@ const en: Record<string, string> = {
 
   // Vault List Item
   'vaultList.estApy': 'Est. APY',
-  'vaultList.riskLevel': 'Risk Level',
+  'vaultList.riskLevel': 'Volatility',
   'vaultList.available': 'Available',
   'vaultList.deposits': 'Deposits',
   'vaultList.histApy': 'Hist. APY',
@@ -780,6 +824,7 @@ const en: Record<string, string> = {
   'wallet.browserExtensionWallets': 'Browser Extension Wallets',
   'wallet.newPassword': 'New Password',
   'wallet.enterRecoveryPhrase': 'Enter your 12 or 24 word recovery phrase',
+  'wallet.restoreMnemonicWarning': 'Warning: Importing a wallet from another provider will not detect runes or inscriptions held in it. Transactions made on this app may burn them. If your wallet holds runes or inscriptions, we recommend using a browser extension wallet instead.',
   'wallet.createPassword': 'Create a password',
   'wallet.restoring': 'Restoring...',
   'wallet.uploadKeystoreDesc': 'Upload a previously exported JSON keystore file to restore your wallet.',
@@ -891,7 +936,7 @@ const en: Record<string, string> = {
   'fire.duration': 'Duration',
   'fire.flex': 'Flex',
   'fire.blocks': 'blocks',
-  'fire.topStakers': 'Top Stakers',
+  'fire.topStakers': 'FIRE Allocations',
   'fire.circulating': 'circulating',
 
   // FIRE Staking Panel

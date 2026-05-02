@@ -88,12 +88,6 @@ export default function FireOverviewPanel() {
 function StakeTemperatureBar({ circulatingSupply, totalStaked }: { circulatingSupply: number; totalStaked: number }) {
   const pct = circulatingSupply > 0 ? Math.min((totalStaked / circulatingSupply) * 100, 100) : 0;
 
-  const fmt = (n: number) => {
-    if (n >= 1e6) return `${(n / 1e6).toFixed(1)}M`;
-    if (n >= 1e3) return `${(n / 1e3).toFixed(0)}K`;
-    return n.toString();
-  };
-
   return (
     <div className="flex gap-1.5 flex-shrink-0 min-h-[160px]">
       {/* The bar */}
@@ -107,14 +101,14 @@ function StakeTemperatureBar({ circulatingSupply, totalStaked }: { circulatingSu
       {/* Labels to the right, top-aligned and bottom-aligned */}
       <div className="flex flex-col justify-between py-0.5">
         <div className="text-[9px] font-semibold text-[color:var(--sf-muted)] whitespace-nowrap">
-          {fmt(circulatingSupply)}
+          {formatCompact(circulatingSupply)}
         </div>
         <div className="flex items-baseline gap-1 whitespace-nowrap">
           <span className="text-[9px] font-bold text-orange-400">
-            {fmt(totalStaked)}
+            {formatCompact(totalStaked)}
           </span>
           <span className="text-[8px] text-[color:var(--sf-muted)]">
-            {pct.toFixed(0)}%
+            {pct.toFixed(2)}%
           </span>
         </div>
       </div>

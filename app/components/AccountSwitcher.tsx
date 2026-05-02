@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { Plus, Check, ChevronDown } from 'lucide-react';
+import { Plus, Check, ChevronDown, X } from 'lucide-react';
 import { useWallet } from '@/context/WalletContext';
 import { AddressType } from '@alkanes/ts-sdk';
 import AddressAvatar from './AddressAvatar';
@@ -104,12 +104,25 @@ export default function AccountSwitcher({ size = 24, className = '' }: AccountSw
   };
 
   const addAccount = () => {
-    const next = (knownIndices[knownIndices.length - 1] ?? -1) + 1;
+    const sorted = [...knownIndices].sort((a, b) => a - b);
+    let next = 0;
+    for (const idx of sorted) {
+      if (idx === next) next++;
+      else if (idx > next) break;
+    }
     if (next >= MAX_ACCOUNTS) return;
     const updated = [...knownIndices, next].sort((a, b) => a - b);
     setKnownIndices(updated);
     saveKnownIndices(updated);
     switchTo(next);
+  };
+
+  const removeAccount = (idx: number) => {
+    if (idx === activeIndex) return;
+    if (knownIndices.length <= 1) return;
+    const updated = knownIndices.filter((i) => i !== idx);
+    setKnownIndices(updated);
+    saveKnownIndices(updated);
   };
 
   // Only show switcher for keystore wallets — browser wallets have their own
@@ -137,35 +150,58 @@ export default function AccountSwitcher({ size = 24, className = '' }: AccountSw
       </button>
 
       {open && (
-        <div className="absolute left-0 top-full z-50 mt-2 w-[280px] overflow-hidden rounded-xl bg-[color:var(--sf-surface)] shadow-[0_8px_24px_rgba(0,0,0,0.18)] border border-[color:var(--sf-outline)]">
-          <div className="px-3 py-2 text-[11px] uppercase tracking-wider font-bold text-[color:var(--sf-text)]/40 border-b border-[color:var(--sf-outline)]">
+        <div className="absolute left-0 top-full z-50 mt-1 w-[280px] overflow-hidden rounded-xl bg-[color:var(--sf-surface)] backdrop-blur-xl shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
+          <div className="px-3 py-2 text-[11px] uppercase tracking-wider font-bold text-[color:var(--sf-text)]/40">
             Accounts
           </div>
           <div className="max-h-[280px] overflow-y-auto no-scrollbar">
             {accounts.map(({ idx, address }) => {
               const isActive = idx === activeIndex;
+              const canRemove = !isActive && knownIndices.length > 1;
               return (
-                <button
+                <div
                   key={idx}
-                  type="button"
-                  onClick={() => switchTo(idx)}
-                  className={`w-full flex items-center gap-2 px-3 py-2.5 text-left hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[200ms] ${
-                    isActive ? 'bg-[color:var(--sf-primary)]/5' : ''
+                  className={`w-full flex items-center gap-2 px-3 py-2.5 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
+                    isActive
+                      ? 'bg-[color:var(--sf-primary)]/10'
+                      : 'hover:bg-[color:var(--sf-primary)]/10'
                   }`}
                 >
-                  <AddressAvatar address={address} size={28} className="shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium text-[color:var(--sf-text)]">
-                      Account {idx}
+                  <button
+                    type="button"
+                    onClick={() => switchTo(idx)}
+                    className="flex items-center gap-2 flex-1 min-w-0 text-left"
+                  >
+                    <AddressAvatar address={address} size={28} className="shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className={`text-sm font-medium ${isActive ? 'text-[color:var(--sf-primary)]' : 'text-[color:var(--sf-text)]'}`}>
+                          Account {idx}
+                        </span>
+                        {isActive && (
+                          <Check size={14} className="shrink-0 text-[color:var(--sf-primary)]" />
+                        )}
+                      </div>
+                      <div className="text-[11px] text-[color:var(--sf-text)]/50 truncate font-mono">
+                        {truncate(address)}
+                      </div>
                     </div>
-                    <div className="text-[11px] text-[color:var(--sf-text)]/50 truncate font-mono">
-                      {truncate(address)}
-                    </div>
-                  </div>
-                  {isActive && (
-                    <Check size={16} className="shrink-0 text-[color:var(--sf-primary)]" />
+                  </button>
+                  {canRemove && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removeAccount(idx);
+                      }}
+                      className="shrink-0 p-1 rounded hover:bg-[color:var(--sf-text)]/10 text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]"
+                      title="Hide account"
+                      aria-label={`Hide Account ${idx}`}
+                    >
+                      <X size={16} />
+                    </button>
                   )}
-                </button>
+                </div>
               );
             })}
           </div>
@@ -173,7 +209,7 @@ export default function AccountSwitcher({ size = 24, className = '' }: AccountSw
             <button
               type="button"
               onClick={addAccount}
-              className="w-full flex items-center gap-2 px-3 py-2.5 border-t border-[color:var(--sf-outline)] hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[200ms] text-[color:var(--sf-primary)] text-sm font-medium"
+              className="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-primary)] text-sm font-medium"
             >
               <Plus size={16} />
               Add Account

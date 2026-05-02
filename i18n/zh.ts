@@ -2,6 +2,7 @@ const zh: Record<string, string> = {
   // Navigation
   'nav.home': '\u9996\u9875',
   'nav.swap': '\u5151\u6362',
+  'nav.advancedTrader': '\u9ad8\u7ea7\u4ea4\u6613',
   'nav.vaults': '\u91d1\u5e93',
   'nav.futures': '\u671f\u8d27',
   'nav.pools': '\u6d41\u52a8\u6c60',
@@ -60,7 +61,15 @@ const zh: Record<string, string> = {
   'swap.hideChart': '\u9690\u85cf\u56fe\u8868',
   'swap.showChart': '\u663e\u793a\u56fe\u8868',
   'swap.swapTab': '\u5151\u6362',
+  'swap.limitTab': '\u9650\u4ef7',
   'swap.liquidityTab': '\u6d41\u52a8\u6027',
+  'swap.market': '\u5e02\u4ef7',
+  'swap.limit': '\u9650\u4ef7',
+  'swap.liquidity': '\u6d41\u52a8\u6027',
+  'swap.chart': '\u56fe\u8868',
+  'swap.orderBook': '\u8ba2\u5355\u7c3f',
+  'swap.hideOrderBook': '\u9690\u85cf\u8ba2\u5355\u7c3f',
+  'swap.showOrderBook': '\u663e\u793a\u8ba2\u5355\u7c3f',
   'swap.ethWalletAddress': '接收地址 (ETH 地址)',
   'swap.enterUsdtRecipient': '输入接收地址 (0x...)',
   'swap.enterEthAddress': '输入您希望接收代币的以太坊地址。',
@@ -186,6 +195,7 @@ const zh: Record<string, string> = {
   'walletDash.send': '\u53d1\u9001',
   'walletDash.swap': '\u5151\u6362',
   'walletDash.withdraw': '\u63d0\u53d6',
+  'walletDash.remove': '\u79fb\u9664',
   'walletDash.receive': '\u63a5\u6536',
   'walletDash.nativeSegwit': 'Native SegWit:',
   'walletDash.taproot': 'Taproot:',
@@ -315,7 +325,7 @@ const zh: Record<string, string> = {
   'settings.invalidPassword': '\u5bc6\u7801\u65e0\u6548\u6216\u89e3\u5bc6\u5931\u8d25',
 
   // Vaults
-  'vaults.title': 'DeFi \u91d1\u5e93',
+  'vaults.title': 'Defi \u91d1\u5e93\uff08\u9884\u89c8\uff09',
   'vaults.comingSoon': '\uff08\u5373\u5c06\u63a8\u51fa\uff09',
   'vaults.backToOverview': '\u8fd4\u56de\u91d1\u5e93\u6982\u89c8',
   'vaults.all': '\u5168\u90e8',
@@ -467,6 +477,40 @@ const zh: Record<string, string> = {
   'settingsPage.maxSlippage': '\u6700\u5927\u6ed1\u70b9 (%)',
   'settingsPage.deadlineBlocks': '\u622a\u6b62\u533a\u5757',
 
+  // Bottom Panels (Swap page tabs)
+  'bottomPanels.globalTrades': '\u5168\u7403\u4ea4\u6613',
+  'bottomPanels.myActivity': '\u6211\u7684\u6d3b\u52a8',
+  'bottomPanels.positions': '\u4ed3\u4f4d',
+  'bottomPanels.openOrders': '\u672a\u7ed3\u8ba2\u5355',
+  'bottomPanels.connectWalletOrders': '\u8fde\u63a5\u94b1\u5305\u4ee5\u67e5\u770b\u8ba2\u5355',
+  'bottomPanels.connectWalletPositions': '\u8fde\u63a5\u94b1\u5305\u4ee5\u67e5\u770b\u4ed3\u4f4d',
+  'bottomPanels.loadingOrders': '\u52a0\u8f7d\u8ba2\u5355\u4e2d...',
+  'bottomPanels.loadingPositions': '\u52a0\u8f7d\u4ed3\u4f4d\u4e2d...',
+  'bottomPanels.noOpenOrders': '\u6682\u65e0\u672a\u7ed3\u8ba2\u5355',
+  'bottomPanels.noPositions': '\u6682\u65e0 LP \u4ed3\u4f4d',
+  'bottomPanels.side': '\u65b9\u5411',
+  'bottomPanels.price': '\u4ef7\u683c',
+  'bottomPanels.amount': '\u6570\u91cf',
+  'bottomPanels.filled': '\u5df2\u6210\u4ea4',
+  'bottomPanels.sell': '\u5356\u51fa',
+  'bottomPanels.buy': '\u4e70\u5165',
+  'bottomPanels.cancelOrder': '\u53d6\u6d88\u8ba2\u5355',
+  'bottomPanels.pool': '\u8d44\u91d1\u6c60',
+  'bottomPanels.add': '\u6dfb\u52a0',
+  'bottomPanels.close': '\u5173\u95ed',
+  'bottomPanels.id': 'ID',
+
+  // Recent Trades / My Activity tables
+  'trades.type': '\u7c7b\u578b',
+  'trades.from': '\u4ece',
+  'trades.to': '\u5230',
+  'trades.amounts': '\u91d1\u989d',
+  'trades.time': '\u65f6\u95f4',
+  'trades.date': '\u65e5\u671f',
+  'trades.noTrades': '\u6b64\u4ea4\u6613\u5bf9\u6682\u65e0\u6700\u8fd1\u4ea4\u6613',
+  'trades.noWraps': '\u6682\u65e0\u6700\u8fd1\u5305\u88c5\u6216\u89e3\u5305\u88c5',
+  'trades.swap': '\u5151\u6362',
+
   // Activity Feed
   'activity.globalActivity': '\u5168\u7403\u6d3b\u52a8',
   'activity.allTypes': '\u6240\u6709\u7c7b\u578b',
@@ -614,7 +658,7 @@ const zh: Record<string, string> = {
 
   // Vault List Item
   'vaultList.estApy': '预估 APY',
-  'vaultList.riskLevel': '风险等级',
+  'vaultList.riskLevel': '波动性',
   'vaultList.available': '可用',
   'vaultList.deposits': '存款',
   'vaultList.histApy': '历史 APY',
@@ -772,6 +816,7 @@ const zh: Record<string, string> = {
   'wallet.browserExtensionWallets': '浏览器扩展钱包',
   'wallet.newPassword': '新密码',
   'wallet.enterRecoveryPhrase': '输入您的 12 或 24 个单词的助记词',
+  'wallet.restoreMnemonicWarning': '警告：从其他提供商导入钱包将无法检测其中持有的 runes 或铭文。在本应用中进行的交易可能会销毁它们。如果您的钱包持有 runes 或铭文，我们建议改用浏览器扩展钱包。',
   'wallet.createPassword': '创建密码',
   'wallet.restoring': '正在恢复...',
   'wallet.uploadKeystoreDesc': '上传之前导出的 JSON 密钥库文件以恢复您的钱包。',
@@ -883,7 +928,7 @@ const zh: Record<string, string> = {
   'fire.duration': '时长',
   'fire.flex': '灵活',
   'fire.blocks': '个区块',
-  'fire.topStakers': '顶级质押者',
+  'fire.topStakers': 'FIRE 分配',
   'fire.circulating': '流通中',
 
   // FIRE Staking Panel

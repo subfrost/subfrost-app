@@ -29,6 +29,12 @@ export type PoolSummary = {
   apr?: number;
 };
 
+export type SelectedOrder = {
+  price: string;
+  amount: string;
+  side: 'buy' | 'sell';
+};
+
 export type SwapQuote = {
   sellAmount: string;
   buyAmount: string;

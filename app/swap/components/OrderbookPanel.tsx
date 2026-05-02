@@ -4,13 +4,21 @@ import { useState, useMemo, useRef, useEffect } from 'react';
 import { useOrderbook, type OrderLevel } from '@/hooks/useOrderbook';
 import { useWallet } from '@/context/WalletContext';
 import { TrendingUp, TrendingDown, ArrowUpDown, ChevronDown } from 'lucide-react';
+import type { SelectedOrder } from '../types';
 
 interface Props {
   baseToken: string;
   quoteToken: string;
-  onPriceSelect?: (price: string) => void;
+  /** Fired when the user clicks a bid/ask row. Bids → side='sell' (fill someone's
+   *  buy), asks → side='buy' (fill someone's sell). Price/amount come straight
+   *  from the level, with thousands separators stripped. */
+  onOrderSelect?: (order: SelectedOrder) => void;
   /** Render without the outer sf-card wrapper so this can be embedded inside another sf-card panel. */
   bare?: boolean;
+}
+
+function stripCommas(s: string): string {
+  return s.replace(/,/g, '');
 }
 
 type DisplayMode = 'both' | 'bids' | 'asks';
@@ -34,7 +42,7 @@ function OrderRow({
   return (
     <button
       onClick={onSelect}
-      className="sf-row grid grid-cols-3 w-full text-right text-[11px] leading-[20px] px-3 py-1.5 relative group cursor-pointer"
+      className="sf-row grid grid-cols-3 w-full text-right text-[11px] leading-[20px] px-4 py-1.5 relative group cursor-pointer"
     >
       {/* Depth bar */}
       <div
@@ -58,7 +66,7 @@ function OrderRow({
   );
 }
 
-export default function OrderbookPanel({ baseToken, quoteToken, onPriceSelect, bare }: Props) {
+export default function OrderbookPanel({ baseToken, quoteToken, onOrderSelect, bare }: Props) {
   const { data: orderbook, isLoading } = useOrderbook(baseToken, quoteToken);
   const [displayMode, setDisplayMode] = useState<DisplayMode>('both');
   const [grouping, setGrouping] = useState<GroupingSize>('0.01');
@@ -169,7 +177,7 @@ export default function OrderbookPanel({ baseToken, quoteToken, onPriceSelect, b
       </div>
 
       {/* Column headers */}
-      <div className="sf-table-header grid grid-cols-3 text-right px-3 py-2">
+      <div className="sf-table-header grid grid-cols-3 text-right px-4 py-2">
         <span>Price ({quoteToken})</span>
         <span>Size ({baseToken})</span>
         <span>Total</span>
@@ -193,7 +201,11 @@ export default function OrderbookPanel({ baseToken, quoteToken, onPriceSelect, b
                   level={level}
                   side="ask"
                   maxTotal={maxAskTotal}
-                  onSelect={() => onPriceSelect?.(level.price)}
+                  onSelect={() => onOrderSelect?.({
+                    price: stripCommas(level.price),
+                    amount: stripCommas(level.amount),
+                    side: 'buy',
+                  })}
                 />
               ))}
             </div>
@@ -233,7 +245,11 @@ export default function OrderbookPanel({ baseToken, quoteToken, onPriceSelect, b
                   level={level}
                   side="bid"
                   maxTotal={maxBidTotal}
-                  onSelect={() => onPriceSelect?.(level.price)}
+                  onSelect={() => onOrderSelect?.({
+                    price: stripCommas(level.price),
+                    amount: stripCommas(level.amount),
+                    side: 'sell',
+                  })}
                 />
               ))}
             </div>

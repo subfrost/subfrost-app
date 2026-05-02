@@ -28,7 +28,9 @@ import { useUserOrders } from '@/hooks/useUserOrders';
 import { useCancelOrderMutation } from '@/hooks/useCancelOrderMutation';
 import { useDevnet } from '@/context/DevnetContext';
 import { getConfig } from '@/utils/getConfig';
+import { useTranslation } from '@/hooks/useTranslation';
 import TokenIcon from '@/app/components/TokenIcon';
+import type { LPPosition } from './LiquidityInputs';
 
 const RecentTradesPanel = lazy(() => import('./RecentTradesPanel'));
 const MyWalletSwaps = lazy(() => import('./MyWalletSwaps'));
@@ -48,6 +50,7 @@ interface Props {
     token1Id?: string;
     token1Symbol: string;
   }) => void;
+  onRemoveLiquidity?: (position: LPPosition) => void;
 }
 
 function EmptyState({ icon: Icon, message }: { icon: any; message: string }) {
@@ -59,7 +62,8 @@ function EmptyState({ icon: Icon, message }: { icon: any; message: string }) {
   );
 }
 
-export default function BottomPanels({ baseToken, quoteToken, baseTokenId, quoteTokenId, poolId, isWrapPair, onAddLiquidity }: Props) {
+export default function BottomPanels({ baseToken, quoteToken, baseTokenId, quoteTokenId, poolId, isWrapPair, onAddLiquidity, onRemoveLiquidity }: Props) {
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<PanelTab>('trades');
   const { isConnected, network } = useWallet() as any;
   const { positions: allPositions, isLoading: isLoadingPositions } = useLPPositions();
@@ -77,63 +81,6 @@ export default function BottomPanels({ baseToken, quoteToken, baseTokenId, quote
   // Cancel order mutation — opcode 21 (CancelOrder) on the Carbine controller.
   // On devnet, mines 1 block after broadcast to keep metashrew synced.
   const cancelMutation = useCancelOrderMutation();
-
-  // Close LP position — remove all liquidity via pool opcode 2 (WithdrawAndBurn)
-  const [closingPositionId, setClosingPositionId] = useState<string | null>(null);
-  const { account } = useWallet() as any;
-  const handleClosePosition = async (pos: typeof lpPositions[0]) => {
-    if (closingPositionId) return;
-    setClosingPositionId(pos.id);
-    try {
-      const isLocal = network === 'regtest-local' || network === 'devnet';
-      if (!isLocal) { window.alert('Close position only supported on local networks for now'); return; }
-
-      const taprootAddress = account?.taproot?.address;
-      const segwitAddress = account?.nativeSegwit?.address;
-      if (!taprootAddress) throw new Error('No taproot address');
-
-      const wasm = await import('@alkanes/ts-sdk/wasm');
-      const rpcUrl = 'http://localhost:18888';
-      const execProvider = new wasm.WebProvider('regtest', { jsonrpc_url: rpcUrl, data_api_url: rpcUrl });
-      const mnemonic = sessionStorage.getItem('subfrost_session_mnemonic') || '';
-      if (!mnemonic) throw new Error('Wallet not unlocked');
-      execProvider.walletLoadMnemonic(mnemonic, null);
-
-      const lpBalance = pos.amount ? Math.floor(parseFloat(pos.amount) * 1e8).toString() : '0';
-      const [poolBlock, poolTx] = pos.id.split(':').map(Number);
-
-      // Pool opcode 2: WithdrawAndBurn — send LP as incomingAlkanes, no extra args
-      const protostone = `[${poolBlock},${poolTx},2]:v0:v0`;
-      const inputReqs = `${pos.id}:${lpBalance}`;
-
-      const fromAddrs = [taprootAddress, segwitAddress].filter(Boolean);
-      const result = await execProvider.alkanesExecuteFull(
-        JSON.stringify([taprootAddress]),
-        inputReqs,
-        protostone,
-        1,
-        null,
-        JSON.stringify({
-          from: fromAddrs,
-          change_address: segwitAddress || taprootAddress,
-          alkanes_change_address: taprootAddress,
-          lock_alkanes: true,
-          mine_enabled: true,
-          auto_confirm: true,
-        }),
-      );
-
-      const parsed = typeof result === 'string' ? JSON.parse(result) : result;
-      const txId = parsed?.txid || parsed?.reveal_txid || '';
-      console.log('[ClosePosition] Success:', txId);
-      window.alert(`Position closed! TX: ${txId.slice(0, 16)}...`);
-    } catch (e: any) {
-      console.error('[ClosePosition] Error:', e);
-      window.alert(`Close failed: ${e?.message || 'See console'}`);
-    } finally {
-      setClosingPositionId(null);
-    }
-  };
 
   const config = getConfig(network || 'mainnet');
   const controllerId = (config as any).CARBINE_CONTROLLER_ID as string | undefined;
@@ -154,10 +101,10 @@ export default function BottomPanels({ baseToken, quoteToken, baseTokenId, quote
   const openOrderCount = userOrders.length;
 
   const tabs: { key: PanelTab; label: string; icon: React.ReactNode; count?: number }[] = [
-    { key: 'trades', label: 'Global Trades', icon: <Globe size={12} /> },
-    { key: 'activity', label: 'My Activity', icon: <Activity size={12} /> },
-    { key: 'positions', label: 'Positions', icon: <BarChart3 size={12} />, count: lpPositions.length },
-    { key: 'orders', label: 'Open Orders', icon: <Layers size={12} />, count: openOrderCount },
+    { key: 'trades', label: t('bottomPanels.globalTrades'), icon: <Globe size={12} /> },
+    { key: 'activity', label: t('bottomPanels.myActivity'), icon: <Activity size={12} /> },
+    { key: 'positions', label: t('bottomPanels.positions'), icon: <BarChart3 size={12} />, count: lpPositions.length },
+    { key: 'orders', label: t('bottomPanels.openOrders'), icon: <Layers size={12} />, count: openOrderCount },
   ];
 
   return (
@@ -187,24 +134,24 @@ export default function BottomPanels({ baseToken, quoteToken, baseTokenId, quote
 
       {/* Panel content */}
       <div className="min-h-[100px]">
-        <Suspense fallback={<div className="p-6 text-center text-xs text-[color:var(--sf-text)]/20 animate-pulse">Loading...</div>}>
+        <Suspense fallback={<div className="p-6 text-center text-xs text-[color:var(--sf-text)]/20 animate-pulse">{t('common.loading')}</div>}>
 
           {/* Open Orders — powered by useUserOrders (Carbine opcode 25) */}
           {activeTab === 'orders' && (
             !isConnected ? (
-              <EmptyState icon={Layers} message="Connect wallet to view orders" />
+              <EmptyState icon={Layers} message={t('bottomPanels.connectWalletOrders')} />
             ) : isLoadingOrders ? (
-              <div className="p-6 text-center text-xs text-[color:var(--sf-text)]/20 animate-pulse">Loading orders...</div>
+              <div className="p-6 text-center text-xs text-[color:var(--sf-text)]/20 animate-pulse">{t('bottomPanels.loadingOrders')}</div>
             ) : openOrderCount === 0 ? (
-              <EmptyState icon={Layers} message="No open orders" />
+              <EmptyState icon={Layers} message={t('bottomPanels.noOpenOrders')} />
             ) : (
               <div>
                 {/* Header */}
                 <div className="sf-table-header grid grid-cols-[auto_1fr_1fr_1fr_auto] gap-3 px-3 py-2">
-                  <span>Side</span>
-                  <span className="text-right">Price</span>
-                  <span className="text-right">Amount</span>
-                  <span className="text-right">Filled</span>
+                  <span>{t('bottomPanels.side')}</span>
+                  <span className="text-right">{t('bottomPanels.price')}</span>
+                  <span className="text-right">{t('bottomPanels.amount')}</span>
+                  <span className="text-right">{t('bottomPanels.filled')}</span>
                   <span />
                 </div>
                 <div className="max-h-[240px] overflow-y-auto">
@@ -228,7 +175,7 @@ export default function BottomPanels({ baseToken, quoteToken, baseTokenId, quote
                             : 'bg-green-500/15 text-green-400'
                         }`}
                       >
-                        {isSell ? 'SELL' : 'BUY'}
+                        {isSell ? t('bottomPanels.sell') : t('bottomPanels.buy')}
                       </span>
                       <span className="text-[11px] text-right tabular-nums text-[color:var(--sf-text)]/80">
                         {price}
@@ -243,7 +190,7 @@ export default function BottomPanels({ baseToken, quoteToken, baseTokenId, quote
                       <button
                         onClick={() => handleCancelOrder(order.orderId)}
                         disabled={isCancelling || cancelMutation.isPending}
-                        title="Cancel order"
+                        title={t('bottomPanels.cancelOrder')}
                         className={`p-1 rounded hover:bg-red-500/20 transition-colors ${
                           isCancelling ? 'opacity-40 cursor-not-allowed' : 'text-[color:var(--sf-text)]/30 hover:text-red-400'
                         }`}
@@ -261,20 +208,20 @@ export default function BottomPanels({ baseToken, quoteToken, baseTokenId, quote
           {/* LP Positions */}
           {activeTab === 'positions' && (
             !isConnected ? (
-              <EmptyState icon={BarChart3} message="Connect wallet to view positions" />
+              <EmptyState icon={BarChart3} message={t('bottomPanels.connectWalletPositions')} />
             ) : isLoadingPositions ? (
-              <div className="p-6 text-center text-xs text-[color:var(--sf-text)]/20 animate-pulse">Loading positions...</div>
+              <div className="p-6 text-center text-xs text-[color:var(--sf-text)]/20 animate-pulse">{t('bottomPanels.loadingPositions')}</div>
             ) : lpPositions.length === 0 ? (
-              <EmptyState icon={BarChart3} message="No LP positions" />
+              <EmptyState icon={BarChart3} message={t('bottomPanels.noPositions')} />
             ) : (
               <div>
                 {/* Header — column layout: Pool | Amount | Add | Close | ID */}
                 <div className="sf-table-header grid grid-cols-[1.4fr_0.9fr_0.7fr_0.7fr_0.7fr] gap-2 px-3 py-2">
-                  <span>Pool</span>
-                  <span className="text-right">Amount</span>
-                  <span className="text-center">Add</span>
-                  <span className="text-center">Close</span>
-                  <span className="text-right">ID</span>
+                  <span>{t('bottomPanels.pool')}</span>
+                  <span className="text-right">{t('bottomPanels.amount')}</span>
+                  <span className="text-center">{t('bottomPanels.add')}</span>
+                  <span className="text-center">{t('bottomPanels.close')}</span>
+                  <span className="text-right">{t('bottomPanels.id')}</span>
                 </div>
                 <div className="max-h-[240px] overflow-y-auto">
                 {lpPositions.map((pos) => (
@@ -306,16 +253,16 @@ export default function BottomPanels({ baseToken, quoteToken, baseTokenId, quote
                         disabled={!onAddLiquidity || !pos.token0Id || !pos.token1Id}
                         className="sf-btn-ghost text-[10px] px-2 py-1 text-green-400 hover:text-green-300 disabled:opacity-50"
                       >
-                        <Plus size={10} className="inline mr-0.5" />Add
+                        <Plus size={10} className="inline mr-0.5" />{t('bottomPanels.add')}
                       </button>
                     </div>
                     <div className="flex justify-center">
                       <button
-                        onClick={() => handleClosePosition(pos)}
-                        disabled={closingPositionId === pos.id}
+                        onClick={() => onRemoveLiquidity?.(pos)}
+                        disabled={!onRemoveLiquidity}
                         className="sf-btn-ghost text-[10px] px-2 py-1 text-red-400 hover:text-red-300 disabled:opacity-50"
                       >
-                        {closingPositionId === pos.id ? '...' : <><LogOut size={10} className="inline mr-0.5" />Close</>}
+                        <LogOut size={10} className="inline mr-0.5" />{t('bottomPanels.close')}
                       </button>
                     </div>
                     <span className="text-[10px] text-right tabular-nums text-[color:var(--sf-text)]/40 truncate">

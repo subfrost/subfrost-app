@@ -67,13 +67,13 @@ import { useLimitOrderMutation } from '@/hooks/useLimitOrderMutation';
 import { useOrderbook } from '@/hooks/useOrderbook';
 import { useTranslation } from '@/hooks/useTranslation';
 import { getConfig } from '@/utils/getConfig';
-import type { TokenMeta } from '../types';
+import type { SelectedOrder, TokenMeta } from '../types';
 import type { Network } from '@/utils/constants';
 
 interface Props {
   baseToken: string;
   quoteToken: string;
-  selectedPrice?: string;
+  selectedOrder?: SelectedOrder;
   fromToken?: TokenMeta;
   toToken?: TokenMeta;
   fromBalanceText?: string;
@@ -87,7 +87,7 @@ interface Props {
 export default function LimitOrderPanel({
   baseToken,
   quoteToken,
-  selectedPrice,
+  selectedOrder,
   fromToken,
   toToken,
   fromBalanceText,
@@ -113,10 +113,15 @@ export default function LimitOrderPanel({
   const priceInputRef = useRef<HTMLInputElement>(null);
   const amountInputRef = useRef<HTMLInputElement>(null);
 
-  // Sync price from orderbook click
+  // Sync price/amount/side from orderbook row click. SwapShell creates a fresh
+  // SelectedOrder reference on every click so re-selecting the same row re-runs
+  // this effect and re-populates the inputs even if the user has edited them.
   useEffect(() => {
-    if (selectedPrice) setPrice(selectedPrice);
-  }, [selectedPrice]);
+    if (!selectedOrder) return;
+    setPrice(selectedOrder.price);
+    setAmount(selectedOrder.amount);
+    setSide(selectedOrder.side);
+  }, [selectedOrder]);
 
   // Last traded price source — orderbook midpoint (best bid/ask average).
   const { data: orderbook } = useOrderbook(fromToken?.id, toToken?.id);
