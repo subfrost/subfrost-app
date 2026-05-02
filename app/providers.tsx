@@ -23,12 +23,21 @@ import GlobalNotificationArea from '@/app/components/GlobalNotificationArea';
 
 // Define Network type locally
 import type { Network } from '@/utils/constants';
+import { DEMO_MODE_ENABLED } from '@/utils/demoMode';
 
 const NETWORK_STORAGE_KEY = 'subfrost_selected_network';
 
 // Detect network from localStorage, hostname, or env variable
 function detectNetwork(): Network {
   if (typeof window === 'undefined') return 'mainnet';
+
+  // Demo mode is a mainnet-only experience — force mainnet and overwrite any
+  // stored network so the gate in useDemoGate() actually fires and the user
+  // can't get stuck on a stale regtest selection from a previous session.
+  if (DEMO_MODE_ENABLED) {
+    localStorage.setItem(NETWORK_STORAGE_KEY, 'mainnet');
+    return 'mainnet';
+  }
 
   // First check localStorage for user selection
   // JOURNAL (2026-03-31): Added 'devnet' to the allowlist — it was missing, so
