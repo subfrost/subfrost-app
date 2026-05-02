@@ -205,10 +205,24 @@ wasm-pack build --target bundler --release crates/alkanes-web-sys
 
 ## Ord on mainnet (2026-05)
 
-`ord_output` / `ord_outputs` works reliably on mainnet again. To-do list,
-in priority order:
+`ord_output` / `ord_outputs` works reliably on mainnet again. Status:
 
-1. Re-enable `has_inscriptions` filtering in SDK `select_utxos` (currently always false).
-2. Re-enable `balances.lua` ord flag (`args[3] = "ord"`) for spendable/assets display.
-3. Consider enabling `check_utxos_for_inscriptions` in SDK (currently skipped: `split_psbt = None`) — required for `ordinalsStrategy: 'preserve'` split-tx codepath to actually run.
-4. `payment_utxos` from UniSat remains preferred for browser BTC-send (faster, no per-UTXO RPC); ord becomes the fallback for non-UniSat browser wallets and keystore.
+1. ✅ **`check_utxos_for_inscriptions` re-enabled in SDK** (subfrost-app
+   commits `5f67170` + `6798ec8` carry the WASM with this fix; alkanes-rs
+   fork branch `feat/sdk-perf-and-coinselect` commit `b0fa07e6`).
+   `ordinalsStrategy: 'preserve'` split-tx codepath active. Includes
+   alkane-aware `build_split_psbt` that routes alkanes to a clean output
+   via protostone OP_RETURN when the inscribed UTXO also carries an alkane.
+2. ✅ **Mempool-spent UTXO filter in `select_utxos`** (same WASM /
+   commit). Fetches `address/{addr}/txs/mempool`, builds a set of
+   pending-spent outpoints, removes them from the candidate set before
+   coin selection. Prevents double-submit mempool conflicts.
+3. ⏳ Re-enable `has_inscriptions` filter in lua-fetched UTXO path
+   (currently always false — replaced by per-UTXO `ord_output` checks
+   inside `check_utxos_for_inscriptions`).
+4. ⏳ Re-enable `balances.lua` ord flag (`args[3] = "ord"`) for the
+   spendable/assets display query.
+5. `payment_utxos` from UniSat remains preferred for browser BTC fees
+   (auto-fetched by `alkanesExecuteTyped` from `txContext.walletType`):
+   faster than per-UTXO `ord_output`, and UniSat already excludes
+   inscription/rune-bearing UTXOs on its side.
