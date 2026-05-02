@@ -699,45 +699,6 @@ export default function WalletSettings() {
             </div>
           )}
         </div>
-        {/* Advanced Options */}
-        <div className="rounded-xl bg-[color:var(--sf-primary)]/5 p-6">
-          <div className="flex items-center gap-3 mb-4">
-            <Settings size={24} className="text-[color:var(--sf-primary)]" />
-            <h3 className="text-xl font-bold text-[color:var(--sf-text)]">{t('settings.advancedOptions')}</h3>
-          </div>
-
-          <div className="space-y-4">
-            {/* Ignore Ordinals */}
-            <div className="flex items-center justify-between p-4 rounded-lg bg-[color:var(--sf-primary)]/5 border border-[color:var(--sf-outline)]">
-              <div className="flex-1 mr-4">
-                <div className="text-sm font-medium text-[color:var(--sf-text)]">{t('settings.ignoreOrdinals')}</div>
-                <div className="text-xs text-[color:var(--sf-text)]/60 mt-1">{t('settings.ignoreOrdinalsDescription')}</div>
-              </div>
-              <button
-                disabled
-                className="relative inline-flex h-6 w-11 shrink-0 cursor-not-allowed items-center rounded-full bg-[color:var(--sf-primary)] opacity-60 transition-colors"
-                title="Enabled — ordinal detection coming soon"
-              >
-                <span className="inline-block h-4 w-4 translate-x-6 rounded-full bg-white transition-transform" />
-              </button>
-            </div>
-
-            {/* Ignore Runes */}
-            <div className="flex items-center justify-between p-4 rounded-lg bg-[color:var(--sf-primary)]/5 border border-[color:var(--sf-outline)]">
-              <div className="flex-1 mr-4">
-                <div className="text-sm font-medium text-[color:var(--sf-text)]">{t('settings.ignoreRunes')}</div>
-                <div className="text-xs text-[color:var(--sf-text)]/60 mt-1">{t('settings.ignoreRunesDescription')}</div>
-              </div>
-              <button
-                disabled
-                className="relative inline-flex h-6 w-11 shrink-0 cursor-not-allowed items-center rounded-full bg-[color:var(--sf-primary)] opacity-60 transition-colors"
-                title="Enabled — rune detection coming soon"
-              >
-                <span className="inline-block h-4 w-4 translate-x-6 rounded-full bg-white transition-transform" />
-              </button>
-            </div>
-          </div>
-        </div>
       </div>
 
       {/* Seed Phrase Modal */}

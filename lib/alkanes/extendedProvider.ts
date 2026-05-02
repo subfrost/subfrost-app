@@ -41,12 +41,17 @@ export async function alkanesExecuteTyped(
   const maxVout = parseMaxVoutFromProtostones(params.protostones);
   const toAddresses = params.toAddresses ?? Array(maxVout + 1).fill('p2tr:0');
 
-  const fromAddrs = params.fromAddresses ?? ['p2wpkh:0', 'p2tr:0'];
+  // Mirror execute.ts' override-then-txContext-then-default chain so logs
+  // reflect the actual values that will reach the WASM provider.
+  const fromAddrs =
+    params.fromAddresses ?? params.txContext?.feeSourceAddresses ?? ['p2wpkh:0', 'p2tr:0'];
   const options: Record<string, any> = {
     from: fromAddrs,
     from_addresses: fromAddrs,
-    change_address: params.changeAddress ?? 'p2wpkh:0',
-    alkanes_change_address: params.alkanesChangeAddress ?? 'p2tr:0',
+    change_address:
+      params.changeAddress ?? params.txContext?.btcChangeAddress ?? 'p2wpkh:0',
+    alkanes_change_address:
+      params.alkanesChangeAddress ?? params.txContext?.alkanesChangeAddress ?? 'p2tr:0',
     lock_alkanes: true,
   };
 
@@ -54,7 +59,8 @@ export async function alkanesExecuteTyped(
   if (params.mineEnabled !== undefined) options.mine_enabled = params.mineEnabled;
   if (params.autoConfirm !== undefined) options.auto_confirm = params.autoConfirm;
   if (params.rawOutput !== undefined) options.raw_output = params.rawOutput;
-  if (params.ordinalsStrategy !== undefined) options.ordinals_strategy = params.ordinalsStrategy;
+  const ordinalsStrategy = params.ordinalsStrategy ?? params.txContext?.defaultOrdinalsStrategy;
+  if (ordinalsStrategy !== undefined) options.ordinals_strategy = ordinalsStrategy;
 
   const toAddressesJson = JSON.stringify(toAddresses);
   const optionsJson = JSON.stringify(options);

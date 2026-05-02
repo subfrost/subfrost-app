@@ -31,7 +31,7 @@ NEVER report work as complete without a structured self-audit. After implementin
 2. **Hardcoded values**: Any hardcoded number (prices, amounts, slot IDs, byte offsets) must be verified against the live state or computed dynamically. Devnet pool reserves vary per boot — never assume specific values.
 3. **Type propagation**: Trace `routeSource`, `poolId`, or any new field end-to-end: hook → component → mutation → protostone. Verify structural type compatibility across file boundaries.
 4. **Binary parsing**: For every LE byte parse, verify byte offsets against the contract's response layout. u128 = 16 bytes (not 8). u32 = 4 bytes (not 16).
-5. **Address handling**: Confirm `useActualAddresses` pattern is used. Confirm router/factory receives tokens via `incomingAlkanes` (two-protostone or SDK auto-edict).
+5. **Address handling**: Confirm hook destructures `txContext` from `useWallet()` and passes it to `alkanesExecuteTyped` (no inline `paymentAddress || taproot` ternaries; no symbolic `'p2tr:0'`/`'p2wpkh:0'`). Confirm router/factory receives tokens via `incomingAlkanes` (two-protostone or SDK auto-edict).
 6. **Run tsc + tests**: `npx tsc --noEmit` and run all affected vitest suites. Do not report success until both pass.
 
 This rule exists because LLM-generated code frequently has correct structure but wrong constants, reversed argument order, or off-by-one byte offsets. The audit catches these before they reach the user.
@@ -69,8 +69,8 @@ When the SDK builds a PSBT, it selects UTXOs from `from_addresses` to fund BTC f
 |------|------|-----------|
 | `lib/devnet/boot.ts` — `deployWasm()` | Consumes alkane UTXOs as fee inputs | Phase 10a re-mints tokens after all deploys |
 | `lib/devnet/boot.ts` — `executeCall()` | Same risk for any non-deploy call | Document risk, re-mint if needed |
-| `lib/alkanes/buildAlkaneTransferPsbt.ts` | User sends DIESEL, PSBT picks inscription UTXO | Smart UTXO selection + collateral warning |
-| `hooks/useSwapMutation.ts` | Swap PSBT picks wrong UTXOs | SDK handles via `alkanesExecuteTyped` with `from_addresses` |
+| `app/wallet/components/SendModal.tsx` (alkane branch) | User sends DIESEL, SDK picks inscription UTXO | `ordinalsStrategy: 'preserve'` when WalletSettings "Protect ordinals" is on |
+| `hooks/useSwapMutation.ts` | Swap PSBT picks wrong UTXOs | SDK handles via `alkanesExecuteTyped` with `txContext.feeSourceAddresses` |
 | Any frontend mutation hook | Browser wallet PSBT construction | `patchInputsOnly` for witnessUtxo scripts |
 
 ### Diagnostic: "Insufficient alkanes: have 0"
@@ -115,14 +115,14 @@ The Alkanes SDK has **two separate derivation systems** that use **different coi
 - `@alkanes/ts-sdk` WASM — coinType=1 for regtest (immutable without WASM rebuild)
 - `@alkanes/ts-sdk` JS — coinType=0 always (immutable without SDK source change)
 
-### Address Handling — useActualAddresses is MANDATORY
-Every mutation hook MUST use `useActualAddresses = isBrowserWallet || network === 'devnet' || network === 'regtest-local' || network === 'qubitcoin-regtest'` for address ternaries (fromAddresses, toAddresses, changeAddr, alkanesChangeAddr).
+### Address Handling — pass `txContext` from `useWallet()`
+Every mutation hook destructures `txContext` from `useWallet()` and forwards it to `alkanesExecuteTyped`. The wrapper unpacks it into `from_addresses` / `change_address` / `alkanes_change_address` / `protect_taproot` / `ordinals_strategy`. Per-call overrides win (`params.X ?? txContext.X`) — used by atomic flows and SendModal `'preserve'`.
 
-**Why:** On devnet, the SDK provider loads the boot mnemonic via `walletLoadMnemonic()`, but `createWalletFromMnemonic()` in WalletContext derives DIFFERENT addresses from the same mnemonic. Symbolic addresses (`p2tr:0`) resolve to the SDK wallet's derivation, not the connected wallet's — tokens land at wrong addresses → "insufficient balance" errors despite having assets.
+**Why centralized:** Symbolic addresses (`p2tr:0`, `p2wpkh:0`) resolve to the SDK provider's *internal* wallet, not the user's. On mainnet this lost real tokens (tx `985436b5...`); on devnet the WASM provider loads the boot mnemonic which derives different addresses than `WalletContext` even from the same seed. The previous fix was a 28-hook duplicated `paymentAddress || taproot` ternary chain. `txContext` collapses that into one computed object on `WalletContext` so a new hook physically can't forget the fallback.
 
 **Use `isBrowserWallet` ONLY for:** signing logic (`signTaprootPsbt` vs `signSegwitPsbt`), `patchInputsOnly`, and confirmation flows.
 
-**Test enforcement:** `address-handling.test.ts` asserts `useActualAddresses = isBrowserWallet || network === 'devnet'` exists in every hook.
+**Test enforcement:** `hooks/__tests__/mutations/address-handling.test.ts` asserts every mutation hook destructures `txContext`, passes it into `alkanesExecuteTyped`, and guards on `!txContext` for unconnected wallets.
 
 **After fixing address bugs:** Hard reset the devnet. Old state has tokens at the wrong derivation addresses and cannot be recovered. Stale state also inflates balance displays (espo aggregates across old + new outpoints) which causes users to attempt swaps larger than their actual spendable balance.
 
@@ -154,7 +154,7 @@ u32 numAsks (4 bytes LE)  ← NOT u128
 - See full Carbine CLOB section at bottom of this file for deployment, pair ordering, and verification scripts
 
 ### PSBT Patching — Input-Only
-`patchPsbtForBrowserWallet()` was removed from all mutation hooks (2026-02-20). Only input-level patching is used: `patchInputsOnly()` for witnessUtxo scripts and redeemScript injection (P2SH-P2WPKH for Xverse). Output patching is never needed because all hooks pass actual addresses via `useActualAddresses`.
+`patchPsbtForBrowserWallet()` was removed from all mutation hooks (2026-02-20). Only input-level patching is used: `patchInputsOnly()` for witnessUtxo scripts and redeemScript injection (P2SH-P2WPKH for Xverse). Output patching is never needed because all hooks pass actual addresses via `txContext`.
 
 ---
 
@@ -480,7 +480,7 @@ For swap/wrap: SDK uses `payment_utxos` from UniSat `getBitcoinUtxos()` (clean U
 
 ### ⚠️ Tokens/BTC sent to wrong addresses (browser wallet)
 **Cause:** Symbolic addresses (`p2tr:0`) resolve to SDK's dummy wallet, not user's.
-**Fix:** See "Address Handling — useActualAddresses is MANDATORY" section above.
+**Fix:** See "Address Handling — pass `txContext` from `useWallet()`" section above.
 
 ---
 
@@ -618,19 +618,14 @@ if (taprootPubKey) {
 
 ### Browser Wallet Address Rules
 
-See "Address Handling — useActualAddresses is MANDATORY" above. This rule was established after **actual token loss on mainnet** (tx `985436b5...`) — symbolic addresses (`p2tr:0`) resolve to the SDK's dummy wallet, not the user's.
+See "Address Handling — pass `txContext` from `useWallet()`" above. This rule was established after **actual token loss on mainnet** (tx `985436b5...`).
 
-```typescript
-const isBrowserWallet = walletType === 'browser';
-const toAddresses = isBrowserWallet ? [primaryAddress] : ['p2tr:0'];
-// Keystore is taproot-only (BIP86) — BTC change must go to taproot, not segwit.
-// Sending change to 'p2wpkh:0' for keystore strands BTC at a segwit address
-// the user does not actively hold funds at.
-const changeAddr = isBrowserWallet ? (segwitAddress || taprootAddress) : 'p2tr:0';
-const alkanesChangeAddr = isBrowserWallet ? primaryAddress : 'p2tr:0';
-```
+`WalletContext` computes `txContext` per `walletType`:
+- **keystore** (BIP86 taproot-only): all four address fields = taproot; `protectTaproot=false`; `'burn'` ord-strategy (skips ord lookup, perf win).
+- **browser dual-address** (Xverse / Leather / OYL): `feeSourceAddresses=[segwit, taproot]`, BTC change → segwit, alkane change → taproot, `protectTaproot=true`, `'exclude'`.
+- **browser single-address** (UniSat / OKX): one address for everything, `protectTaproot=false`.
 
-UniSat/OKX are single-address wallets: `primaryAddress = taprootAddress || segwitAddress`.
+Hooks just pass `txContext` — no inline ternaries. Per-operation overrides (e.g. SendModal `ordinalsStrategy: 'preserve'`) take precedence at the call site.
 
 ### Wallet-Specific Quirks
 
@@ -643,12 +638,10 @@ UniSat/OKX are single-address wallets: `primaryAddress = taprootAddress || segwi
 
 ### Alkane Transfer UTXO Safety
 
-Dust UTXOs can carry inscriptions, runes, AND alkanes simultaneously. `buildAlkaneTransferPsbt.ts` implements smart UTXO selection:
-1. Query `fetchAlkaneOutpoints()` for UTXOs with target alkane
-2. Query `fetchOrdOutputs()` to detect inscriptions/runes (returns `rpcFailed: true` on mainnet — `ord_outputs` RPC is disabled)
-3. Score UTXOs: clean (score 0) > other alkanes (1+) > inscriptions/runes (100+)
-4. Greedy selection: fewest UTXOs needed
-5. If collateral (inscriptions/runes) present, or `rpcFailed` on mainnet → show warning UI, require user acknowledgment
+Dust UTXOs can carry inscriptions, runes, AND alkanes simultaneously. SendModal's alkane branch goes through `alkanesExecuteTyped` (the manual `buildAlkaneTransferPsbt.ts` path was removed in the txContext refactor). Inscription/rune protection is delegated to the SDK via `ordinalsStrategy`:
+
+- **Default:** `txContext.defaultOrdinalsStrategy` (`'exclude'` for browser, `'burn'` for keystore which is wallet-internal and never receives inscriptions).
+- **Per-call override:** SendModal passes `ordinalsStrategy: 'preserve'` when the user has the WalletSettings "Protect ordinals & runes" toggle on (`utils/walletSettings.ts`). This makes the SDK run a split-tx codepath that never spends UTXOs carrying inscriptions/runes.
 
 **DUST_VALUE = 600 sats** (not 546) to avoid node dust rejection.
 
@@ -661,7 +654,7 @@ Dust UTXOs can carry inscriptions, runes, AND alkanes simultaneously. `buildAlka
 5. Outputs: actual addresses for browser wallets, never symbolic
 6. Smart finalization: try `extractTransaction()` first, fallback to `finalizeAllInputs()`
 
-Key files: `app/wallet/components/SendModal.tsx`, `lib/alkanes/buildAlkaneTransferPsbt.ts`, `lib/wallet/browserWalletSigning.ts`
+Key files: `app/wallet/components/SendModal.tsx`, `lib/wallet/browserWalletSigning.ts`
 
 ### Protorune Auto-Allocation (no manual edicts needed)
 

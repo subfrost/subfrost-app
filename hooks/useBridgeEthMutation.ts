@@ -45,7 +45,7 @@ export interface BridgeToEthParams {
 // ---- Hook ----
 
 export function useBridgeEthMutation() {
-  const { account, network, isConnected, signTaprootPsbt, walletType } = useWallet();
+  const { account, network, isConnected, signTaprootPsbt, walletType, txContext } = useWallet();
   const provider = useSandshrewProvider();
   const queryClient = useQueryClient();
   const { requestConfirmation } = useTransactionConfirm();
@@ -72,12 +72,11 @@ export function useBridgeEthMutation() {
         throw new Error('Calldata must be even-length hex.');
       }
 
+      // See `WalletContext.TxContext` jsdoc for the address-fallback semantics.
+      if (!txContext) throw new Error('No wallet address available');
       const taprootAddress = account?.taproot?.address;
       const segwitAddress = account?.nativeSegwit?.address;
-      if (!taprootAddress && !segwitAddress) {
-        throw new Error('No wallet address available');
-      }
-      const primaryAddress = taprootAddress || segwitAddress;
+      const primaryAddress = (taprootAddress || segwitAddress)!;
 
       const config = getConfig(network);
       const frethTokenId = (config as any).FRETH_ALKANE_ID as string;
@@ -104,35 +103,17 @@ export function useBridgeEthMutation() {
       console.log('[useBridgeEth] Input requirements:', inputRequirements);
 
       const isBrowserWallet = walletType === 'browser';
-      const useActualAddresses = isBrowserWallet || network === 'devnet' || network === 'regtest-local' || network === 'qubitcoin-regtest';
       const btcNetwork = getBitcoinNetwork(network);
 
-      const fromAddresses = useActualAddresses
-        ? [segwitAddress, taprootAddress].filter(Boolean) as string[]
-        : ['p2wpkh:0', 'p2tr:0'];
-
-      const toAddresses = useActualAddresses
-        ? [primaryAddress!]
-        : ['p2tr:0'];
-
-      const changeAddr = useActualAddresses
-        ? (segwitAddress || taprootAddress)
-        : 'p2wpkh:0';
-
-      const alkanesChangeAddr = useActualAddresses
-        ? primaryAddress
-        : 'p2tr:0';
+      const toAddresses = [primaryAddress];
 
       const result = await provider.alkanesExecuteTyped({
+        txContext,
         inputRequirements,
         protostones: protostone,
         feeRate: params.feeRate,
         autoConfirm: false,
-        fromAddresses,
         toAddresses,
-        changeAddress: changeAddr,
-        alkanesChangeAddress: alkanesChangeAddr,
-        ordinalsStrategy: 'burn',
       });
 
       // Auto-completed by SDK

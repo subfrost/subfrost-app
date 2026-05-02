@@ -242,12 +242,14 @@ describe('Signing delegation to ts-sdk adapter', () => {
       expect(body).toContain("Buffer.from(signedHex, 'hex')");
     });
 
-    it('handles browser wallet case before keystore fallback', () => {
-      // Browser wallet check should come first
+    it('handles browser wallet case before throwing for keystore', () => {
+      // Browser wallet check first, keystore explicitly throws (no BIP84
+      // fallback — keystore is taproot-only, signSegwitPsbt is unreachable
+      // from production callers; the guard surfaces accidental misuse).
       const adapterCheckIdx = body.indexOf("walletAdapter && walletType === 'browser'");
-      const keystoreCheckIdx = body.indexOf("if (!wallet)");
+      const keystoreThrowIdx = body.indexOf("walletType === 'keystore'");
       expect(adapterCheckIdx).toBeGreaterThan(-1);
-      expect(keystoreCheckIdx).toBeGreaterThan(adapterCheckIdx);
+      expect(keystoreThrowIdx).toBeGreaterThan(adapterCheckIdx);
     });
   });
 

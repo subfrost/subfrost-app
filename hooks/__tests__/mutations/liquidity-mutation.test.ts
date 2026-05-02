@@ -231,26 +231,28 @@ describe('Browser wallet address handling in useAddLiquidityMutation', () => {
     expect(src).toContain("isBrowserWallet = walletType === 'browser'");
   });
 
-  it('should use actual addresses for browser wallet toAddresses', () => {
-    const match = src.match(/toAddresses\s*=\s*(?:isBrowserWallet|useActualAddresses)\s*\n\s*\?\s*(.+)\n/);
-    expect(match).toBeTruthy();
-    expect(match![1]).not.toContain("'p2tr:0'");
+  // Address-fallback chain consolidated into txContext (2026-04-30); the wrapper
+  // unpacks the single `txContext` field into options_json itself.
+  it('should pass txContext into alkanesExecuteTyped', () => {
+    expect(src).toMatch(/alkanesExecuteTyped\(\{[\s\S]*?\btxContext\b/);
   });
 
-  it('should use actual addresses for browser wallet changeAddr', () => {
-    const match = src.match(/changeAddr\s*=\s*(?:isBrowserWallet|useActualAddresses)\s*\n\s*\?\s*(.+)\n/);
-    expect(match).toBeTruthy();
-    expect(match![1]).not.toContain("'p2wpkh:0'");
+  it('should not redundantly pass individual txContext fields', () => {
+    expect(src).not.toMatch(/fromAddresses:\s*txContext\.feeSourceAddresses/);
+    expect(src).not.toMatch(/changeAddress:\s*txContext\.btcChangeAddress/);
+    expect(src).not.toMatch(/alkanesChangeAddress:\s*txContext\.alkanesChangeAddress/);
+    expect(src).not.toContain('ordinalsStrategy: txContext.defaultOrdinalsStrategy');
   });
 
-  it('should use actual addresses for browser wallet alkanesChangeAddr', () => {
-    const match = src.match(/alkanesChangeAddr\s*=\s*(?:isBrowserWallet|useActualAddresses)\s*\n\s*\?\s*(.+)\n/);
-    expect(match).toBeTruthy();
-    expect(match![1]).not.toContain("'p2tr:0'");
-  });
-
-  it('should set ordinalsStrategy to exclude', () => {
-    expect(src).toContain("ordinalsStrategy: 'exclude'");
+  it('should never pass symbolic addresses (p2tr:0 / p2wpkh:0) to alkanesExecuteTyped', () => {
+    const codeOnly = src
+      .replace(/\/\/.*$/gm, '')
+      .replace(/\/\*[\s\S]*?\*\//g, '');
+    const calls = codeOnly.match(/alkanesExecuteTyped\s*\(\s*\{?[\s\S]*?\}\s*\)/g) || [];
+    for (const call of calls) {
+      expect(call).not.toContain("'p2tr:0'");
+      expect(call).not.toContain("'p2wpkh:0'");
+    }
   });
 
   it('should call signTaprootPsbt once for browser wallets (not both segwit and taproot)', () => {

@@ -157,7 +157,7 @@ Frontend hook (useSwapMutation)
 | `lua_evalsaved` fails on load-balanced servers | Script saved on instance A, evalsaved hits instance B | SDK falls back to `lua_savescript` + `lua_evalscript` each time |
 | Broadcast returns string, not Error object | `send_raw_transaction` wraps error text in string | Frontend `extractErrorMessage()` handles both string and Error |
 | WASM runs on main thread | No Web Worker support in SDK | Acceptable for now — heavy work (lua, getrawtransaction) removed |
-| `ord_output` RPC unreliable (~20% success) | Server-side ord indexer overloaded | Disabled; using wallet API + espo instead |
+| `ord_output` RPC was unreliable (~20% success) on mainnet | Server-side ord indexer overload (since resolved) | Working again as of 2026-05; wallet API + espo still used as primary (faster, no per-UTXO RPC) |
 | No batch `get_alkane_info` | espo has no multi-alkane-info endpoint | Individual calls with `staleTime: Infinity` |
 
 ### Examples of SDK-Level Fixes We Made
@@ -203,11 +203,12 @@ wasm-pack build --target bundler --release crates/alkanes-web-sys
 
 ---
 
-## Future: When Ord Returns
+## Ord on mainnet (2026-05)
 
-If `ord_output`/`ord_outputs` becomes reliable on mainnet:
+`ord_output` / `ord_outputs` works reliably on mainnet again. To-do list,
+in priority order:
 
-1. Re-enable `has_inscriptions` filtering in SDK `select_utxos` (currently always false)
-2. Re-enable `balances.lua` ord flag (`args[3] = "ord"`) for spendable/assets display
-3. Consider enabling `check_utxos_for_inscriptions` in SDK (currently skipped: `split_psbt = None`)
-4. `payment_utxos` from UniSat remains preferred — ord would be fallback for non-UniSat wallets
+1. Re-enable `has_inscriptions` filtering in SDK `select_utxos` (currently always false).
+2. Re-enable `balances.lua` ord flag (`args[3] = "ord"`) for spendable/assets display.
+3. Consider enabling `check_utxos_for_inscriptions` in SDK (currently skipped: `split_psbt = None`) — required for `ordinalsStrategy: 'preserve'` split-tx codepath to actually run.
+4. `payment_utxos` from UniSat remains preferred for browser BTC-send (faster, no per-UTXO RPC); ord becomes the fallback for non-UniSat browser wallets and keystore.

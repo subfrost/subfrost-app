@@ -95,7 +95,9 @@ describe('Devnet E2E: Cross-Chain Swap Paths', () => {
       );
       expect(quote.finalOutput).toBeGreaterThan(0n);
       expect(quote.finalOutput).toBeLessThan(100000000n); // < 1 BTC
-      expect(quote.feeBreakdown.totalFees).toBeGreaterThan(0n);
+      // totalFees is a formatted display string (e.g. "~0.001 ETH + 0.0001 BTC")
+      expect(typeof quote.feeBreakdown.totalFees).toBe('string');
+      expect(quote.feeBreakdown.totalFees.length).toBeGreaterThan(0);
     });
 
     it('BTC→ETH quote produces valid output', () => {

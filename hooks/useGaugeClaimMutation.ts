@@ -32,7 +32,7 @@ export interface GaugeClaimParams {
 }
 
 export function useGaugeClaimMutation() {
-  const { account, network, isConnected, signTaprootPsbt, walletType, browserWallet } = useWallet();
+  const { account, network, isConnected, signTaprootPsbt, walletType, browserWallet, txContext } = useWallet();
   const provider = useSandshrewProvider();
   const queryClient = useQueryClient();
   const { requestConfirmation } = useTransactionConfirm();
@@ -42,12 +42,13 @@ export function useGaugeClaimMutation() {
       if (!isConnected) throw new Error('Wallet not connected');
       if (!provider) throw new Error('Provider not available');
 
-      const taprootAddress = account?.taproot?.address;
-      const segwitAddress = account?.nativeSegwit?.address;
-      if (!taprootAddress && !segwitAddress) {
+      // See `WalletContext.TxContext` jsdoc for the address-fallback semantics.
+      if (!txContext) {
         throw new Error('No wallet address available. Please connect a wallet first.');
       }
-      const primaryAddress = taprootAddress || segwitAddress;
+      const taprootAddress = account?.taproot?.address;
+      const segwitAddress = account?.nativeSegwit?.address;
+      const primaryAddress = (taprootAddress || segwitAddress)!;
 
       if (!provider.walletIsLoaded()) {
         throw new Error('Wallet not loaded in provider');
@@ -58,23 +59,8 @@ export function useGaugeClaimMutation() {
 
       const btcNetwork = getBitcoinNetwork(network);
       const isBrowserWallet = walletType === 'browser';
-      const useActualAddresses = isBrowserWallet || network === 'devnet' || network === 'regtest-local' || network === 'qubitcoin-regtest';
 
-      const fromAddresses = useActualAddresses
-        ? [segwitAddress, taprootAddress].filter(Boolean) as string[]
-        : ['p2wpkh:0', 'p2tr:0'];
-
-      const toAddresses = useActualAddresses
-        ? [primaryAddress!]
-        : ['p2tr:0'];
-
-      const changeAddr = useActualAddresses
-        ? (segwitAddress || taprootAddress)
-        : 'p2wpkh:0';
-
-      const alkanesChangeAddr = useActualAddresses
-        ? primaryAddress
-        : 'p2tr:0';
+      const toAddresses = [primaryAddress];
 
       console.log('[useGaugeClaimMutation] Executing gauge claim:', {
         gaugeId: params.gaugeId,
@@ -83,15 +69,12 @@ export function useGaugeClaimMutation() {
       });
 
       const result = await provider.alkanesExecuteTyped({
+        txContext,
         inputRequirements: '',
         protostones: protostone,
         feeRate: params.feeRate,
         autoConfirm: false,
-        fromAddresses,
         toAddresses,
-        changeAddress: changeAddr,
-        alkanesChangeAddress: alkanesChangeAddr,
-        ordinalsStrategy: 'burn',
       });
 
       console.log('[useGaugeClaimMutation] Execute result:', JSON.stringify(result, null, 2));

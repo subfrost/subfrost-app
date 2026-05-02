@@ -13,6 +13,7 @@
 
 import {
   FACTORY_SWAP_OPCODE,
+  FACTORY_SWAP_EXACT_OUT_OPCODE,
   FACTORY_ADD_LIQUIDITY_OPCODE,
   FACTORY_BURN_OPCODE,
   FRBTC_WRAP_OPCODE,
@@ -74,6 +75,59 @@ export function buildSwapProtostone(params: {
     buyTx,
     sellAmount,
     minOutput,
+    deadline,
+  ].join(',');
+
+  return `[${cellpack}]:${pointer}:${refund}`;
+}
+
+/**
+ * Build protostone for AMM swap via factory opcode 14 (SwapTokensForExactTokens).
+ *
+ * Same cellpack shape as opcode 13 but the two amount slots are semantically
+ * swapped: caller specifies the exact buy amount and the maximum input they're
+ * willing to spend. The factory routes the swap and refunds any unspent input
+ * to `alkanes_change_address`.
+ *
+ * Factory opcode 14 format:
+ *   [factory_block,factory_tx,14,path_len,sell_block,sell_tx,buy_block,buy_tx,amount_out,amount_in_max,deadline]
+ */
+export function buildSwapExactOutputProtostone(params: {
+  factoryId: string;
+  sellTokenId: string;
+  buyTokenId: string;
+  amountOut: string;
+  amountInMax: string;
+  deadline: string;
+  pointer?: string;
+  refund?: string;
+}): string {
+  const {
+    factoryId,
+    sellTokenId,
+    buyTokenId,
+    amountOut,
+    amountInMax,
+    deadline,
+    pointer = 'v0',
+    refund = 'v0',
+  } = params;
+
+  const [sellBlock, sellTx] = sellTokenId.split(':');
+  const [buyBlock, buyTx] = buyTokenId.split(':');
+  const [factoryBlock, factoryTx] = factoryId.split(':');
+
+  const cellpack = [
+    factoryBlock,
+    factoryTx,
+    FACTORY_SWAP_EXACT_OUT_OPCODE,
+    2, // path_len
+    sellBlock,
+    sellTx,
+    buyBlock,
+    buyTx,
+    amountOut,
+    amountInMax,
     deadline,
   ].join(',');
 
@@ -197,6 +251,41 @@ export function buildAtomicWrapAddLiquidityProtostones(params: {
   const addLiquidityProtostone = `[${addLiquidityCellpack}]:v1:v1`;
 
   return `${wrapProtostone},${addLiquidityProtostone}`;
+}
+
+/**
+ * Atomic BTC → frBTC + Token X → CreateNewPool in a single transaction.
+ *
+ * Same wrap pattern as `buildAtomicWrapAddLiquidityProtostones`, but the second
+ * protostone calls factory opcode 1 (CreateNewPool) — no min-amounts and no
+ * deadline since there's nothing to slip against (caller defines the initial
+ * price). User-provided amounts become the pool's initial reserves; the first
+ * LP-token mint is `sqrt(amount_a * amount_b) - 1000` (Uniswap MINIMUM_LIQUIDITY).
+ */
+export function buildAtomicWrapCreatePoolProtostones(params: {
+  factoryId: string;
+  tokenA: string;       // Always frBTC (32:0) for atomic-wrap path
+  tokenB: string;
+  amountA: string;
+  amountB: string;
+}): string {
+  const { factoryId, tokenA, tokenB, amountA, amountB } = params;
+  const [factoryBlock, factoryTx] = factoryId.split(':');
+  const [tokenABlock, tokenATx] = tokenA.split(':');
+  const [tokenBBlock, tokenBTx] = tokenB.split(':');
+
+  const wrapProtostone = `[32,0,${FRBTC_WRAP_OPCODE}]:p1:v1`;
+
+  const createPoolCellpack = [
+    factoryBlock, factoryTx,
+    1, // CreateNewPool
+    tokenABlock, tokenATx,
+    tokenBBlock, tokenBTx,
+    amountA, amountB,
+  ].join(',');
+  const createPoolProtostone = `[${createPoolCellpack}]:v1:v1`;
+
+  return `${wrapProtostone},${createPoolProtostone}`;
 }
 
 // ---------------------------------------------------------------------------

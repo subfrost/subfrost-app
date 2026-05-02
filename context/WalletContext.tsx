@@ -350,6 +350,67 @@ const STORAGE_KEYS = {
   TAPROOT_ADDRESS_INDEX: 'subfrost_taproot_address_index', // BIP86 address index (last segment) for keystore
 } as const;
 
+/**
+ * TxContext — single source of truth for address-fallback chains used when
+ * building alkanes / Bitcoin transactions.
+ *
+ * Every mutation hook used to recompute `fromAddresses`, `changeAddress`,
+ * `alkanesChangeAddress` and `protectTaproot` from a wallet-type-specific
+ * fallback chain (`paymentAddress || taprootAddress`, `[segwit, taproot]
+ * .filter(Boolean)`, `isBrowserWallet || network === 'devnet' || …`). Those
+ * accidentally produced the right keystore behaviour because keystore wallets
+ * are taproot-only (`account.nativeSegwit === undefined`), but a future
+ * contributor adding a new mutation could easily forget a fallback and break
+ * keystore. `txContext` collapses all of that into one computed object.
+ *
+ * Wallet-type semantics:
+ *   - **keystore** — taproot-only by design. All four fields point at the
+ *     single taproot address; `shouldProtectTaproot=false` because there is
+ *     no second address to spend BTC fees from.
+ *   - **browser dual-address** (Xverse / Leather / OYL) — fee inputs come
+ *     from `[segwit, taproot]`, BTC change goes to segwit, alkane change to
+ *     taproot, `shouldProtectTaproot=true` reserves taproot UTXOs for alkanes.
+ *   - **browser single-address** (UniSat / OKX) — only one address; we use
+ *     it for everything and disable protect_taproot.
+ *
+ * `null` when the wallet isn't connected — consumers must guard via
+ * `isConnected` (or the `if (!txContext)` shortcut).
+ */
+export type TxContext = {
+  /** Addresses to source UTXOs from. Browser-dual: [segwit, taproot]. Single-address: [primary]. Keystore: [taproot]. */
+  feeSourceAddresses: string[];
+  /** Where BTC change goes. Segwit when available, otherwise the primary single address. Keystore: taproot. */
+  btcChangeAddress: string;
+  /** Where unwanted alkane change goes. Always the taproot address (alkanes are P2TR). */
+  alkanesChangeAddress: string;
+  /** Whether SDK should reserve taproot UTXOs for alkanes only and source BTC fees from segwit. True only for browser-dual wallets. */
+  shouldProtectTaproot: boolean;
+  /**
+   * SDK ordinals_strategy default for this wallet. Used by
+   * `alkanesExecuteTyped` to decide what to do when an inscribed UTXO must
+   * be spent.
+   *
+   * - `'burn'` for keystore: BIP86 taproot-only, wallet-internal, never
+   *   receives inscriptions. Skipping the ord check is a pure perf win.
+   * - `'preserve'` for browser wallets: SDK runs alkane-aware split-tx so
+   *   inscriptions and alkanes survive even if they share a UTXO. Per-call
+   *   overrides take precedence at the call site if needed.
+   */
+  defaultOrdinalsStrategy: 'burn' | 'exclude' | 'preserve';
+  /**
+   * Wallet kind. Lets `alkanesExecuteTyped` apply browser-only auto-defaults
+   * (auto `'preserve'` strategy + auto `payment_utxos` from wallet capability)
+   * without every mutation hook duplicating the same boilerplate.
+   */
+  walletType: 'browser' | 'keystore';
+  /**
+   * Browser wallet ID (`unisat` / `xverse` / `oyl` / etc.) for capability
+   * dispatch. `undefined` for keystore. Used by `alkanesExecuteTyped` to look
+   * up `getCleanBtcUtxos` adapters in the capability registry.
+   */
+  browserWalletId?: string;
+};
+
 type WalletContextType = {
   // Connection state
   isConnectModalOpen: boolean;
@@ -370,6 +431,11 @@ type WalletContextType = {
   account: Account;
   network: Network;
   wallet: AlkanesWallet | null;
+  /**
+   * Computed transaction-context addresses. `null` when the wallet isn't
+   * connected. See `TxContext` jsdoc for semantics.
+   */
+  txContext: TxContext | null;
 
   // Browser wallet data
   browserWallet: ConnectedWallet | null;
@@ -809,6 +875,69 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       network: NetworkMap[network],
     };
   }, [addresses, network]);
+
+  // Compute transaction-context addresses. See `TxContext` jsdoc for the
+  // wallet-type semantics this codifies. `null` when neither address is
+  // available (wallet not connected); consumers should guard via the
+  // `isConnected` flag they already check.
+  const txContext: TxContext | null = useMemo(() => {
+    const segwit = account.nativeSegwit?.address;
+    const taproot = account.taproot?.address;
+
+    if (walletType === 'keystore') {
+      // Keystore is BIP86 taproot-only by design — no segwit derivation.
+      // All addresses funnel to the single taproot, and protect_taproot is
+      // moot because there's no second address to source BTC fees from.
+      if (!taproot) return null;
+      return {
+        feeSourceAddresses: [taproot],
+        btcChangeAddress: taproot,
+        alkanesChangeAddress: taproot,
+        shouldProtectTaproot: false,
+        // Keystore never holds inscriptions — skip the ord lookup entirely.
+        // 'burn' makes `check_utxos_for_inscriptions_with_provider` return
+        // early before any per-UTXO ord_outputs RPC call.
+        defaultOrdinalsStrategy: 'burn',
+        walletType: 'keystore',
+      };
+    }
+
+    // Browser wallet (or unconnected — both addresses absent → null below).
+    if (!segwit && !taproot) return null;
+
+    // Dual-address wallets (Xverse, Leather, OYL) expose distinct segwit +
+    // taproot addresses. Single-address wallets (UniSat, OKX) expose only
+    // one — `isDualAddress` is false and we collapse the BTC + alkane
+    // change destinations to that single address.
+    const isDualAddress = !!segwit && !!taproot && segwit !== taproot;
+    const primary = (taproot || segwit)!;
+
+    return {
+      // Browser-dual: source from both. Single-address: just the one.
+      // `Set` dedupes when the wallet returns the same address for both
+      // purposes (some configurations of UniSat).
+      feeSourceAddresses: Array.from(new Set([segwit, taproot].filter(Boolean) as string[])),
+      // BTC change goes to segwit when available — taproot UTXOs are reserved
+      // for alkanes on dual-address wallets. Falls back to whatever single
+      // address exists.
+      btcChangeAddress: segwit || primary,
+      // Alkane change always goes to taproot (alkanes are P2TR). Single-
+      // address segwit-only wallets fall back to that address — there's
+      // nowhere else to send it.
+      alkanesChangeAddress: taproot || primary,
+      // Only meaningful when there's a separate segwit address to source
+      // BTC fees from. Single-address wallets must spend taproot UTXOs for
+      // both alkanes and fees, so reserving them would block fee selection.
+      shouldProtectTaproot: isDualAddress,
+      // Browser wallets opt into split-tx by default — SDK's alkane-aware
+      // `build_split_psbt` keeps both inscriptions and alkanes intact even
+      // when they share a UTXO. Per-call overrides at the call site still
+      // win if some operation needs different semantics.
+      defaultOrdinalsStrategy: 'preserve',
+      walletType: 'browser',
+      browserWalletId: browserWallet?.info?.id,
+    };
+  }, [account, walletType, browserWallet?.info?.id]);
 
   // Create new wallet
   const createNewWallet = useCallback(async (password: string): Promise<{ mnemonic: string }> => {
@@ -2117,90 +2246,16 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
     }
 
     // Keystore is taproot-only by policy. Native segwit derivation is intentionally
-    // disabled to ensure all keystore funds live at a single (taproot) address.
-    // Callers should never reach this branch — if they do, that means a code path
-    // is still treating keystore as dual-address. Surface the bug rather than
-    // silently producing a half-signed PSBT.
+    // disabled so all keystore funds live at a single taproot address. The
+    // browser-wallet branches above handle the only legitimate segwit-signing
+    // paths; falling through here means the caller is treating keystore as
+    // dual-address (or the browser adapter wasn't initialized).
     if (walletType === 'keystore') {
       throw new Error('signSegwitPsbt called for keystore wallet — keystore is taproot-only. Use signTaprootPsbt instead.');
     }
 
-    if (!wallet) {
-      throw new Error('Wallet not connected');
-    }
-
-    // Get mnemonic from session storage
-    const mnemonic = sessionStorage.getItem(STORAGE_KEYS.SESSION_MNEMONIC);
-    if (!mnemonic) {
-      throw new Error('Wallet session expired. Please unlock wallet again.');
-    }
-
-    // Dynamic imports to avoid SSR issues
-    const [bitcoin, tinysecp, BIP32Factory, bip39] = await Promise.all([
-      import('bitcoinjs-lib'),
-      import('tiny-secp256k1'),
-      import('bip32').then(m => m.default),
-      import('bip39'),
-    ]);
-
-    // Initialize ECC library
-    bitcoin.initEccLib(tinysecp);
-
-    // Determine bitcoin network
-    const getBitcoinNetwork = () => {
-      switch (network) {
-        case 'mainnet':
-          return bitcoin.networks.bitcoin;
-        case 'testnet':
-        case 'signet':
-          return bitcoin.networks.testnet;
-        case 'regtest':
-        case 'regtest-local':
-        case 'subfrost-regtest':
-        case 'oylnet':
-        case 'devnet':
-          return bitcoin.networks.regtest;
-        default:
-          return bitcoin.networks.bitcoin;
-      }
-    };
-
-    const btcNetwork = getBitcoinNetwork();
-
-    // Derive segwit key using BIP84 path (browser wallets that need it use SDK adapter above)
-    const seed = bip39.mnemonicToSeedSync(mnemonic);
-    const bip32 = BIP32Factory(tinysecp);
-    const root = bip32.fromSeed(seed, btcNetwork);
-
-    // BIP84 path: m/84'/coinType/0'/0/0
-    // coinType: 0 for mainnet, 1 for testnet/regtest
-    const coinType = network === 'mainnet' ? 0 : 1;
-    const segwitPath = `m/84'/${coinType}'/0'/0/0`;
-    const segwitChild = root.derivePath(segwitPath);
-
-    if (!segwitChild.privateKey) {
-      throw new Error('Failed to derive segwit private key');
-    }
-
-    // Parse and sign the PSBT
-    const psbt = bitcoin.Psbt.fromBase64(psbtBase64, { network: btcNetwork });
-
-    console.log('[signSegwitPsbt] Signing', psbt.inputCount, 'inputs with segwit key');
-    console.log('[signSegwitPsbt] Segwit path:', segwitPath);
-    console.log('[signSegwitPsbt] Pubkey:', Buffer.from(segwitChild.publicKey).toString('hex'));
-
-    // Sign each input with the segwit key
-    for (let i = 0; i < psbt.inputCount; i++) {
-      try {
-        psbt.signInput(i, segwitChild);
-        console.log(`[signSegwitPsbt] Signed input ${i}`);
-      } catch (error) {
-        console.warn(`[signSegwitPsbt] Could not sign input ${i}:`, error);
-      }
-    }
-
-    return psbt.toBase64();
-  }, [wallet, network, walletAdapter, walletType]);
+    throw new Error('signSegwitPsbt: no signing path available — browser wallet adapter not initialized.');
+  }, [network, walletAdapter, walletType, browserWallet, browserWalletAddresses]);
 
   // Sign multiple PSBTs - supports both keystore and browser wallets
   // Uses SDK wallet adapters for all browser wallet signing
@@ -2496,6 +2551,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       account,
       network,
       wallet,
+      txContext,
 
       // Browser wallet data
       browserWallet,
@@ -2535,6 +2591,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       isInitializing,
       addresses,
       account,
+      txContext,
       network,
       installedBrowserWallets,
       createNewWallet,

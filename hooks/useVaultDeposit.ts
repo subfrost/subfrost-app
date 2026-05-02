@@ -58,10 +58,9 @@ export function buildVaultDepositInputRequirements(params: {
  * Uses opcode 1 (Purchase) to deposit tokens and receive vault units
  */
 export function useVaultDeposit() {
-  const { isConnected, walletType, account, signTaprootPsbt, network } = useWallet();
+  const { isConnected, walletType, account, signTaprootPsbt, network, txContext } = useWallet();
   const provider = useSandshrewProvider();
   const isBrowserWallet = walletType === 'browser';
-  const useActualAddresses = isBrowserWallet || network === 'devnet' || network === 'regtest-local' || network === 'qubitcoin-regtest';
 
   return useMutation({
     mutationFn: async (depositData: VaultDepositData) => {
@@ -72,6 +71,7 @@ export function useVaultDeposit() {
       if (!provider.walletIsLoaded()) {
         throw new Error('Wallet not loaded in provider');
       }
+      if (!txContext) throw new Error('Wallet not connected');
 
       // Build protostone for vault deposit
       const protostone = buildVaultDepositProtostone({
@@ -85,21 +85,17 @@ export function useVaultDeposit() {
         amount: new BigNumber(depositData.amount).toFixed(0),
       });
 
-      const taprootAddress = account?.taproot?.address;
-      const segwitAddress = account?.nativeSegwit?.address;
-
-      const toAddresses = useActualAddresses ? [taprootAddress || ''] : ['p2tr:0'];
-      const changeAddr = useActualAddresses ? (segwitAddress || taprootAddress || '') : 'p2tr:0';
-      const alkanesChangeAddr = useActualAddresses ? (taprootAddress || '') : 'p2tr:0';
+      // Vault units are P2TR alkanes — receive at the alkanes change address
+      // (taproot when available; falls back to the only address otherwise).
+      const toAddresses = [txContext.alkanesChangeAddress];
 
       const result = await provider.alkanesExecuteTyped({
+        txContext,
         inputRequirements,
         protostones: protostone,
         feeRate: depositData.feeRate,
         autoConfirm: !isBrowserWallet,
         toAddresses,
-        changeAddress: changeAddr,
-        alkanesChangeAddress: alkanesChangeAddr,
       });
 
       // Auto-completed by SDK (keystore wallets with autoConfirm=true)

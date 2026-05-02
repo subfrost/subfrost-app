@@ -160,12 +160,12 @@ describe('Wrap output ordering', () => {
   });
 
   it('should set toAddresses with signer first, user second', () => {
-    // toAddresses = [signerAddress, userTaprootAddress or 'p2tr:0']
+    // Address-fallback chain consolidated into txContext (2026-04-30) — there
+    // is no longer a per-wallet-type ternary here; toAddresses is simply
+    // `[signerAddress, userTaprootAddress]` regardless of wallet type.
     expect(src).toContain('signerAddress');
-    // Verify the array ordering in toAddresses
-    const match = src.match(/toAddresses\s*=\s*(?:isBrowserWallet|useActualAddresses)\s*\n\s*\?\s*\[(.*?)\]\s*\n/);
+    const match = src.match(/toAddresses\s*=\s*\[(.*?)\]/);
     expect(match).toBeTruthy();
-    // Browser wallet: [signerAddress, userTaprootAddress]
     expect(match![1]).toMatch(/signerAddress.*userTaprootAddress/);
   });
 
@@ -189,21 +189,26 @@ describe('Browser wallet address handling in useWrapMutation', () => {
     expect(src).toContain("isBrowserWallet = walletType === 'browser'");
   });
 
-  it('should use actual userTaprootAddress for browser wallet in toAddresses', () => {
-    const match = src.match(/toAddresses\s*=\s*(?:isBrowserWallet|useActualAddresses)\s*\n\s*\?\s*\[(.*?)\]/);
+  // After 2026-04-30 the wrapper unpacks `txContext` into options_json
+  // itself; the hook passes the single `txContext` field instead of the
+  // five individual fields (fromAddresses / changeAddress /
+  // alkanesChangeAddress / protectTaproot / ordinalsStrategy).
+  it('should pass txContext into alkanesExecuteTyped', () => {
+    expect(src).toMatch(/alkanesExecuteTyped\(\{[\s\S]*?\btxContext\b/);
+  });
+
+  it('should not redundantly pass individual txContext fields', () => {
+    expect(src).not.toMatch(/fromAddresses:\s*txContext\.feeSourceAddresses/);
+    expect(src).not.toMatch(/changeAddress:\s*txContext\.btcChangeAddress/);
+    expect(src).not.toMatch(/alkanesChangeAddress:\s*txContext\.alkanesChangeAddress/);
+    expect(src).not.toMatch(/protectTaproot:\s*txContext\.shouldProtectTaproot/);
+  });
+
+  it('should use actual userTaprootAddress in toAddresses (frBTC recipient)', () => {
+    const match = src.match(/toAddresses\s*=\s*\[(.*?)\]/);
     expect(match).toBeTruthy();
     expect(match![1]).toContain('userTaprootAddress');
     expect(match![1]).not.toContain("'p2tr:0'");
-  });
-
-  it('should use symbolic p2tr:0 for keystore wallet in toAddresses', () => {
-    const match = src.match(/toAddresses\s*=\s*(?:isBrowserWallet|useActualAddresses)\s*\n\s*\?.+\n\s*:\s*\[(.*?)\]/);
-    expect(match).toBeTruthy();
-    expect(match![1]).toContain("'p2tr:0'");
-  });
-
-  it('should use actual changeAddress for browser wallet', () => {
-    expect(src).toMatch(/changeAddress:\s*(?:isBrowserWallet|useActualAddresses)\s*\?\s*\(userSegwitAddress\s*\|\|\s*userTaprootAddress\)/);
   });
 
   it('should throw when taproot address is missing', () => {

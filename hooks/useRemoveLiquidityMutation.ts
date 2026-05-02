@@ -15,11 +15,13 @@
  * including the transaction that lost user tokens:
  * TX: 985436b5c5c850bd121cd4862f32413f467145b121d34c006417724d71588db9
  *
- * REQUIRED PATTERN:
+ * REQUIRED PATTERN (2026-04-30: now consolidated into `txContext`):
  * ```typescript
- * const toAddresses = useActualAddresses ? [taprootAddress] : ['p2tr:0'];
- * const changeAddr = useActualAddresses ? segwitAddress : 'p2wpkh:0';
- * const alkanesChangeAddr = useActualAddresses ? taprootAddress : 'p2tr:0';
+ * const { txContext } = useWallet();
+ * if (!txContext) throw new Error('Wallet not connected');
+ * await provider.alkanesExecuteTyped({
+ *   txContext,                    // wrapper unpacks fee/change/protectTaproot/etc.
+ * });
  * ```
  * ============================================================================
  *
@@ -82,7 +84,7 @@ export type RemoveLiquidityTransactionData = {
 };
 
 export function useRemoveLiquidityMutation() {
-  const { account, network, isConnected, signTaprootPsbt, walletType, browserWallet } = useWallet();
+  const { account, network, isConnected, signTaprootPsbt, walletType, browserWallet, txContext } = useWallet();
   const provider = useSandshrewProvider();
   const queryClient = useQueryClient();
   const { requestConfirmation } = useTransactionConfirm();
@@ -105,19 +107,16 @@ export function useRemoveLiquidityMutation() {
         throw new Error('Provider wallet not loaded. Please reconnect your wallet.');
       }
 
-      // Get addresses - use actual addresses instead of SDK descriptors
-      // This fixes the "Available: []" issue where SDK couldn't find alkane UTXOs
-      //
-      // JOURNAL ENTRY (2026-03-01): Support single-address wallets (UniSat, OKX)
-      // UniSat/OKX only provide one address type at a time (user-configurable).
-      // We need at least ONE address, but don't require both taproot AND segwit.
-      const taprootAddress = account?.taproot?.address;
-      const segwitAddress = account?.nativeSegwit?.address;
-      if (!taprootAddress && !segwitAddress) {
+      // Get addresses — use the consolidated `txContext` for fee/change addresses.
+      // See `WalletContext.TxContext` jsdoc for the wallet-type semantics this codifies.
+      if (!txContext) {
         throw new Error('No wallet address available. Please connect a wallet first.');
       }
-      // For alkane operations, prefer taproot if available (alkanes use P2TR)
-      const primaryAddress = taprootAddress || segwitAddress;
+      const taprootAddress = account?.taproot?.address;
+      const segwitAddress = account?.nativeSegwit?.address;
+      // For alkane operations, prefer taproot if available (alkanes use P2TR).
+      // Falls back to segwit on single-address segwit-only wallets.
+      const primaryAddress = (taprootAddress || segwitAddress)!;
       console.log('[RemoveLiquidity] Using addresses:', { taprootAddress, segwitAddress, primaryAddress });
 
       // Convert display amounts to alks
@@ -173,50 +172,25 @@ export function useRemoveLiquidityMutation() {
       const btcNetwork = getBitcoinNetwork(network);
 
       const isBrowserWallet = walletType === 'browser';
-      const useActualAddresses = isBrowserWallet || network === 'devnet' || network === 'regtest-local' || network === 'qubitcoin-regtest';
 
-      // ============================================================================
-      // ⚠️ CRITICAL: Browser wallets need ACTUAL addresses, not symbolic ⚠️
-      // ============================================================================
-      // Symbolic addresses (p2tr:0, p2wpkh:0) resolve to the SDK's DUMMY wallet.
-      // Bug fixed: 2026-03-01 - see useSwapMutation.ts for full documentation.
-      // ============================================================================
-      // Keystore is taproot-only: symbolic addresses all resolve to p2tr:0
-      // so BTC change / alkane change / from all stay on taproot.
-      const fromAddresses = useActualAddresses
-        ? [segwitAddress, taprootAddress].filter(Boolean) as string[]
-        : ['p2tr:0'];
+      // Symbolic addresses (`p2tr:0`, `p2wpkh:0`) used to resolve to the SDK's
+      // dummy wallet — see useSwapMutation.ts header for the 2026-03-01 token-loss
+      // tx that motivated `txContext`. Always actual addresses now.
+      const toAddresses = [primaryAddress];
 
-      // JOURNAL ENTRY (2026-03-01): For single-address wallets, use primaryAddress
-      // TypeScript can't infer from the early return that primaryAddress is defined, use assertion
-      const toAddresses = useActualAddresses
-        ? [primaryAddress!]
-        : ['p2tr:0'];
-
-      const changeAddr = useActualAddresses
-        ? (segwitAddress || taprootAddress)
-        : 'p2tr:0';
-
-      const alkanesChangeAddr = useActualAddresses
-        ? primaryAddress
-        : 'p2tr:0';
-
-      console.log('[RemoveLiquidity] From addresses:', fromAddresses, '(browser:', isBrowserWallet, ')');
+      console.log('[RemoveLiquidity] From addresses:', txContext.feeSourceAddresses, '(browser:', isBrowserWallet, ')');
       console.log('[RemoveLiquidity] To addresses:', toAddresses);
-      console.log('[RemoveLiquidity] Change address:', changeAddr);
+      console.log('[RemoveLiquidity] Change address:', txContext.btcChangeAddress);
 
       try {
 
         const result = await provider.alkanesExecuteTyped({
+          txContext,
           inputRequirements,
           protostones: protostone,
           feeRate: data.feeRate,
           autoConfirm: false,
-          fromAddresses,
           toAddresses,
-          changeAddress: changeAddr,
-          alkanesChangeAddress: alkanesChangeAddr,
-          ordinalsStrategy: 'exclude',
         });
 
         console.log('[RemoveLiquidity] Called alkanesExecuteTyped (browser:', isBrowserWallet, ')');

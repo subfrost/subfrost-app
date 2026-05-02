@@ -52,13 +52,12 @@
  *   code that was not yet migrated. The useLimitOrderMutation hook (this file)
  *   is the correct pattern to use going forward.
  *
- * ## useActualAddresses is MANDATORY (devnet + browser wallets)
- *   On devnet, symbolic addresses (p2tr:0, p2wpkh:0) resolve to the SDK's
- *   dummy wallet derivation, NOT the connected wallet. Tokens land at the wrong
- *   address → "insufficient balance" even with real balance.
- *   Pattern enforced here:
- *     const useActualAddresses = isBrowserWallet || network === 'devnet' || network === 'regtest-local' || network === 'qubitcoin-regtest';
- *   See CLAUDE.md "Address Handling" section for full explanation.
+ * ## txContext is MANDATORY (devnet + browser wallets) — 2026-04-30
+ *   On devnet, symbolic addresses (p2tr:0, p2wpkh:0) used to resolve to the SDK's
+ *   dummy wallet derivation, NOT the connected wallet. Tokens landed at the wrong
+ *   address → "insufficient balance" even with real balance. The address-fallback
+ *   chain is now consolidated into `txContext` from `useWallet()`. See
+ *   `WalletContext.TxContext` jsdoc for full semantics.
  *
  * ## "Insufficient alkanes" vs stale devnet state
  *   If you still see "insufficient alkanes" after routing through useSandshrewProvider:
@@ -111,7 +110,7 @@ export interface LimitOrderParams {
 }
 
 export function useLimitOrderMutation() {
-  const { account, network, isConnected, signTaprootPsbt, walletType, browserWallet } = useWallet();
+  const { account, network, isConnected, signTaprootPsbt, walletType, browserWallet, txContext } = useWallet();
   const provider = useSandshrewProvider();
   const { controls: devnetControls } = useDevnet();
   const queryClient = useQueryClient();
@@ -134,13 +133,13 @@ export function useLimitOrderMutation() {
         throw new Error('Provider wallet not loaded. Please reconnect your wallet.');
       }
 
-      // Get addresses - support single-address wallets (UniSat, OKX)
-      const taprootAddress = account?.taproot?.address;
-      const segwitAddress = account?.nativeSegwit?.address;
-      if (!taprootAddress && !segwitAddress) {
+      // See `WalletContext.TxContext` jsdoc for the address-fallback semantics.
+      if (!txContext) {
         throw new Error('No wallet address available. Please connect a wallet first.');
       }
-      const primaryAddress = taprootAddress || segwitAddress;
+      const taprootAddress = account?.taproot?.address;
+      const segwitAddress = account?.nativeSegwit?.address;
+      const primaryAddress = (taprootAddress || segwitAddress)!;
       console.log('[LimitOrder] Using addresses:', { taprootAddress, segwitAddress, primaryAddress });
 
       // Parse IDs
@@ -174,41 +173,21 @@ export function useLimitOrderMutation() {
 
       const btcNetwork = getBitcoinNetwork(network);
       const isBrowserWallet = walletType === 'browser';
-      const useActualAddresses = isBrowserWallet || network === 'devnet' || network === 'regtest-local' || network === 'qubitcoin-regtest';
 
-      // Browser wallets need ACTUAL addresses, not symbolic
-      // Keystore is taproot-only: symbolic addresses all resolve to p2tr:0.
-      const fromAddresses = useActualAddresses
-        ? [segwitAddress, taprootAddress].filter(Boolean) as string[]
-        : ['p2tr:0'];
+      const toAddresses = [primaryAddress];
 
-      const toAddresses = useActualAddresses
-        ? [primaryAddress!]
-        : ['p2tr:0'];
-
-      const changeAddr = useActualAddresses
-        ? (segwitAddress || taprootAddress)
-        : 'p2tr:0';
-
-      const alkanesChangeAddr = useActualAddresses
-        ? primaryAddress
-        : 'p2tr:0';
-
-      console.log('[LimitOrder] From addresses:', fromAddresses, '(browser:', isBrowserWallet, ')');
+      console.log('[LimitOrder] From addresses:', txContext.feeSourceAddresses, '(browser:', isBrowserWallet, ')');
       console.log('[LimitOrder] To addresses:', toAddresses);
 
       try {
 
         const result = await provider.alkanesExecuteTyped({
+          txContext,
           inputRequirements,
           protostones: protostone,
           feeRate: params.feeRate,
           autoConfirm: false,
-          fromAddresses,
           toAddresses,
-          changeAddress: changeAddr,
-          alkanesChangeAddress: alkanesChangeAddr,
-          ordinalsStrategy: 'exclude',
         });
 
         console.log('[LimitOrder] Execute result:', JSON.stringify(result, null, 2));

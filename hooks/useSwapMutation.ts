@@ -166,7 +166,7 @@ import * as ecc from '@bitcoinerlab/secp256k1';
 // NOTE: Only patching INPUTS (witnessUtxo + redeemScript), NOT outputs
 // Output patching was removed - see comment at line 442 for why
 import { patchInputsOnly } from '@/lib/psbt-patching';
-import { buildSwapProtostone, buildSwapInputRequirements, buildRouterSwapProtostone } from '@/lib/alkanes/builders';
+import { buildSwapProtostone, buildSwapExactOutputProtostone, buildSwapInputRequirements, buildRouterSwapProtostone } from '@/lib/alkanes/builders';
 import { FACTORY_SWAP_OPCODE } from '@/lib/alkanes/constants';
 import { uint8ArrayToBase64, getBitcoinNetwork, extractPsbtBase64 } from '@/lib/alkanes/helpers';
 
@@ -223,7 +223,7 @@ export type SwapTransactionBaseData = {
  */
 
 export function useSwapMutation() {
-  const { account, network, isConnected, signTaprootPsbt, walletType, browserWallet } = useWallet();
+  const { account, network, isConnected, signTaprootPsbt, walletType, browserWallet, txContext } = useWallet();
   const provider = useSandshrewProvider();
   const queryClient = useQueryClient();
   const { requestConfirmation } = useTransactionConfirm();
@@ -251,19 +251,18 @@ export function useSwapMutation() {
         throw new Error('Provider not available');
       }
 
-      // Get addresses - use actual addresses instead of SDK descriptors
-      // This fixes the "Available: []" issue where SDK couldn't find alkane UTXOs
-      //
-      // JOURNAL ENTRY (2026-03-01): Support single-address wallets (UniSat, OKX)
-      // UniSat/OKX only provide one address type at a time (user-configurable).
-      // We need at least ONE address, but don't require both taproot AND segwit.
-      const taprootAddress = account?.taproot?.address;
-      const segwitAddress = account?.nativeSegwit?.address;
-      if (!taprootAddress && !segwitAddress) {
+      // Get addresses — use the consolidated `txContext` for fee/change addresses
+      // and only keep the wallet-type-specific receive address (taproot when
+      // available) for `toAddresses`. See `WalletContext.TxContext` jsdoc for the
+      // semantics of feeSourceAddresses / btcChangeAddress / alkanesChangeAddress.
+      if (!txContext) {
         throw new Error('No wallet address available. Please connect a wallet first.');
       }
-      // For alkane operations, prefer taproot if available (alkanes use P2TR)
-      const primaryAddress = taprootAddress || segwitAddress;
+      const taprootAddress = account?.taproot?.address;
+      const segwitAddress = account?.nativeSegwit?.address;
+      // For alkane operations, prefer taproot if available (alkanes use P2TR).
+      // Falls back to segwit on single-address segwit-only wallets.
+      const primaryAddress = (taprootAddress || segwitAddress)!;
 
       // BTC → non-frBTC: only allowed with override protostones (atomic wrap+swap).
       // Without overrides, this would try to swap BTC directly which is impossible.
@@ -322,6 +321,8 @@ export function useSwapMutation() {
 
       let protostone: string;
       if (useRouter && routerId) {
+        // Universal Router only supports exact-in (useSwapQuotes forces
+        // direction='sell' when fetching router quotes).
         protostone = buildRouterSwapProtostone({
           routerId,
           sellTokenId: sellCurrency,
@@ -329,16 +330,29 @@ export function useSwapMutation() {
           sellAmount: new BigNumber(ammSellAmount).toFixed(0),
           minOutput: new BigNumber(minAmountOut).toFixed(0),
         });
+      } else if (swapData.direction === 'buy') {
+        // User typed in the BUY field — exact-out swap via factory opcode 14.
+        // useSwapQuotes already populated swapData.sellAmount with the
+        // slippage-adjusted maxSentInAlks; opcode 14 refunds any unused input
+        // to alkanes_change_address.
+        protostone = buildSwapExactOutputProtostone({
+          factoryId: ALKANE_FACTORY_ID,
+          sellTokenId: sellCurrency,
+          buyTokenId: buyCurrency,
+          amountOut: new BigNumber(ammBuyAmount).toFixed(0),
+          amountInMax: new BigNumber(ammSellAmount).toFixed(0),
+          deadline: deadline.toString(),
+        });
       } else {
-        const protostoneParams = {
+        // Default: exact-in via factory opcode 13 (slippage applied to output).
+        protostone = buildSwapProtostone({
           factoryId: ALKANE_FACTORY_ID,
           sellTokenId: sellCurrency,
           buyTokenId: buyCurrency,
           sellAmount: new BigNumber(ammSellAmount).toFixed(0),
           minOutput: new BigNumber(minAmountOut).toFixed(0),
           deadline: deadline.toString(),
-        };
-        protostone = buildSwapProtostone(protostoneParams);
+        });
       }
 
       // Build input requirements
@@ -359,74 +373,27 @@ export function useSwapMutation() {
       const btcNetwork = getBitcoinNetwork(network);
 
       const isBrowserWallet = walletType === 'browser';
-      const useActualAddresses = isBrowserWallet || network === 'devnet' || network === 'regtest-local' || network === 'qubitcoin-regtest';
 
-      // ============================================================================
-      // ⚠️ CRITICAL: Browser wallets need ACTUAL addresses, not symbolic ⚠️
-      // ============================================================================
-      // For browser wallets, ALL address parameters must use actual user addresses.
-      // Symbolic addresses (p2tr:0, p2wpkh:0) resolve to the SDK's DUMMY wallet,
-      // causing tokens and BTC to be sent to the wrong addresses!
-      //
-      // Bug discovered: 2026-03-01
-      // TX 985436b5... sent 0.3 DIESEL + BTC change to dummy wallet addresses
-      // instead of user's addresses. User lost tokens and BTC.
-      //
-      // For keystore wallets, symbolic addresses work because the user's mnemonic
-      // is loaded into the provider, so p2tr:0 resolves to their actual address.
-      // ============================================================================
-      // Keystore is taproot-only — all addresses resolve to p2tr:0.
-      // Browser wallets use actual addresses (SDK has no mnemonic to resolve symbolic).
-      const fromAddresses = useActualAddresses
-        ? [segwitAddress, taprootAddress].filter(Boolean) as string[]
-        : ['p2tr:0'];
-
-      const toAddresses = useActualAddresses
-        ? [primaryAddress!]
-        : ['p2tr:0'];
-
-      const changeAddr = useActualAddresses
-        ? (segwitAddress || taprootAddress)
-        : 'p2tr:0';
-
-      const alkanesChangeAddr = useActualAddresses
-        ? primaryAddress
-        : 'p2tr:0';
-
+      // Symbolic addresses (`p2tr:0`, `p2wpkh:0`) used to resolve to the SDK's
+      // dummy wallet whenever no real mnemonic was loaded — that's how
+      // tx 985436b5… sent 0.3 DIESEL + BTC change to dummy addresses on
+      // 2026-03-01. `txContext` always carries actual user addresses now,
+      // so this whole class of bug is closed structurally.
+      const toAddresses = [primaryAddress];
 
       try {
-        // Dual-address wallets (Xverse, Leather) have both segwit + taproot.
-        // protect_taproot=true prevents taproot UTXOs from being spent for BTC fees.
-        // Single-address wallets (UniSat, OKX) only have taproot — must set false.
-        const isDualAddress = Boolean(segwitAddress && taprootAddress);
-
-        // Clean BTC UTXOs via wallet capability registry (routes to the correct
-        // wallet API by ID — never touches window.<other_provider> globals).
-        // For single-address wallets without clean UTXOs: abort rather than
-        // falling back to lua which has no ordinal protection on mainnet.
-        const { getCleanBtcUtxosForWallet } = await import('@/lib/wallet/walletCapabilities');
-        const cleanUtxos = isBrowserWallet
-          ? await getCleanBtcUtxosForWallet(browserWallet?.info?.id)
-          : null;
-        if (isBrowserWallet && !isDualAddress && !cleanUtxos?.length) {
-          throw new Error('No clean BTC UTXOs available. Send some BTC to your wallet first — inscription/rune UTXOs cannot be used for fees.');
-        }
-        const paymentUtxos: string[] | undefined = cleanUtxos ?? undefined;
-
+        // ordinals_strategy + paymentUtxos auto-applied by alkanesExecuteTyped
+        // from txContext.walletType. Browser → 'preserve' + UniSat-clean-utxos
+        // (when capability available); keystore → 'burn'. See lib/alkanes/execute.ts.
         const isKeystoreWallet = walletType === 'keystore';
         const result = await provider.alkanesExecuteTyped({
+          txContext,
           // Support overrides for atomic wrap+swap (SwapShell passes custom protostones/addresses)
           inputRequirements: (swapData as any).overrideInputRequirements || inputRequirements,
           protostones: (swapData as any).overrideProtostones || protostone,
           feeRate: swapData.feeRate,
           autoConfirm: isKeystoreWallet,
-          fromAddresses,
           toAddresses: (swapData as any).overrideToAddresses || toAddresses,
-          changeAddress: changeAddr,
-          alkanesChangeAddress: alkanesChangeAddr,
-          ordinalsStrategy: 'exclude',
-          protectTaproot: isDualAddress,
-          paymentUtxos,
           network,
         });
 
