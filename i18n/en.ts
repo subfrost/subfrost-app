@@ -26,10 +26,12 @@ const en: Record<string, string> = {
   'comingSoon.description': 'These features are not yet ready, but please look around to see what we will be launching in the future.',
 
   // Feature Coming Soon Notice (mainnet)
-  'featureNotice.title': 'Coming Soon',
-  'featureNotice.swap': 'Swap is currently in development and will be released when ready.\nPlease take a look around to see what we are building.',
-  'featureNotice.vaults': 'Vaults are currently in development and will be released when ready.\nPlease take a look around to see what we are building.',
-  'featureNotice.futures': 'Futures are currently in development and will be released when ready.\nPlease take a look around to see what we are building.',
+  'featureNotice.title': 'Try It On Devnet',
+  'featureNotice.swap': 'Swap is not yet live on mainnet. Want to try it now? Spin up an in-browser devnet — fully simulated, no real funds.',
+  'featureNotice.vaults': 'Vaults are not yet live on mainnet. Want to try them now? Spin up an in-browser devnet — fully simulated, no real funds.',
+  'featureNotice.futures': 'Futures are not yet live on mainnet. Want to try them now? Spin up an in-browser devnet — fully simulated, no real funds.',
+  'featureNotice.enterDevnet': 'Enter Devnet Demo',
+  'featureNotice.stayOnMainnet': 'Stay on Mainnet',
 
   // Footer
   'footer.copyright': '\u00a9 2025 Subzero Research Inc. All rights reserved.',

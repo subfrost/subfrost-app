@@ -12,20 +12,29 @@ interface MainnetFeatureNoticeProps {
   feature: FeaturePage;
 }
 
+const NETWORK_STORAGE_KEY = 'subfrost_selected_network';
+
 /**
- * Shows a "COMING SOON" notice overlay when demo-gated (demo mode ON + mainnet).
- * Smaller than the main DemoBanner, with page-specific messaging.
+ * Switch the app to devnet. The network change triggers DevnetProvider's
+ * auto-boot effect (see context/DevnetContext.tsx) which loads WASMs and
+ * deploys contracts in-browser. The DevnetBootModal renders the progress.
+ */
+function enterDevnetDemo() {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(NETWORK_STORAGE_KEY, 'devnet');
+  window.dispatchEvent(new CustomEvent('network-changed', { detail: 'devnet' }));
+}
+
+/**
+ * Shown when demo-gated (NEXT_PUBLIC_DEMO_MODE=1 + mainnet, non-OKX/UniSat
+ * wallet). Offers a single CTA to switch into the in-browser devnet so the
+ * user can try the gated feature without real funds.
  */
 export default function MainnetFeatureNotice({ children, feature }: MainnetFeatureNoticeProps) {
   const { t } = useTranslation();
   const isDemoGated = useDemoGate();
   const [dismissed, setDismissed] = useState(false);
 
-  const handleDismiss = () => {
-    setDismissed(true);
-  };
-
-  // Only show when demo-gated and when not dismissed
   if (!isDemoGated || dismissed) {
     return <>{children}</>;
   }
@@ -37,9 +46,9 @@ export default function MainnetFeatureNotice({ children, feature }: MainnetFeatu
         {children}
       </div>
 
-      {/* Centered notice - smaller than the main DemoBanner */}
+      {/* Centered CTA */}
       <div className="absolute inset-0 z-10 flex items-start justify-center pt-16 pointer-events-none">
-        <div className="pointer-events-auto w-[380px] max-w-[90vw] overflow-hidden rounded-2xl bg-[color:var(--sf-glass-bg)] shadow-[0_16px_64px_rgba(0,0,0,0.35)] backdrop-blur-xl">
+        <div className="pointer-events-auto w-[420px] max-w-[92vw] overflow-hidden rounded-2xl bg-[color:var(--sf-glass-bg)] shadow-[0_16px_64px_rgba(0,0,0,0.35)] backdrop-blur-xl">
           {/* Header */}
           <div className="bg-[color:var(--sf-panel-bg)] px-5 py-4 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
             <div className="flex items-center justify-between">
@@ -50,20 +59,26 @@ export default function MainnetFeatureNotice({ children, feature }: MainnetFeatu
             </div>
           </div>
           {/* Content */}
-          <div className="px-5 py-3">
-            <p className="text-sm leading-relaxed text-[color:var(--sf-text)]/60 whitespace-pre-line">
+          <div className="px-5 py-4 space-y-3">
+            <p className="text-sm leading-relaxed text-[color:var(--sf-text)]/70 whitespace-pre-line">
               {t(`featureNotice.${feature}`)}
             </p>
 
-            <div className="mt-3">
-              <button
-                type="button"
-                onClick={handleDismiss}
-                className="w-full rounded-lg bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] py-2 text-xs font-bold uppercase tracking-wide text-white shadow-[0_2px_6px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_3px_10px_rgba(0,0,0,0.2)]"
-              >
-                {t('demo.understand')}
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={enterDevnetDemo}
+              className="w-full rounded-lg bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] py-3 text-sm font-bold uppercase tracking-wide text-white shadow-[0_2px_6px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)]"
+            >
+              {t('featureNotice.enterDevnet')}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setDismissed(true)}
+              className="w-full text-xs font-medium text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)] py-1 transition-colors"
+            >
+              {t('featureNotice.stayOnMainnet')}
+            </button>
           </div>
         </div>
       </div>

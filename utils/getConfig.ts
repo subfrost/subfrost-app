@@ -17,7 +17,20 @@ export const SUBFROST_API_URLS: Record<string, string> = {
   'subfrost-regtest': 'https://regtest.subfrost.io/v4/5d37098b75581792a44b9d230d48aa75',
   oylnet: 'https://regtest.subfrost.io/v4/5d37098b75581792a44b9d230d48aa75',
   devnet: 'http://localhost:18888', // Intercepted by DevnetProvider fetch interceptor
+  custom: '', // Filled at runtime from localStorage — see resolveCustomRpcUrl()
 };
+
+/** Read the user-supplied custom RPC URL from localStorage. SSR returns ''. */
+export function resolveCustomRpcUrl(): string {
+  if (typeof window === 'undefined') return '';
+  return localStorage.getItem('subfrost_custom_rpc_url') || '';
+}
+
+/** Read the user-selected custom API version (v4 sandshrew | v5 qubitcoin). */
+export function resolveCustomApiVersion(): 'v4' | 'v5' {
+  if (typeof window === 'undefined') return 'v4';
+  return localStorage.getItem('subfrost_custom_api_version') === 'v5' ? 'v5' : 'v4';
+}
 
 // Block explorer URLs per network
 export const BLOCK_EXPLORER_URLS: Record<string, string> = {
@@ -39,14 +52,22 @@ export const BLOCK_EXPLORER_URLS: Record<string, string> = {
  */
 export function getRpcUrl(network: string): string {
   if (network === 'devnet') return 'http://localhost:18888';
+  if (network === 'custom') {
+    // Custom networks bypass the proxy and hit the user-specified URL directly.
+    // Falls back to mainnet if the user opens 'custom' before configuring.
+    return resolveCustomRpcUrl() || `/api/rpc/mainnet`;
+  }
   return `/api/rpc/${network}`;
 }
 
 export function getConfig(network: string) {
   const host = (typeof window !== 'undefined' && window.location?.host) || '';
 
-  // Get API URL for network (defaults to mainnet)
-  const apiUrl = SUBFROST_API_URLS[network] || SUBFROST_API_URLS.mainnet;
+  // Get API URL for network (defaults to mainnet). Custom uses the user's URL.
+  const customRpcUrl = network === 'custom' ? resolveCustomRpcUrl() : '';
+  const apiUrl = network === 'custom'
+    ? (customRpcUrl || SUBFROST_API_URLS.mainnet)
+    : (SUBFROST_API_URLS[network] || SUBFROST_API_URLS.mainnet);
   const blockExplorerUrl = BLOCK_EXPLORER_URLS[network] || BLOCK_EXPLORER_URLS.mainnet;
 
   switch (network) {
@@ -218,6 +239,30 @@ export function getConfig(network: string) {
         BLOCK_EXPLORER_URL_BTC: blockExplorerUrl,
         BLOCK_EXPLORER_URL_ETH: 'https://etherscan.io',
         BOUND_API_URL: 'https://api.bound.money/api/v1',
+      } as const;
+    case 'custom':
+      // Custom networks default to mainnet contract IDs but route to the
+      // user-supplied RPC URL. apiVersion: 'v4' = sandshrew interface,
+      // 'v5' = qubitcoin (no esplora layer). Consumers can branch on
+      // (config as any).API_VERSION when relevant.
+      return {
+        ALKANE_FACTORY_ID: '4:65522',
+        BUSD_ALKANE_ID: '2:56801',
+        BUSD_SPLITTER_ID: '4:76',
+        FRBTC_ALKANE_ID: '32:0',
+        FRZEC_ALKANE_ID: '',
+        FRETH_ALKANE_ID: '',
+        DIESEL_CLAIM_MERKLE_DISTRIBUTOR_ID: '2:70003',
+        FIRE_TOKEN_ID: '4:256',
+        FIRE_STAKING_ID: '4:257',
+        FIRE_TREASURY_ID: '4:258',
+        FIRE_BONDING_ID: '4:259',
+        FIRE_REDEMPTION_ID: '4:260',
+        FIRE_DISTRIBUTOR_ID: '4:261',
+        API_URL: apiUrl,
+        API_VERSION: resolveCustomApiVersion(),
+        BLOCK_EXPLORER_URL_BTC: '',
+        BLOCK_EXPLORER_URL_ETH: '',
       } as const;
     default:
       return {

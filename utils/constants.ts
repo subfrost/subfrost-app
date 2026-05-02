@@ -7,7 +7,8 @@ import * as bitcoin from 'bitcoinjs-lib';
 // - subfrost-regtest: Hosted Subfrost regtest at regtest.subfrost.io
 // - oylnet: Legacy local development network
 // - devnet: In-browser devnet (full protocol simulation)
-export type Network = 'mainnet' | 'testnet' | 'signet' | 'oylnet' | 'regtest' | 'regtest-local' | 'qubitcoin-regtest' | 'subfrost-regtest' | 'devnet';
+// - custom: User-specified JSON-RPC URL + v4 (sandshrew) / v5 (qubitcoin) interface
+export type Network = 'mainnet' | 'testnet' | 'signet' | 'oylnet' | 'regtest' | 'regtest-local' | 'qubitcoin-regtest' | 'subfrost-regtest' | 'devnet' | 'custom';
 
 // NetworkMap maps to bitcoin.networks.Network objects using bitcoinjs-lib directly
 export const NetworkMap: Partial<Record<Network, bitcoin.networks.Network>> = {
@@ -20,6 +21,8 @@ export const NetworkMap: Partial<Record<Network, bitcoin.networks.Network>> = {
   'qubitcoin-regtest': bitcoin.networks.regtest,
   'subfrost-regtest': bitcoin.networks.regtest,
   devnet: bitcoin.networks.regtest,
+  // Custom: assume mainnet network params; user owns the address space they target.
+  custom: bitcoin.networks.bitcoin,
 };
 
 // Human-readable network names for UI
@@ -33,6 +36,7 @@ export const NetworkNames: Record<Network, string> = {
   'qubitcoin-regtest': 'Qubitcoin Regtest',
   'subfrost-regtest': 'Subfrost Regtest',
   devnet: 'In-Browser Devnet',
+  custom: 'Custom',
 };
 
 // Sandshrew URL map (legacy, used by some components)

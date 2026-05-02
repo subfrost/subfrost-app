@@ -20,6 +20,7 @@ const NETWORK_URLS: Record<Network, string> = {
   'subfrost-regtest': 'subfrost-regtest',
   'qubitcoin-regtest': 'regtest',
   devnet: 'subfrost-regtest',
+  custom: 'mainnet',
 };
 
 // Subfrost uses /v4/subfrost endpoint for both jsonrpc and data_api_url
@@ -59,6 +60,12 @@ const NETWORK_CONFIG: Record<Network, Record<string, string>> = {
   devnet: {
     jsonrpc_url: 'http://localhost:18888',
     data_api_url: 'http://localhost:18888',
+  },
+  // Custom: resolved from localStorage at call time. Falls back to mainnet
+  // if the user opens the SDK before configuring a URL.
+  custom: {
+    jsonrpc_url: typeof window !== 'undefined' ? (localStorage.getItem('subfrost_custom_rpc_url') || 'https://mainnet.subfrost.io/v4/subfrost') : 'https://mainnet.subfrost.io/v4/subfrost',
+    data_api_url: typeof window !== 'undefined' ? (localStorage.getItem('subfrost_custom_rpc_url') || 'https://mainnet.subfrost.io/v4/subfrost') : 'https://mainnet.subfrost.io/v4/subfrost',
   },
 };
 

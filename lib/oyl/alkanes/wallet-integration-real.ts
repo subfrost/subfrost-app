@@ -137,6 +137,7 @@ export async function createAlkanesProvider(
     'subfrost-regtest': 'https://regtest.subfrost.io/v4/subfrost',
     'qubitcoin-regtest': 'https://meta.lake.direct',
     devnet: 'https://regtest.subfrost.io/v4/subfrost',
+    custom: typeof window !== 'undefined' ? (localStorage.getItem('subfrost_custom_rpc_url') || 'https://api.subfrost.com') : 'https://api.subfrost.com',
   };
 
   const url = rpcUrl || defaultUrls[network] || defaultUrls.mainnet;

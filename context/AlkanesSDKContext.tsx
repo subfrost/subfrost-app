@@ -92,6 +92,7 @@ const NETWORK_TO_PROVIDER: Record<Network, string> = {
   oylnet: 'regtest',
   'subfrost-regtest': 'subfrost-regtest',
   devnet: 'subfrost-regtest', // Devnet uses regtest params, fetch interceptor routes to in-process
+  custom: 'mainnet', // Custom uses mainnet preset; URL is overridden by DIRECT_NETWORK_CONFIG
 };
 
 // Direct URL configurations for each network (used in production or server-side)
@@ -132,6 +133,10 @@ const DIRECT_NETWORK_CONFIG: Record<Network, Record<string, string> | undefined>
     jsonrpc_url: 'http://localhost:18888', // Intercepted by DevnetProvider
     data_api_url: 'http://localhost:18888',
   },
+  // Custom is resolved at the call site from localStorage — undefined here
+  // means the SDK falls back to its built-in mainnet defaults if the user
+  // hasn't yet set a URL (the wallet settings prompt them to before saving).
+  custom: undefined,
 };
 
 /**

@@ -72,8 +72,15 @@ export default function WalletSettings() {
 
   const [network, setNetwork] = useState<NetworkType>(currentNetwork || 'mainnet');
   const [initialNetwork, setInitialNetwork] = useState<NetworkType>(currentNetwork || 'mainnet');
-  const [customDataApiUrl, setCustomDataApiUrl] = useState('');
-  const [customSandshrewUrl, setCustomSandshrewUrl] = useState('');
+  // Custom network: single JSON-RPC URL + version flag. v4 = sandshrew, v5 = qubitcoin.
+  const [customRpcUrl, setCustomRpcUrl] = useState<string>(() =>
+    typeof localStorage !== 'undefined' ? localStorage.getItem('subfrost_custom_rpc_url') || '' : ''
+  );
+  const [customApiVersion, setCustomApiVersion] = useState<'v4' | 'v5'>(() => {
+    if (typeof localStorage === 'undefined') return 'v4';
+    const stored = localStorage.getItem('subfrost_custom_api_version');
+    return stored === 'v5' ? 'v5' : 'v4';
+  });
 
   // Derivation config — only addressIndex is functional (SDK only exposes it).
   // Account and changeIndex are kept in state to render preview path but cannot
@@ -224,22 +231,20 @@ export default function WalletSettings() {
     { value: 1, label: t('settings.changeAddr') },
   ];
 
+  // User-facing networks. The internal NetworkType union still allows other
+  // values (signet, subfrost-regtest, etc.) for legacy URLs / dev tooling, but
+  // the picker exposes only Mainnet / Devnet / Custom.
   const NETWORK_OPTIONS: { value: NetworkType; label: string }[] = [
-    { value: 'devnet', label: 'Devnet (in-browser)' },
     { value: 'mainnet', label: t('settings.mainnet') },
-    { value: 'signet', label: t('settings.signet') },
-    { value: 'subfrost-regtest', label: t('settings.subfrostRegtest') + ' (regtest.subfrost.io)' },
-    { value: 'qubitcoin-regtest', label: 'Qubitcoin Regtest (meta.lake.direct)' },
-    { value: 'regtest-local', label: t('settings.localRegtest') + ' (localhost:18888)' },
-    { value: 'regtest', label: t('settings.localRegtest') + ' (legacy)' },
+    { value: 'devnet', label: 'Devnet (in-browser demo)' },
     { value: 'custom', label: t('settings.customNetwork') },
   ];
 
   const handleSave = () => {
     console.log('Saving settings:', {
       network,
-      customDataApiUrl,
-      customSandshrewUrl,
+      customRpcUrl,
+      customApiVersion,
       taprootPath,
       segwitPath,
       taprootConfig,
@@ -248,6 +253,12 @@ export default function WalletSettings() {
 
     // Save network to localStorage
     localStorage.setItem('subfrost_selected_network', network);
+
+    // Persist custom RPC config so getConfig('custom') can read it
+    if (network === 'custom') {
+      localStorage.setItem('subfrost_custom_rpc_url', customRpcUrl.trim());
+      localStorage.setItem('subfrost_custom_api_version', customApiVersion);
+    }
 
     // Save taproot address index (last segment of BIP-86 path).
     // SDK only exposes the address index — account/change are fixed at 0.
@@ -438,28 +449,42 @@ export default function WalletSettings() {
                 <>
                   <div>
                     <label className="block text-sm font-medium text-[color:var(--sf-text)]/60 mb-2">
-                      Custom Data API Endpoint
+                      JSON-RPC URL
                     </label>
                     <input
                       type="text"
-                      value={customDataApiUrl}
-                      onChange={(e) => setCustomDataApiUrl(e.target.value)}
-                      placeholder="https://your-dataapi.com"
+                      value={customRpcUrl}
+                      onChange={(e) => setCustomRpcUrl(e.target.value)}
+                      placeholder="https://your-node.example.com/rpc"
                       className="w-full rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-primary)]/5 px-4 py-3 text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)]"
                     />
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-[color:var(--sf-text)]/60 mb-2">
-                      Custom Sandshrew RPC URL
+                      API
                     </label>
-                    <input
-                      type="text"
-                      value={customSandshrewUrl}
-                      onChange={(e) => setCustomSandshrewUrl(e.target.value)}
-                      placeholder="https://your-sandshrew-rpc.com"
-                      className="w-full rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-primary)]/5 px-4 py-3 text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)]"
-                    />
+                    <div className="flex items-center gap-2">
+                      {(['v4', 'v5'] as const).map((v) => (
+                        <button
+                          key={v}
+                          type="button"
+                          onClick={() => setCustomApiVersion(v)}
+                          className={`flex-1 rounded-lg px-4 py-3 text-sm font-bold transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
+                            customApiVersion === v
+                              ? 'bg-[color:var(--sf-primary)]/20 text-[color:var(--sf-primary)] shadow-[0_2px_8px_rgba(0,0,0,0.15)]'
+                              : 'bg-[color:var(--sf-surface)] text-[color:var(--sf-text)]/70 hover:bg-[color:var(--sf-primary)]/10'
+                          }`}
+                        >
+                          {v === 'v4' ? 'v4 (sandshrew)' : 'v5 (qubitcoin)'}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="mt-2 text-xs text-[color:var(--sf-text)]/50">
+                      {customApiVersion === 'v4'
+                        ? 'Standard sandshrew JSON-RPC interface (alkanes_*, esplora_*).'
+                        : 'Qubitcoin meta-RPC interface (metashrew_view, no esplora).'}
+                    </p>
                   </div>
                 </>
               )}
