@@ -713,24 +713,20 @@ export function alkaneBalanceQueryOptions(deps: AlkaneBalanceDeps) {
       const provider = deps.provider!;
       const alkaneMap = new Map<string, any>();
 
-      // Fetch all addresses in parallel (was sequential for...of loop)
+      // Fetch all addresses in parallel (was sequential for...of loop).
+      //
+      // Uses the canonical metashrew indexer's `protorunesbyaddress` view
+      // for ALL networks. Espo's `/get-alkanes-by-address` was lagging /
+      // missing fresh outpoints on mainnet (verified 2026-05-03 via tx
+      // 2255b42e... — espo returned 0 items while protorunesbyaddress
+      // showed the correct DIESEL+frBTC balances). The address-keyed view
+      // is fast and consistent with what the contract sees at submit time;
+      // espo is appropriate for token metadata / pool lists, not balances.
       const fetchForAddress = async (address: string): Promise<any[]> => {
         if (deps.network === 'regtest-local' || deps.network === 'devnet') {
           return fetchAlkaneBalancesViaProtobuf('http://localhost:18888', address);
-        } else if (deps.network === 'qubitcoin-regtest') {
-          return fetchAlkaneBalancesViaProtobuf(`${window.location.origin}/api/rpc/qubitcoin-regtest`, address);
-        } else {
-          // Direct REST — no WASM overhead. Same espo endpoint the SDK wraps.
-          const resp = await fetch(`/api/rpc/${deps.network || 'mainnet'}/get-alkanes-by-address`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            signal: AbortSignal.timeout(10000),
-            body: JSON.stringify({ address }),
-          });
-          if (!resp.ok) return [];
-          const result = await resp.json();
-          return result?.data || [];
         }
+        return fetchAlkaneBalancesViaProtobuf(getRpcUrl(deps.network || 'mainnet'), address);
       };
 
       const allResults = await Promise.all(

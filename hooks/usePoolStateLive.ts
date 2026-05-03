@@ -1,16 +1,16 @@
 /**
  * usePoolStateLive — reactive live pool state (reserves + LP supply).
  *
- * Reads espo's `/get-pool-details` endpoint, which serves a per-block snapshot
- * written by the indexer on every block (no TTL cache, just whatever the
- * indexer wrote latest). Bypasses the bulk `/get-all-pools-details` aggregate
- * that we cache for the markets list.
+ * Reads pool reserves *directly from the pool contract* via
+ * `metashrew_view("simulate")` against opcode 999 (PoolDetails). NO espo
+ * dependency — this is what swap/LP slippage math agrees with at submit
+ * time. See `lib/alkanes/poolState.ts` for the byte-layout decoder.
  *
  * ## Refresh model
  *
- * `staleTime: Infinity` + no `refetchInterval`. Espo writes a fresh snapshot
- * per block, so polling between blocks would always return identical data.
- * Instead we rely on:
+ * `staleTime: Infinity` + no `refetchInterval`. The simulate view returns
+ * the indexer's latest committed state, so polling between blocks would
+ * always return identical data. Instead we rely on:
  *   - **HeightPoller** (`queries/height.ts`) invalidates ALL queries when the
  *     metashrew height advances — handles the "new block" trigger.
  *   - **refetchOnWindowFocus** picks up missed blocks if the user was away.
