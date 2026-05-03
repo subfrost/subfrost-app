@@ -20,26 +20,16 @@
  * on 2026-05-03 against block 947661. They are stable: pools cannot be
  * renamed or moved, so as long as the AMM factory at 4:65522 keeps
  * returning these pools they remain valid.
- *
- * Multi-hop tokens (BUTANE, CheekyB) don't have direct frBTC pools yet;
- * they're listed here so the UI can route through the explicit hop. The
- * `route` field describes the path: pool IDs ordered along the swap
- * direction starting from the BTC side. The swap engine consumes this
- * via factory opcode 13 (SwapExactTokensForTokens) which already accepts
- * a `path: Vec<AlkaneId>`.
  */
 
 import type { PoolsListItem } from '@/hooks/usePools';
 import { simulateContract, extractField3Data, parseU128LE } from '@/lib/fujin/rpc';
 
 /**
- * Mainnet alkane id ↔ symbol/name + the direct frBTC pool, plus 2-hop
- * routes for tokens whose pool with frBTC doesn't (yet) exist.
- *
- * `route` is the ordered pool path *starting from frBTC* (i.e. the user
- * spends BTC → wraps to frBTC → swaps along this chain). For direct
- * pools the route is a single pool. For multi-hop the route is multiple
- * pools chained by shared tokens — the swap router walks them.
+ * Mainnet alkane id ↔ symbol/name + its direct frBTC pool. Each entry
+ * pairs the buy-side token with a single pool that contains both that
+ * token and frBTC, so the swap router resolves a one-hop path
+ * automatically (BTC → wrap to frBTC → swap to target).
  */
 export interface CuratedPool {
   /** Alkane id of the non-frBTC token (the "counterparty" the user buys). */
@@ -48,66 +38,16 @@ export interface CuratedPool {
   symbol: string;
   /** Display name. */
   name: string;
-  /**
-   * Ordered pool path. First pool always contains frBTC (32:0); subsequent
-   * pools share a token with the previous pool. For direct pairs this is
-   * one pool; for multi-hop (e.g. BUTANE) it's two or more.
-   */
-  route: Array<{
-    poolId: string;
-    /** The token alkane id this hop ends with. The next hop's pool must contain it. */
-    outTokenId: string;
-  }>;
+  /** Pool id (block:tx) — must contain `tokenId` and frBTC (32:0). */
+  poolId: string;
 }
 
 export const MAINNET_CURATED_POOLS: readonly CuratedPool[] = [
-  {
-    tokenId: '2:0',
-    symbol: 'DIESEL',
-    name: 'DIESEL',
-    route: [{ poolId: '2:77087', outTokenId: '2:0' }],
-  },
-  {
-    tokenId: '2:25720',
-    symbol: 'MIST',
-    name: 'ALKAMIST',
-    route: [{ poolId: '2:77237', outTokenId: '2:25720' }],
-  },
-  {
-    tokenId: '2:590',
-    symbol: '🐝',
-    name: 'Bee',
-    route: [{ poolId: '2:77220', outTokenId: '2:590' }],
-  },
-  {
-    tokenId: '2:35275',
-    symbol: 'DUST',
-    name: 'GOLD DUST',
-    route: [{ poolId: '2:77228', outTokenId: '2:35275' }],
-  },
-  {
-    // CheekyB has no direct frBTC pool. Route through DIESEL/CheekyB.
-    tokenId: '2:490',
-    symbol: 'CKB',
-    name: 'CheekyB',
-    route: [
-      { poolId: '2:77087', outTokenId: '2:0' },     // frBTC → DIESEL
-      { poolId: '2:69914', outTokenId: '2:490' },   // DIESEL → CheekyB
-    ],
-  },
-  {
-    // BUTANE has no direct frBTC pool. Route through ALKAMIST/BUTANE.
-    tokenId: '2:19',
-    symbol: 'C4H10',
-    name: 'BUTANE',
-    route: [
-      { poolId: '2:77237', outTokenId: '2:25720' }, // frBTC → ALKAMIST
-      { poolId: '2:70358', outTokenId: '2:19' },    // ALKAMIST → BUTANE
-    ],
-  },
+  { tokenId: '2:0',     symbol: 'DIESEL',    name: 'DIESEL',    poolId: '2:77087' },
+  { tokenId: '2:25720', symbol: 'MIST',      name: 'ALKAMIST',  poolId: '2:77237' },
+  { tokenId: '2:590',   symbol: '🐝',         name: 'Bee',        poolId: '2:77220' },
+  { tokenId: '2:35275', symbol: 'DUST',      name: 'GOLD DUST', poolId: '2:77228' },
 ] as const;
-
-const FRBTC_ID = '32:0';
 
 /** Decode a u32 LE from a hex string at a hex-character offset. */
 function parseU32LE(hexData: string, offset: number): number {
@@ -187,27 +127,22 @@ async function fetchCuratedPoolDetails(
 /**
  * Render the curated list as `PoolsListItem[]` so it slots into the
  * existing `usePools` consumer surface (same shape `useAlkanesTokenPairs`
- * etc. already consume from the espo path). Only the *direct* frBTC
- * pools become PoolsListItem entries — multi-hop tokens (CheekyB,
- * BUTANE) don't have their own frBTC pool and need separate routing in
- * the swap quote engine.
+ * etc. already consume from the espo path).
  *
- * Promise.all-fetches reserves for every direct pool in parallel; takes
+ * Promise.all-fetches reserves for every pool in parallel; takes
  * ~100-200ms on warm metashrew. If any individual pool fetch fails it's
  * skipped (logged) — the rest still surface.
  */
 export async function fetchCuratedPoolsListItems(
   rpcUrl: string,
 ): Promise<PoolsListItem[]> {
-  const direct = MAINNET_CURATED_POOLS.filter((p) => p.route.length === 1);
-
   const detailsList = await Promise.all(
-    direct.map((p) => fetchCuratedPoolDetails(rpcUrl, p.route[0].poolId)),
+    MAINNET_CURATED_POOLS.map((p) => fetchCuratedPoolDetails(rpcUrl, p.poolId)),
   );
 
   const items: PoolsListItem[] = [];
-  for (let i = 0; i < direct.length; i++) {
-    const curated = direct[i];
+  for (let i = 0; i < MAINNET_CURATED_POOLS.length; i++) {
+    const curated = MAINNET_CURATED_POOLS[i];
     const details = detailsList[i];
     if (!details) continue;
 
@@ -242,31 +177,6 @@ export async function fetchCuratedPoolsListItems(
   }
 
   return items;
-}
-
-/**
- * Multi-hop routes (CheekyB, BUTANE). The swap engine should consume
- * these for path-style swaps via factory opcode 13. Returned in the
- * shape: { sellTokenId: 'btc'/frBTC, buyTokenId, path: [tokenIds in
- * order] } so the quote builder can derive amounts from each hop's
- * reserves.
- */
-export function getCuratedMultiHopRoutes(): Array<{
-  buyTokenId: string;
-  symbol: string;
-  name: string;
-  path: string[];
-  poolIds: string[];
-}> {
-  return MAINNET_CURATED_POOLS
-    .filter((p) => p.route.length > 1)
-    .map((p) => ({
-      buyTokenId: p.tokenId,
-      symbol: p.symbol,
-      name: p.name,
-      path: [FRBTC_ID, ...p.route.map((hop) => hop.outTokenId)],
-      poolIds: p.route.map((hop) => hop.poolId),
-    }));
 }
 
 /**
