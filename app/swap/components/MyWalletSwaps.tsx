@@ -8,6 +8,7 @@ import TokenIcon from '@/app/components/TokenIcon';
 import Link from 'next/link';
 import { useWallet } from '@/context/WalletContext';
 import { useTranslation } from '@/hooks/useTranslation';
+import { getTxExplorerUrl } from '@/utils/getConfig';
 import type { Network } from '@/utils/constants';
 
 type AmmRow =
@@ -221,12 +222,17 @@ export default function MyWalletSwaps() {
                     }
                   })();
 
+                  const txExplorerUrl = getTxExplorerUrl(network, (row as any).transactionId);
+
+                  const RowEl: any = txExplorerUrl ? Link : 'div';
+                  const rowProps: any = txExplorerUrl
+                    ? { href: txExplorerUrl, target: '_blank', rel: 'noopener noreferrer' }
+                    : {};
+
                   return (
-                    <Link
+                    <RowEl
                       key={(row as any).transactionId + '-' + idx}
-                      href={`https://espo.sh/tx/${(row as any).transactionId}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                      {...rowProps}
                       className="sf-row block"
                     >
                       <div className="grid grid-cols-[0.5fr_0.7fr_0.7fr_1fr_0.6fr] gap-1 text-[11px] leading-[20px] px-4 py-1.5 items-center">
@@ -257,7 +263,7 @@ export default function MyWalletSwaps() {
                           {timeLabel}
                         </span>
                       </div>
-                    </Link>
+                    </RowEl>
                   );
                 })}
               </>

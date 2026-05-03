@@ -360,8 +360,8 @@ describe('TransactionHistory', () => {
     expect(src).toMatch(/t\(['"]txHistory\.noActivity['"]\)/);
   });
 
-  it('links transactions to espo.sh explorer', () => {
-    expect(src).toMatch(/espo\.sh\/tx/);
+  it('links transactions to network-aware explorer via getTxExplorerUrl', () => {
+    expect(src).toMatch(/getTxExplorerUrl\(network,\s*tx\.txid\)/);
   });
 
   it('shows alkanes badge for transactions with protostones', () => {

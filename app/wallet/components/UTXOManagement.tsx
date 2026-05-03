@@ -2,14 +2,17 @@
 
 import { useState, useEffect } from 'react';
 import { useEnrichedWalletData } from '@/hooks/useEnrichedWalletData';
+import { useWallet } from '@/context/WalletContext';
 import { Box, ChevronDown, ChevronUp, ExternalLink, Loader2, RefreshCw, Filter, Lock, Unlock, Scissors } from 'lucide-react';
 import InscriptionRenderer from '@/app/components/InscriptionRenderer';
 import SplitUtxoModal from './SplitUtxoModal';
+import { getTxExplorerUrl } from '@/utils/getConfig';
 
 type UTXOFilterType = 'all' | 'p2wpkh' | 'p2tr' | 'protorunes' | 'runes' | 'brc20';
 
 export default function UTXOManagement() {
   const { utxos, isLoading, error, refresh } = useEnrichedWalletData();
+  const { network } = useWallet() as any;
   const [expandedUtxo, setExpandedUtxo] = useState<string | null>(null);
   const [selectedFilters, setSelectedFilters] = useState<Set<UTXOFilterType>>(new Set(['all']));
   const [frozenUtxos, setFrozenUtxos] = useState<Set<string>>(new Set());
@@ -281,14 +284,19 @@ export default function UTXOManagement() {
                         <span className="text-[color:var(--sf-text)]/60">Transaction ID:</span>
                         <div className="flex items-center gap-2 mt-1">
                           <span className="text-xs break-all text-[color:var(--sf-text)]">{utxo.txid}</span>
-                          <a
-                            href={`https://espo.sh/tx/${utxo.txid}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-[color:var(--sf-primary)] hover:opacity-80"
-                          >
-                            <ExternalLink size={14} />
-                          </a>
+                          {(() => {
+                            const utxoTxUrl = getTxExplorerUrl(network, utxo.txid);
+                            return utxoTxUrl ? (
+                              <a
+                                href={utxoTxUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-[color:var(--sf-primary)] hover:opacity-80"
+                              >
+                                <ExternalLink size={14} />
+                              </a>
+                            ) : null;
+                          })()}
                         </div>
                       </div>
                       <div className="text-[color:var(--sf-text)]">

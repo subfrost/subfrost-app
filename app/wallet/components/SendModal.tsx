@@ -109,6 +109,7 @@ import { useNotification } from '@/context/NotificationContext';
 import { useEnrichedWalletData } from '@/hooks/useEnrichedWalletData';
 import { useSandshrewProvider } from '@/hooks/useSandshrewProvider';
 import TokenIcon from '@/app/components/TokenIcon';
+import { getTxExplorerUrl } from '@/utils/getConfig';
 import { useFeeRate, FeeSelection } from '@/hooks/useFeeRate';
 import { usePools } from '@/hooks/usePools';
 import { useTranslation } from '@/hooks/useTranslation';
@@ -1391,22 +1392,26 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
     </div>
   );
 
-  const renderSuccess = () => (
+  const renderSuccess = () => {
+    const successTxUrl = txid ? getTxExplorerUrl(network, txid) : null;
+    const SuccessTxEl: any = successTxUrl ? 'a' : 'div';
+    const successTxProps: any = successTxUrl
+      ? { href: successTxUrl, target: '_blank', rel: 'noopener noreferrer' }
+      : {};
+    return (
     <>
       <div className="flex flex-col items-center justify-center py-8 space-y-4">
         <CheckCircle size={64} className="text-green-400" />
         <div className="text-xl font-bold text-[color:var(--sf-text)]">{t('send.transactionSent')}</div>
 
-        <a
-          href={`https://espo.sh/tx/${txid}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="w-full rounded-lg bg-[color:var(--sf-info-green-bg)] border border-[color:var(--sf-info-green-border)] p-3 hover:brightness-110 transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none cursor-pointer relative"
+        <SuccessTxEl
+          {...successTxProps}
+          className={`w-full rounded-lg bg-[color:var(--sf-info-green-bg)] border border-[color:var(--sf-info-green-border)] p-3 transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none relative ${successTxUrl ? 'hover:brightness-110 cursor-pointer' : ''}`}
         >
-          <ExternalLink size={12} className="absolute top-3 right-3 text-[color:var(--sf-info-green-text)]/60" />
+          {successTxUrl && <ExternalLink size={12} className="absolute top-3 right-3 text-[color:var(--sf-info-green-text)]/60" />}
           <div className="text-xs text-[color:var(--sf-info-green-title)] mb-1">{t('send.transactionIdLabel')}</div>
-          <div data-testid="txid" className="text-sm text-[color:var(--sf-info-green-text)] break-all pr-6">{txid}</div>
-        </a>
+          <div data-testid="txid" className={`text-sm text-[color:var(--sf-info-green-text)] break-all ${successTxUrl ? 'pr-6' : ''}`}>{txid}</div>
+        </SuccessTxEl>
       </div>
 
       <button
@@ -1416,7 +1421,8 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
         {t('send.close')}
       </button>
     </>
-  );
+    );
+  };
 
   return (
     <div className="sf-popup-overlay p-4" onClick={onClose}>
