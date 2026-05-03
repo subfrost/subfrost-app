@@ -11,6 +11,7 @@ import { getConfig, getRpcUrl } from '@/utils/getConfig';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { KNOWN_TOKENS } from '@/lib/alkanes-client';
 import { simulateContract, extractField3Data, parseU128LE } from '@/lib/fujin/rpc';
+import { fetchCuratedPoolsListItems } from '@/lib/alkanes/curated-pools';
 import { queryKeys } from '@/queries/keys';
 
 export type UsePoolsParams = {
@@ -729,6 +730,25 @@ export function usePools(params: UsePoolsParams = {}) {
         return { items, total: items.length };
       }
 
+      // Mainnet (and signet/testnet) primary: prefetch curated pool IDs
+      // directly from on-chain via metashrew. Espo + SDK fallbacks have been
+      // returning empty for extended periods (verified 2026-05-03), so we
+      // anchor the swap/LP UI on a known good list of pool IDs and fetch
+      // their live reserves with a single fan-out of opcode-999 calls.
+      // The remaining espo / SDK fallbacks below run *additively* — any
+      // extra pools they surface get layered on top of the curated set.
+      if (network === 'mainnet' || network === 'signet' || network === 'testnet') {
+        try {
+          const rpcUrl = getRpcUrl(network);
+          const curated = await fetchCuratedPoolsListItems(rpcUrl);
+          if (curated.length > 0) {
+            items = curated;
+          }
+        } catch (e) {
+          console.warn('[usePools] curated pool prefetch failed:', e);
+        }
+      }
+
       // Primary: Direct REST call to get-all-pools-details (preserves ALL API fields
       // including poolApr, poolVolume30dInUsd, etc. which the SDK WASM deserializer drops).
       // On devnet, the fetch interceptor routes these REST calls through quspo.
@@ -853,10 +873,16 @@ export function usePools(params: UsePoolsParams = {}) {
       if (items.length < beforeCount) {
       }
 
-      // Remove dust/dead pools with negligible TVL (skip on regtest/devnet where pricing is unavailable)
+      // Remove dust/dead pools with negligible TVL (skip on regtest/devnet where pricing is unavailable).
+      //
+      // Pools whose `tvlUsd` is `undefined` (vs zero) are kept — undefined
+      // means "no TVL data was attached to this entry", which happens on
+      // the curated/on-chain fallback paths where reserves come from
+      // opcode-999 directly and pricing isn't joined yet. Filtering those
+      // out would silently nuke the curated set whenever espo is empty.
       if (!network?.includes('regtest') && network !== 'devnet') {
         const MIN_TVL_USD = 5;
-        items = items.filter(p => (p.tvlUsd ?? 0) >= MIN_TVL_USD);
+        items = items.filter(p => p.tvlUsd === undefined || p.tvlUsd >= MIN_TVL_USD);
       }
 
       return applyFiltersAndPagination(items, params);
