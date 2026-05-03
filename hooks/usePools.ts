@@ -785,6 +785,19 @@ export function usePools(params: UsePoolsParams = {}) {
         }
       }
 
+      // Fallback 4: direct metashrew_view simulate (factory opcode 3 + per-pool
+      // 999). Pure on-chain — no espo / no SDK dependency. Use this when every
+      // upstream path (REST + SDK) has failed; loses TVL/volume data but
+      // ensures the LP / swap forms can still match pools by token id.
+      if (items.length === 0) {
+        try {
+          items = await fetchPoolsFromDirectSimulate(ALKANE_FACTORY_ID, network);
+          console.warn('[usePools] used direct simulate fallback — TVL/volume fields missing');
+        } catch (e) {
+          console.warn('[usePools] direct simulate fallback also failed:', e);
+        }
+      }
+
       // Second pass: find pool tokens with numeric-only names and fetch metadata individually.
       // Check for *useful* metadata (non-empty, non-numeric name/symbol), not just map presence,
       // because the bulk /get-alkanes fetch may return entries with empty symbols.
