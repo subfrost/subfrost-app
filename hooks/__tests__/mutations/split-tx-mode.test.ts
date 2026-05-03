@@ -109,6 +109,26 @@ function resolveSplitDefault(
   return override ?? network === 'mainnet';
 }
 
+// ---------------------------------------------------------------------------
+// Wrapper-layer forwarding. The mutation hooks pass `splitTransactions`
+// to `provider.alkanesExecuteTyped({...})`, which serializes it into the
+// options JSON consumed by the WASM provider. If the wrapper drops it,
+// the entire upstream plumbing is dead code — exactly the regression
+// fixed in `lib/alkanes/__tests__/executeTyped-splitTransactions.test.ts`.
+// ---------------------------------------------------------------------------
+describe('lib/alkanes/execute.ts: wrapper forwards splitTransactions to options JSON', () => {
+  const src = fs.readFileSync(
+    path.resolve(HOOK_DIR, '../lib/alkanes/execute.ts'),
+    'utf-8',
+  );
+
+  it('writes options.split_transactions when params.splitTransactions is set', () => {
+    expect(src).toMatch(
+      /params\.splitTransactions\s*!==\s*undefined[^\n]*options\.split_transactions\s*=\s*params\.splitTransactions/,
+    );
+  });
+});
+
 describe('split-tx default policy (network-aware)', () => {
   it('mainnet without override → true', () => {
     expect(resolveSplitDefault(undefined, 'mainnet')).toBe(true);

@@ -59,4 +59,12 @@ export interface AlkanesExecuteTypedParams {
   paymentUtxos?: string[];
   /** Network name — used to reliably detect devnet (instead of URL sniffing). */
   network?: string;
+  /** Opt-in CPFP-chained 2-tx flow for wrap+execute requests. When true and
+   *  the protostones[0] is a wrap (block 32, opcode 77), alkanes-rs splits
+   *  the request into Tx A (wrap-only) + Tx B (execute consuming Tx A's
+   *  alkane carrier). Each tx then gets its own MINIMUM_FUEL_CHANGE1 (3.5M)
+   *  budget instead of sharing the single per-tx fuel allocation, avoiding
+   *  OOG when block_fuel is exhausted. Default: caller's choice — most
+   *  atomic-flow hooks default to `network === 'mainnet'`. */
+  splitTransactions?: boolean;
 }

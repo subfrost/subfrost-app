@@ -97,6 +97,14 @@ export async function alkanesExecuteTyped(
   if (params.mineEnabled !== undefined) options.mine_enabled = params.mineEnabled;
   if (params.autoConfirm !== undefined) options.auto_confirm = params.autoConfirm;
   if (params.rawOutput !== undefined) options.raw_output = params.rawOutput;
+  // Forward to alkanes-rs `execute_full`'s split-tx gate (parsed at
+  // alkanes-web-sys/src/provider.rs line ~826). Without this line the
+  // mutation hooks' `splitTransactions: ... === true` becomes a silent
+  // no-op — the WASM provider never sees the field, defaults to false,
+  // and the gate at execute.rs line 211 is skipped. That bug surfaced
+  // during the 2026-05-03 mainnet camoufoxd run as "only 1
+  // sendrawtransaction observed when wrap+swap should produce 2."
+  if (params.splitTransactions !== undefined) options.split_transactions = params.splitTransactions;
 
   const ordinalsStrategy = params.ordinalsStrategy ?? params.txContext?.defaultOrdinalsStrategy;
   if (ordinalsStrategy !== undefined) options.ordinals_strategy = ordinalsStrategy;
