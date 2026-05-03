@@ -185,25 +185,106 @@ export function parseProtorunesResponse(hex: string): Map<string, bigint> {
   return balanceMap;
 }
 
+/**
+ * Compute spendable alkane balances by enriching the address's CURRENT
+ * unspent UTXO set with per-outpoint balance sheets:
+ *
+ *   1. esplora_address::utxo  → unspent UTXOs at the address (BTC-layer
+ *      truth — already excludes outpoints the user has spent).
+ *   2. Promise.all(alkanes_protorunesbyoutpoint) per UTXO → alkane balance
+ *      sheet at each outpoint.
+ *   3. Aggregate per (block, tx).
+ *
+ * Why NOT `protorunesbyaddress`: the indexer's address-keyed view records
+ * "this address received an alkane at this outpoint" but does not retract
+ * entries when the outpoint is spent at the BTC layer. As a result, summing
+ * across that view shows phantom balances on previously-held outpoints
+ * (verified 2026-05-03: bc1p0eyy… reported 1800 DIESEL via address-view but
+ * actually held only 58 DIESEL at currently-unspent outpoints).
+ *
+ * Espo's `/get-alkanes-by-address` has the same staleness class plus an
+ * additional indexer-lag gap on freshly-confirmed UTXOs.
+ *
+ * Performance: dust UTXOs (≤1000 sats) are the only candidates for alkane
+ * balances — protorunes encode token amounts on dust outputs. Filtering
+ * before the protorunesbyoutpoint fan-out avoids a query per non-alkane
+ * BTC UTXO. Each call is ~50ms; 10 dust UTXOs settle in ~100-200ms total
+ * thanks to Promise.all parallelism.
+ */
 async function fetchAlkaneBalancesViaProtobuf(
   rpcUrl: string,
   address: string,
 ): Promise<{ alkaneId: { block: string; tx: string }; balance: string }[]> {
-  const payload = buildProtorunesPayload(address);
-  const res = await fetch(rpcUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    signal: AbortSignal.timeout(20000),
-    body: JSON.stringify({
-      jsonrpc: '2.0', id: 1,
-      method: 'metashrew_view',
-      params: ['protorunesbyaddress', payload, 'latest'],
-    }),
+  // Step 1: esplora_address::utxo
+  let utxos: Array<{ txid: string; vout: number; value: number }> = [];
+  try {
+    const utxoResp = await fetch(rpcUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(15_000),
+      body: JSON.stringify({
+        jsonrpc: '2.0', id: 1,
+        method: 'esplora_address::utxo',
+        params: [address],
+      }),
+    });
+    const utxoJson = await utxoResp.json();
+    const rawResult = utxoJson?.result ?? utxoJson;
+    utxos = Array.isArray(rawResult) ? rawResult : [];
+  } catch (err) {
+    console.warn(`[alkaneBalances] esplora_address::utxo failed for ${address}:`, err);
+    return [];
+  }
+
+  // Step 2: Promise.all alkanes_protorunesbyoutpoint per dust UTXO.
+  //
+  // Alkane tokens live on dust outputs (~546-600 sats). Filtering to ≤1000
+  // sats keeps the fan-out small. The indexer answers each outpoint query
+  // independently, so parallelism is safe and bounded by the number of
+  // dust UTXOs at the address (typically <30 for active wallets).
+  const dustUtxos = utxos.filter((u) => u.value <= 1000);
+  if (dustUtxos.length === 0) return [];
+
+  const checks = dustUtxos.map(async (u) => {
+    try {
+      const resp = await fetch(rpcUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(15_000),
+        body: JSON.stringify({
+          jsonrpc: '2.0', id: 1,
+          method: 'alkanes_protorunesbyoutpoint',
+          params: [{ txid: u.txid, vout: u.vout, protocolTag: '1' }],
+        }),
+      });
+      const json = await resp.json();
+      const balances: Array<{ block: number | string; tx: number | string; amount: number | string }> =
+        json?.result?.balance_sheet?.cached?.balances ?? [];
+      return balances;
+    } catch {
+      return [] as Array<{ block: number | string; tx: number | string; amount: number | string }>;
+    }
   });
-  const data = await res.json();
-  if (data.error || !data.result) return [];
-  const balanceMap = parseProtorunesResponse(data.result);
-  return Array.from(balanceMap, ([id, bal]) => {
+
+  const results = await Promise.all(checks);
+
+  // Step 3: aggregate per (block, tx).
+  const aggregate = new Map<string, bigint>();
+  for (const balances of results) {
+    for (const b of balances) {
+      const block = String(b.block);
+      const tx = String(b.tx);
+      // Skip explicit zero entries (the indexer occasionally returns
+      // {amount:0} placeholders for outpoints that mention an alkane id
+      // without actually carrying value).
+      const amount = BigInt(String(b.amount ?? 0));
+      if (amount === 0n) continue;
+      const key = `${block}:${tx}`;
+      aggregate.set(key, (aggregate.get(key) ?? 0n) + amount);
+    }
+  }
+
+  return Array.from(aggregate, ([id, bal]) => {
     const [block, tx] = id.split(':');
     return { alkaneId: { block, tx }, balance: bal.toString() };
   });
