@@ -395,7 +395,18 @@ export function useSwapMutation() {
           autoConfirm: isKeystoreWallet,
           toAddresses: (swapData as any).overrideToAddresses || toAddresses,
           network,
-        });
+          // Opt-in CPFP-chained 2-tx flow when caller knows the combined wrap
+          // + execute fuel cost would exceed the per-tx floor. The SDK splits
+          // the wrap into Tx A and the execute into Tx B; each gets its own
+          // 3.5M MINIMUM_FUEL budget. Required for atomic BTC→Token swaps on
+          // mainnet where block-fuel-share starvation is real.
+          // `splitTransactions` is honored at runtime by alkanesExecuteFull's
+          // options JSON (see alkanes-rs ts-sdk/src/provider/index.ts), but
+          // the SDK's hand-maintained index.d.ts hasn't surfaced the prop on
+          // alkanesExecuteTyped's param type yet. Cast `as any` until the SDK
+          // d.ts is regenerated; the runtime path is unchanged.
+          splitTransactions: (swapData as any).splitTransactions === true,
+        } as any);
 
 
 

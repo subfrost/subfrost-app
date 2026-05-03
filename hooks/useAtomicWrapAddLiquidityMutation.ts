@@ -42,6 +42,14 @@ export interface AtomicWrapAddLiquidityParams {
   deadlineBlocks: number;
   /** Optional pool id; mutation falls back to factory.FindPoolId if absent. */
   poolId?: { block: number; tx: number };
+  /**
+   * Opt-in CPFP-chained 2-tx flow. Same fuel-budget rationale as
+   * useAtomicWrapSwapMutation: combined wrap + addLiquidity exceeds the
+   * per-tx 3.5M MINIMUM_FUEL floor when block_fuel is depleted, causing
+   * OOG. Splitting moves the wrap into its own parent tx so each gets a
+   * fresh budget. Default: on for mainnet.
+   */
+  splitTransactions?: boolean;
 }
 
 export function useAtomicWrapAddLiquidityMutation() {
@@ -134,7 +142,8 @@ export function useAtomicWrapAddLiquidityMutation() {
         overrideProtostones: protostones,
         overrideToAddresses: [signerAddress, address],
         overrideInputRequirements: inputRequirements,
-      });
+        splitTransactions: params.splitTransactions ?? (network === 'mainnet'),
+      } as any);
     },
     [network, address, premiumData, fee.feeRate, addLiquidityMutation, provider],
   );

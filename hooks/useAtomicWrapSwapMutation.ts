@@ -45,6 +45,20 @@ export interface AtomicWrapSwapParams {
   maxSlippage: string;
   /** Deadline blocks from "now". */
   deadlineBlocks: number;
+  /**
+   * Opt-in CPFP-chained 2-tx flow:
+   *   Tx A: wrap-only — mints frBTC to a UTXO at the user's taproot.
+   *   Tx B: factory swap — spends Tx A:1 (frBTC carrier) + Tx A:2 (BTC fee).
+   *
+   * Each tx gets its own per-tx fuel budget (3.5M MINIMUM_FUEL floor +
+   * block_fuel share) instead of sharing one budget across both protostones.
+   * Required when combined wrap + execute fuel cost (~5M) exceeds the floor
+   * — typical on busy mainnet blocks where block_fuel is depleted.
+   *
+   * When false (default), uses the original single-tx atomic flow which
+   * works fine when block_fuel is abundant but OOGs at the floor.
+   */
+  splitTransactions?: boolean;
 }
 
 export function useAtomicWrapSwapMutation() {
@@ -94,6 +108,13 @@ export function useAtomicWrapSwapMutation() {
         overrideProtostones: protostones,
         overrideToAddresses: [signerAddress, address],
         overrideInputRequirements: `B:${btcSats.toString()}:v0`,
+        // Default-on for mainnet: combined wrap+swap fuel exceeds the
+        // MINIMUM_FUEL_CHANGE1 floor (3.5M) so the original atomic flow
+        // OOGs whenever block_fuel is exhausted by earlier txs. Splitting
+        // the wrap into a parent tx avoids the race entirely. Devnet /
+        // regtest get full block_fuel each tx so the atomic flow is fine
+        // there — leave it off to keep existing test paths unchanged.
+        splitTransactions: params.splitTransactions ?? (network === 'mainnet'),
       } as any);
     },
     [network, address, premiumData, fee.feeRate, swapMutation],

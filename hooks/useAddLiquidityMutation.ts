@@ -86,6 +86,8 @@ export type AddLiquidityTransactionData = {
   overrideProtostones?: string;
   overrideInputRequirements?: string;
   overrideToAddresses?: string[];
+  /** When true, route through SDK's split-tx CPFP chain (Tx A wrap + Tx B addLiquidity). */
+  splitTransactions?: boolean;
 };
 
 /**
@@ -461,7 +463,11 @@ export function useAddLiquidityMutation() {
           autoConfirm: false,
           toAddresses: data.overrideToAddresses || toAddresses,
           network,
-        });
+          // Opt-in: SDK splits wrap+addLiquidity into a CPFP chain so each
+          // tx fits under the per-tx fuel floor. See useAtomicWrapAddLiquidityMutation.
+          // Cast `as any` because SDK index.d.ts hasn't surfaced the prop yet.
+          splitTransactions: data.splitTransactions === true,
+        } as any);
 
         console.log('[AddLiquidity] Called alkanesExecuteTyped (browser:', isBrowserWallet, ')');
 
