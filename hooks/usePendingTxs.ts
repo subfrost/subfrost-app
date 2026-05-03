@@ -212,36 +212,110 @@ export function usePendingTxs(): UsePendingTxsResult {
 }
 
 // ---------------------------------------------------------------------------
-// Synchronous tx-hex decoder — kept tiny + pure for testability.
+// Synchronous tx-hex decoder — produces:
+//   - txid via bitcoinjs-lib `Transaction.fromHex(hex).getId()`
+//   - per-output { addressMatchesUs, value } using bitcoinjs-lib's
+//     `address.fromOutputScript()` against each network the wallet
+//     might be on (mainnet / signet / regtest).
 //
-// We only decode enough to populate `PendingTxSummary` for plain-
-// transfer txs:
-//   - txid (computed via SHA-256(SHA-256(stripWitness(buf))))
-//   - per-output address + value (we know our addresses)
-//
-// Alkane deltas come from the protostone OP_RETURN, which is
-// non-trivial to parse here. For Phase 1 we simply skip the alkane
-// side — the hook returns alkaneDeltas: []. Phase 2 will hook in
-// the protostone decoder.
+// BTC delta cannot be fully computed here — our inputs need a
+// prevout lookup to know if they were ours. For Phase 1 we expose
+// the partial delta (outputs only); the hook caller layers a
+// confirmed-UTXO lookup on top to handle the input side.
 // ---------------------------------------------------------------------------
 
-function decodeHex(txHex: string, ourAddresses: Set<string>): PendingTxSummary | null {
-  // For now, return a stub with zero deltas. Real decoding belongs
-  // in Phase 2 (decode tx hex → outputs paying us → alkane balance
-  // lookup per output). Keeping this lightweight in Phase 1 means
-  // the hook integrates cleanly with the wallet UI without
-  // blocking on a heavier protostone parser.
-  // The `txid` we compute here matches the alkanes-rs side.
-  const stub: PendingTxSummary = {
-    txid: '',
-    btcDelta: 0n,
+import * as bitcoin from 'bitcoinjs-lib';
+import { bech32m } from '@scure/base';
+
+/**
+ * Decode a scriptPubKey to a bech32 / bech32m address. Walks
+ * mainnet → testnet → regtest. Special-cases P2TR (segwit v1)
+ * since bitcoinjs-lib 7 dropped it from `fromOutputScript`.
+ */
+function scriptToAddress(script: Uint8Array): string | null {
+  // P2TR: OP_1 <32-byte program>
+  if (script.length === 34 && script[0] === 0x51 && script[1] === 0x20) {
+    const program = Array.from(script.slice(2));
+    // bech32m encode: convert 8-bit program to 5-bit, prepend witness
+    // version (1), call bech32m.encode.
+    const words = bech32mFromBytes(program);
+    for (const hrp of ['bc', 'tb', 'bcrt']) {
+      try {
+        return bech32m.encode(hrp, [1, ...words]);
+      } catch {
+        /* try next */
+      }
+    }
+    return null;
+  }
+  // Everything else (P2WPKH, P2WSH, P2PKH, P2SH) — bitcoinjs handles it.
+  for (const net of [
+    bitcoin.networks.bitcoin,
+    bitcoin.networks.testnet,
+    bitcoin.networks.regtest,
+  ]) {
+    try {
+      return bitcoin.address.fromOutputScript(Buffer.from(script), net);
+    } catch {
+      /* try next */
+    }
+  }
+  return null;
+}
+
+function bech32mFromBytes(bytes: number[]): number[] {
+  // 8-to-5 bit conversion (RFC standard, same algorithm as bech32 lib).
+  let acc = 0;
+  let bits = 0;
+  const result: number[] = [];
+  for (const b of bytes) {
+    acc = (acc << 8) | b;
+    bits += 8;
+    while (bits >= 5) {
+      bits -= 5;
+      result.push((acc >> bits) & 0x1f);
+    }
+  }
+  if (bits > 0) result.push((acc << (5 - bits)) & 0x1f);
+  return result;
+}
+
+/**
+ * Exported for testing. The hook uses this internally; vitest pins
+ * the txid + output-delta semantics here so future protostone-aware
+ * upgrades have a stable spec to assert against.
+ */
+export function decodeHex(txHex: string, ourAddresses: Set<string>): PendingTxSummary | null {
+  let tx: bitcoin.Transaction;
+  try {
+    tx = bitcoin.Transaction.fromHex(txHex);
+  } catch (e) {
+    console.warn('[usePendingTxs] decode failed:', e);
+    return null;
+  }
+
+  // Outputs paying us → +value.
+  let outputDelta = 0n;
+  for (const output of tx.outs) {
+    const address = scriptToAddress(output.script);
+    if (address && ourAddresses.has(address)) {
+      outputDelta += BigInt(output.value);
+    }
+  }
+
+  // Phase 1 doesn't have the prevout lookup wired through (would
+  // need to query confirmed UTXO set per input). Returning the
+  // output-only delta is honest: it OVERSTATES the BTC delta for
+  // outgoing txs (because we ignore the inputs). The wallet UI
+  // should show this as "+X BTC pending" only when outputDelta > 0
+  // for incoming txs; outgoing txs should layer in the input
+  // subtraction at the call site via `computeBtcDelta` with a
+  // proper lookup. The hook returns enough for both modes.
+  const summary: PendingTxSummary = {
+    txid: tx.getId(),
+    btcDelta: outputDelta,
     alkaneDeltas: [],
     hex: txHex,
   };
-  // Note: Phase 2 will wire `computeBtcDelta` into this body via
-  // a synchronous bitcoinjs-lib decode. Intentionally left
-  // unimplemented in Phase 1 to keep the surface small + obvious
-  // in code review.
-  void ourAddresses;
-  return stub;
+  return summary;
 }
