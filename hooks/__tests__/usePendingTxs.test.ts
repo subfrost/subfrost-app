@@ -169,6 +169,75 @@ describe('decodeHex', () => {
     // to address-decode it and add 0 to the running sum (this is
     // implicitly true since 0 + n = n; the regression to guard
     // against is throwing on an OP_RETURN output).
+    void 0;
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Source-string spec: every BTC / alkane broadcast site must push
+// the broadcast hex into the IndexedDB PendingTxStore so the wallet
+// UI's pre-flight check overlays the new mempool state.
+//
+// Ad-hoc plumbing is the right shape for Phase 2; Phase 3 will wrap
+// `provider.broadcastTransaction` itself so this becomes implicit.
+// Until then, this assertion guards the pattern.
+// ---------------------------------------------------------------------------
+
+import * as fs from 'fs';
+import * as path from 'path';
+
+describe('pending-tx-store push at broadcast sites', () => {
+  const root = path.resolve(__dirname, '../..');
+  const sites = [
+    'hooks/useBtcSendMutation.ts',
+    // Phase 3 will add: useAlkaneSendMutation, useSwapMutation,
+    // useAddLiquidityMutation, etc. For now only useBtcSendMutation
+    // pushes manually — the rest go through alkanesExecuteTyped
+    // which uses the WASM-side in-memory store; the IndexedDB
+    // mirror is a follow-up.
+  ];
+
+  for (const site of sites) {
+    it(`${site} pushes successful broadcasts into pendingTxStore`, () => {
+      const src = fs.readFileSync(path.join(root, site), 'utf-8');
+      expect(src).toMatch(/import\(['"]@\/lib\/alkanes\/pendingTxStore['"]\)/);
+      expect(src).toMatch(/pendingTxStore\.add\(/);
+    });
+  }
+});
+
+describe('SendModal overlays pending state on availableUtxos', () => {
+  const root = path.resolve(__dirname, '../..');
+  const src = fs.readFileSync(
+    path.join(root, 'app/wallet/components/SendModal.tsx'),
+    'utf-8',
+  );
+
+  it('imports the IndexedDB PendingTxStore', () => {
+    expect(src).toMatch(/@\/lib\/alkanes\/pendingTxStore/);
+  });
+
+  it('builds an ourPendingTxids set from the store on modal open', () => {
+    expect(src).toMatch(/ourPendingTxids/);
+    expect(src).toMatch(/Transaction\.fromHex\(.*\)\.getId\(\)/);
+  });
+
+  it('availableUtxos filter allows unconfirmed UTXOs whose txid is in our pending set', () => {
+    // The line shape is:
+    //   if (!utxo.status.confirmed && !ourPendingTxids.has(utxo.txid)) return false;
+    // Both halves must be present.
+    expect(src).toMatch(
+      /!utxo\.status\.confirmed\s*&&\s*!ourPendingTxids\.has\(utxo\.txid\)/,
+    );
+  });
+});
+
+describe('keep the original assertion stable', () => {
+  it('placeholder', () => {
+    // Tx A has vout 3 = OP_RETURN (value 0). decodeHex must not try
+    // to address-decode it and add 0 to the running sum (this is
+    // implicitly true since 0 + n = n; the regression to guard
+    // against is throwing on an OP_RETURN output).
     const txAHex =
       '02000000000102c0b16477f5a5ab2d2b1ed826138bf6d1d91338428880df1b35499a11800f1a600100000000fdffffff22de02b77e503167665374f9161999ced057d093e453753372901f61a3f0b8c60200000000fdffffff043075000000000000225120a7f90b8256f58c1074fe085d37b73dff3040774babc216dae106e281e020638b22020000000000002251207ab57455a9be2f87f4d3dfc3ddf2ac2a3ebc0163159f36130f7ceb9e527fa2c34cbc0000000000002251207ab57455a9be2f87f4d3dfc3ddf2ac2a3ebc0163159f36130f7ceb9e527fa2c30000000000000000136a5d101600ff7f818cec8ad0abc0a8a081d2150140300f852484bcd16e2d5c2850f8c3bc1bd861a033971994f621fb589deb3edf8225dfbbdb969abb738b4ba2e1c119c7c3f860d77095b150b058a89170b2d532ad01408e1f00dd1c42ee3c073f256395d5b74d7c8366a52d29b72832a1ebec3bda4048f3a86f41625ec8736cf97051796b20961e05e11291aa65737cbf0ddb243f450f00000000';
     expect(() => decodeHex(txAHex, new Set([USER_ADDR]))).not.toThrow();

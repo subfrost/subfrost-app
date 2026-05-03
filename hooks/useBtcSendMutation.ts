@@ -184,7 +184,21 @@ async function sendBrowser(args: {
     txObj = signedPsbt.extractTransaction();
   }
 
-  const broadcastTxid = await provider.broadcastTransaction(txObj.toHex());
+  const broadcastHex = txObj.toHex();
+  const broadcastTxid = await provider.broadcastTransaction(broadcastHex);
+
+  // Persist into the IndexedDB PendingTxStore so the SendModal's
+  // pre-flight UTXO check overlays the new mempool state on the
+  // next render. Without this, back-to-back sends are blocked
+  // because the wallet UI rejects unconfirmed UTXOs.
+  if (typeof window !== 'undefined') {
+    try {
+      const { pendingTxStore } = await import('@/lib/alkanes/pendingTxStore');
+      await pendingTxStore.add(broadcastHex);
+    } catch (e) {
+      console.warn('[btcSend] pending-tx-store add failed:', e);
+    }
+  }
 
   return {
     success: true,
@@ -224,6 +238,22 @@ async function sendKeystore(args: {
     result?.result?.txid ||
     result?.data?.txid ||
     (typeof result === 'string' ? result : null);
+
+  // Persist into the IndexedDB PendingTxStore so the SendModal's
+  // pre-flight UTXO check overlays the new mempool state on the
+  // next render. The SDK's WASM-side store is in-memory only —
+  // IndexedDB is the cross-modal-mount + cross-page-reload mirror.
+  // Mirrors the same logic in the browser-wallet sendBrowser path.
+  const broadcastHex =
+    result?.reveal_tx_hex || result?.tx_hex || result?.hex || null;
+  if (broadcastHex && typeof window !== 'undefined') {
+    try {
+      const { pendingTxStore } = await import('@/lib/alkanes/pendingTxStore');
+      await pendingTxStore.add(broadcastHex);
+    } catch (e) {
+      console.warn('[btcSend] keystore pending-tx-store add failed:', e);
+    }
+  }
 
   return { success: true, transactionId: txid, amountSats };
 }

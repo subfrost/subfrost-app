@@ -296,6 +296,32 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
     return raw;
   };
 
+  // Track txids the user broadcast in this session via the IndexedDB
+  // PendingTxStore. Unconfirmed UTXOs whose txid is in this set are
+  // treated as available for the next send — the SDK's selector will
+  // accept them via its in-memory pending store, but the wallet UI's
+  // pre-flight check otherwise rejects them on `confirmed: false`.
+  // Without this overlay, "send back-to-back" UX is broken: tx 1's
+  // change UTXO is mempool-only until ~10min confirmation, and the
+  // confirmed-alkane-carriers don't have enough sats for tx 2.
+  const [ourPendingTxids, setOurPendingTxids] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    if (!isOpen || typeof window === 'undefined') return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { pendingTxStore } = await import('@/lib/alkanes/pendingTxStore');
+        const hexes = await pendingTxStore.list();
+        const { Transaction } = await import('bitcoinjs-lib');
+        const ids = new Set(hexes.map((h) => Transaction.fromHex(h).getId()));
+        if (!cancelled) setOurPendingTxids(ids);
+      } catch (e) {
+        console.warn('[SendModal] pending-tx-store load failed:', e);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [isOpen]);
+
   // Fetch UTXOs via esplora when modal opens.
   const [esploraUtxos, setEsploraUtxos] = useState<any[]>([]);
   useEffect(() => {
@@ -417,7 +443,12 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
   // keystore / single-address browser the address may share alkanes with
   // BTC, so the filter stays.
   const availableUtxos = utxos.all.filter((utxo) => {
-    if (!utxo.status.confirmed) return false;
+    // Allow unconfirmed UTXOs ONLY if they originate from a tx the
+    // user broadcast in this session. The SDK's PendingTxStore
+    // tracks those — see `ourPendingTxids` above. This overlays
+    // optimistic pending state on top of the confirmed UTXO set so
+    // back-to-back sends don't get blocked by indexer lag.
+    if (!utxo.status.confirmed && !ourPendingTxids.has(utxo.txid)) return false;
     if (!btcFromAddresses.includes(utxo.address)) return false;
 
     const utxoKey = `${utxo.txid}:${utxo.vout}`;
