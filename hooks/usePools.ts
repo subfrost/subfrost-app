@@ -749,6 +749,23 @@ export function usePools(params: UsePoolsParams = {}) {
         }
       }
 
+      // Merge fallback pool entries onto the curated set instead of replacing
+      // it. The original code overwrote `items = await fallback(...)` whenever
+      // a fallback returned anything non-empty, which silently nuked the
+      // curated DIESEL/MIST/Bee/DUST entries when /api/pools/cached returned
+      // a 2-pool partial list (the espo proxy serves stale partial data
+      // before it's fully populated). Symptom: BTC→Token swap picker only
+      // surfaced frBTC/bUSD/FIRE despite the curated path having succeeded.
+      const mergeItems = (extra: PoolsListItem[]) => {
+        const seen = new Set(items.map((p) => p.id));
+        for (const p of extra) {
+          if (!seen.has(p.id)) {
+            items.push(p);
+            seen.add(p.id);
+          }
+        }
+      };
+
       // Primary: Direct REST call to get-all-pools-details (preserves ALL API fields
       // including poolApr, poolVolume30dInUsd, etc. which the SDK WASM deserializer drops).
       // On devnet, the fetch interceptor routes these REST calls through quspo.
@@ -756,7 +773,8 @@ export function usePools(params: UsePoolsParams = {}) {
       // Race tokenMeta against a 250ms budget: if it's already cached, use it for symbol
       // enrichment in the parse loop; otherwise the second pass below handles missing names.
       try {
-        items = await fetchPoolsFromPoolsDetailsRest(ALKANE_FACTORY_ID, network, undefined);
+        const fetched = await fetchPoolsFromPoolsDetailsRest(ALKANE_FACTORY_ID, network, undefined);
+        mergeItems(fetched);
         const TOKEN_META_BUDGET_MS = 250;
         tokenMetaMap = await Promise.race([
           tokenMetaPromise,
@@ -772,7 +790,7 @@ export function usePools(params: UsePoolsParams = {}) {
       // Fallback 1: SDK WASM dataApiGetAllPoolsDetails (may drop some fields like poolApr)
       if (items.length === 0) {
         try {
-          items = await fetchPoolsFromDataApi(provider, ALKANE_FACTORY_ID, network, tokenMetaMap);
+          mergeItems(await fetchPoolsFromDataApi(provider, ALKANE_FACTORY_ID, network, tokenMetaMap));
         } catch (e) {
           console.warn('[usePools] dataApiGetAllPoolsDetails failed:', e);
         }
@@ -781,7 +799,7 @@ export function usePools(params: UsePoolsParams = {}) {
       // Fallback 2: get-all-token-pairs REST
       if (items.length === 0) {
         try {
-          items = await fetchPoolsFromTokenPairsRest(ALKANE_FACTORY_ID, network, tokenMetaMap);
+          mergeItems(await fetchPoolsFromTokenPairsRest(ALKANE_FACTORY_ID, network, tokenMetaMap));
         } catch (e) {
           console.warn('[usePools] get-all-token-pairs REST failed:', e);
         }
@@ -790,7 +808,7 @@ export function usePools(params: UsePoolsParams = {}) {
       // Fallback 2b: dataApiGetAllTokenPairs
       if (items.length === 0) {
         try {
-          items = await fetchPoolsFromTokenPairsApi(provider, ALKANE_FACTORY_ID, network, tokenMetaMap);
+          mergeItems(await fetchPoolsFromTokenPairsApi(provider, ALKANE_FACTORY_ID, network, tokenMetaMap));
         } catch (e) {
           console.warn('[usePools] dataApiGetAllTokenPairs also failed, falling back to RPC:', e);
         }
@@ -799,7 +817,7 @@ export function usePools(params: UsePoolsParams = {}) {
       // Fallback 3: N+1 RPC simulation calls (no TVL/volume data)
       if (items.length === 0) {
         try {
-          items = await fetchPoolsFromSDKFallback(provider, ALKANE_FACTORY_ID, network, tokenMetaMap);
+          mergeItems(await fetchPoolsFromSDKFallback(provider, ALKANE_FACTORY_ID, network, tokenMetaMap));
         } catch (e) {
           console.warn('[usePools] SDK fallback also failed:', e);
         }
@@ -811,7 +829,7 @@ export function usePools(params: UsePoolsParams = {}) {
       // ensures the LP / swap forms can still match pools by token id.
       if (items.length === 0) {
         try {
-          items = await fetchPoolsFromDirectSimulate(ALKANE_FACTORY_ID, network);
+          mergeItems(await fetchPoolsFromDirectSimulate(ALKANE_FACTORY_ID, network));
           console.warn('[usePools] used direct simulate fallback — TVL/volume fields missing');
         } catch (e) {
           console.warn('[usePools] direct simulate fallback also failed:', e);
