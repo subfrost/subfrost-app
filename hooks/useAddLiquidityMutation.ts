@@ -454,20 +454,33 @@ export function useAddLiquidityMutation() {
 
       try {
 
+        // Split-tx mode requires the SDK's `execute_full` path (which is the
+        // only one that branches into `execute_split`). The PSBT-return path
+        // (`autoConfirm: false`) is single-tx only and silently ignores the
+        // splitTransactions flag — exactly the symptom that broke
+        // useAtomicWrapAddLiquidityMutation on mainnet (combined wrap +
+        // addLiquidity fuel cost > MINIMUM_FUEL_CHANGE1, OOG without split).
+        //
+        // When the caller asked for split-tx, switch to autoConfirm=true so
+        // the SDK signs + broadcasts both Tx A and Tx B internally. Manual
+        // alkane UTXO injection / input patching below is skipped in that
+        // branch — for atomic wrap+addLiquidity the alkanes come from the
+        // wrap protostone so injection isn't needed anyway.
+        const wantsSplit = data.splitTransactions === true;
+        const useAutoConfirm = wantsSplit;
         const result = await provider.alkanesExecuteTyped({
           txContext,
           // Atomic wrap+addLiquidity passes overrides (custom protostones, BTC input, signer output)
           inputRequirements: data.overrideInputRequirements || inputRequirements,
           protostones: data.overrideProtostones || protostone,
           feeRate: data.feeRate,
-          autoConfirm: false,
+          autoConfirm: useAutoConfirm,
           toAddresses: data.overrideToAddresses || toAddresses,
           network,
           // Opt-in: SDK splits wrap+addLiquidity into a CPFP chain so each
           // tx fits under the per-tx fuel floor. See useAtomicWrapAddLiquidityMutation.
-          // Cast `as any` because SDK index.d.ts hasn't surfaced the prop yet.
-          splitTransactions: data.splitTransactions === true,
-        } as any);
+          splitTransactions: wantsSplit,
+        });
 
         console.log('[AddLiquidity] Called alkanesExecuteTyped (browser:', isBrowserWallet, ')');
 

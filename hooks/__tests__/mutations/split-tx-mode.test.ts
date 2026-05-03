@@ -61,10 +61,32 @@ describe('useAddLiquidityMutation: splitTransactions plumbing', () => {
     expect(src).toMatch(/splitTransactions\?:\s*boolean/);
   });
 
+  it('reads splitTransactions from the mutation payload via === true gate', () => {
+    // Hook reads `data.splitTransactions === true` (and stores into a local
+    // `wantsSplit` for use by both the autoConfirm switch and the SDK call).
+    // The `=== true` ensures missing/undefined flag → false (opt-in only).
+    expect(src).toMatch(/data\.splitTransactions\s*===\s*true/);
+  });
+
   it('forwards splitTransactions to alkanesExecuteTyped', () => {
+    // The call may write `splitTransactions: data.splitTransactions === true`
+    // directly OR (current) `splitTransactions: wantsSplit` after pulling the
+    // gate result into a local. Either form is acceptable as long as the
+    // value comes from `data.splitTransactions === true`.
     const callRegex =
-      /provider\.alkanesExecuteTyped\(\{[\s\S]*?splitTransactions:\s*data\.splitTransactions\s*===\s*true[\s\S]*?\}\)/;
+      /provider\.alkanesExecuteTyped\(\{[\s\S]*?splitTransactions:\s*(?:data\.splitTransactions\s*===\s*true|wantsSplit)[\s\S]*?\}\)/;
     expect(src).toMatch(callRegex);
+  });
+
+  it('uses autoConfirm=true when split mode is requested', () => {
+    // Split-tx requires the SDK's `execute_full` path (PSBT-return path is
+    // single-tx only). When the caller asks for split mode, the hook flips
+    // autoConfirm so the SDK signs + broadcasts both Tx A and Tx B itself.
+    // Without this conditional flip, splitTransactions=true was a silent
+    // no-op for atomic wrap+addLiquidity (regression seen 2026-05-03 on
+    // mainnet — wrap+addLiquidity OOG'd because split mode never fired).
+    expect(src).toMatch(/const\s+useAutoConfirm\s*=\s*wantsSplit/);
+    expect(src).toMatch(/autoConfirm:\s*useAutoConfirm/);
   });
 });
 
