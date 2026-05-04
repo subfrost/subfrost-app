@@ -387,21 +387,11 @@ export function useSwapMutation() {
         // (when capability available); keystore → 'burn'. See lib/alkanes/execute.ts.
         const isKeystoreWallet = walletType === 'keystore';
 
-        // Indexer-sync transient retry (2026-05-04).
-        //
-        // alkanesExecuteTyped (via WASM `webprovider_waitForIndexer`) gates
-        // broadcast on `metashrew_height === bitcoind_blockcount`. On mainnet
-        // the gateway is sometimes a block apart for ~10-30s. The SDK throws
-        // "Indexer sync timed out: metashrew at N, bitcoind at N+1 after 30s"
-        // and the swap dies on "Building Transaction" forever (gabe's
-        // screenshot). The condition is transient — by the time the user
-        // retries manually, it's usually resolved.
-        //
-        // We retry up to 2 extra times with backoff. Each retry restarts
-        // alkanesExecuteTyped from scratch (re-derives PSBT inputs etc.),
-        // which is safe because nothing has been broadcast yet — the failure
-        // is upstream of broadcast. The user just sees "Building..." for a
-        // few extra seconds instead of a hard error.
+        // Indexer sync probe lives in lib/alkanes/execute.ts (the central
+        // alkanesExecuteTyped wrapper) — every mutation gets it for free.
+        // The retry-on-error block below remains as a safety net for the
+        // case where the indexer takes longer than waitForIndexer's own
+        // internal budget.
         const buildExecuteOpts = () => ({
           txContext,
           // Support overrides for atomic wrap+swap (SwapShell passes custom protostones/addresses)
@@ -429,6 +419,9 @@ export function useSwapMutation() {
           return /indexer sync timed out/i.test(msg);
         };
 
+        // Safety net: if the SDK's internal waitForIndexer still trips
+        // inside alkanesExecuteTyped, retry once more after a short
+        // re-probe of provider.waitForIndexer(). Bounded to 2 retries.
         const RETRY_BACKOFF_MS = [3_000, 8_000];
         let result: any;
         let attempt = 0;
@@ -441,8 +434,9 @@ export function useSwapMutation() {
               throw err;
             }
             const delay = RETRY_BACKOFF_MS[attempt];
-            console.warn(`[swap] indexer sync timeout (attempt ${attempt + 1}/${RETRY_BACKOFF_MS.length}), retrying in ${delay}ms…`);
+            console.warn(`[swap] indexer sync timeout (attempt ${attempt + 1}/${RETRY_BACKOFF_MS.length}), reprobing in ${delay}ms…`);
             await new Promise((resolve) => setTimeout(resolve, delay));
+            try { await provider.waitForIndexer(); } catch { /* continue to retry */ }
             attempt++;
           }
         }

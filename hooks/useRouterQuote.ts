@@ -25,7 +25,8 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { useWallet } from '@/context/WalletContext';
-import { getConfig, getRpcUrl } from '@/utils/getConfig';
+import { getConfig } from '@/utils/getConfig';
+import { alkanesSimulate } from '@/lib/alkanes/rpc';
 
 export type RouterQuoteResult = {
   /** Best output amount in raw alks (u128) */
@@ -81,38 +82,22 @@ export async function fetchRouterQuote(
   buyTokenId: string,
   amountIn: string,
 ): Promise<RouterQuoteResult | null> {
-  const rpcUrl = getRpcUrl(network);
   const [routerBlock, routerTx] = routerId.split(':');
   const [sellBlock, sellTx] = sellTokenId.split(':');
   const [buyBlock, buyTx] = buyTokenId.split(':');
 
   try {
-    const resp = await fetch(rpcUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        method: 'alkanes_simulate',
-        params: [{
-          target: { block: routerBlock, tx: routerTx },
-          inputs: ['2', sellBlock, sellTx, buyBlock, buyTx, amountIn],
-          block_tag: 'latest',
-        }],
-        id: 1,
-      }),
+    const result = await alkanesSimulate(network, {
+      target: `${routerBlock}:${routerTx}`,
+      inputs: ['2', sellBlock, sellTx, buyBlock, buyTx, amountIn],
     });
-
-    const json = await resp.json();
-    const execution = json?.result?.execution;
+    const execution = (result as any)?.execution;
 
     if (execution?.error) {
       console.warn('[useRouterQuote] Router quote error:', execution.error);
       return null;
     }
-
-    if (!execution?.data) {
-      return null;
-    }
+    if (!execution?.data) return null;
 
     return parseRouterQuoteResponse(execution.data);
   } catch (err) {

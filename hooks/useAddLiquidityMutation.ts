@@ -62,6 +62,7 @@ import * as ecc from '@bitcoinerlab/secp256k1';
 // Output patching was removed - see useSwapMutation.ts for why
 import { patchInputsOnly } from '@/lib/psbt-patching';
 import { buildCreateNewPoolProtostone, buildFactoryAddLiquidityProtostones, buildAddLiquidityInputRequirements } from '@/lib/alkanes/builders';
+import { getAddressUtxos, getProtorunesByOutpoint } from '@/lib/alkanes/rpc';
 import { getBitcoinNetwork, toAlks, extractPsbtBase64 } from '@/lib/alkanes/helpers';
 import { encodeSimulateCalldata } from '@/utils/simulateCalldata';
 
@@ -184,30 +185,16 @@ export async function findPoolId(
  */
 async function discoverAlkaneUtxos(
   taprootAddress: string,
-  rpcUrl: string = '/api/rpc',
+  network: string = 'mainnet',
 ): Promise<{ txid: string; vout: number; value: number; alkanes: { block: number; tx: number; amount: number }[] }[]> {
   console.log('[AddLiquidity] Discovering alkane UTXOs at', taprootAddress);
 
-  // 1. Fetch all UTXOs at the taproot address
-  const utxoResp = await fetch(rpcUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      method: 'esplora_address::utxo',
-      params: [taprootAddress],
-      id: 1,
-    }),
-  });
-  const utxoData = await utxoResp.json();
-  // JOURNAL (2026-03-26): On devnet, esplora_address::utxo returns non-array
-  // result (string error or null) causing "utxos.filter is not a function".
-  // This fix was accidentally reverted once during a bulk file revert — do not remove.
-  const rawResult = utxoData?.result ?? utxoData;
-  const utxos = Array.isArray(rawResult) ? rawResult : [];
+  // 1. Fetch UTXOs via SDK-mediated rpc.ts (handles devnet localhost
+  //    interception, error-sentinel guards, and abort signals).
+  const utxos = await getAddressUtxos(network, taprootAddress, AbortSignal.timeout(15_000));
 
   // 2. Filter for dust UTXOs (<=1000 sats) - alkane tokens live on dust outputs
-  const dustUtxos = utxos.filter((u: any) => u.value <= 1000);
+  const dustUtxos = utxos.filter((u) => u.value <= 1000);
   console.log(`[AddLiquidity] Found ${utxos.length} UTXOs, ${dustUtxos.length} dust UTXOs to check`);
 
   if (dustUtxos.length === 0) {
@@ -216,25 +203,15 @@ async function discoverAlkaneUtxos(
   }
 
   // 3. Check each dust UTXO for alkane balances (in parallel)
-  const checks = dustUtxos.map(async (utxo: any) => {
+  const checks = dustUtxos.map(async (utxo) => {
     try {
-      const resp = await fetch(rpcUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          method: 'alkanes_protorunesbyoutpoint',
-          params: [utxo.txid, utxo.vout],
-          id: 1,
-        }),
-      });
-      const data = await resp.json();
-      const balances = data?.result?.balance_sheet?.cached?.balances || [];
+      const resp = await getProtorunesByOutpoint(network, utxo.txid, utxo.vout, AbortSignal.timeout(15_000));
+      const balances = resp?.balance_sheet?.cached?.balances || [];
       if (balances.length > 0) {
         return {
-          txid: utxo.txid as string,
-          vout: utxo.vout as number,
-          value: utxo.value as number,
+          txid: utxo.txid,
+          vout: utxo.vout,
+          value: utxo.value,
           alkanes: balances.map((b: any) => ({ block: Number(b.block), tx: Number(b.tx), amount: Number(b.amount) })),
         };
       }
@@ -506,8 +483,7 @@ export function useAddLiquidityMutation() {
           // so the PSBT is built WITHOUT alkane-bearing inputs. We manually discover
           // alkane UTXOs and inject them into the PSBT before signing.
           console.log('[AddLiquidity] Discovering alkane UTXOs for injection...');
-          const rpcPath = network ? `/api/rpc/${network}` : '/api/rpc';
-          const alkaneUtxos = await discoverAlkaneUtxos(taprootAddress!, rpcPath);
+          const alkaneUtxos = await discoverAlkaneUtxos(taprootAddress!, network || 'mainnet');
 
           if (alkaneUtxos.length > 0) {
             const tapInternalKeyHex = account?.taproot?.pubKeyXOnly;

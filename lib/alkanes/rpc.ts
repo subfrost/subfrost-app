@@ -215,6 +215,99 @@ export async function getProtorunesByAddress(
 }
 
 // ============================================================================
+// alkanes_protorunesbyoutpoint — alkane balances at a specific UTXO
+// ============================================================================
+
+export interface ProtoruneOutpointResponse {
+  balance_sheet?: {
+    cached?: {
+      balances: Array<{ block: number; tx: number; amount: number | string }>;
+    };
+  };
+  outpoint?: { txid: string; vout: number };
+  output?: { value: number };
+}
+
+/**
+ * Fetch alkane balances at a single (txid, vout). The wallet's
+ * UTXO-derived balance fetch fans out across these in Promise.all.
+ */
+export async function getProtorunesByOutpoint(
+  network: string,
+  txid: string,
+  vout: number,
+  signal?: AbortSignal,
+): Promise<ProtoruneOutpointResponse> {
+  return jsonRpcCall<ProtoruneOutpointResponse>(
+    subfrostRpcUrl(network),
+    'alkanes_protorunesbyoutpoint',
+    [{ txid, vout, protocolTag: '1' }],
+    signal,
+  );
+}
+
+// ============================================================================
+// esplora_address::utxo — list UTXOs at an address
+// ============================================================================
+
+export interface EsploraUtxo {
+  txid: string;
+  vout: number;
+  value: number;
+  status?: { confirmed?: boolean; block_height?: number };
+}
+
+/**
+ * List UTXOs at a Bitcoin address (confirmed + mempool). Some upstream
+ * gateways return a string error sentinel (e.g.
+ * "legacy address base58 string") in the JSON-RPC `result` field instead
+ * of an array — handle that gracefully so callers always get a clean
+ * `EsploraUtxo[]`.
+ */
+export async function getAddressUtxos(
+  network: string,
+  address: string,
+  signal?: AbortSignal,
+): Promise<EsploraUtxo[]> {
+  const result = await jsonRpcCall<unknown>(
+    subfrostRpcUrl(network),
+    'esplora_address::utxo',
+    [address],
+    signal,
+  );
+  return Array.isArray(result) ? (result as EsploraUtxo[]) : [];
+}
+
+// ============================================================================
+// esplora_address::txs:mempool — list mempool transactions for an address
+// ============================================================================
+
+export interface EsploraMempoolTx {
+  txid: string;
+  vin?: Array<{ txid: string; vout: number }>;
+  vout?: Array<{ value: number; scriptpubkey_address?: string }>;
+}
+
+/**
+ * List unconfirmed (mempool) transactions touching an address. Used by
+ * the balance pipeline to filter out outpoints we've already spent in
+ * our own pending transactions.
+ */
+export async function getAddressMempoolTxs(
+  network: string,
+  address: string,
+  signal?: AbortSignal,
+): Promise<EsploraMempoolTx[]> {
+  const result = await jsonRpcCall<unknown>(
+    subfrostRpcUrl(network),
+    'esplora_address::txs:mempool',
+    [address],
+    signal,
+  );
+  return Array.isArray(result) ? (result as EsploraMempoolTx[]) : [];
+}
+
+// ============================================================================
 // Block height — hedged over multiple sources
 // ============================================================================
 
@@ -233,6 +326,41 @@ export async function getHeight(network: string, signal?: AbortSignal): Promise<
     2000,
     signal,
   );
+}
+
+// ============================================================================
+// esplora_tx — fetch a transaction by txid (confirmation status, vouts, etc.)
+// ============================================================================
+
+export interface EsploraTransaction {
+  txid: string;
+  status?: { confirmed?: boolean; block_height?: number; block_hash?: string; block_time?: number };
+  vin?: Array<{ txid: string; vout: number; prevout?: { value: number; scriptpubkey_address?: string } }>;
+  vout?: Array<{ value: number; scriptpubkey_address?: string }>;
+  fee?: number;
+  size?: number;
+}
+
+/**
+ * Fetch a Bitcoin transaction by id. Returns null when the tx is not yet
+ * known to the indexer (a typical state for a freshly-broadcast tx).
+ */
+export async function getEsploraTx(
+  network: string,
+  txid: string,
+  signal?: AbortSignal,
+): Promise<EsploraTransaction | null> {
+  try {
+    const result = await jsonRpcCall<EsploraTransaction>(
+      subfrostRpcUrl(network),
+      'esplora_tx',
+      [txid],
+      signal,
+    );
+    return result ?? null;
+  } catch {
+    return null;
+  }
 }
 
 // ============================================================================

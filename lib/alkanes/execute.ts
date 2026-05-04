@@ -138,6 +138,26 @@ export async function alkanesExecuteTyped(
   console.log('[alkanesExecuteTyped] fee_rate:', params.feeRate);
   console.log('[alkanesExecuteTyped] options:', optionsJson);
 
+  // Proactive indexer-sync probe (2026-05-04, fixes "Indexer sync timed out").
+  //
+  // alkanesExecuteWithStrings / alkanesExecuteFull internally call
+  // `webprovider_waitForIndexer` before broadcast and time out at 30s if
+  // metashrew_height < bitcoind_blockcount. On mainnet the gateway is
+  // sometimes one block apart for ~10–30s; the timeout buries the swap on
+  // "Building Transaction" forever. The elegant pattern (97b1aec2 — "fix:
+  // update @alkanes/ts-sdk with indexer sync fix") is to probe the
+  // SDK's sync primitive ourselves first so a transient gap becomes a
+  // short pre-flight wait instead of a deep failure. Catching here in the
+  // central wrapper covers swap / wrap / unwrap / send / addLiquidity in
+  // one place — no per-hook duplication.
+  try {
+    if (typeof (provider as any).waitForIndexer === 'function') {
+      await (provider as any).waitForIndexer();
+    }
+  } catch (syncErr) {
+    console.warn('[alkanesExecuteTyped] proactive waitForIndexer failed, continuing:', syncErr);
+  }
+
   // On devnet, use alkanesExecuteFull which handles signing + mining internally.
   // alkanesExecuteWithStrings relies on the SDK's data API for UTXO discovery,
   // which routes through quspo on devnet. Quspo may not have indexed all blocks,

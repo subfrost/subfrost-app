@@ -18,7 +18,12 @@ import { queryOptions } from '@tanstack/react-query';
 import { queryKeys } from './keys';
 import { KNOWN_TOKENS } from '@/lib/alkanes-client';
 import { getRpcUrl } from '@/utils/getConfig';
-import { getAlkaneInfoBatch } from '@/lib/alkanes/rpc';
+import {
+  getAddressMempoolTxs,
+  getAddressUtxos,
+  getAlkaneInfoBatch,
+  getProtorunesByOutpoint,
+} from '@/lib/alkanes/rpc';
 import type { CurrencyPriceInfoResponse } from '@/types/alkanes';
 
 type WebProvider = import('@alkanes/ts-sdk/wasm').WebProvider;
@@ -213,27 +218,15 @@ export function parseProtorunesResponse(hex: string): Map<string, bigint> {
  * thanks to Promise.all parallelism.
  */
 async function fetchAlkaneBalancesViaProtobuf(
-  rpcUrl: string,
+  network: string,
   address: string,
 ): Promise<{ alkaneId: { block: string; tx: string }; balance: string }[]> {
-  // Step 1: esplora_address::utxo
-  let utxos: Array<{ txid: string; vout: number; value: number }> = [];
+  // Step 1: esplora_address::utxo (via SDK-mediated rpc.ts).
+  let utxos: { txid: string; vout: number; value: number }[] = [];
   try {
-    const utxoResp = await fetch(rpcUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      signal: AbortSignal.timeout(15_000),
-      body: JSON.stringify({
-        jsonrpc: '2.0', id: 1,
-        method: 'esplora_address::utxo',
-        params: [address],
-      }),
-    });
-    const utxoJson = await utxoResp.json();
-    const rawResult = utxoJson?.result ?? utxoJson;
-    utxos = Array.isArray(rawResult) ? rawResult : [];
+    utxos = await getAddressUtxos(network, address, AbortSignal.timeout(15_000));
   } catch (err) {
-    console.warn(`[alkaneBalances] esplora_address::utxo failed for ${address}:`, err);
+    console.warn(`[alkaneBalances] getAddressUtxos failed for ${address}:`, err);
     return [];
   }
 
@@ -248,20 +241,8 @@ async function fetchAlkaneBalancesViaProtobuf(
 
   const checks = dustUtxos.map(async (u) => {
     try {
-      const resp = await fetch(rpcUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        signal: AbortSignal.timeout(15_000),
-        body: JSON.stringify({
-          jsonrpc: '2.0', id: 1,
-          method: 'alkanes_protorunesbyoutpoint',
-          params: [{ txid: u.txid, vout: u.vout, protocolTag: '1' }],
-        }),
-      });
-      const json = await resp.json();
-      const balances: Array<{ block: number | string; tx: number | string; amount: number | string }> =
-        json?.result?.balance_sheet?.cached?.balances ?? [];
-      return balances;
+      const resp = await getProtorunesByOutpoint(network, u.txid, u.vout, AbortSignal.timeout(15_000));
+      return resp?.balance_sheet?.cached?.balances ?? [];
     } catch {
       return [] as Array<{ block: number | string; tx: number | string; amount: number | string }>;
     }
@@ -517,55 +498,28 @@ export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
 
       const fetchUtxosViaEsplora = async (address: string) => {
         try {
-          const rpcPath = deps.network ? `/api/rpc/${deps.network}` : '/api/rpc';
-          const response = await fetch(rpcPath, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              jsonrpc: '2.0',
-              method: 'esplora_address::utxo',
-              params: [address],
-              id: 1,
-            }),
-          });
-          const json = await response.json();
-          if (json.result && Array.isArray(json.result)) {
-            return json.result.map((utxo: any) => ({
-              outpoint: `${utxo.txid}:${utxo.vout}`,
-              value: utxo.value,
-              height: utxo.status?.block_height || 0,
-            }));
-          }
+          const utxos = await getAddressUtxos(deps.network || 'mainnet', address);
+          return utxos.map((utxo) => ({
+            outpoint: `${utxo.txid}:${utxo.vout}`,
+            value: utxo.value,
+            height: utxo.status?.block_height || 0,
+          }));
         } catch (err) {
           console.error(`[BALANCE] esplora fallback failed for ${address}:`, err);
+          return null;
         }
-        return null;
       };
 
       const fetchMempoolSpent = async (address: string): Promise<number> => {
         try {
-          const rpcPath = deps.network ? `/api/rpc/${deps.network}` : '/api/rpc';
-          const response = await fetch(rpcPath, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              jsonrpc: '2.0',
-              method: 'esplora_address::txs:mempool',
-              params: [address],
-              id: 1,
-            }),
-          });
-          if (!response.ok) return 0;
-          const json = await response.json();
-          const txs = json.result;
-          if (!Array.isArray(txs)) return 0;
+          const txs = await getAddressMempoolTxs(deps.network || 'mainnet', address);
 
           // Build set of mempool txids to distinguish confirmed vs unconfirmed parents
-          const mempoolTxids = new Set(txs.map((tx: any) => tx.txid));
+          const mempoolTxids = new Set(txs.map((tx) => tx.txid));
 
           let spent = 0;
           for (const tx of txs) {
-            for (const vin of (tx.vin || [])) {
+            for (const vin of ((tx as any).vin || [])) {
               if (vin.prevout?.scriptpubkey_address === address) {
                 // Only count if parent tx is NOT a mempool tx (i.e., parent is confirmed)
                 if (!mempoolTxids.has(vin.txid)) {
@@ -805,10 +759,7 @@ export function alkaneBalanceQueryOptions(deps: AlkaneBalanceDeps) {
       // is fast and consistent with what the contract sees at submit time;
       // espo is appropriate for token metadata / pool lists, not balances.
       const fetchForAddress = async (address: string): Promise<any[]> => {
-        if (deps.network === 'regtest-local' || deps.network === 'devnet') {
-          return fetchAlkaneBalancesViaProtobuf('http://localhost:18888', address);
-        }
-        return fetchAlkaneBalancesViaProtobuf(getRpcUrl(deps.network || 'mainnet'), address);
+        return fetchAlkaneBalancesViaProtobuf(deps.network || 'mainnet', address);
       };
 
       const allResults = await Promise.all(
@@ -975,11 +926,11 @@ export function sellableCurrenciesQueryOptions(deps: SellableCurrenciesDeps) {
             let balances: { alkaneId: string; balance: string; name?: string; symbol?: string }[] = [];
 
             if (deps.network === 'devnet' || deps.network === 'regtest-local' || deps.network === 'qubitcoin-regtest') {
-              // REST data API returns HTTP 400/404 on local networks. Use protobuf RPC.
-              const protobufRpcUrl = deps.network === 'qubitcoin-regtest'
-                ? `${typeof window !== 'undefined' ? window.location.origin : ''}/api/rpc/qubitcoin-regtest`
-                : 'http://localhost:18888';
-              const rawItems = await fetchAlkaneBalancesViaProtobuf(protobufRpcUrl, address);
+              // REST data API returns HTTP 400/404 on local networks. Use the
+              // SDK-mediated rpc.ts path which resolves to the in-process
+              // devnet harness for `devnet`/`regtest-local` (intercepted)
+              // and to the local proxy for `qubitcoin-regtest`.
+              const rawItems = await fetchAlkaneBalancesViaProtobuf(deps.network, address);
               for (const item of rawItems) {
                 const id = `${item.alkaneId.block}:${item.alkaneId.tx}`;
                 const known = KNOWN_TOKENS_SELL[id];

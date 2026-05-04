@@ -19,26 +19,18 @@
 
 import { useEffect } from 'react';
 import { useNotification } from '@/context/NotificationContext';
+import { useWallet } from '@/context/WalletContext';
+import { getEsploraTx } from '@/lib/alkanes/rpc';
 import { loadAllPendingRecords, clearPendingTx } from '@/lib/pendingTxStorage';
 
 // Re-export storage helpers so callers only need one import
 export { storePendingTx, clearPendingTx, loadAllPendingRecords } from '@/lib/pendingTxStorage';
 export type { PendingTxRecord } from '@/lib/pendingTxStorage';
 
-async function isTxConfirmed(txid: string): Promise<boolean> {
+async function isTxConfirmed(network: string, txid: string): Promise<boolean> {
   try {
-    const res = await fetch('/api/rpc', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        method: 'esplora_tx',
-        params: [txid],
-        id: 1,
-      }),
-    });
-    const json = await res.json();
-    return !!json?.result?.status?.confirmed;
+    const tx = await getEsploraTx(network, txid);
+    return !!tx?.status?.confirmed;
   } catch {
     return false;
   }
@@ -53,13 +45,14 @@ async function isTxConfirmed(txid: string): Promise<boolean> {
  */
 export function useSyncPendingTransactions(): void {
   const { showNotification } = useNotification();
+  const { network } = useWallet();
 
   useEffect(() => {
     const records = loadAllPendingRecords();
     if (records.length === 0) return;
 
     records.forEach((record) => {
-      isTxConfirmed(record.txid).then((confirmed) => {
+      isTxConfirmed(network || 'mainnet', record.txid).then((confirmed) => {
         if (confirmed) {
           clearPendingTx(record.txid);
         } else {

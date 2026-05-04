@@ -25,6 +25,7 @@ import { useUnwrapMutation } from '@/hooks/useUnwrapMutation';
 import { useFeeRate } from '@/hooks/useFeeRate';
 import { useGlobalStore } from '@/stores/global';
 import { getConfig, getRpcUrl } from '@/utils/getConfig';
+import { getEsploraTx } from '@/lib/alkanes/rpc';
 import type { OperationType } from '@/app/components/SwapSuccessNotification';
 
 export interface TokenToBtcSwapProgress {
@@ -127,13 +128,8 @@ export function useTokenToBtcSwap() {
           params.onProgress({ type: 'swap-confirming', txId: swapTxId, attempt: attempt + 1, maxAttempts: maxPollAttempts });
           await new Promise(resolve => setTimeout(resolve, pollInterval));
           try {
-            const txResp = await fetch(getRpcUrl(network), {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ jsonrpc: '2.0', method: 'esplora_tx', params: [swapTxId], id: 1 }),
-            });
-            const txData = await txResp.json();
-            if (txData?.result?.status?.confirmed) {
+            const tx = await getEsploraTx(network!, swapTxId);
+            if (tx?.status?.confirmed) {
               await new Promise(resolve => setTimeout(resolve, 2000));
               swapConfirmed = true;
               break;

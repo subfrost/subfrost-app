@@ -1,9 +1,21 @@
 /**
- * Fujin RPC helpers — ported from fuboku-app/lib/rpc-helpers.ts
+ * Fujin RPC helpers — protobuf encoders + parsers for metashrew_view payloads.
  *
- * Provides contract simulation via metashrew_view("simulate") protobuf
- * and Espo Fujin JSON-RPC calls.
+ * 2026-05-04: All transport now goes through `lib/alkanes/rpc.ts` (the
+ * single SDK-mediated layer). This module retains only the protobuf
+ * encode/decode helpers that callers can't easily inline:
+ *   - encodeLEB128 / decodeVarint  — protobuf varint codec
+ *   - parseU128LE                  — read u128 little-endian out of hex
+ *   - extractField3Data            — pull contract return-data out of
+ *                                    a simulate response
+ *   - simulateContract             — high-level wrapper that builds the
+ *                                    `simulate` protobuf payload and
+ *                                    dispatches via `rpc.metashrewView`
+ *   - espoCall                     — kept for the Espo Fujin JSON-RPC
+ *                                    surface, which is a different host
  */
+
+import { metashrewView, getHeight } from '@/lib/alkanes/rpc';
 
 /** Encode unsigned integer as LEB128 */
 function encodeLEB128(value: number): number[] {
@@ -66,31 +78,42 @@ export function extractField3Data(hexResult: string, minLength: number = 16): st
   return null;
 }
 
-/** Get current block height */
-async function getBlockHeight(rpcUrl: string): Promise<number> {
-  const res = await fetch(rpcUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    signal: AbortSignal.timeout(10_000),
-    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'metashrew_height', params: [] }),
-  });
-  const json = await res.json();
-  if (json.error) throw new Error(`RPC error: ${json.error.message}`);
-  return parseInt(json.result, 10);
-}
-
 /**
  * Call contract via metashrew_view("simulate") protobuf.
+ *
+ * Accepts either a network name ('mainnet', 'devnet', etc. — preferred)
+ * or a legacy raw URL ('http://localhost:18888', '/api/rpc/mainnet').
+ * Dispatch goes through `lib/alkanes/rpc.ts` (the single SDK-mediated
+ * layer); URL inputs are mapped back to network names via
+ * `SUBFROST_API_URLS` so existing callers keep working while we migrate
+ * them to network-named arguments.
+ *
  * Returns raw hex result.
  */
+function urlToNetwork(input: string): string {
+  if (!input.includes('://') && !input.startsWith('/')) return input; // already a network name
+  // Common cases handled inline; everything else falls back to mainnet.
+  if (input.includes('localhost:18888')) return 'devnet';
+  if (input.includes('mainnet.subfrost.io')) return 'mainnet';
+  if (input.includes('testnet.subfrost.io')) return 'testnet';
+  if (input.includes('signet.subfrost.io')) return 'signet';
+  if (input.includes('regtest.subfrost.io')) return 'regtest';
+  if (input.includes('meta.lake.direct')) return 'qubitcoin-regtest';
+  // /api/rpc/<network> proxy URLs
+  const proxyMatch = input.match(/^\/api\/rpc\/([^/?#]+)/);
+  if (proxyMatch) return proxyMatch[1];
+  return 'mainnet';
+}
+
 export async function simulateContract(
-  rpcUrl: string,
+  networkOrUrl: string,
   contractId: string,
   opcode: number,
   args: number[] = [],
 ): Promise<string> {
+  const network = urlToNetwork(networkOrUrl);
   const [block, tx] = contractId.split(':').map(Number);
-  const height = await getBlockHeight(rpcUrl);
+  const height = await getHeight(network);
 
   const calldata: number[] = [];
   for (const val of [block, tx, opcode, ...args]) {
@@ -110,15 +133,8 @@ export async function simulateContract(
 
   const hex = '0x' + Array.from(parts, b => b.toString(16).padStart(2, '0')).join('');
 
-  const res = await fetch(rpcUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    signal: AbortSignal.timeout(10_000),
-    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'metashrew_view', params: ['simulate', hex, 'latest'] }),
-  });
-  const json = await res.json();
-  if (json.error) throw new Error(`RPC error: ${json.error.message || JSON.stringify(json.error)}`);
-  return json.result || '';
+  const result = await metashrewView(network, 'simulate', hex, 'latest');
+  return (result as string) || '';
 }
 
 /**
