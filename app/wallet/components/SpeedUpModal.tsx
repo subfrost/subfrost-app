@@ -115,11 +115,19 @@ export default function SpeedUpModal({
               </div>
             )}
 
-            {speedUp.isError && (
-              <div className="rounded-lg p-3 mt-3 bg-red-500/10 border border-red-500/30 text-sm text-red-400 break-all">
-                {(speedUp.error as Error)?.message ?? 'Speed-up failed'}
-              </div>
-            )}
+            {speedUp.isError && (() => {
+              const err = speedUp.error as Error & { stack?: string; cause?: unknown };
+              const msg = err?.message ?? 'Speed-up failed';
+              const stack = err?.stack ? err.stack.slice(0, 600) : '';
+              const cause = err?.cause ? `\ncause: ${String(err.cause)}` : '';
+              return (
+                <div className="rounded-lg p-3 mt-3 bg-red-500/10 border border-red-500/30 text-xs text-red-400 break-all whitespace-pre-wrap font-mono">
+                  {msg}
+                  {cause}
+                  {stack ? `\n\n${stack}` : ''}
+                </div>
+              );
+            })()}
 
             <div className="flex gap-2 mt-4">
               <button

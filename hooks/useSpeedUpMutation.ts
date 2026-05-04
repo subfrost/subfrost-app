@@ -468,9 +468,29 @@ export function useSpeedUpMutation() {
         .filter((c): c is { hex: string; txid: string } => !!c);
       const parentInPending = findParentInPending(tx, parentCandidates);
 
-      if (parentInPending && typeof bridge.rebuildBundleWithFeeRate === 'function') {
+      // Only treat as a bundle if the candidate parent is itself
+      // still in the mempool. If it confirmed, bumping it via RBF is
+      // meaningless (its inputs are mined) — fall through to a
+      // single-tx rebuild of the leaf instead. The IDB entry can lag
+      // behind block-tip until the next eviction sweep, so this check
+      // keeps us safe.
+      let parentForBundle: { hex: string; txid: string } | undefined;
+      if (parentInPending) {
+        try {
+          const status = await fetch(
+            `/api/esplora/tx/${parentInPending.txid}/status?network=${encodeURIComponent(networkArg)}`,
+          ).then((r) => (r.ok ? r.json() : null));
+          if (status && status.confirmed === false) {
+            parentForBundle = parentInPending;
+          }
+        } catch {
+          // If the status fetch fails, default to single-tx RBF (safer).
+        }
+      }
+
+      if (parentForBundle && typeof bridge.rebuildBundleWithFeeRate === 'function') {
         return runBundleRbf({
-          parentHex: parentInPending.hex,
+          parentHex: parentForBundle.hex,
           childHex: txHex,
           newFeeRate,
           newFeeRateArg: newFeeRate,
@@ -491,7 +511,22 @@ export function useSpeedUpMutation() {
         JSON.stringify(ourAddresses),
         networkArg,
       );
-      const plan = raw as RebuildPayload;
+      // Debug: serde_wasm_bindgen returns Map by default for objects;
+      // unwrap to plain object if so.
+      let plan: RebuildPayload;
+      if (raw instanceof Map) {
+        const obj = Object.fromEntries(raw as unknown as Iterable<[string, unknown]>);
+        plan = obj as unknown as RebuildPayload;
+      } else {
+        plan = raw as RebuildPayload;
+      }
+      if (typeof plan?.tx_hex !== 'string' || plan.tx_hex.length < 20) {
+        throw new Error(
+          `bridge returned malformed plan: keys=${
+            raw instanceof Map ? Array.from(raw.keys()).join(',') : Object.keys(raw as object).join(',')
+          } tx_hex=${typeof plan?.tx_hex} len=${plan?.tx_hex?.length}`,
+        );
+      }
 
       let broadcastHex: string | undefined;
 
