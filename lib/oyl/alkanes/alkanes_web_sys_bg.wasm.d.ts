@@ -10,6 +10,7 @@ export const webprovider_brc20_prog_rpc_url: (a: number) => [number, number];
 export const webprovider_getEnrichedBalances: (a: number, b: number, c: number, d: number, e: number) => any;
 export const webprovider_pendingTxStoreList: (a: number) => any;
 export const webprovider_predictBalanceDelta: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => [number, number, number];
+export const webprovider_rebuildTxWithFeeRate: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => [number, number, number];
 export const webprovider_pendingTxStoreEvict: (a: number, b: number, c: number) => any;
 export const webprovider_getAddressTxs: (a: number, b: number, c: number) => any;
 export const webprovider_getTransactionHex: (a: number, b: number, c: number) => any;

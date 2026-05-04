@@ -891,6 +891,26 @@ export class WebProvider {
     predictBalanceDelta(tx_hex: string, prevout_lookups_json: string, output_addresses_json: string, our_addresses_json: string): any;
     protorunesAnalyzeTx(txid: string): Promise<any>;
     protorunesDecodeTx(txid: string): Promise<any>;
+    /**
+     * Rebuild a still-pending tx with a higher fee rate by reducing
+     * the change-to-self output. Returns the new UNSIGNED tx hex
+     * plus accounting fields for the UI ("bumping from X to Y
+     * sat/vB, paying Z extra sats"). The caller re-signs and
+     * re-broadcasts.
+     *
+     * Args:
+     *   tx_hex: original signed tx hex (still in mempool)
+     *   new_fee_rate_sat_vb: target fee rate
+     *   prevout_values_json: JSON [{txid, vout, value_sats}] for each input
+     *   our_addresses_json: JSON ["bc1p..."] — change-output search set
+     *   network: "mainnet" | "testnet" | "signet" | "regtest"
+     *
+     * Returns: {tx_hex, original_fee_sats, new_fee_sats,
+     *   original_fee_rate, new_fee_rate, vsize,
+     *   change_output_index, new_change_value} on success.
+     * Throws a JS string error on any RBF rejection.
+     */
+    rebuildTxWithFeeRate(tx_hex: string, new_fee_rate_sat_vb: number, prevout_values_json: string, our_addresses_json: string, network: string): any;
     runestoneAnalyzeTx(txid: string): Promise<any>;
     runestoneDecodeTx(txid: string): Promise<any>;
     sandshrew_rpc_url(): string;
