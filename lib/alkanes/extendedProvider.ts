@@ -89,6 +89,40 @@ export async function alkanesExecuteTyped(
   try {
     const parsed = await executeTypedCore(provider, params);
     logWasmResult(methodLabel, parsed, Date.now() - startTime);
+
+    // Mirror to the browser-side IndexedDB pending-tx store so the
+    // optimistic balance overlay survives page reloads. The SDK
+    // auto-pushes to its in-memory WASM store on broadcast, but that
+    // state is lost when the WebProvider is recreated. The IDB layer
+    // is the durable cross-session record. Any tx hex returned by
+    // executeTypedCore — wrap, swap, addLiquidity, alkane-send — is a
+    // candidate for the overlay.
+    if (typeof window !== 'undefined' && parsed) {
+      const candidates = [
+        parsed?.tx_hex,
+        parsed?.transaction_hex,
+        parsed?.txHex,
+        parsed?.hex,
+        parsed?.broadcast?.tx_hex,
+        parsed?.broadcast_tx?.tx_hex,
+        parsed?.tx?.hex,
+        parsed?.raw_tx,
+        parsed?.raw,
+        parsed?.transaction?.hex,
+      ];
+      for (const c of candidates) {
+        if (typeof c === 'string' && /^[0-9a-fA-F]{40,}$/.test(c.replace(/^0x/, ''))) {
+          try {
+            const { pendingTxStore } = await import('./pendingTxStore');
+            await pendingTxStore.add(c);
+          } catch (e) {
+            console.warn('[alkanesExecuteTyped] pendingTxStore.add failed:', e);
+          }
+          break;
+        }
+      }
+    }
+
     return parsed;
   } catch (error) {
     logWasmError(methodLabel, error, [

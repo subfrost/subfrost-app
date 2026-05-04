@@ -183,20 +183,57 @@ export function usePendingTxs(): UsePendingTxsResult {
     return set;
   }, [account?.taproot?.address, account?.nativeSegwit?.address]);
 
-  // Query the IndexedDB store. Re-run whenever the height poller
-  // invalidates `pendingTxs`. Browser-only — guard SSR.
+  // Query both the IndexedDB store (cross-reload persistence — BTC
+  // send mutation pushes here) and the WASM in-memory store (every
+  // broadcast through `alkanesExecuteTyped` auto-pushes — wrap, swap,
+  // addLiquidity, alkane-send, etc.). Merge + dedupe by txid.
   const { data, isLoading, refetch } = useQuery<string[]>({
-    queryKey: ['pendingTxs'],
+    queryKey: ['pendingTxs', !!provider],
     enabled: typeof window !== 'undefined' && ourAddresses.size > 0,
     queryFn: async () => {
+      const seen = new Set<string>();
+      const merged: string[] = [];
       try {
-        return await pendingTxStore.list();
+        const idbList = await pendingTxStore.list();
+        for (const hex of idbList) {
+          try {
+            const txid = bitcoin.Transaction.fromHex(hex).getId();
+            if (!seen.has(txid)) {
+              seen.add(txid);
+              merged.push(hex);
+            }
+          } catch {
+            /* skip malformed */
+          }
+        }
       } catch (e) {
-        console.warn('[usePendingTxs] list failed:', e);
-        return [];
+        console.warn('[usePendingTxs] idb list failed:', e);
       }
+      if (provider && typeof (provider as any).pendingTxStoreList === 'function') {
+        try {
+          const wasmList = await (provider as any).pendingTxStoreList();
+          if (Array.isArray(wasmList)) {
+            for (const hex of wasmList) {
+              if (typeof hex !== 'string') continue;
+              try {
+                const txid = bitcoin.Transaction.fromHex(hex).getId();
+                if (!seen.has(txid)) {
+                  seen.add(txid);
+                  merged.push(hex);
+                }
+              } catch {
+                /* skip malformed */
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('[usePendingTxs] wasm list failed:', e);
+        }
+      }
+      return merged;
     },
-    staleTime: Infinity,
+    staleTime: 5_000, // re-poll occasionally so newly-broadcast WASM-side txs surface
+    refetchInterval: 8_000,
     refetchOnWindowFocus: false,
   });
 
