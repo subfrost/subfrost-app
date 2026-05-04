@@ -217,7 +217,31 @@ export function parseProtorunesResponse(hex: string): Map<string, bigint> {
  * BTC UTXO. Each call is ~50ms; 10 dust UTXOs settle in ~100-200ms total
  * thanks to Promise.all parallelism.
  */
-async function fetchAlkaneBalancesViaProtobuf(
+/**
+ * Wrapper that returns the same {Map<alkaneId, bigint>} shape as the
+ * old `parseProtorunesResponse` parser — so call sites that previously
+ * issued raw `protorunesbyaddress` RPC and parsed the protobuf can
+ * one-line-swap to this. Internally it goes through the canonical
+ * UTXO+outpoint fanout below.
+ *
+ * `protorunesbyaddress` is forbidden in production (phantom-balance
+ * bug per fetchAlkaneBalancesViaProtobuf docs above). The
+ * `protorunesbyaddress` regression vitest enforces this.
+ */
+export async function fetchUserAlkaneBalances(
+  network: string,
+  address: string,
+): Promise<Map<string, bigint>> {
+  const items = await fetchAlkaneBalancesViaProtobuf(network, address);
+  const map = new Map<string, bigint>();
+  for (const item of items) {
+    const id = `${item.alkaneId.block}:${item.alkaneId.tx}`;
+    map.set(id, BigInt(item.balance));
+  }
+  return map;
+}
+
+export async function fetchAlkaneBalancesViaProtobuf(
   network: string,
   address: string,
 ): Promise<{ alkaneId: { block: string; tx: string }; balance: string }[]> {

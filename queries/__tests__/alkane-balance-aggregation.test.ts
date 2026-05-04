@@ -165,9 +165,6 @@ describe('fetchAlkaneBalancesViaProtobuf source contract', () => {
   });
 
   it('does NOT use the address-keyed protorunesbyaddress view (phantom-balance bug)', () => {
-    // Allow protorunesbyaddress in OTHER files (FujinDifficultyPanel,
-    // useFireUserPositions etc. legitimately need it for protocol-specific
-    // protorune queries) — but NOT in the wallet alkane-balance path.
     const balanceFn =
       src.match(/async function fetchAlkaneBalancesViaProtobuf[\s\S]*?\n\}\n/)?.[0] ?? '';
     expect(balanceFn).not.toMatch(/protorunesbyaddress/);
@@ -181,5 +178,96 @@ describe('fetchAlkaneBalancesViaProtobuf source contract', () => {
     // Alkane balances live on dust outputs; filtering before the fan-out
     // avoids one protorunesbyoutpoint call per non-alkane BTC UTXO.
     expect(src).toMatch(/u\.value\s*<=?\s*1000/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Project-wide ban: NO production file may invoke the address-keyed
+// `protorunesbyaddress` RPC. Comments + tests + devnet harnesses are
+// allowed (devnet has different consensus + the indexer is canonical
+// there). This walk catches new violations the moment they're introduced.
+// ---------------------------------------------------------------------------
+
+describe('project-wide protorunesbyaddress ban', () => {
+  // Production source roots: must not call the address-keyed view.
+  const PROD_ROOTS = [
+    'app',
+    'hooks',
+    'context',
+    'queries',
+    'components',
+    'utils',
+    'lib/alkanes',
+    'lib/wallet',
+    'lib/oyl',
+    'lib/pools',
+    'lib/fujin',
+  ];
+  // Carve-outs: devnet/in-browser regtest harness + tests + comments-only files.
+  const ALLOW_PATHS = [
+    /__tests__\//,
+    /\/test\//,
+    /lib\/devnet\//,
+    /lib\/luaScripts\.ts$/, // comment-only
+    /lib\/alkanes\/execute\.ts$/, // comment-only mention
+    /lib\/oyl\/alkanes\/.*\.(d\.ts|wasm.*|js|cjs)$/, // bundled SDK artifacts
+    /\.bak$/,
+  ];
+
+  // Patterns that count as a violation (RPC method call, NOT a comment).
+  const VIOLATION_PATTERNS = [
+    /method:\s*['"]alkanes_protorunesbyaddress['"]/,
+    /method:\s*['"]metashrew_view['"][^}]*\bparams[^}]*\bprotorunesbyaddress\b/,
+    /\.protorunesbyaddress\(/,
+    /'protorunesbyaddress'/,
+    /"protorunesbyaddress"/,
+  ];
+
+  function* walk(dir: string): Generator<string> {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (entry.name === 'node_modules' || entry.name === '.next' || entry.name === '.bak') continue;
+        yield* walk(full);
+      } else if (/\.(ts|tsx|js|mjs|cjs)$/.test(entry.name)) {
+        yield full;
+      }
+    }
+  }
+
+  function isAllowed(rel: string): boolean {
+    return ALLOW_PATHS.some((re) => re.test(rel));
+  }
+
+  function stripComments(src: string): string {
+    // Drop block comments + line comments. Naive but safe enough for
+    // RPC-method-string detection — actual method calls live in code.
+    return src
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .split('\n')
+      .map((l) => l.replace(/\s\/\/.*$/, ''))
+      .filter((l) => !/^\s*(\*|\/\/)/.test(l))
+      .join('\n');
+  }
+
+  it('no production file invokes protorunesbyaddress', () => {
+    const root = path.resolve(__dirname, '../..');
+    const violations: string[] = [];
+    for (const dir of PROD_ROOTS) {
+      const abs = path.join(root, dir);
+      if (!fs.existsSync(abs)) continue;
+      for (const file of walk(abs)) {
+        const rel = path.relative(root, file);
+        if (isAllowed(rel)) continue;
+        const src = stripComments(fs.readFileSync(file, 'utf-8'));
+        for (const pat of VIOLATION_PATTERNS) {
+          if (pat.test(src)) {
+            violations.push(`${rel}: matched ${pat}`);
+            break;
+          }
+        }
+      }
+    }
+    expect(violations).toEqual([]);
   });
 });

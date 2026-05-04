@@ -11,7 +11,6 @@ import { useVaultWithdraw } from "@/hooks/useVaultWithdraw";
 import { useVaultUnits } from "@/hooks/useVaultUnits";
 import { useWallet } from "@/context/WalletContext";
 import { useQuery } from "@tanstack/react-query";
-import { getRpcUrl } from "@/utils/getConfig";
 import BoostSection from "./BoostSection";
 import { useTranslation } from '@/hooks/useTranslation';
 
@@ -44,10 +43,9 @@ export default function VaultDetail({ vault: initialVault }: Props) {
   const depositMutation = useVaultDeposit();
   const withdrawMutation = useVaultWithdraw();
 
-  // Wallet balance of the input token (what user can deposit)
-  // Uses alkanes_protorunesbyaddress RPC (NOT dataApiGetAlkanesByAddress which
-  // routes through quspo on devnet and hangs). This is the same method boot.ts
-  // uses for getAlkaneBalance — proven to work on devnet.
+  // Wallet balance of the input token (what user can deposit).
+  // Canonical UTXO+outpoint fanout — `protorunesbyaddress` is forbidden
+  // (phantom balances on previously-spent outpoints; see queries/account.ts).
   const { account, network: walletNetwork } = useWallet();
   const taprootAddress = account?.taproot?.address;
   const inputTokenId = currentVault.tokenId?.includes(':') ? currentVault.tokenId : null;
@@ -58,30 +56,15 @@ export default function VaultDetail({ vault: initialVault }: Props) {
     staleTime: 10_000,
     queryFn: async () => {
       if (!taprootAddress || !inputTokenId) return '0';
-      const [targetBlock, targetTx] = inputTokenId.split(':').map(Number);
       try {
-        const rpcUrl = getRpcUrl(walletNetwork);
-        const resp = await fetch(rpcUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            jsonrpc: '2.0',
-            method: 'alkanes_protorunesbyaddress',
-            params: [{ address: taprootAddress, protocolTag: '1' }],
-            id: 1,
-          }),
-        });
-        const json = await resp.json();
-        let total = 0;
-        for (const outpoint of json?.result?.outpoints || []) {
-          const balances = outpoint.balance_sheet?.cached?.balances || outpoint.runes || [];
-          for (const entry of balances) {
-            if (parseInt(entry.block ?? '0') === targetBlock && parseInt(entry.tx ?? '0') === targetTx) {
-              total += parseInt(entry.amount || '0');
-            }
-          }
-        }
-        return (total / 1e8).toFixed(8);
+        const { fetchUserAlkaneBalances } = await import('@/queries/account');
+        const balances = await fetchUserAlkaneBalances(walletNetwork, taprootAddress);
+        const sub = balances.get(inputTokenId) ?? 0n;
+        // Display in token units (8 decimals). Use BigInt division to avoid
+        // float drift on amounts that exceed Number.MAX_SAFE_INTEGER sub-units.
+        const whole = sub / 100_000_000n;
+        const remainder = sub % 100_000_000n;
+        return `${whole}.${remainder.toString().padStart(8, '0')}`;
       } catch {}
       return '0';
     },

@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useWallet } from '@/context/WalletContext';
 import { getConfig, getRpcUrl } from '@/utils/getConfig';
-import { parseProtorunesResponse } from '@/queries/account';
+import { fetchUserAlkaneBalances } from '@/queries/account';
 import { simulateContract, extractField3Data, parseU128LE } from '@/lib/fujin/rpc';
 
 export interface StakingPosition {
@@ -22,7 +22,11 @@ const LOCAL_NETWORKS = ['regtest-local', 'devnet'];
  * Discover position NFT tokens in the user's wallet and fetch their details.
  *
  * Flow:
- * 1. Query protorunesbyaddress for all tokens at taproot address
+ * 1. Discover all alkane balances at the taproot address via the canonical
+ *    UTXO+outpoint fanout (`fetchUserAlkaneBalances` — esplora_address::utxo
+ *    → Promise.all(protorunesbyoutpoint) per dust UTXO). Never use
+ *    `protorunesbyaddress` directly: that view carries phantom balances on
+ *    previously-spent outpoints and shows tokens the wallet no longer holds.
  * 2. For each token, call staking contract IsRegisteredChild (opcode 36)
  * 3. For confirmed position tokens, call GetAllDetails (opcode 23) on the token itself
  */
@@ -43,25 +47,9 @@ export function useFireUserPositions(enabled: boolean = true) {
       const rpcUrl = LOCAL_NETWORKS.includes(network) ? 'http://localhost:18888' : getRpcUrl(network);
       const taprootAddress = account.taproot.address;
 
-      // 1. Get all tokens at taproot address
-      const addrBuf = new TextEncoder().encode(taprootAddress);
-      const payload = '0x' + Array.from(
-        [0x0a, addrBuf.length, ...addrBuf, 0x12, 0x02, 0x08, 0x01],
-        b => b.toString(16).padStart(2, '0'),
-      ).join('');
-
-      const res = await fetch(rpcUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        signal: AbortSignal.timeout(15_000),
-        body: JSON.stringify({
-          jsonrpc: '2.0', id: 1,
-          method: 'metashrew_view',
-          params: ['protorunesbyaddress', payload, 'latest'],
-        }),
-      });
-      const json = await res.json();
-      const balanceMap = parseProtorunesResponse(json.result || '0x');
+      // 1. Get all tokens at taproot address via canonical UTXO+outpoint
+      // fanout (avoids `protorunesbyaddress` phantom-balance bug).
+      const balanceMap = await fetchUserAlkaneBalances(network, taprootAddress);
 
       // 2. Check each token against staking contract IsRegisteredChild (opcode 36)
       const [stakingBlock, stakingTx] = stakingId.split(':').map(Number);

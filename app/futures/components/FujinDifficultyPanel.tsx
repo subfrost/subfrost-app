@@ -32,24 +32,19 @@ export default function FujinDifficultyPanel() {
   const directRpcUrl = isLocal ? 'http://localhost:18888' : getRpcUrl(network);
 
   // All alkane balances at wallet address — single protobuf query
+  // Canonical balance source: esplora_address::utxo + Promise.all
+  // protorunesbyoutpoint per dust UTXO. `protorunesbyaddress` (the
+  // address-keyed view) is forbidden — it carries phantom balances
+  // for previously-spent outpoints. See queries/account.ts docs.
   const { data: allBalances } = useQuery({
     queryKey: ['fujin-all-balances', taprootAddress, network],
     enabled: !!taprootAddress,
     staleTime: 10_000,
     refetchInterval: 15_000,
     queryFn: async () => {
-      if (!taprootAddress) return new Map<string, bigint>();
-      const addrBuf = new TextEncoder().encode(taprootAddress);
-      const parts = [0x0a, addrBuf.length, ...addrBuf, 0x12, 0x02, 0x08, 0x01];
-      const hex = '0x' + Array.from(parts, b => b.toString(16).padStart(2, '0')).join('');
-      const res = await fetch(directRpcUrl, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'metashrew_view', params: ['protorunesbyaddress', hex, 'latest'] }),
-      });
-      const json = await res.json();
-      if (!json.result || json.result.length <= 4) return new Map<string, bigint>();
-      const { parseProtorunesResponse } = await import('@/queries/account');
-      return parseProtorunesResponse(json.result);
+      if (!taprootAddress || !network) return new Map<string, bigint>();
+      const { fetchUserAlkaneBalances } = await import('@/queries/account');
+      return fetchUserAlkaneBalances(network, taprootAddress);
     },
   });
 
