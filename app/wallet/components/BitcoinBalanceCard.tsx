@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useWallet } from '@/context/WalletContext';
-import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
+import { useBtcPrice } from '@/hooks/useBtcPrice';
 import { useEnrichedWalletData } from '@/hooks/useEnrichedWalletData';
 import { usePendingTxs } from '@/hooks/usePendingTxs';
 import { RefreshCw, ExternalLink } from 'lucide-react';
@@ -10,7 +10,9 @@ import { useTranslation } from '@/hooks/useTranslation';
 
 export default function BitcoinBalanceCard() {
   const { account } = useWallet() as any;
-  const { bitcoinPrice } = useAlkanesSDK();
+  // Single source of truth for BTC price — see queries/market.ts (subpricer
+  // primary, rpc.ts + coingecko fallbacks). Returns 0 when no source resolves.
+  const { data: btcPriceUsd = 0 } = useBtcPrice();
   const { t } = useTranslation();
   const { balances, btcFast, isBtcFastLoading, isBtcLoading, error, refreshBtcFast } = useEnrichedWalletData();
   const { btcDelta: pendingBtcDelta } = usePendingTxs();
@@ -33,9 +35,9 @@ export default function BitcoinBalanceCard() {
   };
 
   const formatUSD = (sats: number) => {
-    if (!bitcoinPrice) return null;
+    if (!btcPriceUsd) return null;
     const btc = sats / 100000000;
-    return (btc * bitcoinPrice.usd).toFixed(2);
+    return (btc * btcPriceUsd).toFixed(2);
   };
 
   // btcFast: wallet API (instant) or esplora. Fallback to enriched lua data.
@@ -71,7 +73,7 @@ export default function BitcoinBalanceCard() {
   }
 
   const totalBTC = formatBTC(spendable);
-  const totalUSD = bitcoinPrice ? formatUSD(spendable) : null;
+  const totalUSD = btcPriceUsd ? formatUSD(spendable) : null;
 
   const showValue = (value: string) => {
     return isLoadingData ? (

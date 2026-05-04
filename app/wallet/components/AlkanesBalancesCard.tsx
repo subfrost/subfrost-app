@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useWallet } from '@/context/WalletContext';
-import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
+import { useBtcPrice } from '@/hooks/useBtcPrice';
 import { useEnrichedWalletData } from '@/hooks/useEnrichedWalletData';
 import { usePools } from '@/hooks/usePools';
 import { usePendingTxs } from '@/hooks/usePendingTxs';
@@ -26,7 +26,8 @@ interface AlkanesBalancesCardProps {
 
 export default function AlkanesBalancesCard({ onSendAlkane }: AlkanesBalancesCardProps) {
   const { network } = useWallet() as any;
-  const { bitcoinPrice } = useAlkanesSDK();
+  // Single source of truth for BTC price (queries/market.ts).
+  const { data: btcPriceUsd = 0 } = useBtcPrice();
   const { t } = useTranslation();
   const router = useRouter();
   const { balances, isAlkanesLoading, error, refreshAlkanes } = useEnrichedWalletData();
@@ -83,8 +84,8 @@ export default function AlkanesBalancesCard({ onSendAlkane }: AlkanesBalancesCar
 
   const derivedPrices = useMemo(() => {
     const prices = new Map<string, number>();
-    if (!bitcoinPrice?.usd || !poolsData?.items) return prices;
-    prices.set(FRBTC_ID, bitcoinPrice.usd);
+    if (!btcPriceUsd || !poolsData?.items) return prices;
+    prices.set(FRBTC_ID, btcPriceUsd);
     for (const pool of poolsData.items) {
       const r0 = Number(pool.token0Amount || '0');
       const r1 = Number(pool.token1Amount || '0');
@@ -98,7 +99,7 @@ export default function AlkanesBalancesCard({ onSendAlkane }: AlkanesBalancesCar
       }
     }
     return prices;
-  }, [poolsData, bitcoinPrice]);
+  }, [poolsData, btcPriceUsd]);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -472,12 +473,12 @@ export default function AlkanesBalancesCard({ onSendAlkane }: AlkanesBalancesCar
                         if (alkane.priceUsd && alkane.priceUsd > 0) {
                           return formatUsdValue(balanceFloat * alkane.priceUsd);
                         }
-                        if ((alkane.symbol === 'frBTC' || alkane.alkaneId === '32:0') && bitcoinPrice?.usd) {
-                          return formatUsdValue(balanceFloat * bitcoinPrice.usd);
+                        if ((alkane.symbol === 'frBTC' || alkane.alkaneId === '32:0') && btcPriceUsd) {
+                          return formatUsdValue(balanceFloat * btcPriceUsd);
                         }
-                        if (alkane.priceInSatoshi && alkane.priceInSatoshi > 0 && bitcoinPrice?.usd) {
+                        if (alkane.priceInSatoshi && alkane.priceInSatoshi > 0 && btcPriceUsd) {
                           const pricePerUnitBtc = alkane.priceInSatoshi / 1e8;
-                          return formatUsdValue(balanceFloat * pricePerUnitBtc * bitcoinPrice.usd);
+                          return formatUsdValue(balanceFloat * pricePerUnitBtc * btcPriceUsd);
                         }
                         const derived = derivedPrices.get(alkane.alkaneId);
                         if (derived && derived > 0) {
