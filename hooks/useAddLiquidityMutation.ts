@@ -61,6 +61,7 @@ import * as ecc from '@bitcoinerlab/secp256k1';
 // NOTE: Only patching INPUTS (witnessUtxo + redeemScript), NOT outputs
 // Output patching was removed - see useSwapMutation.ts for why
 import { patchInputsOnly } from '@/lib/psbt-patching';
+import { toXOnlyPubKeyHex, X_ONLY_HEX_LENGTH } from '@/lib/wallet/pubkeyHelpers';
 import { buildCreateNewPoolProtostone, buildFactoryAddLiquidityProtostones, buildAddLiquidityInputRequirements } from '@/lib/alkanes/builders';
 import { getAddressUtxos, getProtorunesByOutpoint } from '@/lib/alkanes/rpc';
 import { getBitcoinNetwork, toAlks, extractPsbtBase64 } from '@/lib/alkanes/helpers';
@@ -260,8 +261,20 @@ function injectAlkaneInputs(
   );
 
   const taprootScript = bitcoin.address.toOutputScript(taprootAddress, btcNetwork);
-  // Use pure Uint8Array — wallets reject Buffer with "Expected Uint8Array" error
-  const tapInternalKey = tapInternalKeyHex ? new Uint8Array(Buffer.from(tapInternalKeyHex, 'hex')) : undefined;
+  // Defense-in-depth: WalletContext now hands us a properly-shaped x-only key
+  // via toXOnlyPubKeyHex, but if a future caller bypasses that path we still
+  // want to reject malformed input rather than emit an invalid PSBT.
+  // (bitcoinjs-lib's tapInternalKey validator rejects with "Expected Uint8Array".)
+  // Use pure Uint8Array — wallets reject node Buffer with that same error.
+  let tapInternalKey: Uint8Array | undefined;
+  if (tapInternalKeyHex) {
+    const cleanHex = toXOnlyPubKeyHex(tapInternalKeyHex);
+    if (cleanHex.length !== X_ONLY_HEX_LENGTH) {
+      console.warn(`[AddLiquidity] tapInternalKeyHex has unexpected length ${cleanHex.length}, skipping tapInternalKey injection`);
+    } else {
+      tapInternalKey = new Uint8Array(Buffer.from(cleanHex, 'hex'));
+    }
+  }
 
   let injectedCount = 0;
   for (const utxo of alkaneUtxos) {
