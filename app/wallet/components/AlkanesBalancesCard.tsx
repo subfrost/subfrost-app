@@ -62,7 +62,7 @@ export default function AlkanesBalancesCard({ onSendAlkane }: AlkanesBalancesCar
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [expandedAlkaneId, setExpandedAlkaneId] = useState<string | null>(null);
   const [alkaneFilter, setAlkaneFilter] = useState<'tokens' | 'nfts' | 'positions' | 'fuel'>('tokens');
-  const hasAutoRefreshed = useRef(false);
+  // hasAutoRefreshed: removed in 2026-05-04 along with the auto-retry useEffect.
 
   const poolMap = useMemo(() => {
     const map = new Map<string, { token0Symbol: string; token1Symbol: string; token0Id: string; token1Id: string; token0Amount: string; token1Amount: string; lpTotalSupply: string }>();
@@ -141,38 +141,23 @@ export default function AlkanesBalancesCard({ onSendAlkane }: AlkanesBalancesCar
     router.push('/swap');
   };
 
-  // Auto-retry when balances loaded but alkanes are empty — catches cases where
-  // the alkane-balances API was slow or timed out on the initial fetch.
-  // Retries at 3s and 8s, then stops. Resets when wallet reconnects.
-  const retryCountRef = useRef(0);
-  const MAX_AUTO_RETRIES = 2;
-
-  useEffect(() => {
-    // Reset retry counter when alkanes appear or loading starts fresh
-    if (balances.alkanes.length > 0) {
-      retryCountRef.current = 0;
-      hasAutoRefreshed.current = true;
-    }
-  }, [balances.alkanes.length]);
-
-  useEffect(() => {
-    // Only retry when: not loading, alkanes are empty, and we haven't exhausted retries
-    if (isAlkanesLoading || balances.alkanes.length > 0 || retryCountRef.current >= MAX_AUTO_RETRIES) {
-      return;
-    }
-
-    // Exponential delay: 3s, then 8s
-    const delay = retryCountRef.current === 0 ? 3000 : 8000;
-    const timer = setTimeout(() => {
-      if (balances.alkanes.length === 0 && retryCountRef.current < MAX_AUTO_RETRIES) {
-        retryCountRef.current += 1;
-        console.log(`[AlkanesBalancesCard] Auto-retry ${retryCountRef.current}/${MAX_AUTO_RETRIES} — alkanes empty after ${delay}ms`);
-        handleRefresh();
-      }
-    }, delay);
-
-    return () => clearTimeout(timer);
-  }, [balances.alkanes.length, isAlkanesLoading]);
+  // Auto-retry useEffect removed (2026-05-04).
+  //
+  // Why it existed: the previous balance fetch path (espo
+  // /get-alkanes-by-address) would intermittently return an empty list
+  // when the indexer lagged. The retry was a hack to paper over that.
+  //
+  // Why it has to go: after 9ec751fb the balance source is canonical
+  // (UTXO set) — when it returns 0 alkanes, the wallet *actually has 0*.
+  // The retry was firing on the legitimately-empty case, calling
+  // refreshAlkanes() which invalidates the query, which races against the
+  // earlier-resolved good fetch and overwrites it. Net effect: balance
+  // shows correctly, then 3s later flickers to "no alkanes" or fractional,
+  // then the manual reload button restores it. That's exactly the symptom
+  // gabe reported on staging-app. Removing the retry kills the race.
+  //
+  // The reload button still works for genuine "I just received funds and
+  // want to see them now" cases — manual user action, no race window.
 
   const isLpToken = (alkane: { symbol: string; name: string; alkaneId?: string }) =>
     /\bLP\b/i.test(alkane.symbol) || /\bLP\b/i.test(alkane.name) || (alkane.alkaneId ? poolMap.has(alkane.alkaneId) : false);
