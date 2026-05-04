@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useWallet } from '@/context/WalletContext';
-import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
+import { useBtcPrice } from '@/hooks/useBtcPrice';
 import { useEnrichedWalletData } from '@/hooks/useEnrichedWalletData';
 import { usePools } from '@/hooks/usePools';
 import { usePendingTxs } from '@/hooks/usePendingTxs';
@@ -26,7 +26,8 @@ interface AlkanesBalancesCardProps {
 
 export default function AlkanesBalancesCard({ onSendAlkane }: AlkanesBalancesCardProps) {
   const { network } = useWallet() as any;
-  const { bitcoinPrice } = useAlkanesSDK();
+  // Single source of truth for BTC price (queries/market.ts).
+  const { data: btcPriceUsd = 0 } = useBtcPrice();
   const { t } = useTranslation();
   const router = useRouter();
   const { balances, isAlkanesLoading, error, refreshAlkanes } = useEnrichedWalletData();
@@ -61,7 +62,7 @@ export default function AlkanesBalancesCard({ onSendAlkane }: AlkanesBalancesCar
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [expandedAlkaneId, setExpandedAlkaneId] = useState<string | null>(null);
   const [alkaneFilter, setAlkaneFilter] = useState<'tokens' | 'nfts' | 'positions' | 'fuel'>('tokens');
-  const hasAutoRefreshed = useRef(false);
+  // hasAutoRefreshed: removed in 2026-05-04 along with the auto-retry useEffect.
 
   const poolMap = useMemo(() => {
     const map = new Map<string, { token0Symbol: string; token1Symbol: string; token0Id: string; token1Id: string; token0Amount: string; token1Amount: string; lpTotalSupply: string }>();
@@ -83,8 +84,8 @@ export default function AlkanesBalancesCard({ onSendAlkane }: AlkanesBalancesCar
 
   const derivedPrices = useMemo(() => {
     const prices = new Map<string, number>();
-    if (!bitcoinPrice?.usd || !poolsData?.items) return prices;
-    prices.set(FRBTC_ID, bitcoinPrice.usd);
+    if (!btcPriceUsd || !poolsData?.items) return prices;
+    prices.set(FRBTC_ID, btcPriceUsd);
     for (const pool of poolsData.items) {
       const r0 = Number(pool.token0Amount || '0');
       const r1 = Number(pool.token1Amount || '0');
@@ -98,7 +99,7 @@ export default function AlkanesBalancesCard({ onSendAlkane }: AlkanesBalancesCar
       }
     }
     return prices;
-  }, [poolsData, bitcoinPrice]);
+  }, [poolsData, btcPriceUsd]);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -140,38 +141,23 @@ export default function AlkanesBalancesCard({ onSendAlkane }: AlkanesBalancesCar
     router.push('/swap');
   };
 
-  // Auto-retry when balances loaded but alkanes are empty — catches cases where
-  // the alkane-balances API was slow or timed out on the initial fetch.
-  // Retries at 3s and 8s, then stops. Resets when wallet reconnects.
-  const retryCountRef = useRef(0);
-  const MAX_AUTO_RETRIES = 2;
-
-  useEffect(() => {
-    // Reset retry counter when alkanes appear or loading starts fresh
-    if (balances.alkanes.length > 0) {
-      retryCountRef.current = 0;
-      hasAutoRefreshed.current = true;
-    }
-  }, [balances.alkanes.length]);
-
-  useEffect(() => {
-    // Only retry when: not loading, alkanes are empty, and we haven't exhausted retries
-    if (isAlkanesLoading || balances.alkanes.length > 0 || retryCountRef.current >= MAX_AUTO_RETRIES) {
-      return;
-    }
-
-    // Exponential delay: 3s, then 8s
-    const delay = retryCountRef.current === 0 ? 3000 : 8000;
-    const timer = setTimeout(() => {
-      if (balances.alkanes.length === 0 && retryCountRef.current < MAX_AUTO_RETRIES) {
-        retryCountRef.current += 1;
-        console.log(`[AlkanesBalancesCard] Auto-retry ${retryCountRef.current}/${MAX_AUTO_RETRIES} — alkanes empty after ${delay}ms`);
-        handleRefresh();
-      }
-    }, delay);
-
-    return () => clearTimeout(timer);
-  }, [balances.alkanes.length, isAlkanesLoading]);
+  // Auto-retry useEffect removed (2026-05-04).
+  //
+  // Why it existed: the previous balance fetch path (espo
+  // /get-alkanes-by-address) would intermittently return an empty list
+  // when the indexer lagged. The retry was a hack to paper over that.
+  //
+  // Why it has to go: after 9ec751fb the balance source is canonical
+  // (UTXO set) — when it returns 0 alkanes, the wallet *actually has 0*.
+  // The retry was firing on the legitimately-empty case, calling
+  // refreshAlkanes() which invalidates the query, which races against the
+  // earlier-resolved good fetch and overwrites it. Net effect: balance
+  // shows correctly, then 3s later flickers to "no alkanes" or fractional,
+  // then the manual reload button restores it. That's exactly the symptom
+  // gabe reported on staging-app. Removing the retry kills the race.
+  //
+  // The reload button still works for genuine "I just received funds and
+  // want to see them now" cases — manual user action, no race window.
 
   const isLpToken = (alkane: { symbol: string; name: string; alkaneId?: string }) =>
     /\bLP\b/i.test(alkane.symbol) || /\bLP\b/i.test(alkane.name) || (alkane.alkaneId ? poolMap.has(alkane.alkaneId) : false);
@@ -472,12 +458,12 @@ export default function AlkanesBalancesCard({ onSendAlkane }: AlkanesBalancesCar
                         if (alkane.priceUsd && alkane.priceUsd > 0) {
                           return formatUsdValue(balanceFloat * alkane.priceUsd);
                         }
-                        if ((alkane.symbol === 'frBTC' || alkane.alkaneId === '32:0') && bitcoinPrice?.usd) {
-                          return formatUsdValue(balanceFloat * bitcoinPrice.usd);
+                        if ((alkane.symbol === 'frBTC' || alkane.alkaneId === '32:0') && btcPriceUsd) {
+                          return formatUsdValue(balanceFloat * btcPriceUsd);
                         }
-                        if (alkane.priceInSatoshi && alkane.priceInSatoshi > 0 && bitcoinPrice?.usd) {
+                        if (alkane.priceInSatoshi && alkane.priceInSatoshi > 0 && btcPriceUsd) {
                           const pricePerUnitBtc = alkane.priceInSatoshi / 1e8;
-                          return formatUsdValue(balanceFloat * pricePerUnitBtc * bitcoinPrice.usd);
+                          return formatUsdValue(balanceFloat * pricePerUnitBtc * btcPriceUsd);
                         }
                         const derived = derivedPrices.get(alkane.alkaneId);
                         if (derived && derived > 0) {

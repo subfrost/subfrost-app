@@ -67,6 +67,7 @@ import { BROWSER_WALLETS, getInstalledWallets, isWalletInstalled } from '@/const
 
 // Import browser wallet signing utilities with robust reconnection handling
 import { signWithOyl, signWithUnisat, signWithXverse, detectWalletId, getOylCallCount, resetOylCallCount, patchTapInternalKeys } from '@/lib/wallet/browserWalletSigning';
+import { toXOnlyPubKeyHex } from '@/lib/wallet/pubkeyHelpers';
 
 // Connection-specific counter for OYL getAddresses() calls during initial connection
 // Helps identify if React StrictMode is causing duplicate modal triggers
@@ -772,7 +773,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
             taproot: hasExplicitTaproot ? {
               address: taprootAddress,
               pubkey: taprootAddr!.publicKey || '',
-              pubKeyXOnly: taprootAddr!.publicKey ? taprootAddr!.publicKey.slice(2) : '',
+              pubKeyXOnly: toXOnlyPubKeyHex(taprootAddr!.publicKey),
               hdPath: ''
             } : { address: '', pubkey: '', pubKeyXOnly: '', hdPath: '' },
           };
@@ -805,7 +806,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
         taproot: isTaproot ? {
           address: resolvedAddress,
           pubkey: primaryPublicKey,
-          pubKeyXOnly: primaryPublicKey ? primaryPublicKey.slice(2) : '',
+          pubKeyXOnly: toXOnlyPubKeyHex(primaryPublicKey),
           hdPath: ''
         } : { address: '', pubkey: '', pubKeyXOnly: '', hdPath: '' },
       };
@@ -1955,7 +1956,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       // Without this, taproot inputs cannot be signed by ANY browser wallet.
       const taprootPubKey = browserWalletAddresses?.taproot?.publicKey || browserWallet?.publicKey;
       if (taprootPubKey) {
-        const xOnlyHex = taprootPubKey.length === 66 ? taprootPubKey.slice(2) : taprootPubKey;
+        const xOnlyHex = toXOnlyPubKeyHex(taprootPubKey);
         const patchedCount = patchTapInternalKeys(psbt, xOnlyHex);
         if (patchedCount > 0) {
           console.log(`[WalletContext] Patched tapInternalKey on ${patchedCount} input(s) to user x-only: ${xOnlyHex}`);

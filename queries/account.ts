@@ -18,6 +18,12 @@ import { queryOptions } from '@tanstack/react-query';
 import { queryKeys } from './keys';
 import { KNOWN_TOKENS } from '@/lib/alkanes-client';
 import { getRpcUrl } from '@/utils/getConfig';
+import {
+  getAddressMempoolTxs,
+  getAddressUtxos,
+  getAlkaneInfoBatch,
+  getProtorunesByOutpoint,
+} from '@/lib/alkanes/rpc';
 import type { CurrencyPriceInfoResponse } from '@/types/alkanes';
 
 type WebProvider = import('@alkanes/ts-sdk/wasm').WebProvider;
@@ -212,27 +218,15 @@ export function parseProtorunesResponse(hex: string): Map<string, bigint> {
  * thanks to Promise.all parallelism.
  */
 async function fetchAlkaneBalancesViaProtobuf(
-  rpcUrl: string,
+  network: string,
   address: string,
 ): Promise<{ alkaneId: { block: string; tx: string }; balance: string }[]> {
-  // Step 1: esplora_address::utxo
-  let utxos: Array<{ txid: string; vout: number; value: number }> = [];
+  // Step 1: esplora_address::utxo (via SDK-mediated rpc.ts).
+  let utxos: { txid: string; vout: number; value: number }[] = [];
   try {
-    const utxoResp = await fetch(rpcUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      signal: AbortSignal.timeout(15_000),
-      body: JSON.stringify({
-        jsonrpc: '2.0', id: 1,
-        method: 'esplora_address::utxo',
-        params: [address],
-      }),
-    });
-    const utxoJson = await utxoResp.json();
-    const rawResult = utxoJson?.result ?? utxoJson;
-    utxos = Array.isArray(rawResult) ? rawResult : [];
+    utxos = await getAddressUtxos(network, address, AbortSignal.timeout(15_000));
   } catch (err) {
-    console.warn(`[alkaneBalances] esplora_address::utxo failed for ${address}:`, err);
+    console.warn(`[alkaneBalances] getAddressUtxos failed for ${address}:`, err);
     return [];
   }
 
@@ -245,27 +239,31 @@ async function fetchAlkaneBalancesViaProtobuf(
   const dustUtxos = utxos.filter((u) => u.value <= 1000);
   if (dustUtxos.length === 0) return [];
 
-  const checks = dustUtxos.map(async (u) => {
-    try {
-      const resp = await fetch(rpcUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        signal: AbortSignal.timeout(15_000),
-        body: JSON.stringify({
-          jsonrpc: '2.0', id: 1,
-          method: 'alkanes_protorunesbyoutpoint',
-          params: [{ txid: u.txid, vout: u.vout, protocolTag: '1' }],
-        }),
-      });
-      const json = await resp.json();
-      const balances: Array<{ block: number | string; tx: number | string; amount: number | string }> =
-        json?.result?.balance_sheet?.cached?.balances ?? [];
-      return balances;
-    } catch {
-      return [] as Array<{ block: number | string; tx: number | string; amount: number | string }>;
+  // Per-outpoint retry: a single transient timeout silently dropped tokens
+  // before (gabe's mainnet bug — 58 DIESEL displayed as 31 because one of
+  // 24 dust outpoints intermittently failed and the catch returned []).
+  // We retry up to 2 times with backoff, then propagate the failure as an
+  // exception so the React Query layer marks the whole balance as errored
+  // rather than silently rendering an undercount.
+  const fetchWithRetry = async (
+    txid: string,
+    vout: number,
+  ): Promise<Array<{ block: number | string; tx: number | string; amount: number | string }>> => {
+    const RETRY_DELAYS = [0, 500, 1500];
+    let lastErr: unknown;
+    for (const delay of RETRY_DELAYS) {
+      if (delay > 0) await new Promise((r) => setTimeout(r, delay));
+      try {
+        const resp = await getProtorunesByOutpoint(network, txid, vout, AbortSignal.timeout(15_000));
+        return resp?.balance_sheet?.cached?.balances ?? [];
+      } catch (e) {
+        lastErr = e;
+      }
     }
-  });
+    throw new Error(`getProtorunesByOutpoint(${txid}:${vout}) failed after retries: ${lastErr}`);
+  };
 
+  const checks = dustUtxos.map((u) => fetchWithRetry(u.txid, u.vout));
   const results = await Promise.all(checks);
 
   // Step 3: aggregate per (block, tx).
@@ -516,55 +514,28 @@ export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
 
       const fetchUtxosViaEsplora = async (address: string) => {
         try {
-          const rpcPath = deps.network ? `/api/rpc/${deps.network}` : '/api/rpc';
-          const response = await fetch(rpcPath, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              jsonrpc: '2.0',
-              method: 'esplora_address::utxo',
-              params: [address],
-              id: 1,
-            }),
-          });
-          const json = await response.json();
-          if (json.result && Array.isArray(json.result)) {
-            return json.result.map((utxo: any) => ({
-              outpoint: `${utxo.txid}:${utxo.vout}`,
-              value: utxo.value,
-              height: utxo.status?.block_height || 0,
-            }));
-          }
+          const utxos = await getAddressUtxos(deps.network || 'mainnet', address);
+          return utxos.map((utxo) => ({
+            outpoint: `${utxo.txid}:${utxo.vout}`,
+            value: utxo.value,
+            height: utxo.status?.block_height || 0,
+          }));
         } catch (err) {
           console.error(`[BALANCE] esplora fallback failed for ${address}:`, err);
+          return null;
         }
-        return null;
       };
 
       const fetchMempoolSpent = async (address: string): Promise<number> => {
         try {
-          const rpcPath = deps.network ? `/api/rpc/${deps.network}` : '/api/rpc';
-          const response = await fetch(rpcPath, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              jsonrpc: '2.0',
-              method: 'esplora_address::txs:mempool',
-              params: [address],
-              id: 1,
-            }),
-          });
-          if (!response.ok) return 0;
-          const json = await response.json();
-          const txs = json.result;
-          if (!Array.isArray(txs)) return 0;
+          const txs = await getAddressMempoolTxs(deps.network || 'mainnet', address);
 
           // Build set of mempool txids to distinguish confirmed vs unconfirmed parents
-          const mempoolTxids = new Set(txs.map((tx: any) => tx.txid));
+          const mempoolTxids = new Set(txs.map((tx) => tx.txid));
 
           let spent = 0;
           for (const tx of txs) {
-            for (const vin of (tx.vin || [])) {
+            for (const vin of ((tx as any).vin || [])) {
               if (vin.prevout?.scriptpubkey_address === address) {
                 // Only count if parent tx is NOT a mempool tx (i.e., parent is confirmed)
                 if (!mempoolTxids.has(vin.txid)) {
@@ -804,18 +775,17 @@ export function alkaneBalanceQueryOptions(deps: AlkaneBalanceDeps) {
       // is fast and consistent with what the contract sees at submit time;
       // espo is appropriate for token metadata / pool lists, not balances.
       const fetchForAddress = async (address: string): Promise<any[]> => {
-        if (deps.network === 'regtest-local' || deps.network === 'devnet') {
-          return fetchAlkaneBalancesViaProtobuf('http://localhost:18888', address);
-        }
-        return fetchAlkaneBalancesViaProtobuf(getRpcUrl(deps.network || 'mainnet'), address);
+        return fetchAlkaneBalancesViaProtobuf(deps.network || 'mainnet', address);
       };
 
-      const allResults = await Promise.all(
-        addresses.map(addr => fetchForAddress(addr).catch(err => {
-          console.error(`[alkaneBalanceQuery] Failed for ${addr}:`, err);
-          return [] as any[];
-        }))
-      );
+      // Do NOT catch per-address failures here. The outpoint fanout in
+      // fetchAlkaneBalancesViaProtobuf already retries 3× per outpoint
+      // (cc22225); if it still throws, the indexer is genuinely struggling.
+      // Letting the failure propagate triggers React Query's retry loop and,
+      // crucially, preserves the previously-successful `data` rather than
+      // overwriting it with `[]`. Returning `[]` here was vanishing every
+      // alkane balance the moment one outpoint timed out on a refetch.
+      const allResults = await Promise.all(addresses.map(fetchForAddress));
 
       for (const items of allResults) {
         for (const item of items) {
@@ -852,6 +822,29 @@ export function alkaneBalanceQueryOptions(deps: AlkaneBalanceDeps) {
               existing.balance = String(Number(existing.balance || 0) + Number(balance));
             }
           }
+        }
+      }
+
+      // ── Token name / symbol enrichment ──────────────────────────────────
+      // The outpoint-aggregation path (esplora_address::utxo +
+      // alkanes_protorunesbyoutpoint) returns balances only — no metadata.
+      // Without enrichment, anything outside KNOWN_TOKENS renders as
+      // "Token 2:NN" in the wallet, which is what gabe reports on
+      // staging-app.subfrost.io.
+      //
+      // Fix: one batched call to /api/token-details (via the SDK-mediated
+      // rpc.ts layer) for all unknown ids. Names are immutable, so the
+      // outer query's `staleTime: Infinity` (mainnet) caches the enriched
+      // result forever — HeightPoller is the only invalidator.
+      const unknownIds = [...alkaneMap.keys()].filter((id) => !KNOWN_TOKENS[id]);
+      if (unknownIds.length > 0) {
+        const meta = await getAlkaneInfoBatch(deps.network || 'mainnet', unknownIds);
+        for (const [id, info] of Object.entries(meta)) {
+          const entry = alkaneMap.get(id);
+          if (!entry) continue;
+          if (info.name && entry.name === `Token ${id}`) entry.name = info.name;
+          if (info.symbol && !entry.symbol) entry.symbol = info.symbol;
+          if (info.decimals != null) entry.decimals = info.decimals;
         }
       }
 
@@ -941,37 +934,31 @@ export function sellableCurrenciesQueryOptions(deps: SellableCurrenciesDeps) {
 
         const sellBalancePromises = addresses.map(async (address) => {
           try {
-            // ⚠️ (2026-03-26): On devnet, /api/alkane-balances is a Next.js
-            // server-side route that returns empty ({ balances: [] }) because the
-            // server process can't reach the in-browser WASM devnet. The devnet
-            // runs entirely in the browser via a fetch interceptor — server-side
-            // fetch() to localhost:18888 hits nothing. Must use client-side
-            // dataApiGetAlkanesByAddress instead, which routes through quspo.
-            // This powers the 25/50/75/MAX percentage buttons on the swap page.
+            // 2026-05-04: All networks now use the canonical UTXO-derived
+            // outpoint fanout (`fetchAlkaneBalancesViaProtobuf`) for swap
+            // form percentage buttons.
+            //
+            // Previously mainnet hit `/api/alkane-balances`, a Next.js
+            // server-side proxy that uses the address-keyed
+            // `alkanes_protorunesbyaddress` view. That view sums spent +
+            // unspent outpoints (the indexer never retracts entries when
+            // the UTXO is spent at the BTC layer), producing phantom
+            // balances. Wallet UI was switched to the outpoint fanout in
+            // 9ec751fb but `sellableCurrencies` (this query) was missed —
+            // user could click "MAX" and see ~58 DIESEL spendable when
+            // they actually only had 31. Same fix path now used by both.
             let balances: { alkaneId: string; balance: string; name?: string; symbol?: string }[] = [];
 
-            if (deps.network === 'devnet' || deps.network === 'regtest-local' || deps.network === 'qubitcoin-regtest') {
-              // REST data API returns HTTP 400/404 on local networks. Use protobuf RPC.
-              const protobufRpcUrl = deps.network === 'qubitcoin-regtest'
-                ? `${typeof window !== 'undefined' ? window.location.origin : ''}/api/rpc/qubitcoin-regtest`
-                : 'http://localhost:18888';
-              const rawItems = await fetchAlkaneBalancesViaProtobuf(protobufRpcUrl, address);
-              for (const item of rawItems) {
-                const id = `${item.alkaneId.block}:${item.alkaneId.tx}`;
-                const known = KNOWN_TOKENS_SELL[id];
-                balances.push({
-                  alkaneId: id,
-                  balance: item.balance,
-                  name: known?.name,
-                  symbol: known?.symbol,
-                });
-              }
-            } else {
-              const resp = await fetch(
-                `/api/alkane-balances?address=${encodeURIComponent(address)}&network=${encodeURIComponent(deps.network)}`,
-              );
-              const data = await resp.json();
-              balances = data?.balances || [];
+            const rawItems = await fetchAlkaneBalancesViaProtobuf(deps.network, address);
+            for (const item of rawItems) {
+              const id = `${item.alkaneId.block}:${item.alkaneId.tx}`;
+              const known = KNOWN_TOKENS_SELL[id];
+              balances.push({
+                alkaneId: id,
+                balance: item.balance,
+                name: known?.name,
+                symbol: known?.symbol,
+              });
             }
 
             for (const entry of balances) {

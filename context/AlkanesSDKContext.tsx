@@ -260,23 +260,17 @@ export function AlkanesSDKProvider({ children, network }: AlkanesSDKProviderProp
     initProvider();
   }, [network]);
 
-  // BTC price and fee estimates are now managed by TanStack Query (queries/market.ts)
-  // and invalidated by the central HeightPoller. These context methods are kept for
-  // backward compatibility but simply fetch once on init.
-  const refreshBitcoinPrice = async () => {
-    try {
-      const response = await fetch('/api/btc-price');
-      const data = await response.json();
-      if (data?.usd && data.usd > 0) {
-        setBitcoinPrice({
-          usd: data.usd,
-          lastUpdated: data.timestamp || Date.now(),
-        });
-      }
-    } catch (error) {
-      console.error('Failed to fetch Bitcoin price:', error);
-    }
-  };
+  // BTC price is owned by `btcPriceQueryOptions` in queries/market.ts (single
+  // source — subpricer primary, rpc.ts + coingecko fallbacks). Previously this
+  // context fetched `/api/btc-price` directly on init and wrote to the same
+  // `bitcoinPrice` state, producing two parallel writers with different upstream
+  // sources — that's the $79K-vs-$110K oscillation the wallet reports.
+  //
+  // 2026-05-04: refreshBitcoinPrice is now a no-op; the context-level
+  // `bitcoinPrice` state remains null and consumers must migrate to
+  // `useBtcPrice()`. The signature is kept for backwards compat with the
+  // context type, but the function does nothing.
+  const refreshBitcoinPrice = async () => { /* no-op — see comment above */ };
 
   const refreshFeeEstimates = async () => {
     try {

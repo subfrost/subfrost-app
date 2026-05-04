@@ -386,7 +386,13 @@ export function useSwapMutation() {
         // from txContext.walletType. Browser → 'preserve' + UniSat-clean-utxos
         // (when capability available); keystore → 'burn'. See lib/alkanes/execute.ts.
         const isKeystoreWallet = walletType === 'keystore';
-        const result = await provider.alkanesExecuteTyped({
+
+        // Indexer sync probe lives in lib/alkanes/execute.ts (the central
+        // alkanesExecuteTyped wrapper) — every mutation gets it for free.
+        // The retry-on-error block below remains as a safety net for the
+        // case where the indexer takes longer than waitForIndexer's own
+        // internal budget.
+        const buildExecuteOpts = () => ({
           txContext,
           // Support overrides for atomic wrap+swap (SwapShell passes custom protostones/addresses)
           inputRequirements: (swapData as any).overrideInputRequirements || inputRequirements,
@@ -406,7 +412,34 @@ export function useSwapMutation() {
           // alkanesExecuteTyped's param type yet. Cast `as any` until the SDK
           // d.ts is regenerated; the runtime path is unchanged.
           splitTransactions: (swapData as any).splitTransactions === true,
-        } as any);
+        });
+
+        const isIndexerSyncError = (e: unknown): boolean => {
+          const msg = e instanceof Error ? e.message : String(e ?? '');
+          return /indexer sync timed out/i.test(msg);
+        };
+
+        // Safety net: if the SDK's internal waitForIndexer still trips
+        // inside alkanesExecuteTyped, retry once more after a short
+        // re-probe of provider.waitForIndexer(). Bounded to 2 retries.
+        const RETRY_BACKOFF_MS = [3_000, 8_000];
+        let result: any;
+        let attempt = 0;
+        while (true) {
+          try {
+            result = await provider.alkanesExecuteTyped(buildExecuteOpts() as any);
+            break;
+          } catch (err) {
+            if (!isIndexerSyncError(err) || attempt >= RETRY_BACKOFF_MS.length) {
+              throw err;
+            }
+            const delay = RETRY_BACKOFF_MS[attempt];
+            console.warn(`[swap] indexer sync timeout (attempt ${attempt + 1}/${RETRY_BACKOFF_MS.length}), reprobing in ${delay}ms…`);
+            await new Promise((resolve) => setTimeout(resolve, delay));
+            try { await provider.waitForIndexer(); } catch { /* continue to retry */ }
+            attempt++;
+          }
+        }
 
 
 

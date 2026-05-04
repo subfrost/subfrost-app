@@ -125,15 +125,23 @@ export function parseMaxVoutFromProtostones(protostones: string): number {
 /**
  * Convert display amount to alks (atomic units).
  * Default is 8 decimals for alkane tokens.
+ *
+ * 2026-05-04: Bug — sub-1 amounts (e.g. "0.1") produced "010000000" because
+ * the old `^0+(\d)` regex required a digit AFTER leading zeros, leaving the
+ * bare `'0'` from `whole` untouched. The post-012ccfca SDK rejects leading
+ * zeros in cellpack ints and surfaces it as "Invalid edict format" (its
+ * cellpack-number parser falls back to the edict parser on parse failure).
  */
 export function toAlks(amount: string, decimals: number = 8): string {
   if (!amount) return '0';
-  // Simple string-based conversion to avoid BigNumber dependency in shared layer
+  // Simple string-based conversion to avoid BigNumber dependency in shared layer.
   const parts = amount.split('.');
   const whole = parts[0] || '0';
   const frac = (parts[1] || '').padEnd(decimals, '0').slice(0, decimals);
-  const normalizedWhole = whole.replace(/^0+(\d)/, '$1');
-  return `${normalizedWhole || '0'}${frac}`;
+  // Strip leading zeros from the combined integer; the empty-string case
+  // (input was "0" or "0.0") falls back to "0".
+  const combined = `${whole}${frac}`.replace(/^0+/, '');
+  return combined || '0';
 }
 
 /**

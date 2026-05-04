@@ -117,6 +117,7 @@ import * as bitcoin from 'bitcoinjs-lib';
 import * as ecc from '@bitcoinerlab/secp256k1';
 import { useBtcSendMutation, BtcSendStaleUtxosError } from '@/hooks/useBtcSendMutation';
 import { useAlkaneSendMutation } from '@/hooks/useAlkaneSendMutation';
+import { getHeight as rpcGetHeight, getAddressUtxos as rpcGetAddressUtxos } from '@/lib/alkanes/rpc';
 
 bitcoin.initEccLib(ecc);
 
@@ -338,28 +339,19 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
   const [esploraUtxos, setEsploraUtxos] = useState<any[]>([]);
   useEffect(() => {
     if (!isOpen) return;
-    const addresses = [account?.taproot?.address, account?.nativeSegwit?.address].filter(Boolean);
+    const addresses = [account?.taproot?.address, account?.nativeSegwit?.address].filter(Boolean) as string[];
     if (addresses.length === 0) return;
-    const rpcPath = network ? `/api/rpc/${network}` : '/api/rpc';
     const isRegtest = network === 'regtest' || network === 'regtest-local' || network === 'subfrost-regtest' || network === 'qubitcoin-regtest';
 
     (async () => {
+    // SDK-mediated reads — see lib/alkanes/rpc.ts for the canonical layer.
+    // No raw fetch / metashrew_view calls in app code.
     const [heightResult, utxoResults] = await Promise.all([
-      fetch(rpcPath, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jsonrpc: '2.0', method: 'metashrew_height', params: [], id: 99 }),
-      }).then(r => r.json()).then(j => parseInt(String(j.result || '0'), 10)).catch(() => 0),
-
+      rpcGetHeight(network || 'mainnet').catch(() => 0),
       Promise.all(addresses.map(async (addr) => {
         try {
-          const resp = await fetch(rpcPath, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ jsonrpc: '2.0', method: 'esplora_address::utxo', params: [addr], id: 1 }),
-          });
-          const json = await resp.json();
-          return (json.result || []).map((u: any) => ({ ...u, _addr: addr }));
+          const utxos = await rpcGetAddressUtxos(network || 'mainnet', addr);
+          return utxos.map((u) => ({ ...u, _addr: addr }));
         } catch { return []; }
       })),
     ]);

@@ -155,11 +155,13 @@ describe('fetchAlkaneBalancesViaProtobuf source contract', () => {
   );
 
   it('uses esplora_address::utxo to source the unspent UTXO set', () => {
-    expect(src).toMatch(/method:\s*['"]esplora_address::utxo['"]/);
+    // Either inline JSON-RPC (method: 'esplora_address::utxo') or the SDK-mediated helper.
+    expect(src).toMatch(/method:\s*['"]esplora_address::utxo['"]|getAddressUtxos\(/);
   });
 
   it('uses alkanes_protorunesbyoutpoint to enrich each UTXO', () => {
-    expect(src).toMatch(/method:\s*['"]alkanes_protorunesbyoutpoint['"]/);
+    // Either inline JSON-RPC method or the SDK-mediated helper from lib/alkanes/rpc.ts.
+    expect(src).toMatch(/method:\s*['"]alkanes_protorunesbyoutpoint['"]|getProtorunesByOutpoint\(/);
   });
 
   it('does NOT use the address-keyed protorunesbyaddress view (phantom-balance bug)', () => {

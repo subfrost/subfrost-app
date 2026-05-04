@@ -18,6 +18,7 @@
 import { useEffect, useRef } from 'react';
 import { queryOptions, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
+import { getHeight as rpcGetHeight } from '@/lib/alkanes/rpc';
 import { queryKeys } from './keys';
 
 type WebProvider = import('@alkanes/ts-sdk/wasm').WebProvider;
@@ -26,63 +27,19 @@ type WebProvider = import('@alkanes/ts-sdk/wasm').WebProvider;
 // Query options factory
 // ---------------------------------------------------------------------------
 
-async function fetchHeightViaSDK(provider: WebProvider): Promise<number> {
-  // Try espoGetHeight first (Espo service), then dataApiGetBlockHeight, then metashrewGetHeight
-  try {
-    const height = await provider.espoGetHeight();
-    if (typeof height === 'number' && height > 0) return height;
-  } catch { /* fall through */ }
-
-  try {
-    const result = await provider.dataApiGetBlockHeight();
-    const parsed = typeof result === 'string' ? JSON.parse(result) : result;
-    const h = parsed?.height ?? parsed?.data?.height ?? parsed;
-    if (typeof h === 'number' && h > 0) return h;
-  } catch { /* fall through */ }
-
-  try {
-    const result = await provider.metashrewHeight();
-    const h = typeof result === 'number' ? result : parseInt(String(result), 10);
-    if (h > 0) return h;
-  } catch { /* fall through */ }
-
-  throw new Error('All SDK height methods failed');
-}
-
-async function fetchHeightViaRPC(network: string): Promise<number> {
-  // For devnet, use localhost URL that fetch interceptor catches.
-  // For other networks, normalize to slug for API proxy.
-  const rpcUrl = network === 'devnet'
-    ? 'http://localhost:18888'
-    : `/api/rpc/${network === 'mainnet' ? 'mainnet'
-        : network === 'testnet' ? 'testnet'
-        : network === 'signet' ? 'signet'
-        : network === 'regtest' || network === 'subfrost-regtest' || network === 'regtest-local' ? 'regtest'
-        : 'mainnet'}`;
-
-  const res = await fetch(rpcUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      method: 'metashrew_height',
-      params: [],
-      id: 1,
-    }),
-  });
-  const json = await res.json();
-  const result = json.result;
-  return typeof result === 'number' ? result : (typeof result === 'string' ? parseInt(result, 10) || 0 : 0);
-}
-
-export function espoHeightQueryOptions(network: string, provider?: WebProvider | null) {
+export function espoHeightQueryOptions(network: string, _provider?: WebProvider | null) {
   return queryOptions({
     queryKey: queryKeys.height.espo(network),
     queryFn: async () => {
-      // Direct RPC fetch — no WASM overhead. SDK route (espoGetHeight) adds
-      // WASM bridge serialization + 4 console.log lines per call, which is
-      // unnecessary for a single integer polled every 10s.
-      return fetchHeightViaRPC(network);
+      // Single SDK-mediated entry point — `rpc.getHeight()` hedges
+      // metashrew_height + esplora_blocks::tip-height internally and is
+      // the canonical fetch wrapper used everywhere in the app
+      // (lib/alkanes/rpc.ts).
+      try {
+        return await rpcGetHeight(network);
+      } catch {
+        return 0;
+      }
     },
     // This is the ONE query that polls
     refetchInterval: 10_000,

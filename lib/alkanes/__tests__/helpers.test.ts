@@ -179,17 +179,18 @@ describe('toAlks', () => {
     expect(toAlks('1', 8)).toBe('100000000');
   });
 
-  it('should convert 0.5 with 8 decimals', () => {
-    // toAlks concatenates whole='0' + frac='50000000' = '050000000'
-    // The regex /^0+(\d)/ doesn't match single '0' (needs 0+digit after)
-    // so the leading zero is preserved. This is fine because parseInt/BigInt
-    // handles leading zeros correctly downstream.
-    expect(toAlks('0.5', 8)).toBe('050000000');
+  it('should convert 0.5 with 8 decimals — no leading zeros (2026-05-04)', () => {
+    // Sub-1 amounts must NOT have leading zeros: the post-012ccfca SDK rejects
+    // them in cellpack number parsing and surfaces it as "Invalid edict format".
+    expect(toAlks('0.5', 8)).toBe('50000000');
   });
 
-  it('should convert 0.00000001 with 8 decimals', () => {
-    // whole='0', frac='00000001' => '000000001'
-    expect(toAlks('0.00000001', 8)).toBe('000000001');
+  it('should convert 0.1 with 8 decimals — no leading zeros', () => {
+    expect(toAlks('0.1', 8)).toBe('10000000');
+  });
+
+  it('should convert 0.00000001 with 8 decimals — no leading zeros', () => {
+    expect(toAlks('0.00000001', 8)).toBe('1');
   });
 
   it('should handle no decimal part', () => {
@@ -219,8 +220,8 @@ describe('toAlks', () => {
     expect(toAlks('1.5', 8)).toBe('150000000');
   });
 
-  it('should handle whole number "0"', () => {
-    expect(toAlks('0', 8)).toBe('000000000');
+  it('should handle whole number "0" — canonical "0" (no padding)', () => {
+    expect(toAlks('0', 8)).toBe('0');
   });
 
   it('should handle different decimal counts', () => {

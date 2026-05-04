@@ -157,6 +157,44 @@ u32 numAsks (4 bytes LE)  ← NOT u128
 ### PSBT Patching — Input-Only
 `patchPsbtForBrowserWallet()` was removed from all mutation hooks (2026-02-20). Only input-level patching is used: `patchInputsOnly()` for witnessUtxo scripts and redeemScript injection (P2SH-P2WPKH for Xverse). Output patching is never needed because all hooks pass actual addresses via `txContext`.
 
+### SDK-Mediated Network Reads — `lib/alkanes/rpc.ts`
+
+**No raw `fetch(rpc, { method: metashrew_* / alkanes_* / esplora_* })` calls in app code.** Every JSON-RPC read goes through the wrapper layer in `lib/alkanes/rpc.ts`. The pattern was originally introduced in commit `c62d2621 feat(rpc): phase 1 — additive lib/alkanes/rpc.ts thin-fetch layer` and resurrected on `release-patch` (2026-05-04).
+
+Available helpers (canonical surface):
+- `alkanesSimulate(network, params)` — contract view calls (replaces raw `alkanes_simulate`).
+- `getProtorunesByAddress(network, address)` — alkane balances + UTXOs for an address.
+- `getProtorunesByOutpoint(network, txid, vout)` — single-outpoint balance fan-out.
+- `getAddressUtxos(network, address)` — `esplora_address::utxo` (with error-sentinel guard).
+- `getAddressMempoolTxs(network, address)` — `esplora_address::txs:mempool`.
+- `getEsploraTx(network, txid)` — single transaction by id.
+- `getHeight(network)` — `metashrew_height` hedged with `esplora_blocks::tip-height`.
+- `broadcastTransaction(network, txHex)` — `esplora_tx::broadcast`.
+- `metashrewView(network, viewFn, hex, blockTag)` — generic raw-view passthrough for protobuf payloads (`simulate`, `protorunesbyaddress`).
+- `getAlkaneInfo(network, alkaneId)` / `getAlkaneInfoBatch(network, ids[])` — `/api/token-details`.
+- `getBitcoinPrice()` — `/api/btc-price` proxy.
+
+**Migrated (release-patch, 2026-05-04):** `queries/account.ts`, `queries/height.ts`, `queries/market.ts` (BTC price + token names), `hooks/useSwapMutation.ts`, `hooks/useAddLiquidityMutation.ts`, `hooks/useRemoveLiquidityMutation.ts` (already via `alkanesExecuteTyped`), `hooks/useWrapMutation.ts` / `hooks/useUnwrapMutation.ts` (already via `alkanesExecuteTyped`), `hooks/useAlkaneSendMutation.ts` / `hooks/useBtcSendMutation.ts` (already via `alkanesExecuteTyped`), `hooks/useRouterQuote.ts`, `hooks/useTokenToBtcSwap.ts`, `hooks/useTxConfirmed.ts`, `hooks/usePendingTransactions.ts`, `app/wallet/components/SendModal.tsx`, `lib/fujin/rpc.ts` (`simulateContract` now routes through `rpc.metashrewView`; accepts either network name or legacy URL string), `lib/alkanes/execute.ts` (proactive `waitForIndexer` for all mutations).
+
+**TODO — not yet migrated** (still contain raw `fetch(rpc, { method: ... })` calls; safe to use but should be ported when those features are next touched):
+- `hooks/useOrderbook.ts`, `hooks/useUserOrders.ts`, `hooks/useLimitOrderMutation.ts` — Carbine CLOB
+- `hooks/useFujinMarkets.ts`, `app/futures/components/FujinDifficultyPanel.tsx` — Fujin futures
+- `hooks/useNormalPool.ts`, `hooks/useDxBtcVault.ts`, `hooks/useVxGauge.ts`, `app/vaults/components/{GaugeVault,VaultDetail}.tsx` — vaults / gauge
+- `hooks/useBridge.ts` — cross-chain bridge
+- `hooks/fire/useFireUserPositions.ts` — FIRE staking
+- `lib/alkanes/poolState.ts`, `lib/alkanes/curated-pools.ts`, `lib/fire/simulate.ts`, `lib/pools/candle-fetcher.ts`, `lib/luaScripts.ts` — keep using `simulateContract` from `lib/fujin/rpc.ts` which is now compliant (routes through rpc.metashrewView under the hood).
+- `app/wallet/components/Brc20BalancesCard.tsx` — BRC-20 balances
+
+When you next edit any of those files, swap the raw fetch for the corresponding `rpc.*` helper.
+
+### Indexer Sync — Proactive Probe in `alkanesExecuteTyped`
+
+`lib/alkanes/execute.ts:alkanesExecuteTyped` calls `provider.waitForIndexer()` before dispatching to `alkanesExecuteWithStrings` / `alkanesExecuteFull`. This catches the transient `metashrew_height < bitcoind_blockcount` window on mainnet (sometimes a block apart for ~10–30s) up-front, instead of letting the SDK's internal 30s timeout fire and bury the swap on "Building Transaction".
+
+`useSwapMutation.ts` keeps a retry-with-backoff safety net (3s, 8s) that reprobes `waitForIndexer` and rebuilds the PSBT if the SDK's internal sync still trips. Other mutations don't have the safety net — they rely on the proactive probe alone, which is sufficient for the common case.
+
+Pattern source: commit `97b1aec2 fix: update @alkanes/ts-sdk with indexer sync fix` (Feb 2026).
+
 ---
 
 ### Rule 1 — The "Step 0" Rule: Dead Code First
