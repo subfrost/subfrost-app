@@ -18,6 +18,7 @@ import { queryOptions } from '@tanstack/react-query';
 import { queryKeys } from './keys';
 import { KNOWN_TOKENS } from '@/lib/alkanes-client';
 import { getRpcUrl } from '@/utils/getConfig';
+import { getAlkaneInfoBatch } from '@/lib/alkanes/rpc';
 import type { CurrencyPriceInfoResponse } from '@/types/alkanes';
 
 type WebProvider = import('@alkanes/ts-sdk/wasm').WebProvider;
@@ -852,6 +853,29 @@ export function alkaneBalanceQueryOptions(deps: AlkaneBalanceDeps) {
               existing.balance = String(Number(existing.balance || 0) + Number(balance));
             }
           }
+        }
+      }
+
+      // ── Token name / symbol enrichment ──────────────────────────────────
+      // The outpoint-aggregation path (esplora_address::utxo +
+      // alkanes_protorunesbyoutpoint) returns balances only — no metadata.
+      // Without enrichment, anything outside KNOWN_TOKENS renders as
+      // "Token 2:NN" in the wallet, which is what gabe reports on
+      // staging-app.subfrost.io.
+      //
+      // Fix: one batched call to /api/token-details (via the SDK-mediated
+      // rpc.ts layer) for all unknown ids. Names are immutable, so the
+      // outer query's `staleTime: Infinity` (mainnet) caches the enriched
+      // result forever — HeightPoller is the only invalidator.
+      const unknownIds = [...alkaneMap.keys()].filter((id) => !KNOWN_TOKENS[id]);
+      if (unknownIds.length > 0) {
+        const meta = await getAlkaneInfoBatch(deps.network || 'mainnet', unknownIds);
+        for (const [id, info] of Object.entries(meta)) {
+          const entry = alkaneMap.get(id);
+          if (!entry) continue;
+          if (info.name && entry.name === `Token ${id}`) entry.name = info.name;
+          if (info.symbol && !entry.symbol) entry.symbol = info.symbol;
+          if (info.decimals != null) entry.decimals = info.decimals;
         }
       }
 

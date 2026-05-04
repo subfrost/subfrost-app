@@ -447,27 +447,52 @@ export interface AlkaneInfo {
 }
 
 /**
+ * Fetch metadata for a batch of alkanes (name / symbol / decimals).
+ * Uses the app's existing `/api/token-details` route. Returns a map
+ * keyed by alkaneId; missing entries are omitted, errors swallowed
+ * (returns empty map on transport failure).
+ */
+export async function getAlkaneInfoBatch(
+  network: string,
+  alkaneIds: string[],
+  signal?: AbortSignal,
+): Promise<Record<string, AlkaneInfo>> {
+  if (alkaneIds.length === 0) return {};
+  try {
+    const res = await fetch(`/api/token-details`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ network, alkaneIds }),
+      signal,
+    });
+    if (!res.ok) return {};
+    const json = await res.json();
+    const map: Record<string, AlkaneInfo> = {};
+    // Two response shapes the route emits — handle both.
+    if (json?.tokens && typeof json.tokens === 'object' && !Array.isArray(json.tokens)) {
+      for (const [id, info] of Object.entries(json.tokens as Record<string, Omit<AlkaneInfo, 'alkaneId'>>)) {
+        map[id] = { alkaneId: id, ...info };
+      }
+    } else if (Array.isArray(json?.tokens)) {
+      for (const t of json.tokens as AlkaneInfo[]) {
+        if (t.alkaneId) map[t.alkaneId] = t;
+      }
+    }
+    return map;
+  } catch {
+    return {};
+  }
+}
+
+/**
  * Fetch metadata for a single alkane (name / symbol / decimals).
- * Uses the app's existing `/api/token-details` route.
+ * Convenience wrapper over `getAlkaneInfoBatch`.
  */
 export async function getAlkaneInfo(
   network: string,
   alkaneId: string,
   signal?: AbortSignal,
 ): Promise<AlkaneInfo | null> {
-  const res = await fetch(`/api/token-details`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ network, alkaneIds: [alkaneId] }),
-    signal,
-  });
-  if (!res.ok) return null;
-  const json = await res.json();
-  if (json?.tokens?.[alkaneId]) {
-    return { alkaneId, ...json.tokens[alkaneId] };
-  }
-  if (Array.isArray(json?.tokens)) {
-    return json.tokens.find((t: AlkaneInfo) => t.alkaneId === alkaneId) ?? null;
-  }
-  return null;
+  const map = await getAlkaneInfoBatch(network, [alkaneId], signal);
+  return map[alkaneId] ?? null;
 }
