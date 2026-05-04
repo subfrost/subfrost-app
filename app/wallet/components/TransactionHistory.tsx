@@ -3,8 +3,10 @@
 import { useState, useRef, useEffect, useImperativeHandle, forwardRef, useCallback } from 'react';
 import { useWallet } from '@/context/WalletContext';
 import { useTransactionHistory } from '@/hooks/useTransactionHistory';
+import { usePendingTxs } from '@/hooks/usePendingTxs';
 import { RefreshCw, Zap, Loader2 } from 'lucide-react';
 import { useTranslation } from '@/hooks/useTranslation';
+import SpeedUpModal from './SpeedUpModal';
 
 export interface TransactionHistoryHandle {
   refresh: () => Promise<void>;
@@ -32,6 +34,18 @@ const TransactionHistory = forwardRef<TransactionHistoryHandle>(function Transac
 
   const [isRefreshing, setIsRefreshing] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Speed-up modal state. We index pending tx hexes by txid so a
+  // click on the "Speed Up" button can hand the right hex to the
+  // modal without re-querying.
+  const { pendingTxs } = usePendingTxs();
+  const pendingHexByTxid = new Map(pendingTxs.map((p) => [p.txid, p.hex]));
+  const [speedUpFor, setSpeedUpFor] = useState<{
+    txid: string;
+    hex: string;
+    fee?: number;
+    vsize?: number;
+  } | null>(null);
 
   // Infinite scroll — load next page when scrolled near bottom
   const handleScroll = useCallback(() => {
@@ -113,15 +127,41 @@ const TransactionHistory = forwardRef<TransactionHistoryHandle>(function Transac
                       </span>
                     )}
                   </div>
-                  <span
-                    className={`px-3 py-1 rounded-full text-xs font-bold ${
-                      tx.confirmed
-                        ? 'bg-[color:var(--sf-info-green-bg)] border border-[color:var(--sf-info-green-border)] text-[color:var(--sf-info-green-title)]'
-                        : 'bg-yellow-500/20 text-yellow-600 dark:text-yellow-400'
-                    }`}
-                  >
-                    {tx.confirmed ? t('txHistory.confirmed') : t('txHistory.pending')}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    {!tx.confirmed && pendingHexByTxid.has(tx.txid) && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          // Don't navigate to explorer when bumping.
+                          e.preventDefault();
+                          e.stopPropagation();
+                          const hex = pendingHexByTxid.get(tx.txid);
+                          if (hex) {
+                            setSpeedUpFor({
+                              txid: tx.txid,
+                              hex,
+                              fee: tx.fee,
+                              vsize: (tx as { vsize?: number }).vsize,
+                            });
+                          }
+                        }}
+                        className="flex items-center gap-1 px-2 py-1 rounded text-xs font-bold uppercase tracking-wide bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 transition-all"
+                        title="Replace this tx with a higher fee (RBF)"
+                      >
+                        <Zap size={11} />
+                        Speed Up
+                      </button>
+                    )}
+                    <span
+                      className={`px-3 py-1 rounded-full text-xs font-bold ${
+                        tx.confirmed
+                          ? 'bg-[color:var(--sf-info-green-bg)] border border-[color:var(--sf-info-green-border)] text-[color:var(--sf-info-green-title)]'
+                          : 'bg-yellow-500/20 text-yellow-600 dark:text-yellow-400'
+                      }`}
+                    >
+                      {tx.confirmed ? t('txHistory.confirmed') : t('txHistory.pending')}
+                    </span>
+                  </div>
                 </div>
                 <div className="text-xs text-[color:var(--sf-text)]/60 mt-2">
                   {[
@@ -149,6 +189,16 @@ const TransactionHistory = forwardRef<TransactionHistoryHandle>(function Transac
           </div>
         )}
       </div>
+      {speedUpFor && (
+        <SpeedUpModal
+          open={!!speedUpFor}
+          onClose={() => setSpeedUpFor(null)}
+          txid={speedUpFor.txid}
+          txHex={speedUpFor.hex}
+          currentFeeSats={speedUpFor.fee}
+          vsize={speedUpFor.vsize}
+        />
+      )}
     </div>
   );
 });
