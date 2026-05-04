@@ -6,6 +6,7 @@ import { useWallet } from '@/context/WalletContext';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { useEnrichedWalletData } from '@/hooks/useEnrichedWalletData';
 import { usePools } from '@/hooks/usePools';
+import { usePendingTxs } from '@/hooks/usePendingTxs';
 import { RefreshCw, Send, ArrowUpFromLine, ArrowLeftRight, Flame } from 'lucide-react';
 import TokenIcon from '@/app/components/TokenIcon';
 import { useTranslation } from '@/hooks/useTranslation';
@@ -30,6 +31,31 @@ export default function AlkanesBalancesCard({ onSendAlkane }: AlkanesBalancesCar
   const router = useRouter();
   const { balances, isAlkanesLoading, error, refreshAlkanes } = useEnrichedWalletData();
   const { data: poolsData } = usePools();
+  const { alkaneDeltas: pendingAlkaneDeltas, pendingTxs } = usePendingTxs();
+
+  // Build a per-alkaneId map of {delta, uncertain}. A tx flagged
+  // contract_outputs_uncertain may still have edict-confirmed
+  // input-side deltas (e.g. a swap that consumes 1000 DIESEL but
+  // produces an uncertain amount of frBTC). To keep the overlay
+  // honest, we mark a row as uncertain only when one of the
+  // contributing pending txs flagged itself uncertain AND included
+  // this alkaneId in its own alkane delta list.
+  const pendingByAlkane = useMemo(() => {
+    const map = new Map<string, { delta: bigint; uncertain: boolean }>();
+    for (const d of pendingAlkaneDeltas) {
+      const key = `${d.alkaneId.block}:${d.alkaneId.tx}`;
+      map.set(key, { delta: d.delta, uncertain: false });
+    }
+    for (const tx of pendingTxs) {
+      if (!tx.contractOutputsUncertain) continue;
+      for (const a of tx.alkaneDeltas) {
+        const key = `${a.alkaneId.block}:${a.alkaneId.tx}`;
+        const cur = map.get(key);
+        if (cur) cur.uncertain = true;
+      }
+    }
+    return map;
+  }, [pendingAlkaneDeltas, pendingTxs]);
   const { data: positionMeta } = usePositionMetadata(balances.alkanes);
   const fuelAllocation = useFuelAllocation();
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -394,6 +420,26 @@ export default function AlkanesBalancesCard({ onSendAlkane }: AlkanesBalancesCar
                       <div className="font-bold text-sm text-[color:var(--sf-text)]">
                         {showValue(formatAlkaneBalance(alkane.balance, alkane.decimals, alkane))}
                       </div>
+                      {(() => {
+                        const pending = pendingByAlkane.get(alkane.alkaneId);
+                        if (!pending || pending.delta === 0n) return null;
+                        const decimals = alkane.decimals || 8;
+                        const sign = pending.delta < 0n ? '-' : '+';
+                        const abs = pending.delta < 0n ? -pending.delta : pending.delta;
+                        const divisor = BigInt(10 ** decimals);
+                        const whole = abs / divisor;
+                        const remainder = abs % divisor;
+                        const wholeStr = whole.toString();
+                        const remainderStr = remainder.toString().padStart(decimals, '0');
+                        const dp = wholeStr.length >= 3 ? 2 : 4;
+                        const formatted = `${wholeStr}.${remainderStr.slice(0, dp)}`;
+                        const label = pending.uncertain ? `${sign}? ${alkane.symbol || ''}` : `${sign}${formatted} ${alkane.symbol || ''}`;
+                        return (
+                          <div className="text-[10px] text-amber-300/80" title={pending.uncertain ? 'Contract output amount is uncertain until the swap confirms' : 'Pending mempool delta — overlays confirmed balance'}>
+                            {label.trim()} pending
+                          </div>
+                        );
+                      })()}
                       {!isLoadingData && (() => {
                         const decimals = alkane.decimals || 8;
                         const balanceFloat = Number(BigInt(alkane.balance)) / Math.pow(10, decimals);
