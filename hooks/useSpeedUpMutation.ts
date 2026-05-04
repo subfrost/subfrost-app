@@ -512,13 +512,19 @@ export function useSpeedUpMutation() {
             if (!pk) return undefined;
             return pk.length === 66 ? pk.slice(2) : pk;
           })();
-        const psbt = buildPsbtForRbf({
-          unsignedHex: plan.tx_hex,
-          prevouts,
-          taprootXOnlyHex: xOnly,
-          network: bitcoinNetworkFor(network),
-        });
-        broadcastHex = await bridge.walletSignPsbtBase64(psbt.toBase64());
+        try {
+          const psbt = buildPsbtForRbf({
+            unsignedHex: plan.tx_hex,
+            prevouts,
+            taprootXOnlyHex: xOnly,
+            network: bitcoinNetworkFor(network),
+          });
+          broadcastHex = await bridge.walletSignPsbtBase64(psbt.toBase64());
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          const stack = e instanceof Error && e.stack ? `\n${e.stack.slice(0, 400)}` : '';
+          throw new Error(`keystore sign failed: ${msg}${stack}`);
+        }
       } else if (walletType === 'browser') {
         // Browser wallet: build PSBT, hand to signTaprootPsbt, finalize.
         // Prefer the already-x-only field if WalletContext exposes it
