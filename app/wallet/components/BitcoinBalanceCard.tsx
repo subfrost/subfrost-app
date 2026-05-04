@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useWallet } from '@/context/WalletContext';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { useEnrichedWalletData } from '@/hooks/useEnrichedWalletData';
+import { usePendingTxs } from '@/hooks/usePendingTxs';
 import { RefreshCw, ExternalLink } from 'lucide-react';
 import { useTranslation } from '@/hooks/useTranslation';
 
@@ -12,6 +13,7 @@ export default function BitcoinBalanceCard() {
   const { bitcoinPrice } = useAlkanesSDK();
   const { t } = useTranslation();
   const { balances, btcFast, isBtcFastLoading, isBtcLoading, error, refreshBtcFast } = useEnrichedWalletData();
+  const { btcDelta: pendingBtcDelta } = usePendingTxs();
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const handleRefresh = async () => {
@@ -128,6 +130,25 @@ export default function BitcoinBalanceCard() {
             +{formatBTC(pendingIn)} BTC pending
           </div>
         )}
+        {pendingBtcDelta !== 0n && (() => {
+          // Signed pending overlay from broadcast txs we've made (the
+          // pending-tx store is a superset of indexer-reported pending
+          // because indexers can lag broadcast). For outgoing txs this
+          // is negative (we lost sats); for incoming-only this is
+          // positive. Distinct from `pendingIn` above which is the
+          // address-level mempool API.
+          const sats = Number(pendingBtcDelta);
+          const sign = sats < 0 ? '−' : '+';
+          const abs = Math.abs(sats);
+          return (
+            <div
+              className="text-xs text-amber-300/80 mt-1"
+              title="Pending mempool delta from your recent broadcasts — overlays confirmed balance until block-tip"
+            >
+              {sign}{formatBTC(abs)} BTC pending
+            </div>
+          );
+        })()}
       </div>
 
       {/* Address Breakdown — only show when wallet has both address types */}

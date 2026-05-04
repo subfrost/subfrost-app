@@ -311,7 +311,26 @@ export default function AlkanesBalancesCard({ onSendAlkane }: AlkanesBalancesCar
           </div>
         </div>
       ) : (() => {
-        let filtered = balances.alkanes.filter((a) => {
+        // Ghost rows: alkane IDs with a pending delta but no confirmed
+        // row yet (first-receive case — user is about to receive a
+        // token they've never held). Add them as zero-balance entries
+        // so the pending overlay has something to attach to.
+        const ghostAlkanes: AlkaneAsset[] = [];
+        const confirmedIds = new Set(balances.alkanes.map((a) => a.alkaneId));
+        for (const [id] of pendingByAlkane) {
+          if (confirmedIds.has(id)) continue;
+          const poolMatch = poolMap.get(id);
+          ghostAlkanes.push({
+            alkaneId: id,
+            balance: '0',
+            decimals: 8,
+            symbol: poolMatch ? `${poolMatch.token0Symbol}/${poolMatch.token1Symbol} LP` : '',
+            name: poolMatch ? `${poolMatch.token0Symbol}/${poolMatch.token1Symbol} LP` : id,
+          } as AlkaneAsset);
+        }
+        const merged = [...balances.alkanes, ...ghostAlkanes];
+
+        let filtered = merged.filter((a) => {
           if (alkaneFilter === 'positions') return isPosition(a);
           if (alkaneFilter === 'nfts') return isNft(a.balance) && !isPosition(a);
           return !isNft(a.balance) && !isPosition(a);

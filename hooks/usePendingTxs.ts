@@ -236,12 +236,17 @@ export function usePendingTxs(): UsePendingTxsResult {
   });
 
   // Merge the BTC-side summary with the alkane prediction.
+  // The predict bridge gives an INPUT-AWARE BTC delta (subtracts our
+  // inputs by their prevout values). decodeHex's output-only delta
+  // is left as a transitional fallback for txs whose predict result
+  // hasn't loaded yet (e.g. during the prevout fetch round-trip).
   const summaries = useMemo<PendingTxSummary[]>(() => {
     return baseSummaries.map((s) => {
       const pred = predictions?.get(s.txid);
       if (!pred) return s;
       return {
         ...s,
+        btcDelta: pred.btcDeltaFromPredict,
         alkaneDeltas: pred.alkanes,
         contractOutputsUncertain: pred.uncertain,
       };
