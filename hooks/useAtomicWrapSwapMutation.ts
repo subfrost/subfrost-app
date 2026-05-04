@@ -25,10 +25,12 @@ import BigNumber from 'bignumber.js';
 import { useCallback } from 'react';
 import { useWallet } from '@/context/WalletContext';
 import { useSwapMutation } from '@/hooks/useSwapMutation';
+import { useSandshrewProvider } from '@/hooks/useSandshrewProvider';
 import { useFrbtcPremium } from '@/hooks/useFrbtcPremium';
 import { useFeeRate } from '@/hooks/useFeeRate';
 import { FRBTC_WRAP_FEE_PER_1000 } from '@/constants/alkanes';
 import { getConfig } from '@/utils/getConfig';
+import { getFutureBlockHeight } from '@/utils/amm';
 
 export interface AtomicWrapSwapParams {
   /** Display BTC amount (e.g. "0.001"). */
@@ -64,6 +66,7 @@ export interface AtomicWrapSwapParams {
 export function useAtomicWrapSwapMutation() {
   const { network, address } = useWallet();
   const swapMutation = useSwapMutation();
+  const provider = useSandshrewProvider();
   const { data: premiumData } = useFrbtcPremium();
   const fee = useFeeRate();
 
@@ -80,8 +83,11 @@ export function useAtomicWrapSwapMutation() {
       const frbtcAfterFee = btcSats.multipliedBy(1000 - wrapFeePerThousand).dividedBy(1000)
         .integerValue(BigNumber.ROUND_FLOOR).toString();
 
-      const currentBlock = parseInt(localStorage.getItem('subfrost_last_block_height') || '0', 10);
-      const deadline = (currentBlock + params.deadlineBlocks).toString();
+      // Block height via the WASM provider — the localStorage path was
+      // unreliable (stale "NaN" propagating into the cellpack as
+      // "Invalid edict format"). Same pattern as
+      // useRemoveLiquidityMutation / useSwapMutation.
+      const deadline = (await getFutureBlockHeight(params.deadlineBlocks, provider as any)).toString();
 
       const protostones = buildAtomicWrapSwapProtostones({
         factoryId: config.ALKANE_FACTORY_ID,

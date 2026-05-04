@@ -64,6 +64,7 @@ import { patchInputsOnly } from '@/lib/psbt-patching';
 import { buildCreateNewPoolProtostone, buildFactoryAddLiquidityProtostones, buildAddLiquidityInputRequirements } from '@/lib/alkanes/builders';
 import { getAddressUtxos, getProtorunesByOutpoint } from '@/lib/alkanes/rpc';
 import { getBitcoinNetwork, toAlks, extractPsbtBase64 } from '@/lib/alkanes/helpers';
+import { getFutureBlockHeight } from '@/utils/amm';
 import { encodeSimulateCalldata } from '@/utils/simulateCalldata';
 
 bitcoin.initEccLib(ecc);
@@ -373,8 +374,13 @@ export function useAddLiquidityMutation() {
         const amount0Min = BigInt(Math.floor(Number(amount0Alks) * slippageFactor)).toString();
         const amount1Min = BigInt(Math.floor(Number(amount1Alks) * slippageFactor)).toString();
 
-        const blockHeight = parseInt(localStorage.getItem('subfrost_last_block_height') || '0', 10);
-        const deadline = (blockHeight + (data.deadlineBlocks || 5)).toString();
+        // Block height — query the WASM provider directly (same pattern as
+        // useRemoveLiquidityMutation / useSwapMutation). Reading from
+        // localStorage was unreliable: stale "NaN" from a previous broken
+        // session would propagate into the cellpack and the SDK's
+        // cellpack-number parser fell back to its edict parser, surfacing as
+        // "Invalid edict format. Expected 'block:tx:amount:target' …".
+        const deadline = (await getFutureBlockHeight(data.deadlineBlocks || 5, provider as any)).toString();
 
         protostone = buildFactoryAddLiquidityProtostones({
           factoryId: ALKANE_FACTORY_ID,

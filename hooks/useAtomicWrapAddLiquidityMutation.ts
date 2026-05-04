@@ -28,6 +28,7 @@ import { useFrbtcPremium } from '@/hooks/useFrbtcPremium';
 import { useFeeRate } from '@/hooks/useFeeRate';
 import { FRBTC_WRAP_FEE_PER_1000 } from '@/constants/alkanes';
 import { getConfig } from '@/utils/getConfig';
+import { getFutureBlockHeight } from '@/utils/amm';
 
 export interface AtomicWrapAddLiquidityParams {
   /** The non-BTC token in the LP pair (the partner of frBTC). */
@@ -100,8 +101,11 @@ export function useAtomicWrapAddLiquidityMutation() {
         const slippageFactor = new BigNumber(100).minus(params.maxSlippage).dividedBy(100);
         const frbtcMin = frbtcDesired.multipliedBy(slippageFactor).integerValue(BigNumber.ROUND_FLOOR);
         const tokenMin = tokenAmountAlks.multipliedBy(slippageFactor).integerValue(BigNumber.ROUND_FLOOR);
-        const currentBlock = parseInt(localStorage.getItem('subfrost_last_block_height') || '0', 10);
-        const deadline = (currentBlock + (params.deadlineBlocks || 5)).toString();
+        // Block height via the WASM provider — the localStorage path was
+        // unreliable (stale "NaN" propagating into the cellpack as
+        // "Invalid edict format"). Same pattern as
+        // useRemoveLiquidityMutation / useSwapMutation.
+        const deadline = (await getFutureBlockHeight(params.deadlineBlocks || 5, provider as any)).toString();
 
         protostones = buildAtomicWrapAddLiquidityProtostones({
           factoryId: config.ALKANE_FACTORY_ID,
