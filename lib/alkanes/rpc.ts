@@ -596,9 +596,14 @@ export async function getAlkaneInfoBatch(
     if (!res.ok) return {};
     const json = await res.json();
     const map: Record<string, AlkaneInfo> = {};
-    // Two response shapes the route emits — handle both.
-    if (json?.tokens && typeof json.tokens === 'object' && !Array.isArray(json.tokens)) {
-      for (const [id, info] of Object.entries(json.tokens as Record<string, Omit<AlkaneInfo, 'alkaneId'>>)) {
+    // /api/token-details returns `{ names: { id: { name, symbol } } }`.
+    // Also accept legacy `tokens` shapes (object map or array) for forward-compat.
+    const objectMap =
+      (json?.names && typeof json.names === 'object' && !Array.isArray(json.names) && json.names) ||
+      (json?.tokens && typeof json.tokens === 'object' && !Array.isArray(json.tokens) && json.tokens) ||
+      null;
+    if (objectMap) {
+      for (const [id, info] of Object.entries(objectMap as Record<string, Omit<AlkaneInfo, 'alkaneId'>>)) {
         map[id] = { alkaneId: id, ...info };
       }
     } else if (Array.isArray(json?.tokens)) {

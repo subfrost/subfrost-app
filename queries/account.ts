@@ -778,12 +778,14 @@ export function alkaneBalanceQueryOptions(deps: AlkaneBalanceDeps) {
         return fetchAlkaneBalancesViaProtobuf(deps.network || 'mainnet', address);
       };
 
-      const allResults = await Promise.all(
-        addresses.map(addr => fetchForAddress(addr).catch(err => {
-          console.error(`[alkaneBalanceQuery] Failed for ${addr}:`, err);
-          return [] as any[];
-        }))
-      );
+      // Do NOT catch per-address failures here. The outpoint fanout in
+      // fetchAlkaneBalancesViaProtobuf already retries 3× per outpoint
+      // (cc22225); if it still throws, the indexer is genuinely struggling.
+      // Letting the failure propagate triggers React Query's retry loop and,
+      // crucially, preserves the previously-successful `data` rather than
+      // overwriting it with `[]`. Returning `[]` here was vanishing every
+      // alkane balance the moment one outpoint timed out on a refetch.
+      const allResults = await Promise.all(addresses.map(fetchForAddress));
 
       for (const items of allResults) {
         for (const item of items) {
