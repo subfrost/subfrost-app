@@ -239,15 +239,31 @@ async function fetchAlkaneBalancesViaProtobuf(
   const dustUtxos = utxos.filter((u) => u.value <= 1000);
   if (dustUtxos.length === 0) return [];
 
-  const checks = dustUtxos.map(async (u) => {
-    try {
-      const resp = await getProtorunesByOutpoint(network, u.txid, u.vout, AbortSignal.timeout(15_000));
-      return resp?.balance_sheet?.cached?.balances ?? [];
-    } catch {
-      return [] as Array<{ block: number | string; tx: number | string; amount: number | string }>;
+  // Per-outpoint retry: a single transient timeout silently dropped tokens
+  // before (gabe's mainnet bug — 58 DIESEL displayed as 31 because one of
+  // 24 dust outpoints intermittently failed and the catch returned []).
+  // We retry up to 2 times with backoff, then propagate the failure as an
+  // exception so the React Query layer marks the whole balance as errored
+  // rather than silently rendering an undercount.
+  const fetchWithRetry = async (
+    txid: string,
+    vout: number,
+  ): Promise<Array<{ block: number | string; tx: number | string; amount: number | string }>> => {
+    const RETRY_DELAYS = [0, 500, 1500];
+    let lastErr: unknown;
+    for (const delay of RETRY_DELAYS) {
+      if (delay > 0) await new Promise((r) => setTimeout(r, delay));
+      try {
+        const resp = await getProtorunesByOutpoint(network, txid, vout, AbortSignal.timeout(15_000));
+        return resp?.balance_sheet?.cached?.balances ?? [];
+      } catch (e) {
+        lastErr = e;
+      }
     }
-  });
+    throw new Error(`getProtorunesByOutpoint(${txid}:${vout}) failed after retries: ${lastErr}`);
+  };
 
+  const checks = dustUtxos.map((u) => fetchWithRetry(u.txid, u.vout));
   const results = await Promise.all(checks);
 
   // Step 3: aggregate per (block, tx).
@@ -916,37 +932,31 @@ export function sellableCurrenciesQueryOptions(deps: SellableCurrenciesDeps) {
 
         const sellBalancePromises = addresses.map(async (address) => {
           try {
-            // ⚠️ (2026-03-26): On devnet, /api/alkane-balances is a Next.js
-            // server-side route that returns empty ({ balances: [] }) because the
-            // server process can't reach the in-browser WASM devnet. The devnet
-            // runs entirely in the browser via a fetch interceptor — server-side
-            // fetch() to localhost:18888 hits nothing. Must use client-side
-            // dataApiGetAlkanesByAddress instead, which routes through quspo.
-            // This powers the 25/50/75/MAX percentage buttons on the swap page.
+            // 2026-05-04: All networks now use the canonical UTXO-derived
+            // outpoint fanout (`fetchAlkaneBalancesViaProtobuf`) for swap
+            // form percentage buttons.
+            //
+            // Previously mainnet hit `/api/alkane-balances`, a Next.js
+            // server-side proxy that uses the address-keyed
+            // `alkanes_protorunesbyaddress` view. That view sums spent +
+            // unspent outpoints (the indexer never retracts entries when
+            // the UTXO is spent at the BTC layer), producing phantom
+            // balances. Wallet UI was switched to the outpoint fanout in
+            // 9ec751fb but `sellableCurrencies` (this query) was missed —
+            // user could click "MAX" and see ~58 DIESEL spendable when
+            // they actually only had 31. Same fix path now used by both.
             let balances: { alkaneId: string; balance: string; name?: string; symbol?: string }[] = [];
 
-            if (deps.network === 'devnet' || deps.network === 'regtest-local' || deps.network === 'qubitcoin-regtest') {
-              // REST data API returns HTTP 400/404 on local networks. Use the
-              // SDK-mediated rpc.ts path which resolves to the in-process
-              // devnet harness for `devnet`/`regtest-local` (intercepted)
-              // and to the local proxy for `qubitcoin-regtest`.
-              const rawItems = await fetchAlkaneBalancesViaProtobuf(deps.network, address);
-              for (const item of rawItems) {
-                const id = `${item.alkaneId.block}:${item.alkaneId.tx}`;
-                const known = KNOWN_TOKENS_SELL[id];
-                balances.push({
-                  alkaneId: id,
-                  balance: item.balance,
-                  name: known?.name,
-                  symbol: known?.symbol,
-                });
-              }
-            } else {
-              const resp = await fetch(
-                `/api/alkane-balances?address=${encodeURIComponent(address)}&network=${encodeURIComponent(deps.network)}`,
-              );
-              const data = await resp.json();
-              balances = data?.balances || [];
+            const rawItems = await fetchAlkaneBalancesViaProtobuf(deps.network, address);
+            for (const item of rawItems) {
+              const id = `${item.alkaneId.block}:${item.alkaneId.tx}`;
+              const known = KNOWN_TOKENS_SELL[id];
+              balances.push({
+                alkaneId: id,
+                balance: item.balance,
+                name: known?.name,
+                symbol: known?.symbol,
+              });
             }
 
             for (const entry of balances) {
