@@ -1,5 +1,19 @@
 @import "tailwindcss";
 
+/*
+ * Exclude unpacked browser-wallet extension code from Tailwind's
+ * content scan. Those bundles contain regex character classes
+ * (e.g. `[-:a-zA-Z0-9]` for input validation) that Tailwind 4
+ * misreads as arbitrary-property classes and tries to compile to
+ * invalid CSS like `.[-:a-zA-Z0-9] { -: a-zA-Z0-9; }`. The compile
+ * error 500s every server-side route (including /api/btc-price).
+ */
+@source not "../.autochrome-ext-unpacked";
+@source not "../node_modules";
+@source not "../playwright-report";
+@source not "../test-results";
+@source not "../e2e-tests";
+
 :root {
   --background: #0a1929;
   --foreground: #ededed;
