@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { computeBtcDelta, decodeHex } from '@/hooks/usePendingTxs';
+import { computeBtcDelta, decodeHex, parsePredictResult } from '@/hooks/usePendingTxs';
 
 const USER_ADDR = 'bc1p026hg4dfhchc0axnmlpamu4v9gltcqtrzk0nvyc00n4eu5nl5tpsrh7zkm';
 const RECIPIENT = 'bc1puvfmy5whzdq35nd2trckkm09em9u7ps6lal564jz92c9feswwrpsr7ach5';
@@ -229,6 +229,102 @@ describe('SendModal overlays pending state on availableUtxos', () => {
     expect(src).toMatch(
       /!utxo\.status\.confirmed\s*&&\s*!ourPendingTxids\.has\(utxo\.txid\)/,
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// parsePredictResult — verifies the JS-side parser of the SDK
+// predict_balance_delta WASM bridge result. Cross-references the
+// shape produced by the cargo tests in
+// `crates/alkanes-cli-common/src/alkanes/predict.rs`.
+// ---------------------------------------------------------------------------
+
+describe('parsePredictResult', () => {
+  it('parses an empty result (no alkane activity)', () => {
+    const result = parsePredictResult({
+      btc: { delta_sats: '0' },
+      alkanes: [],
+      contract_outputs_uncertain: false,
+    });
+    expect(result.alkanes).toEqual([]);
+    expect(result.uncertain).toBe(false);
+    expect(result.btcDeltaFromPredict).toBe(0n);
+  });
+
+  it('parses a single edict-driven alkane delta (alkane-send case)', () => {
+    // Mirrors the cargo test
+    // `alkane_send_explicit_edict_to_recipient` — sender loses 1000
+    // DIESEL ([2:0]).
+    const result = parsePredictResult({
+      btc: { delta_sats: '-200' },
+      alkanes: [
+        { alkane_id: { block: '2', tx: '0' }, delta: '-1000' },
+      ],
+      contract_outputs_uncertain: false,
+    });
+    expect(result.alkanes).toHaveLength(1);
+    expect(result.alkanes[0].alkaneId).toEqual({ block: '2', tx: '0' });
+    expect(result.alkanes[0].delta).toBe(-1000n);
+    expect(result.uncertain).toBe(false);
+    expect(result.btcDeltaFromPredict).toBe(-200n);
+  });
+
+  it('flags contract_outputs_uncertain when a cellpack protostone is present', () => {
+    // Mirrors `cellpack_protostone_marks_uncertain` — input loss
+    // accounted, output gain skipped (contract decides).
+    const result = parsePredictResult({
+      btc: { delta_sats: '-200' },
+      alkanes: [
+        { alkane_id: { block: '2', tx: '0' }, delta: '-1000' },
+      ],
+      contract_outputs_uncertain: true,
+    });
+    expect(result.uncertain).toBe(true);
+    // input-side loss is still reported so the UI can show an
+    // optimistic "-1000 DIESEL pending" while the swap output
+    // arrives confirmed.
+    expect(result.alkanes[0].delta).toBe(-1000n);
+  });
+
+  it('handles numeric delta_sats (not just string)', () => {
+    const result = parsePredictResult({
+      btc: { delta_sats: 5000 },
+      alkanes: [],
+      contract_outputs_uncertain: false,
+    });
+    expect(result.btcDeltaFromPredict).toBe(5000n);
+  });
+
+  it('coerces missing fields to safe defaults', () => {
+    const result = parsePredictResult({});
+    expect(result.alkanes).toEqual([]);
+    expect(result.uncertain).toBe(false);
+    expect(result.btcDeltaFromPredict).toBe(0n);
+  });
+
+  it('handles big alkane amounts via BigInt', () => {
+    // u128 max would arrive as a string; verify we parse it.
+    const big = '170141183460469231731687303715884105727'; // i128 max
+    const result = parsePredictResult({
+      btc: { delta_sats: '0' },
+      alkanes: [
+        { alkane_id: { block: '4', tx: '256' }, delta: big },
+      ],
+      contract_outputs_uncertain: false,
+    });
+    expect(result.alkanes[0].delta).toBe(BigInt(big));
+  });
+});
+
+describe('PendingTxSummary shape', () => {
+  it('decodeHex now populates the contractOutputsUncertain field (default false)', () => {
+    const txAHex =
+      '02000000000102c0b16477f5a5ab2d2b1ed826138bf6d1d91338428880df1b35499a11800f1a600100000000fdffffff22de02b77e503167665374f9161999ced057d093e453753372901f61a3f0b8c60200000000fdffffff043075000000000000225120a7f90b8256f58c1074fe085d37b73dff3040774babc216dae106e281e020638b22020000000000002251207ab57455a9be2f87f4d3dfc3ddf2ac2a3ebc0163159f36130f7ceb9e527fa2c34cbc0000000000002251207ab57455a9be2f87f4d3dfc3ddf2ac2a3ebc0163159f36130f7ceb9e527fa2c30000000000000000136a5d101600ff7f818cec8ad0abc0a8a081d2150140300f852484bcd16e2d5c2850f8c3bc1bd861a033971994f621fb589deb3edf8225dfbbdb969abb738b4ba2e1c119c7c3f860d77095b150b058a89170b2d532ad01408e1f00dd1c42ee3c073f256395d5b74d7c8366a52d29b72832a1ebec3bda4048f3a86f41625ec8736cf97051796b20961e05e11291aa65737cbf0ddb243f450f00000000';
+    const result = decodeHex(txAHex, new Set([USER_ADDR]));
+    expect(result).not.toBeNull();
+    expect(result!.contractOutputsUncertain).toBe(false);
+    // alkaneDeltas is initialized empty; the hook overlays predictions.
+    expect(result!.alkaneDeltas).toEqual([]);
   });
 });
 

@@ -866,6 +866,29 @@ export class WebProvider {
      * have confirmed via `pendingTxStoreEvict`.
      */
     pendingTxStoreList(): Promise<any>;
+    /**
+     * Predict the user's balance delta from a candidate tx hex.
+     *
+     * Phase 3-lite — handles edict-driven flows (alkane-send) deterministically.
+     * Cellpack-bearing protostones (swaps, addLiquidity) flag
+     * `contract_outputs_uncertain` and only return the input-side
+     * loss; the gain side requires alkane-VM execution which is
+     * deferred to Phase 3-full.
+     *
+     * Args (all JS-friendly):
+     *   tx_hex: raw signed tx hex
+     *   prevout_lookups: array of {txid, vout, address, value_sats,
+     *     alkane_balances:[{block, tx, amount}]}. Caller pulls these
+     *     from confirmed UTXOs + protorunesbyoutpoint.
+     *   output_addresses: array of network-decoded addresses per
+     *     output index (null for OP_RETURN). Caller pre-decodes
+     *     since this depends on the wallet's network.
+     *   our_addresses: addresses the user owns.
+     *
+     * Returns a JS object: {btc:{delta_sats}, alkanes:[{alkane_id,
+     * delta}], contract_outputs_uncertain}.
+     */
+    predictBalanceDelta(tx_hex: string, prevout_lookups_json: string, output_addresses_json: string, our_addresses_json: string): any;
     protorunesAnalyzeTx(txid: string): Promise<any>;
     protorunesDecodeTx(txid: string): Promise<any>;
     runestoneAnalyzeTx(txid: string): Promise<any>;

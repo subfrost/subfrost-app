@@ -21,17 +21,19 @@
  *     render a "pending" badge next to balance lines that include
  *     in-flight deltas. Honest > implied — see /loop conversation.
  *
- * What it does NOT do:
- *   - It does not predict alkane balance changes from contract
- *     calls (swaps, addLiquidity). Those produce alkane outputs
- *     whose values are determined by the contract — knowing them
- *     requires running the alkane VM with the pre-tx state. That's
- *     Phase 3 (vendor `alkanes/inspector` + qubitcoin overlay).
- *     For Phase 1 we only handle plain transfers (alkane-send,
- *     BTC-send) where the output values are visible in the tx
- *     itself.
+ * Phase 3-lite scope (what this hook predicts):
+ *   - Edict-driven alkane deltas (alkane-send / transfer) are
+ *     predicted deterministically by calling the SDK's
+ *     `predictBalanceDelta` bridge with prevout context fetched
+ *     from the Esplora proxy.
+ *   - Tx with cellpack-bearing protostones (swaps, addLiquidity)
+ *     report input-side losses and set
+ *     `contractOutputsUncertain=true`; the UI shows "+? TOKEN
+ *     pending" instead of a concrete number for the receive side.
+ *   - Phase 3-full (deferred): fork state + run the alkane VM to
+ *     predict exact swap output amounts.
  *
- *   - It does not replace the confirmed-balance source of truth.
+ *   - Does not replace the confirmed-balance source of truth.
  *     Optimistic state is layered on top, never instead of.
  */
 
@@ -40,7 +42,25 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useWallet } from '@/context/WalletContext';
+import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { pendingTxStore } from '@/lib/alkanes/pendingTxStore';
+
+// Phase 3-lite: alkane delta prediction.
+//
+// For each pending tx we call the SDK's `predictBalanceDelta` JS
+// bridge. It needs:
+//   - tx hex (already in our store)
+//   - prevout context (address + value per input) — fetched from the
+//     Esplora proxy on demand and cached by react-query
+//   - per-output decoded addresses (we already compute these here for
+//     BTC delta)
+//   - our addresses (taproot + segwit)
+//
+// The bridge reconstructs protostones from the tx OP_RETURN inside
+// the WASM. For protostones with edicts only, we get accurate alkane
+// deltas. For cellpack-bearing protostones (swaps, addLiquidity) it
+// reports `contract_outputs_uncertain=true` and we surface that with
+// a "+? TOKEN pending" affordance instead of a concrete number.
 
 // ---------------------------------------------------------------------------
 // Types
@@ -58,6 +78,13 @@ export interface PendingTxSummary {
   btcDelta: bigint;
   /** Per-alkane deltas. Empty for pure-BTC sends. */
   alkaneDeltas: AlkaneDelta[];
+  /**
+   * True if the tx has a cellpack-bearing protostone (swap, addLiquidity,
+   * etc.). Phase 3-lite reports input-side losses but skips output-side
+   * accounting since the contract decides those. UI surfaces this as
+   * "+? TOKEN pending" instead of a hard number.
+   */
+  contractOutputsUncertain: boolean;
   /** Raw tx hex — kept so callers can deep-dive (debug UI, "view raw" button). */
   hex: string;
 }
@@ -69,6 +96,11 @@ interface UsePendingTxsResult {
   btcDelta: bigint;
   /** Aggregate alkane deltas across all pending txs (merged by alkaneId). */
   alkaneDeltas: AlkaneDelta[];
+  /**
+   * True if any pending tx flagged contract_outputs_uncertain. UI uses
+   * this to switch from "+1000 DIESEL" to "+? DIESEL" labels.
+   */
+  contractOutputsUncertain: boolean;
   /** True when the indexedDB query is still in flight. */
   isLoading: boolean;
   /** Force-refresh — useful after a manual broadcast. */
@@ -140,7 +172,8 @@ export function computeBtcDelta(
  *   The `isOverlayed` flag drives the "pending" badge.
  */
 export function usePendingTxs(): UsePendingTxsResult {
-  const { account } = useWallet();
+  const { account, network } = useWallet();
+  const { provider } = useAlkanesSDK();
   const queryClient = useQueryClient();
 
   const ourAddresses = useMemo(() => {
@@ -167,13 +200,53 @@ export function usePendingTxs(): UsePendingTxsResult {
     refetchOnWindowFocus: false,
   });
 
-  // Decode + summarize each pending tx.
-  const summaries = useMemo<PendingTxSummary[]>(() => {
+  // BTC-side summary (output-only — see decodeHex docs).
+  const baseSummaries = useMemo<PendingTxSummary[]>(() => {
     if (!data) return [];
     return data
       .map((hex) => decodeHex(hex, ourAddresses))
       .filter((s): s is PendingTxSummary => s !== null);
   }, [data, ourAddresses]);
+
+  // Phase 3-lite alkane prediction. Calls the SDK's
+  // `predictBalanceDelta` JS bridge for each pending tx. Cached by
+  // (txid, ourAddresses) so we don't re-fetch prevouts on every render.
+  const ourAddressList = useMemo(() => [...ourAddresses].sort(), [ourAddresses]);
+  const { data: predictions } = useQuery<Map<string, PredictResult>>({
+    queryKey: ['pendingTxsPredict', baseSummaries.map((s) => s.txid).sort(), ourAddressList, network],
+    enabled:
+      typeof window !== 'undefined' &&
+      provider != null &&
+      baseSummaries.length > 0 &&
+      ourAddressList.length > 0,
+    queryFn: async () => {
+      const out = new Map<string, PredictResult>();
+      for (const s of baseSummaries) {
+        try {
+          const result = await predictForTx(s.hex, ourAddressList, network ?? 'mainnet', provider);
+          if (result) out.set(s.txid, result);
+        } catch (e) {
+          console.warn('[usePendingTxs] predict failed for', s.txid, e);
+        }
+      }
+      return out;
+    },
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+  });
+
+  // Merge the BTC-side summary with the alkane prediction.
+  const summaries = useMemo<PendingTxSummary[]>(() => {
+    return baseSummaries.map((s) => {
+      const pred = predictions?.get(s.txid);
+      if (!pred) return s;
+      return {
+        ...s,
+        alkaneDeltas: pred.alkanes,
+        contractOutputsUncertain: pred.uncertain,
+      };
+    });
+  }, [baseSummaries, predictions]);
 
   // Aggregates.
   const btcDelta = useMemo(
@@ -195,19 +268,143 @@ export function usePendingTxs(): UsePendingTxsResult {
     });
   }, [summaries]);
 
+  const contractOutputsUncertain = useMemo(
+    () => summaries.some((s) => s.contractOutputsUncertain),
+    [summaries],
+  );
+
   // Re-export refetch so callers can force-invalidate after manual
   // broadcasts. The HeightPoller already invalidates on tip change;
   // explicit refetch is for the broadcast path.
   const stableRefetch = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ['pendingTxs'] });
+    queryClient.invalidateQueries({ queryKey: ['pendingTxsPredict'] });
   }, [queryClient]);
 
   return {
     pendingTxs: summaries,
     btcDelta,
     alkaneDeltas,
+    contractOutputsUncertain,
     isLoading,
     refetch: stableRefetch,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Predict bridge — SDK call + prevout fetch helpers.
+// ---------------------------------------------------------------------------
+
+interface PredictResult {
+  alkanes: AlkaneDelta[];
+  uncertain: boolean;
+  btcDeltaFromPredict: bigint;
+}
+
+interface ProviderLike {
+  predictBalanceDelta(
+    txHex: string,
+    prevoutLookupsJson: string,
+    outputAddressesJson: string,
+    ourAddressesJson: string,
+  ): Promise<unknown>;
+}
+
+async function predictForTx(
+  hex: string,
+  ourAddresses: string[],
+  network: string,
+  provider: unknown,
+): Promise<PredictResult | null> {
+  if (!provider || typeof (provider as ProviderLike).predictBalanceDelta !== 'function') {
+    return null;
+  }
+
+  let tx: bitcoin.Transaction;
+  try {
+    tx = bitcoin.Transaction.fromHex(hex);
+  } catch {
+    return null;
+  }
+
+  // Resolve each input's prevout (txid:vout → address+value) via the
+  // esplora proxy. We only care about the inputs that pay one of OUR
+  // addresses — those are the ones that contribute to the BTC delta
+  // and carry alkanes we owned. For inputs we don't own, we still
+  // need to NOT subtract them from our balance, so a missing entry
+  // is the safe default (predict treats missing prevout as foreign).
+  const prevoutLookups: PrevoutLookup[] = [];
+  await Promise.all(
+    tx.ins.map(async (input) => {
+      const prevTxid = Buffer.from(input.hash).reverse().toString('hex');
+      try {
+        const res = await fetch(
+          `/api/esplora/tx/${prevTxid}?network=${encodeURIComponent(network)}`,
+        );
+        if (!res.ok) return;
+        const json = await res.json();
+        const prevout = json?.vout?.[input.index];
+        if (!prevout?.scriptpubkey_address) return;
+        prevoutLookups.push({
+          txid: prevTxid,
+          vout: input.index,
+          address: prevout.scriptpubkey_address,
+          value_sats: prevout.value,
+          alkane_balances: [],
+        });
+      } catch {
+        /* skip — predict treats as foreign */
+      }
+    }),
+  );
+
+  const outputAddresses: (string | null)[] = tx.outs.map((o) => scriptToAddress(o.script));
+
+  const raw = await (provider as ProviderLike).predictBalanceDelta(
+    hex,
+    JSON.stringify(prevoutLookups),
+    JSON.stringify(outputAddresses),
+    JSON.stringify(ourAddresses),
+  );
+
+  const parsed = parsePredictResult(raw);
+  return parsed;
+}
+
+interface PrevoutLookup {
+  txid: string;
+  vout: number;
+  address: string;
+  value_sats: number;
+  alkane_balances: { block: number; tx: number; amount: string }[];
+}
+
+/**
+ * Parse the raw JS object the WASM bridge returns. Shape:
+ *   {btc:{delta_sats:string|number},
+ *    alkanes:[{alkane_id:{block,tx}, delta:string}],
+ *    contract_outputs_uncertain:bool}
+ *
+ * Numbers may arrive as strings (i128 via serde_wasm_bindgen). We
+ * normalize to bigint here.
+ */
+export function parsePredictResult(raw: unknown): PredictResult {
+  const r = raw as {
+    btc?: { delta_sats?: string | number };
+    alkanes?: { alkane_id?: { block?: string | number; tx?: string | number }; delta?: string | number }[];
+    contract_outputs_uncertain?: boolean;
+  };
+  const alkanes: AlkaneDelta[] = (r?.alkanes ?? []).map((a) => ({
+    alkaneId: {
+      block: String(a.alkane_id?.block ?? '0'),
+      tx: String(a.alkane_id?.tx ?? '0'),
+    },
+    delta: BigInt(a.delta ?? 0),
+  }));
+  return {
+    alkanes,
+    uncertain: !!r?.contract_outputs_uncertain,
+    btcDeltaFromPredict: BigInt(r?.btc?.delta_sats ?? 0),
   };
 }
 
@@ -315,6 +512,7 @@ export function decodeHex(txHex: string, ourAddresses: Set<string>): PendingTxSu
     txid: tx.getId(),
     btcDelta: outputDelta,
     alkaneDeltas: [],
+    contractOutputsUncertain: false,
     hex: txHex,
   };
   return summary;
