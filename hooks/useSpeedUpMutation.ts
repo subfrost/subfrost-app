@@ -118,8 +118,7 @@ interface BridgeProvider {
     network: string,
   ): Promise<unknown>;
   pendingTxStoreList?(): Promise<unknown>;
-  walletSignTransactionTaproot?(unsignedHex: string): Promise<string>;
-  signTransaction?(unsignedHex: string): Promise<string>;
+  walletSignPsbtBase64?(psbtBase64: string): Promise<string>;
   broadcastTransaction(txHex: string): Promise<string>;
 }
 
@@ -317,28 +316,31 @@ async function runBundleRbf(args: BundleRbfArgs): Promise<SpeedUpResult> {
   }
   const childPrevoutsForSigning = [...childChainedPrevouts, ...childExtra];
 
+  const xOnly =
+    account?.taproot?.pubKeyXOnly ??
+    (() => {
+      const pk = account?.taproot?.pubkey;
+      if (!pk) return undefined;
+      return pk.length === 66 ? pk.slice(2) : pk;
+    })();
+
   const signOne = async (
     unsignedHex: string,
     prevoutsForSigning: PrevoutInfo[],
   ): Promise<string> => {
     if (walletType === 'keystore') {
-      let signed: string | undefined;
-      if (typeof bridge.walletSignTransactionTaproot === 'function') {
-        signed = await bridge.walletSignTransactionTaproot(unsignedHex);
-      } else if (typeof bridge.signTransaction === 'function') {
-        signed = await bridge.signTransaction(unsignedHex);
+      if (typeof bridge.walletSignPsbtBase64 !== 'function') {
+        throw new Error('keystore: provider missing walletSignPsbtBase64');
       }
-      if (!signed) throw new Error('keystore: no sign method on provider');
-      return signed;
+      const psbt = buildPsbtForRbf({
+        unsignedHex,
+        prevouts: prevoutsForSigning,
+        taprootXOnlyHex: xOnly,
+        network: bitcoinNetworkFor(network),
+      });
+      return await bridge.walletSignPsbtBase64(psbt.toBase64());
     }
     if (walletType === 'browser') {
-      const xOnly =
-        account?.taproot?.pubKeyXOnly ??
-        (() => {
-          const pk = account?.taproot?.pubkey;
-          if (!pk) return undefined;
-          return pk.length === 66 ? pk.slice(2) : pk;
-        })();
       if (!xOnly) throw new Error('browser wallet missing taproot pubkey');
       const psbt = buildPsbtForRbf({
         unsignedHex,
@@ -494,17 +496,29 @@ export function useSpeedUpMutation() {
       let broadcastHex: string | undefined;
 
       if (walletType === 'keystore') {
-        // Headless sign via the WASM provider — mnemonic loaded at unlock.
-        if (typeof bridge.walletSignTransactionTaproot === 'function') {
-          broadcastHex = await bridge.walletSignTransactionTaproot(plan.tx_hex);
-        } else if (typeof bridge.signTransaction === 'function') {
-          broadcastHex = await bridge.signTransaction(plan.tx_hex);
-        }
-        if (!broadcastHex) {
+        // Headless sign via the WASM provider's walletSignPsbtBase64 —
+        // the keystore mnemonic is loaded at unlock, so this method
+        // signs + finalizes + extracts the tx in one call. Returns
+        // ready-to-broadcast hex.
+        if (typeof bridge.walletSignPsbtBase64 !== 'function') {
           throw new Error(
-            'Provider missing wallet sign method (walletSignTransactionTaproot / signTransaction)',
+            'Provider missing walletSignPsbtBase64 — bump @alkanes/ts-sdk to ≥0.1.5-138a9cf',
           );
         }
+        const xOnly =
+          account?.taproot?.pubKeyXOnly ??
+          (() => {
+            const pk = account?.taproot?.pubkey;
+            if (!pk) return undefined;
+            return pk.length === 66 ? pk.slice(2) : pk;
+          })();
+        const psbt = buildPsbtForRbf({
+          unsignedHex: plan.tx_hex,
+          prevouts,
+          taprootXOnlyHex: xOnly,
+          network: bitcoinNetworkFor(network),
+        });
+        broadcastHex = await bridge.walletSignPsbtBase64(psbt.toBase64());
       } else if (walletType === 'browser') {
         // Browser wallet: build PSBT, hand to signTaprootPsbt, finalize.
         // Prefer the already-x-only field if WalletContext exposes it

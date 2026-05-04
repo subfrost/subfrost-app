@@ -190,6 +190,7 @@ export const webprovider_walletGetAddresses: (a: number, b: number, c: number, d
 export const webprovider_walletSend: (a: number, b: number, c: number) => any;
 export const webprovider_walletGetUtxos: (a: number, b: number, c: number) => any;
 export const webprovider_walletGetHistory: (a: number, b: number, c: number) => any;
+export const webprovider_walletSignPsbtBase64: (a: number, b: number, c: number) => any;
 export const webprovider_walletCreatePsbt: (a: number, b: number, c: number) => any;
 export const webprovider_walletExport: (a: number) => any;
 export const webprovider_walletBackup: (a: number) => any;

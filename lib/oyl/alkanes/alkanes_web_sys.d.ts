@@ -1012,6 +1012,14 @@ export class WebProvider {
      * Wallet must be loaded first via walletLoadMnemonic
      */
     walletSend(params_json: string): Promise<any>;
+    /**
+     * Sign a PSBT (base64-encoded) using the loaded keystore mnemonic
+     * and return the signed/finalized tx hex. Pairs with the JS-side
+     * PSBT construction in `useSpeedUpMutation` (RBF rebuild → PSBT
+     * → sign → broadcast). The keystore must be unlocked (via
+     * `walletLoadMnemonic`) before calling.
+     */
+    walletSignPsbtBase64(psbt_base64: string): Promise<any>;
 }
 
 export function analyze_psbt(psbt_base64: string, network_str: string): string;
