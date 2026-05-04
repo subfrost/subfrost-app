@@ -4,25 +4,28 @@
  * Pipeline:
  *   1. Caller passes the original tx hex (from pendingTxStore) and a
  *      new fee rate.
- *   2. Hook fetches each input's prevout value from the Esplora proxy
- *      so the WASM bridge can compute the current fee rate.
+ *   2. Hook fetches each input's prevout (value + scriptpubkey) from
+ *      the Esplora proxy. The bridge needs values to compute the
+ *      original fee rate; the browser-wallet sign path additionally
+ *      needs scriptpubkey for PSBT witnessUtxo.
  *   3. Calls `provider.rebuildTxWithFeeRate(...)` — returns the new
  *      UNSIGNED tx hex with the change output reduced.
- *   4. Re-signs via the same WASM provider (keystore mnemonic loaded)
- *      using `provider.signTransaction(unsignedHex)` if available, or
- *      via the SDK's broadcast flow.
+ *   4. Re-signs:
+ *      - keystore: uses the WASM provider's sign method headlessly
+ *        (mnemonic is already loaded).
+ *      - browser wallet: builds a PSBT (witnessUtxo + tapInternalKey
+ *        per input), hands to `signTaprootPsbt` from WalletContext,
+ *        finalizes, extracts the broadcast hex.
  *   5. Broadcasts. The new tx replaces the original in the mempool.
- *   6. Pushes the new tx hex to `pendingTxStore`. Optionally evicts
- *      the OLD txid (the indexer will do this on next block-tip
- *      anyway, so it's a soft cleanup).
+ *   6. Pushes the new tx hex to `pendingTxStore` so the predict
+ *      overlay picks it up immediately.
  *
- * Limitations (Phase 1 — single-tx only):
- *   - Split-tx bundles are NOT handled. The hook returns an explicit
- *     error if it detects the input outpoint matches another pending
- *     tx (chain). UI surfaces this as "advanced bump required".
- *   - Browser wallets need to re-sign via popup; this hook routes
- *     through the keystore signing path. Browser flow can extend it
- *     by passing through `signTaprootPsbt`.
+ * Limitations (Phase 2 — single-tx only):
+ *   - Split-tx bundles are NOT handled. The bridge call would
+ *     succeed (rebuilding the leaf tx in isolation), but the parent
+ *     split tx would still be unaffected, which is fine when only
+ *     the leaf is in our pending store. Fully bundled RBF (rebuild
+ *     parent + chain leaves with new outpoints) lands in Phase 3.
  */
 
 'use client';
@@ -50,16 +53,24 @@ interface SpeedUpResult {
   feeIncreaseSats: number;
 }
 
+interface PrevoutInfo {
+  txid: string;
+  vout: number;
+  value_sats: number;
+  scriptpubkey: string; // hex
+}
+
 /**
- * Build the prevout-values JSON the bridge needs by fetching each
- * input's parent tx via the Esplora proxy and indexing into the
- * relevant vout.
+ * Fetch each input's prevout (value + scriptpubkey) via the Esplora
+ * proxy. Both fields are needed: the cargo bridge takes value to
+ * compute the original fee rate; the browser-wallet PSBT builder
+ * also needs scriptpubkey for witnessUtxo.
  */
-async function fetchPrevoutValues(
+async function fetchPrevoutInfo(
   tx: bitcoin.Transaction,
   network: string,
-): Promise<{ txid: string; vout: number; value_sats: number }[]> {
-  const out: { txid: string; vout: number; value_sats: number }[] = [];
+): Promise<PrevoutInfo[]> {
+  const out: PrevoutInfo[] = [];
   await Promise.all(
     tx.ins.map(async (input) => {
       const prevTxid = Buffer.from(input.hash).reverse().toString('hex');
@@ -70,8 +81,16 @@ async function fetchPrevoutValues(
         if (!res.ok) return;
         const json = await res.json();
         const prevout = json?.vout?.[input.index];
-        if (typeof prevout?.value === 'number') {
-          out.push({ txid: prevTxid, vout: input.index, value_sats: prevout.value });
+        if (
+          typeof prevout?.value === 'number' &&
+          typeof prevout?.scriptpubkey === 'string'
+        ) {
+          out.push({
+            txid: prevTxid,
+            vout: input.index,
+            value_sats: prevout.value,
+            scriptpubkey: prevout.scriptpubkey,
+          });
         }
       } catch {
         /* skip — bridge will reject with MissingPrevoutValue */
@@ -105,8 +124,70 @@ interface RebuildPayload {
   new_change_value: number;
 }
 
+/**
+ * Map the app's network string to bitcoinjs-lib's Network constant.
+ */
+function bitcoinNetworkFor(network: string | undefined): bitcoin.Network {
+  if (!network) return bitcoin.networks.bitcoin;
+  if (network.includes('regtest')) return bitcoin.networks.regtest;
+  if (network === 'signet' || network === 'testnet') return bitcoin.networks.testnet;
+  return bitcoin.networks.bitcoin;
+}
+
+/**
+ * Build a PSBT from an unsigned tx hex by re-attaching witnessUtxo
+ * data per input. For taproot inputs, also patches in `tapInternalKey`
+ * so browser wallets that scrutinize PSBTs (Xverse, OKX) can sign.
+ *
+ * Exported so the vitest mirror can pin the shape.
+ */
+export function buildPsbtForRbf(params: {
+  unsignedHex: string;
+  prevouts: PrevoutInfo[];
+  taprootXOnlyHex?: string;
+  network: bitcoin.Network;
+}): bitcoin.Psbt {
+  const { unsignedHex, prevouts, taprootXOnlyHex, network } = params;
+  const tx = bitcoin.Transaction.fromHex(unsignedHex);
+  const psbt = new bitcoin.Psbt({ network });
+  psbt.setVersion(tx.version);
+  psbt.setLocktime(tx.locktime);
+
+  for (const input of tx.ins) {
+    const txid = Buffer.from(input.hash).reverse().toString('hex');
+    const vout = input.index;
+    const prev = prevouts.find((p) => p.txid === txid && p.vout === vout);
+    if (!prev) {
+      throw new Error(`prevout missing for ${txid}:${vout}`);
+    }
+    const script = Buffer.from(prev.scriptpubkey, 'hex');
+    const inputData: Parameters<bitcoin.Psbt['addInput']>[0] = {
+      hash: input.hash,
+      index: input.index,
+      sequence: input.sequence,
+      witnessUtxo: { script, value: BigInt(prev.value_sats) },
+    };
+    // Detect P2TR (segwit v1): OP_1 + 32-byte program.
+    const isTaproot =
+      script.length === 34 && script[0] === 0x51 && script[1] === 0x20;
+    if (isTaproot && taprootXOnlyHex) {
+      inputData.tapInternalKey = Buffer.from(taprootXOnlyHex, 'hex');
+    }
+    psbt.addInput(inputData);
+  }
+
+  for (const output of tx.outs) {
+    psbt.addOutput({
+      script: output.script,
+      value: BigInt(output.value),
+    });
+  }
+
+  return psbt;
+}
+
 export function useSpeedUpMutation() {
-  const { account, network, walletType } = useWallet();
+  const { account, network, walletType, signTaprootPsbt } = useWallet();
   const { provider } = useAlkanesSDK();
 
   return useMutation<SpeedUpResult, Error, SpeedUpParams>({
@@ -118,14 +199,9 @@ export function useSpeedUpMutation() {
           'SDK does not support RBF — bump @alkanes/ts-sdk to ≥0.1.5-a3e5253',
         );
       }
-      if (walletType !== 'keystore') {
-        throw new Error(
-          'Speed-up via this hook only supports keystore wallets right now. Browser wallets must use the wallet-specific RBF flow.',
-        );
-      }
 
       const tx = bitcoin.Transaction.fromHex(txHex);
-      const prevouts = await fetchPrevoutValues(tx, network ?? 'mainnet');
+      const prevouts = await fetchPrevoutInfo(tx, network ?? 'mainnet');
       const ourAddresses = [account?.taproot?.address, account?.nativeSegwit?.address]
         .filter((a): a is string => !!a);
 
@@ -137,35 +213,79 @@ export function useSpeedUpMutation() {
         return 'mainnet';
       })();
 
+      const prevoutValuesPayload = prevouts.map(({ txid, vout, value_sats }) => ({
+        txid,
+        vout,
+        value_sats,
+      }));
+
       const raw = await (provider as unknown as BridgeProvider).rebuildTxWithFeeRate(
         txHex,
         newFeeRate,
-        JSON.stringify(prevouts),
+        JSON.stringify(prevoutValuesPayload),
         JSON.stringify(ourAddresses),
         networkArg,
       );
       const plan = raw as RebuildPayload;
 
-      // Re-sign via the keystore provider. The mnemonic is loaded
-      // when the user unlocked, so signTransaction works headlessly.
       const bridge = provider as unknown as BridgeProvider;
-      let signedHex: string | undefined;
-      if (typeof bridge.walletSignTransactionTaproot === 'function') {
-        signedHex = await bridge.walletSignTransactionTaproot(plan.tx_hex);
-      } else if (typeof bridge.signTransaction === 'function') {
-        signedHex = await bridge.signTransaction(plan.tx_hex);
-      }
-      if (!signedHex) {
-        throw new Error(
-          'Provider missing wallet sign method (walletSignTransactionTaproot / signTransaction)',
-        );
+      let broadcastHex: string | undefined;
+
+      if (walletType === 'keystore') {
+        // Headless sign via the WASM provider — mnemonic loaded at unlock.
+        if (typeof bridge.walletSignTransactionTaproot === 'function') {
+          broadcastHex = await bridge.walletSignTransactionTaproot(plan.tx_hex);
+        } else if (typeof bridge.signTransaction === 'function') {
+          broadcastHex = await bridge.signTransaction(plan.tx_hex);
+        }
+        if (!broadcastHex) {
+          throw new Error(
+            'Provider missing wallet sign method (walletSignTransactionTaproot / signTransaction)',
+          );
+        }
+      } else if (walletType === 'browser') {
+        // Browser wallet: build PSBT, hand to signTaprootPsbt, finalize.
+        // Prefer the already-x-only field if WalletContext exposes it
+        // (saves the slice and makes the call safe regardless of which
+        // wallet returned the public key).
+        const xOnly =
+          account?.taproot?.pubKeyXOnly ??
+          (() => {
+            const pk = account?.taproot?.pubkey;
+            if (!pk) return undefined;
+            return pk.length === 66 ? pk.slice(2) : pk;
+          })();
+        if (!xOnly) {
+          throw new Error('Browser wallet missing taproot public key — reconnect');
+        }
+        const psbt = buildPsbtForRbf({
+          unsignedHex: plan.tx_hex,
+          prevouts,
+          taprootXOnlyHex: xOnly,
+          network: bitcoinNetworkFor(network),
+        });
+        const signedPsbtBase64 = await signTaprootPsbt(psbt.toBase64());
+        const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtBase64, {
+          network: bitcoinNetworkFor(network),
+        });
+        // UniSat returns finalized; Xverse / OYL / OKX return un-finalized.
+        let txObj: bitcoin.Transaction;
+        try {
+          txObj = signedPsbt.extractTransaction();
+        } catch {
+          signedPsbt.finalizeAllInputs();
+          txObj = signedPsbt.extractTransaction();
+        }
+        broadcastHex = txObj.toHex();
+      } else {
+        throw new Error(`Speed-up not supported for walletType=${walletType ?? 'unknown'}`);
       }
 
-      const newTxid = await bridge.broadcastTransaction(signedHex);
+      const newTxid = await bridge.broadcastTransaction(broadcastHex);
 
       // Mirror to IDB so the predict overlay picks it up immediately.
       try {
-        await pendingTxStore.add(signedHex);
+        await pendingTxStore.add(broadcastHex);
       } catch {
         /* non-fatal */
       }

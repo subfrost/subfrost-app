@@ -137,3 +137,132 @@ describe('useSpeedUpMutation export', () => {
     expect(typeof mod.useSpeedUpMutation).toBe('function');
   });
 });
+
+// ---------------------------------------------------------------------------
+// buildPsbtForRbf — browser-wallet sign path. Verifies that the
+// unsigned tx hex from the bridge plus per-input prevout info round-
+// trips to a PSBT with witnessUtxo + tapInternalKey populated.
+// ---------------------------------------------------------------------------
+
+import * as bitcoin from 'bitcoinjs-lib';
+
+describe('buildPsbtForRbf', () => {
+  // Build a minimal 1-input / 1-output unsigned tx.
+  // Input: prevTxid (zeros), vout 0, sequence fdffffff, no witness.
+  // Output: 12345 sats to a P2TR address.
+  const taprootProgram = '5e08b59b69acdc8900eb220e92a7c86d07390f8ea4f952d4095e684798470b3e';
+  const unsignedHex = (() => {
+    const tx = new bitcoin.Transaction();
+    tx.version = 2;
+    tx.addInput(Buffer.alloc(32), 0, 0xfdffffff);
+    const script = Buffer.concat([
+      Buffer.from([0x51, 0x20]),
+      Buffer.from(taprootProgram, 'hex'),
+    ]);
+    tx.addOutput(script, BigInt(12345));
+    return tx.toHex();
+  })();
+
+  it('attaches witnessUtxo to each input from prevout map', async () => {
+    const { buildPsbtForRbf } = await import('@/hooks/useSpeedUpMutation');
+    const psbt = buildPsbtForRbf({
+      unsignedHex,
+      prevouts: [
+        {
+          txid: '00'.repeat(32),
+          vout: 0,
+          value_sats: 50_000,
+          scriptpubkey: '5120' + taprootProgram,
+        },
+      ],
+      taprootXOnlyHex: taprootProgram,
+      network: bitcoin.networks.bitcoin,
+    });
+    expect(psbt.inputCount).toBe(1);
+    const witnessUtxo = (psbt.data.inputs[0] as { witnessUtxo?: { value: bigint } }).witnessUtxo;
+    expect(witnessUtxo?.value).toBe(BigInt(50_000));
+  });
+
+  it('patches tapInternalKey when input is P2TR', async () => {
+    const { buildPsbtForRbf } = await import('@/hooks/useSpeedUpMutation');
+    const psbt = buildPsbtForRbf({
+      unsignedHex,
+      prevouts: [
+        {
+          txid: '00'.repeat(32),
+          vout: 0,
+          value_sats: 50_000,
+          scriptpubkey: '5120' + taprootProgram,
+        },
+      ],
+      taprootXOnlyHex: taprootProgram,
+      network: bitcoin.networks.bitcoin,
+    });
+    const internalKey = (psbt.data.inputs[0] as { tapInternalKey?: Buffer }).tapInternalKey;
+    expect(internalKey).toBeDefined();
+    expect(internalKey?.toString('hex')).toBe(taprootProgram);
+  });
+
+  it('omits tapInternalKey for non-P2TR inputs', async () => {
+    const { buildPsbtForRbf } = await import('@/hooks/useSpeedUpMutation');
+    // Re-build with a P2WPKH input (00 + 20-byte hash). 22 bytes total.
+    const wpkhScript = Buffer.concat([
+      Buffer.from([0x00, 0x14]),
+      Buffer.from('aa'.repeat(20), 'hex'),
+    ]);
+    // Synthesise an unsigned tx whose first output is the WPKH script —
+    // we just need a parseable tx; the PSBT logic only inspects the
+    // prevouts hex you supply, so the in-tx output script isn't read.
+    const tx = new bitcoin.Transaction();
+    tx.version = 2;
+    tx.addInput(Buffer.alloc(32), 0, 0xfdffffff);
+    tx.addOutput(wpkhScript, BigInt(12345));
+    const psbt = buildPsbtForRbf({
+      unsignedHex: tx.toHex(),
+      prevouts: [
+        {
+          txid: '00'.repeat(32),
+          vout: 0,
+          value_sats: 50_000,
+          scriptpubkey: '0014' + 'aa'.repeat(20),
+        },
+      ],
+      taprootXOnlyHex: taprootProgram,
+      network: bitcoin.networks.bitcoin,
+    });
+    const internalKey = (psbt.data.inputs[0] as { tapInternalKey?: Buffer }).tapInternalKey;
+    expect(internalKey).toBeUndefined();
+  });
+
+  it('throws if prevout is missing for an input', async () => {
+    const { buildPsbtForRbf } = await import('@/hooks/useSpeedUpMutation');
+    expect(() =>
+      buildPsbtForRbf({
+        unsignedHex,
+        prevouts: [],
+        taprootXOnlyHex: taprootProgram,
+        network: bitcoin.networks.bitcoin,
+      }),
+    ).toThrow(/prevout missing/);
+  });
+
+  it('preserves output value and script verbatim', async () => {
+    const { buildPsbtForRbf } = await import('@/hooks/useSpeedUpMutation');
+    const psbt = buildPsbtForRbf({
+      unsignedHex,
+      prevouts: [
+        {
+          txid: '00'.repeat(32),
+          vout: 0,
+          value_sats: 50_000,
+          scriptpubkey: '5120' + taprootProgram,
+        },
+      ],
+      taprootXOnlyHex: taprootProgram,
+      network: bitcoin.networks.bitcoin,
+    });
+    const out = psbt.txOutputs[0];
+    expect(out.value).toBe(BigInt(12345));
+    expect(Buffer.from(out.script).toString('hex')).toBe('5120' + taprootProgram);
+  });
+});
