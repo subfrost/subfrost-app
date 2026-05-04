@@ -844,6 +844,28 @@ export class WebProvider {
     ordParents(inscription_id: string, page?: number | null): Promise<any>;
     ordRune(rune: string): Promise<any>;
     ordTxInfo(txid: string): Promise<any>;
+    /**
+     * Evict the given txids from the pending-tx store. Wallet UIs
+     * call this on every block-tip change with the set of txids
+     * the indexer has now seen confirmed.
+     */
+    pendingTxStoreEvict(txids: string[]): Promise<any>;
+    /**
+     * List all pending (broadcast-but-unconfirmed) transactions in
+     * the SDK's session-scoped store. Each entry is the raw signed
+     * hex (same format as `sendrawtransaction` accepts).
+     *
+     * JS-side wallet UIs use this to overlay optimistic mempool
+     * state on top of the confirmed UTXO set — e.g. the SendModal
+     * pre-flight check that allows back-to-back sends without
+     * waiting for the indexer.
+     *
+     * The store is auto-populated by `broadcast_transaction` /
+     * `send_raw_transactions` on success — see those impls for
+     * architectural rationale. Callers should evict txids that
+     * have confirmed via `pendingTxStoreEvict`.
+     */
+    pendingTxStoreList(): Promise<any>;
     protorunesAnalyzeTx(txid: string): Promise<any>;
     protorunesDecodeTx(txid: string): Promise<any>;
     runestoneAnalyzeTx(txid: string): Promise<any>;

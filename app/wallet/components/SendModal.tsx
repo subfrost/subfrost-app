@@ -296,22 +296,34 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
     return raw;
   };
 
-  // Track txids the user broadcast in this session via the IndexedDB
-  // PendingTxStore. Unconfirmed UTXOs whose txid is in this set are
-  // treated as available for the next send — the SDK's selector will
-  // accept them via its in-memory pending store, but the wallet UI's
-  // pre-flight check otherwise rejects them on `confirmed: false`.
-  // Without this overlay, "send back-to-back" UX is broken: tx 1's
-  // change UTXO is mempool-only until ~10min confirmation, and the
+  // Track txids the user broadcast in this session via the SDK's
+  // PendingTxStore (auto-populated by broadcast_transaction inside
+  // alkanes-web-sys — single source of truth). Unconfirmed UTXOs
+  // whose txid is in this set are treated as available for the next
+  // send — the SDK's selector also accepts them, this overlay just
+  // mirrors that decision into the wallet UI's pre-flight check.
+  //
+  // Without this, "send back-to-back" UX is broken: tx 1's change
+  // UTXO is mempool-only until ~10min confirmation, and the
   // confirmed-alkane-carriers don't have enough sats for tx 2.
   const [ourPendingTxids, setOurPendingTxids] = useState<Set<string>>(new Set());
   useEffect(() => {
     if (!isOpen || typeof window === 'undefined') return;
+    if (!provider) return;
     let cancelled = false;
     (async () => {
       try {
-        const { pendingTxStore } = await import('@/lib/alkanes/pendingTxStore');
-        const hexes = await pendingTxStore.list();
+        // Try SDK-side list first (auto-populated). Falls back to
+        // IndexedDB store if the SDK method isn't available (older
+        // SDK build).
+        let hexes: string[] = [];
+        const sdkList = (provider as any).pendingTxStoreList;
+        if (typeof sdkList === 'function') {
+          hexes = (await sdkList.call(provider)) || [];
+        } else {
+          const { pendingTxStore } = await import('@/lib/alkanes/pendingTxStore');
+          hexes = await pendingTxStore.list();
+        }
         const { Transaction } = await import('bitcoinjs-lib');
         const ids = new Set(hexes.map((h) => Transaction.fromHex(h).getId()));
         if (!cancelled) setOurPendingTxids(ids);
@@ -320,7 +332,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
       }
     })();
     return () => { cancelled = true; };
-  }, [isOpen]);
+  }, [isOpen, provider]);
 
   // Fetch UTXOs via esplora when modal opens.
   const [esploraUtxos, setEsploraUtxos] = useState<any[]>([]);
