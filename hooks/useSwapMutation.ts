@@ -386,7 +386,23 @@ export function useSwapMutation() {
         // from txContext.walletType. Browser → 'preserve' + UniSat-clean-utxos
         // (when capability available); keystore → 'burn'. See lib/alkanes/execute.ts.
         const isKeystoreWallet = walletType === 'keystore';
-        const result = await provider.alkanesExecuteTyped({
+
+        // Indexer-sync transient retry (2026-05-04).
+        //
+        // alkanesExecuteTyped (via WASM `webprovider_waitForIndexer`) gates
+        // broadcast on `metashrew_height === bitcoind_blockcount`. On mainnet
+        // the gateway is sometimes a block apart for ~10-30s. The SDK throws
+        // "Indexer sync timed out: metashrew at N, bitcoind at N+1 after 30s"
+        // and the swap dies on "Building Transaction" forever (gabe's
+        // screenshot). The condition is transient — by the time the user
+        // retries manually, it's usually resolved.
+        //
+        // We retry up to 2 extra times with backoff. Each retry restarts
+        // alkanesExecuteTyped from scratch (re-derives PSBT inputs etc.),
+        // which is safe because nothing has been broadcast yet — the failure
+        // is upstream of broadcast. The user just sees "Building..." for a
+        // few extra seconds instead of a hard error.
+        const buildExecuteOpts = () => ({
           txContext,
           // Support overrides for atomic wrap+swap (SwapShell passes custom protostones/addresses)
           inputRequirements: (swapData as any).overrideInputRequirements || inputRequirements,
@@ -406,7 +422,30 @@ export function useSwapMutation() {
           // alkanesExecuteTyped's param type yet. Cast `as any` until the SDK
           // d.ts is regenerated; the runtime path is unchanged.
           splitTransactions: (swapData as any).splitTransactions === true,
-        } as any);
+        });
+
+        const isIndexerSyncError = (e: unknown): boolean => {
+          const msg = e instanceof Error ? e.message : String(e ?? '');
+          return /indexer sync timed out/i.test(msg);
+        };
+
+        const RETRY_BACKOFF_MS = [3_000, 8_000];
+        let result: any;
+        let attempt = 0;
+        while (true) {
+          try {
+            result = await provider.alkanesExecuteTyped(buildExecuteOpts() as any);
+            break;
+          } catch (err) {
+            if (!isIndexerSyncError(err) || attempt >= RETRY_BACKOFF_MS.length) {
+              throw err;
+            }
+            const delay = RETRY_BACKOFF_MS[attempt];
+            console.warn(`[swap] indexer sync timeout (attempt ${attempt + 1}/${RETRY_BACKOFF_MS.length}), retrying in ${delay}ms…`);
+            await new Promise((resolve) => setTimeout(resolve, delay));
+            attempt++;
+          }
+        }
 
 
 
