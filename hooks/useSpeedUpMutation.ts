@@ -108,6 +108,16 @@ interface BridgeProvider {
     ourAddressesJson: string,
     network: string,
   ): Promise<unknown>;
+  rebuildBundleWithFeeRate?(
+    parentTxHex: string,
+    childTxHex: string,
+    newFeeRateSatVb: number,
+    parentPrevoutValuesJson: string,
+    extraChildPrevoutValuesJson: string,
+    ourAddressesJson: string,
+    network: string,
+  ): Promise<unknown>;
+  pendingTxStoreList?(): Promise<unknown>;
   walletSignTransactionTaproot?(unsignedHex: string): Promise<string>;
   signTransaction?(unsignedHex: string): Promise<string>;
   broadcastTransaction(txHex: string): Promise<string>;
@@ -122,6 +132,40 @@ interface RebuildPayload {
   vsize: number;
   change_output_index: number;
   new_change_value: number;
+}
+
+interface BundleRebuildPayload {
+  parent_tx_hex: string;
+  child_tx_hex: string;
+  original_total_fee_sats: number;
+  new_total_fee_sats: number;
+  original_total_vsize: number;
+  new_total_vsize: number;
+  new_fee_rate: number;
+  parent_change_output_index: number;
+  child_change_output_index: number;
+}
+
+/**
+ * Detect whether `childTx` chains from any tx in `parentCandidates`.
+ * Returns the parent hex if found, else undefined.
+ *
+ * Exported for vitest. The hook uses this to decide between single-tx
+ * and bundle RBF — if a child's input prev_outpoint references another
+ * pending tx in our store, that's a split→main chain.
+ */
+export function findParentInPending(
+  childTx: bitcoin.Transaction,
+  parentCandidates: { txid: string; hex: string }[],
+): { hex: string; txid: string } | undefined {
+  const candidateTxids = new Set(parentCandidates.map((c) => c.txid));
+  for (const input of childTx.ins) {
+    const prevTxid = Buffer.from(input.hash).reverse().toString('hex');
+    if (candidateTxids.has(prevTxid)) {
+      return parentCandidates.find((c) => c.txid === prevTxid);
+    }
+  }
+  return undefined;
 }
 
 /**
@@ -186,6 +230,166 @@ export function buildPsbtForRbf(params: {
   return psbt;
 }
 
+// ---------------------------------------------------------------------------
+// Bundle RBF — runs the parent + child rebuild and re-signs both.
+// ---------------------------------------------------------------------------
+
+interface BundleRbfArgs {
+  parentHex: string;
+  childHex: string;
+  newFeeRate: number;
+  newFeeRateArg: number;
+  ourAddresses: string[];
+  networkArg: string;
+  network: string | undefined;
+  walletType: string | undefined;
+  account: ReturnType<typeof useWallet>['account'];
+  signTaprootPsbt: ReturnType<typeof useWallet>['signTaprootPsbt'];
+  bridge: BridgeProvider;
+}
+
+async function runBundleRbf(args: BundleRbfArgs): Promise<SpeedUpResult> {
+  const {
+    parentHex,
+    childHex,
+    newFeeRate,
+    networkArg,
+    network,
+    ourAddresses,
+    walletType,
+    account,
+    signTaprootPsbt,
+    bridge,
+  } = args;
+
+  // Fetch prevouts for parent + child external inputs separately.
+  const parentTx = bitcoin.Transaction.fromHex(parentHex);
+  const childTx = bitcoin.Transaction.fromHex(childHex);
+  const parentPrevouts = await fetchPrevoutInfo(parentTx, network ?? 'mainnet');
+  // child_extra: all child inputs whose prev_outpoint is NOT the parent.
+  const parentTxid = parentTx.getId();
+  const childAllPrevouts = await fetchPrevoutInfo(childTx, network ?? 'mainnet');
+  const childExtra = childAllPrevouts.filter((p) => p.txid !== parentTxid);
+
+  if (typeof bridge.rebuildBundleWithFeeRate !== 'function') {
+    throw new Error('SDK missing rebuildBundleWithFeeRate — bump @alkanes/ts-sdk');
+  }
+
+  const raw = await bridge.rebuildBundleWithFeeRate(
+    parentHex,
+    childHex,
+    newFeeRate,
+    JSON.stringify(
+      parentPrevouts.map(({ txid, vout, value_sats }) => ({ txid, vout, value_sats })),
+    ),
+    JSON.stringify(
+      childExtra.map(({ txid, vout, value_sats }) => ({ txid, vout, value_sats })),
+    ),
+    JSON.stringify(ourAddresses),
+    networkArg,
+  );
+  const plan = raw as BundleRebuildPayload;
+
+  // Re-sign both. Parent: use its own prevouts. Child: parent's
+  // (post-rebuild) outputs at the chained vout + child's external
+  // prevouts. We reconstruct the child's full prevout set by parsing
+  // the new parent and taking the outputs it now exposes.
+  const newParentTx = bitcoin.Transaction.fromHex(plan.parent_tx_hex);
+  const newParentTxid = newParentTx.getId();
+  const childChainedPrevouts: PrevoutInfo[] = [];
+  const tempChild = bitcoin.Transaction.fromHex(plan.child_tx_hex);
+  for (const input of tempChild.ins) {
+    const inTxid = Buffer.from(input.hash).reverse().toString('hex');
+    if (inTxid === newParentTxid) {
+      const out = newParentTx.outs[input.index];
+      if (!out) {
+        throw new Error(
+          `child references new parent ${inTxid}:${input.index} but output missing`,
+        );
+      }
+      childChainedPrevouts.push({
+        txid: inTxid,
+        vout: input.index,
+        value_sats: Number(out.value),
+        scriptpubkey: Buffer.from(out.script).toString('hex'),
+      });
+    }
+  }
+  const childPrevoutsForSigning = [...childChainedPrevouts, ...childExtra];
+
+  const signOne = async (
+    unsignedHex: string,
+    prevoutsForSigning: PrevoutInfo[],
+  ): Promise<string> => {
+    if (walletType === 'keystore') {
+      let signed: string | undefined;
+      if (typeof bridge.walletSignTransactionTaproot === 'function') {
+        signed = await bridge.walletSignTransactionTaproot(unsignedHex);
+      } else if (typeof bridge.signTransaction === 'function') {
+        signed = await bridge.signTransaction(unsignedHex);
+      }
+      if (!signed) throw new Error('keystore: no sign method on provider');
+      return signed;
+    }
+    if (walletType === 'browser') {
+      const xOnly =
+        account?.taproot?.pubKeyXOnly ??
+        (() => {
+          const pk = account?.taproot?.pubkey;
+          if (!pk) return undefined;
+          return pk.length === 66 ? pk.slice(2) : pk;
+        })();
+      if (!xOnly) throw new Error('browser wallet missing taproot pubkey');
+      const psbt = buildPsbtForRbf({
+        unsignedHex,
+        prevouts: prevoutsForSigning,
+        taprootXOnlyHex: xOnly,
+        network: bitcoinNetworkFor(network),
+      });
+      const signedPsbtBase64 = await signTaprootPsbt(psbt.toBase64());
+      const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtBase64, {
+        network: bitcoinNetworkFor(network),
+      });
+      try {
+        return signedPsbt.extractTransaction().toHex();
+      } catch {
+        signedPsbt.finalizeAllInputs();
+        return signedPsbt.extractTransaction().toHex();
+      }
+    }
+    throw new Error(`unsupported walletType=${walletType ?? 'unknown'}`);
+  };
+
+  const signedParentHex = await signOne(plan.parent_tx_hex, parentPrevouts);
+  const signedChildHex = await signOne(plan.child_tx_hex, childPrevoutsForSigning);
+
+  // Broadcast parent first (mempool will reject child if parent
+  // isn't there yet). Then child. The mempool-replacement is atomic
+  // from the user's perspective.
+  const newParentBroadcastTxid = await bridge.broadcastTransaction(signedParentHex);
+  const newChildBroadcastTxid = await bridge.broadcastTransaction(signedChildHex);
+
+  // Mirror BOTH new hexes into IDB so the predict overlay updates.
+  try {
+    await pendingTxStore.add(signedParentHex);
+    await pendingTxStore.add(signedChildHex);
+  } catch {
+    /* non-fatal */
+  }
+
+  return {
+    newTxid: newChildBroadcastTxid,
+    newFeeRate: plan.new_fee_rate,
+    newFeeSats: plan.new_total_fee_sats,
+    feeIncreaseSats: plan.new_total_fee_sats - plan.original_total_fee_sats,
+  };
+
+  // The parent txid is informational; surface via console for now.
+  // (Future UI: show "new parent txid + new child txid" in the modal.)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const _unused = newParentBroadcastTxid;
+}
+
 export function useSpeedUpMutation() {
   const { account, network, walletType, signTaprootPsbt } = useWallet();
   const { provider } = useAlkanesSDK();
@@ -219,7 +423,66 @@ export function useSpeedUpMutation() {
         value_sats,
       }));
 
-      const raw = await (provider as unknown as BridgeProvider).rebuildTxWithFeeRate(
+      const bridge = provider as unknown as BridgeProvider;
+
+      // -----------------------------------------------------------
+      // Bundle detection: if any of `txHex`'s inputs reference
+      // another pending tx in our store, that other tx is the
+      // PARENT (split) and `txHex` is the CHILD (main). We must
+      // rebuild both atomically — replacing only the child would
+      // leave the parent in mempool with a stale fee, and replacing
+      // only the parent orphans the child.
+      // -----------------------------------------------------------
+      const pendingHexes: string[] = [];
+      try {
+        const list = await pendingTxStore.list();
+        for (const h of list) if (h !== txHex) pendingHexes.push(h);
+      } catch {
+        /* non-fatal — bundle detection just won't fire */
+      }
+      // Also pull from the WASM in-memory store.
+      if (typeof bridge.pendingTxStoreList === 'function') {
+        try {
+          const wasmList = await bridge.pendingTxStoreList();
+          if (Array.isArray(wasmList)) {
+            for (const h of wasmList) {
+              if (typeof h === 'string' && h !== txHex && !pendingHexes.includes(h)) {
+                pendingHexes.push(h);
+              }
+            }
+          }
+        } catch {
+          /* non-fatal */
+        }
+      }
+      const parentCandidates = pendingHexes
+        .map((hex) => {
+          try {
+            return { hex, txid: bitcoin.Transaction.fromHex(hex).getId() };
+          } catch {
+            return undefined;
+          }
+        })
+        .filter((c): c is { hex: string; txid: string } => !!c);
+      const parentInPending = findParentInPending(tx, parentCandidates);
+
+      if (parentInPending && typeof bridge.rebuildBundleWithFeeRate === 'function') {
+        return runBundleRbf({
+          parentHex: parentInPending.hex,
+          childHex: txHex,
+          newFeeRate,
+          newFeeRateArg: newFeeRate,
+          ourAddresses,
+          networkArg,
+          network: network ?? undefined,
+          walletType: walletType ?? undefined,
+          account,
+          signTaprootPsbt,
+          bridge,
+        });
+      }
+
+      const raw = await bridge.rebuildTxWithFeeRate(
         txHex,
         newFeeRate,
         JSON.stringify(prevoutValuesPayload),
@@ -228,7 +491,6 @@ export function useSpeedUpMutation() {
       );
       const plan = raw as RebuildPayload;
 
-      const bridge = provider as unknown as BridgeProvider;
       let broadcastHex: string | undefined;
 
       if (walletType === 'keystore') {

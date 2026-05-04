@@ -246,6 +246,59 @@ describe('buildPsbtForRbf', () => {
     ).toThrow(/prevout missing/);
   });
 
+  it('findParentInPending returns the parent when child references it', async () => {
+    const { findParentInPending } = await import('@/hooks/useSpeedUpMutation');
+    // Build a minimal parent + child where child.input[0] points at parent.txid:0
+    const parent = (() => {
+      const tx = new bitcoin.Transaction();
+      tx.version = 2;
+      tx.addInput(Buffer.alloc(32), 0, 0xfdffffff);
+      tx.addOutput(
+        Buffer.concat([
+          Buffer.from([0x51, 0x20]),
+          Buffer.from(taprootProgram, 'hex'),
+        ]),
+        BigInt(546),
+      );
+      return tx;
+    })();
+    const parentTxid = parent.getId();
+    const parentHex = parent.toHex();
+
+    const child = new bitcoin.Transaction();
+    child.version = 2;
+    child.addInput(
+      Buffer.from(parentTxid, 'hex').reverse(),
+      0,
+      0xfdffffff,
+    );
+    child.addOutput(
+      Buffer.concat([
+        Buffer.from([0x51, 0x20]),
+        Buffer.from(taprootProgram, 'hex'),
+      ]),
+      BigInt(400),
+    );
+
+    const found = findParentInPending(child, [
+      { hex: parentHex, txid: parentTxid },
+      { hex: '00', txid: 'aa'.repeat(32) },
+    ]);
+    expect(found?.txid).toBe(parentTxid);
+    expect(found?.hex).toBe(parentHex);
+  });
+
+  it('findParentInPending returns undefined when no input matches', async () => {
+    const { findParentInPending } = await import('@/hooks/useSpeedUpMutation');
+    const tx = new bitcoin.Transaction();
+    tx.version = 2;
+    tx.addInput(Buffer.alloc(32), 0, 0xfdffffff);
+    const found = findParentInPending(tx, [
+      { hex: 'cafe', txid: 'aa'.repeat(32) },
+    ]);
+    expect(found).toBeUndefined();
+  });
+
   it('preserves output value and script verbatim', async () => {
     const { buildPsbtForRbf } = await import('@/hooks/useSpeedUpMutation');
     const psbt = buildPsbtForRbf({

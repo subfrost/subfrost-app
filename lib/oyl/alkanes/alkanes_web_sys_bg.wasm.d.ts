@@ -11,6 +11,7 @@ export const webprovider_getEnrichedBalances: (a: number, b: number, c: number, 
 export const webprovider_pendingTxStoreList: (a: number) => any;
 export const webprovider_predictBalanceDelta: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => [number, number, number];
 export const webprovider_rebuildTxWithFeeRate: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => [number, number, number];
+export const webprovider_rebuildBundleWithFeeRate: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number) => [number, number, number];
 export const webprovider_pendingTxStoreEvict: (a: number, b: number, c: number) => any;
 export const webprovider_getAddressTxs: (a: number, b: number, c: number) => any;
 export const webprovider_getTransactionHex: (a: number, b: number, c: number) => any;

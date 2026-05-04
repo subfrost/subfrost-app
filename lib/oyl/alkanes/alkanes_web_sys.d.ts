@@ -892,6 +892,32 @@ export class WebProvider {
     protorunesAnalyzeTx(txid: string): Promise<any>;
     protorunesDecodeTx(txid: string): Promise<any>;
     /**
+     * Rebuild a parent (split) + child (main) tx bundle with a higher
+     * fee rate. Walks the chain (child inputs that reference parent's
+     * txid), rebuilds parent first (reducing its change), recomputes
+     * parent's new txid, rewrites the child's parent-derived input
+     * outpoints to point to the new parent, then rebuilds the child
+     * with the new fee rate.
+     *
+     * Caller broadcasts NEW parent first, then NEW child. Returns
+     * both unsigned tx hexes for re-signing.
+     *
+     * Args:
+     *   parent_tx_hex / child_tx_hex: original signed hexes
+     *   new_fee_rate_sat_vb: target rate applied to BOTH txs
+     *   parent_prevout_values_json: prevout values for parent's inputs
+     *   extra_child_prevout_values_json: prevout values for child's
+     *     non-chain inputs (the parent-chain inputs are auto-discovered
+     *     from the rebuilt parent's outputs)
+     *   our_addresses_json / network: same as the single-tx variant
+     *
+     * Returns: {parent_tx_hex, child_tx_hex,
+     *   original_total_fee_sats, new_total_fee_sats,
+     *   original_total_vsize, new_total_vsize, new_fee_rate,
+     *   parent_change_output_index, child_change_output_index}
+     */
+    rebuildBundleWithFeeRate(parent_tx_hex: string, child_tx_hex: string, new_fee_rate_sat_vb: number, parent_prevout_values_json: string, extra_child_prevout_values_json: string, our_addresses_json: string, network: string): any;
+    /**
      * Rebuild a still-pending tx with a higher fee rate by reducing
      * the change-to-self output. Returns the new UNSIGNED tx hex
      * plus accounting fields for the UI ("bumping from X to Y
