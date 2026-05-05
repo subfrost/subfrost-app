@@ -25,7 +25,6 @@ import { useWallet } from '@/context/WalletContext';
 import { useAddLiquidityMutation, findPoolId } from '@/hooks/useAddLiquidityMutation';
 import { useSandshrewProvider } from '@/hooks/useSandshrewProvider';
 import { useFrbtcPremium } from '@/hooks/useFrbtcPremium';
-import { useFeeRate } from '@/hooks/useFeeRate';
 import { FRBTC_WRAP_FEE_PER_1000 } from '@/constants/alkanes';
 import { getConfig } from '@/utils/getConfig';
 import { getFutureBlockHeight } from '@/utils/amm';
@@ -41,6 +40,7 @@ export interface AtomicWrapAddLiquidityParams {
   maxSlippage: string;
   /** Deadline blocks from "now". */
   deadlineBlocks: number;
+  feeRate: number; // sats/vB — pass caller's useFeeRate instance (each hook instance has independent state)
   /** Optional pool id; mutation falls back to factory.FindPoolId if absent. */
   poolId?: { block: number; tx: number };
   /**
@@ -58,7 +58,6 @@ export function useAtomicWrapAddLiquidityMutation() {
   const provider = useSandshrewProvider();
   const addLiquidityMutation = useAddLiquidityMutation();
   const { data: premiumData } = useFrbtcPremium();
-  const fee = useFeeRate();
 
   const executeAtomicAddLiquidity = useCallback(
     async (params: AtomicWrapAddLiquidityParams) => {
@@ -140,7 +139,7 @@ export function useAtomicWrapAddLiquidityMutation() {
         token0Decimals: 8,
         token1Decimals: 8,
         maxSlippage: params.maxSlippage,
-        feeRate: fee.feeRate,
+        feeRate: params.feeRate,
         deadlineBlocks: params.deadlineBlocks,
         poolId: resolvedPoolId ?? undefined,
         overrideProtostones: protostones,
@@ -149,7 +148,7 @@ export function useAtomicWrapAddLiquidityMutation() {
         splitTransactions: params.splitTransactions ?? (network === 'mainnet'),
       } as any);
     },
-    [network, address, premiumData, fee.feeRate, addLiquidityMutation, provider],
+    [network, address, premiumData, addLiquidityMutation, provider],
   );
 
   return {

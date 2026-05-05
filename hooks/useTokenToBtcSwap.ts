@@ -22,7 +22,6 @@ import { useCallback } from 'react';
 import { useWallet } from '@/context/WalletContext';
 import { useSwapMutation } from '@/hooks/useSwapMutation';
 import { useUnwrapMutation } from '@/hooks/useUnwrapMutation';
-import { useFeeRate } from '@/hooks/useFeeRate';
 import { useGlobalStore } from '@/stores/global';
 import { getConfig, getRpcUrl } from '@/utils/getConfig';
 import { getEsploraTx } from '@/lib/alkanes/rpc';
@@ -48,6 +47,7 @@ export interface TokenToBtcSwapParams {
   buyAmount: string;
   /** Pool id from the swap quote. */
   poolId?: { block: string | number; tx: string | number };
+  feeRate: number; // sats/vB — pass caller's useFeeRate instance (each hook instance has independent state)
   /** UI callback fired on every state transition. */
   onProgress: (progress: TokenToBtcSwapProgress) => void;
   /** UI callback fired when a tx is broadcast (for toast notifications). */
@@ -57,7 +57,6 @@ export interface TokenToBtcSwapParams {
 export function useTokenToBtcSwap() {
   const { network, address } = useWallet();
   const { maxSlippage, deadlineBlocks } = useGlobalStore();
-  const fee = useFeeRate();
   const swapMutation = useSwapMutation();
   const unwrapMutation = useUnwrapMutation();
   const config = getConfig(network);
@@ -78,7 +77,7 @@ export function useTokenToBtcSwap() {
         sellAmount: params.sellAmount,
         buyAmount: params.buyAmount,
         maxSlippage,
-        feeRate: fee.feeRate,
+        feeRate: params.feeRate,
         poolId: params.poolId,
         deadlineBlocks,
       });
@@ -188,7 +187,7 @@ export function useTokenToBtcSwap() {
 
       const unwrapRes = await unwrapMutation.mutateAsync({
         amount: frbtcAmount,
-        feeRate: fee.feeRate,
+        feeRate: params.feeRate,
       });
 
       if (!unwrapRes?.success || !unwrapRes.transactionId) {
@@ -214,7 +213,7 @@ export function useTokenToBtcSwap() {
 
       return { swapTxId, unwrapTxId: unwrapRes.transactionId };
     },
-    [network, address, maxSlippage, deadlineBlocks, fee.feeRate, swapMutation, unwrapMutation, config.FRBTC_ALKANE_ID],
+    [network, address, maxSlippage, deadlineBlocks, swapMutation, unwrapMutation, config.FRBTC_ALKANE_ID],
   );
 
   return {

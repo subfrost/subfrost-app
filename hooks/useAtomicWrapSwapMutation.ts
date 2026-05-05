@@ -27,7 +27,6 @@ import { useWallet } from '@/context/WalletContext';
 import { useSwapMutation } from '@/hooks/useSwapMutation';
 import { useSandshrewProvider } from '@/hooks/useSandshrewProvider';
 import { useFrbtcPremium } from '@/hooks/useFrbtcPremium';
-import { useFeeRate } from '@/hooks/useFeeRate';
 import { FRBTC_WRAP_FEE_PER_1000 } from '@/constants/alkanes';
 import { getConfig } from '@/utils/getConfig';
 import { getFutureBlockHeight } from '@/utils/amm';
@@ -47,6 +46,7 @@ export interface AtomicWrapSwapParams {
   maxSlippage: string;
   /** Deadline blocks from "now". */
   deadlineBlocks: number;
+  feeRate: number; // sats/vB — pass caller's useFeeRate instance (each hook instance has independent state)
   /**
    * Opt-in CPFP-chained 2-tx flow:
    *   Tx A: wrap-only — mints frBTC to a UTXO at the user's taproot.
@@ -68,7 +68,6 @@ export function useAtomicWrapSwapMutation() {
   const swapMutation = useSwapMutation();
   const provider = useSandshrewProvider();
   const { data: premiumData } = useFrbtcPremium();
-  const fee = useFeeRate();
 
   const executeAtomicSwap = useCallback(
     async (params: AtomicWrapSwapParams) => {
@@ -106,7 +105,7 @@ export function useAtomicWrapSwapMutation() {
         sellAmount: btcSats.toString(),
         buyAmount: params.quoteBuyAmount,
         maxSlippage: params.maxSlippage,
-        feeRate: fee.feeRate,
+        feeRate: params.feeRate,
         poolId: params.poolId,
         deadlineBlocks: params.deadlineBlocks,
         // Override protostones and addresses for atomic wrap+swap.
@@ -123,7 +122,7 @@ export function useAtomicWrapSwapMutation() {
         splitTransactions: params.splitTransactions ?? (network === 'mainnet'),
       } as any);
     },
-    [network, address, premiumData, fee.feeRate, swapMutation],
+    [network, address, premiumData, swapMutation, provider],
   );
 
   return {
