@@ -128,6 +128,23 @@ export async function alkanesExecuteTyped(
       console.warn('[alkanesExecuteTyped] getCleanBtcUtxosForWallet failed:', e);
     }
   }
+  // Cache-fast path for any wallet type. The mutation hook can pass the
+  // pre-warmed UTXO snapshot through `params.cachedUtxos`; we filter to
+  // clean BTC carriers (non-dust, no alkane balance sheet) and hand them
+  // to the SDK as `payment_utxos`. This skips the WASM's internal
+  // `select_utxos` BTC fanout — for wallets with many UTXOs that fanout
+  // is the user-visible "click → wallet popup" delay.
+  if (!options.payment_utxos && params.cachedUtxos?.length) {
+    const clean = params.cachedUtxos
+      .filter((u) => (u.alkanes?.length ?? 0) === 0 && u.value > 1000)
+      .map((u) => ({ txid: u.txid, vout: u.vout, value: u.value }));
+    if (clean.length > 0) {
+      options.payment_utxos = clean;
+      console.log(
+        `[alkanesExecuteTyped] payment_utxos: ${clean.length} clean BTC UTXOs from prefetched cache (skipping WASM fanout)`,
+      );
+    }
+  }
 
   const toAddressesJson = JSON.stringify(toAddresses);
   const optionsJson = JSON.stringify(options);

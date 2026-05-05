@@ -152,6 +152,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import BigNumber from 'bignumber.js';
 import { useWallet } from '@/context/WalletContext';
 import { useSandshrewProvider } from '@/hooks/useSandshrewProvider';
+import { useWalletUtxoCache, useSyncStatus } from '@/hooks/useWalletUtxoCache';
 import { useTransactionConfirm } from '@/context/TransactionConfirmContext';
 import { getConfig } from '@/utils/getConfig';
 import { getTokenSymbol } from '@/lib/alkanes-client';
@@ -228,6 +229,11 @@ export function useSwapMutation() {
   const queryClient = useQueryClient();
   const { requestConfirmation } = useTransactionConfirm();
   const { FRBTC_ALKANE_ID, ALKANE_FACTORY_ID } = getConfig(network);
+  // Pre-warmed UTXO snapshot — passed into alkanesExecuteTyped so the
+  // SDK skips its internal BTC-fee fanout. Per-click latency win on
+  // wallets with many UTXOs (user-reported, 2026-05-05).
+  const utxoCache = useWalletUtxoCache();
+  const syncStatus = useSyncStatus();
 
   // Fetch dynamic frBTC wrap/unwrap fees
   const { data: premiumData } = useFrbtcPremium();
@@ -239,6 +245,14 @@ export function useSwapMutation() {
       if (!isConnected) {
         console.error('[useSwapMutation] ❌ Wallet not connected');
         throw new Error('Wallet not connected');
+      }
+      // Sync gate — refuse to submit while metashrew is behind bitcoind.
+      // Skipped on local devnet/regtest where the user mines blocks.
+      const isLocalNetwork = ['devnet', 'regtest-local', 'qubitcoin-regtest'].includes(network ?? '');
+      if (!isLocalNetwork && syncStatus.metashrewHeight > 0 && !syncStatus.inSync) {
+        throw new Error(
+          `Indexer catching up (${syncStatus.lag} block${syncStatus.lag === 1 ? '' : 's'} behind). Try again in a moment.`,
+        );
       }
 
       // Ensure browser wallet session is active before building PSBT
@@ -401,6 +415,10 @@ export function useSwapMutation() {
           autoConfirm: isKeystoreWallet,
           toAddresses: (swapData as any).overrideToAddresses || toAddresses,
           network,
+          // Pre-warmed UTXO snapshot. alkanesExecuteTyped derives clean
+          // BTC payment_utxos from this and skips the WASM's internal
+          // fanout. Click-to-popup latency win.
+          cachedUtxos: utxoCache.utxos,
           // Opt-in CPFP-chained 2-tx flow when caller knows the combined wrap
           // + execute fuel cost would exceed the per-tx floor. The SDK splits
           // the wrap into Tx A and the execute into Tx B; each gets its own

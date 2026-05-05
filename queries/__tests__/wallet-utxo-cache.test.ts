@@ -135,6 +135,71 @@ describe('useAddLiquidityMutation cache wiring', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Cache-wiring contract for the rest of the alkane mutation hooks.
+// All of them must:
+//   - read the prewarmed cache via useWalletUtxoCache
+//   - read sync status via useSyncStatus
+//   - gate submission on syncStatus.inSync (mainnet only)
+//   - pass utxoCache.utxos as `cachedUtxos` into alkanesExecuteTyped
+//     so the SDK skips its internal BTC-fee fanout
+// ---------------------------------------------------------------------------
+
+const MUTATION_HOOKS = [
+  'useSwapMutation',
+  'useAlkaneSendMutation',
+  'useRemoveLiquidityMutation',
+];
+
+describe.each(MUTATION_HOOKS)('%s — cache + sync gate wiring', (hookName) => {
+  const src = fs.readFileSync(
+    path.resolve(__dirname, `../../hooks/${hookName}.ts`),
+    'utf-8',
+  );
+
+  it('imports useWalletUtxoCache + useSyncStatus', () => {
+    expect(src).toMatch(/from\s+['"][^'"]*useWalletUtxoCache['"]/);
+    expect(src).toMatch(/useWalletUtxoCache/);
+    expect(src).toMatch(/useSyncStatus/);
+  });
+
+  it('passes utxoCache.utxos to alkanesExecuteTyped via cachedUtxos', () => {
+    expect(src).toMatch(/cachedUtxos:\s*utxoCache\.utxos/);
+  });
+
+  it('refuses submission when metashrew is behind bitcoind (sync gate)', () => {
+    expect(src).toMatch(/syncStatus\.inSync/);
+    expect(src).toMatch(/Indexer catching up/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// alkanesExecuteTyped wrapper must consume `cachedUtxos` to derive
+// `payment_utxos` for the SDK. This is the JS-side equivalent of the
+// browser-wallet `getCleanBtcUtxosForWallet` auto-default — same effect
+// (skips WASM coinselect BTC fanout) but works for keystore too.
+// ---------------------------------------------------------------------------
+
+describe('alkanesExecuteTyped consumes cachedUtxos', () => {
+  const src = fs.readFileSync(
+    path.resolve(__dirname, '../../lib/alkanes/execute.ts'),
+    'utf-8',
+  );
+
+  it('reads params.cachedUtxos and filters to clean BTC carriers', () => {
+    expect(src).toMatch(/params\.cachedUtxos/);
+    // "clean" = no alkane balance sheet AND value > dust threshold.
+    expect(src).toMatch(/u\.alkanes\?\.length[\s\S]{0,40}===\s*0/);
+    expect(src).toMatch(/u\.value\s*>\s*1000/);
+  });
+
+  it('writes the filtered list to options.payment_utxos when present', () => {
+    // payment_utxos is the SDK's canonical clean-BTC-UTXO param; the
+    // WASM uses ONLY these for fee inputs and skips its own fanout.
+    expect(src).toMatch(/options\.payment_utxos\s*=\s*clean/);
+  });
+});
+
 describe('WalletStatePrewarmer', () => {
   it('mounts the cache + sync hooks (no JSX, headless prefetch)', () => {
     const src = fs.readFileSync(

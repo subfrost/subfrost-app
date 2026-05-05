@@ -4,6 +4,7 @@ import * as ecc from '@bitcoinerlab/secp256k1';
 
 import { useWallet } from '@/context/WalletContext';
 import { useSandshrewProvider } from './useSandshrewProvider';
+import { useWalletUtxoCache, useSyncStatus } from './useWalletUtxoCache';
 import { getBitcoinNetwork, extractPsbtBase64 } from '@/lib/alkanes/helpers';
 import { patchInputsOnly } from '@/lib/psbt-patching';
 import {
@@ -35,6 +36,10 @@ export function useAlkaneSendMutation() {
   } = useWallet();
   const provider = useSandshrewProvider();
   const queryClient = useQueryClient();
+  // Pre-warmed UTXO snapshot — lets the SDK skip its internal BTC-fee
+  // fanout. Latency win for wallets with many dust UTXOs.
+  const utxoCache = useWalletUtxoCache();
+  const syncStatus = useSyncStatus();
 
   return useMutation<AlkaneSendResult, Error, AlkaneSendData>({
     mutationFn: async (data: AlkaneSendData) => {
@@ -43,6 +48,13 @@ export function useAlkaneSendMutation() {
       if (!txContext) throw new Error('Wallet not connected');
       if (!provider.walletIsLoaded()) {
         throw new Error('Provider wallet not loaded. Please reconnect your wallet.');
+      }
+      // Sync gate (skipped on local devnet/regtest where the user mines blocks).
+      const isLocal = ['devnet', 'regtest-local', 'qubitcoin-regtest'].includes(network ?? '');
+      if (!isLocal && syncStatus.metashrewHeight > 0 && !syncStatus.inSync) {
+        throw new Error(
+          `Indexer catching up (${syncStatus.lag} block${syncStatus.lag === 1 ? '' : 's'} behind). Try again in a moment.`,
+        );
       }
 
       const isKeystoreWallet = walletType === 'keystore';
@@ -70,6 +82,7 @@ export function useAlkaneSendMutation() {
         toAddresses,
         autoConfirm: isKeystoreWallet,
         network,
+        cachedUtxos: utxoCache.utxos,
       });
 
       // Keystore (autoConfirm=true): SDK signs + broadcasts internally.

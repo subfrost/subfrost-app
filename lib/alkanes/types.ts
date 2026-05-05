@@ -57,6 +57,21 @@ export interface AlkanesExecuteTypedParams {
    *  skips lua get_utxos entirely. Alkane UTXOs still discovered via espo.
    */
   paymentUtxos?: string[];
+  /** Pre-warmed UTXO + balance-sheet snapshot from `useWalletUtxoCache`.
+   *  When supplied, alkanesExecuteTyped derives `payment_utxos` (clean
+   *  BTC carriers) from the cache instead of letting the WASM fan out
+   *  RPC at click time. The cache is HeightPoller-invalidated and
+   *  prewarmed via <WalletStatePrewarmer/>, so by the time the user
+   *  clicks Swap the data is already in memory. This is what cuts
+   *  click-to-popup latency from multi-second to ~0 for wallets with
+   *  many dust UTXOs. */
+  cachedUtxos?: Array<{
+    txid: string;
+    vout: number;
+    value: number;
+    address?: string;
+    alkanes?: Array<{ block: number; tx: number; amount: bigint }>;
+  }>;
   /** Network name — used to reliably detect devnet (instead of URL sniffing). */
   network?: string;
   /** Opt-in CPFP-chained 2-tx flow for wrap+execute requests. When true and
