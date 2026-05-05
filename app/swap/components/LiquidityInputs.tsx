@@ -8,7 +8,7 @@ import { useTheme } from "@/context/ThemeContext";
 import { useModalStore } from "@/stores/modals";
 import { useGlobalStore } from "@/stores/global";
 import type { SlippageSelection } from "@/stores/global";
-import { ChevronDown, Settings, Plus, Minus } from "lucide-react";
+import { ChevronDown, Settings, Plus, Minus, Loader2 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import type { FeeSelection } from "@/hooks/useFeeRate";
 import { useTranslation } from '@/hooks/useTranslation';
@@ -172,7 +172,16 @@ export default function LiquidityInputs({
 
   const isDemoGated = useDemoGate();
 
+  // While a mutation is in flight, the CTA must visibly disable AND
+  // ignore extra clicks. Users in a hurry double-click thinking the
+  // first click didn't register; without this guard the second click
+  // re-fires the mutation and broadcasts a duplicate tx (or — worse —
+  // re-uses the same alkane carrier and double-spends in the mempool).
+  const isMutationPending =
+    liquidityMode === 'remove' ? isRemoveLoading : isLoading;
+
   const onCtaClick = () => {
+    if (isMutationPending) return;  // hard guard against double-clicks
     if (!isConnected) {
       onConnectModalOpenChange(true);
       return;
@@ -829,9 +838,24 @@ export default function LiquidityInputs({
         <button
           type="button"
           onClick={onCtaClick}
-          className={`mt-2 h-12 w-full rounded-xl font-bold text-sm uppercase tracking-wider transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none focus:outline-none ${isConnected && isDemoGated ? 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)]/30 cursor-not-allowed' : 'bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] text-white shadow-[0_4px_16px_rgba(0,0,0,0.3)] hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98]'}`}
+          disabled={isMutationPending}
+          aria-busy={isMutationPending}
+          className={`mt-2 h-12 w-full rounded-xl font-bold text-sm uppercase tracking-wider transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none focus:outline-none ${
+            isMutationPending
+              ? 'bg-[color:var(--sf-primary-pressed)] text-white/90 cursor-wait shadow-[0_2px_8px_rgba(0,0,0,0.2)]'
+              : isConnected && isDemoGated
+              ? 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)]/30 cursor-not-allowed'
+              : 'bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] text-white shadow-[0_4px_16px_rgba(0,0,0,0.3)] hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98]'
+          }`}
         >
-          {showLiquidityComingSoon ? (
+          {isMutationPending ? (
+            <span className="inline-flex items-center justify-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              {liquidityMode === 'remove'
+                ? t('liquidity.removingLiquidity')
+                : t('liquidity.addingLiquidity')}
+            </span>
+          ) : showLiquidityComingSoon ? (
             <span className="animate-pulse">{t('badge.comingSoon')}</span>
           ) : (
             ctaText
