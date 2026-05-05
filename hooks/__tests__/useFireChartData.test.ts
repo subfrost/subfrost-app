@@ -56,9 +56,12 @@ describe('useFireChartData', () => {
     expect(result.current.tvlHistory.length).toBe(31);
   });
 
-  it('returns staker distribution with at least one entry', () => {
+  it('returns an empty staker distribution when there is no on-chain data', () => {
+    // 940f42d4 dropped the demo-staker fallback. With null staking +
+    // tokenStats + treasury inputs, every branch's amount is 0 and
+    // nothing gets pushed.
     const { result } = renderHook(() => useFireChartData(), { wrapper: createWrapper() });
-    expect(result.current.stakerDistribution.length).toBeGreaterThan(0);
+    expect(result.current.stakerDistribution.length).toBe(0);
   });
 
   it('uses default values when no on-chain data available', () => {
@@ -112,14 +115,31 @@ describe('useFireChartData', () => {
     expect(dist.some(d => d.address === 'Emission Pool')).toBe(true);
   });
 
-  it('shows demo staker distribution when no on-chain staking data', () => {
+  it('renders the Staked/Emission/Treasury split when on-chain data is present', () => {
+    // The demo-staker fallback (10 fake addresses) was deliberately removed
+    // in 940f42d4 so the pie chart only ever shows real protocol state.
+    mockStakingStats.mockReturnValue({
+      data: { totalStaked: '50000000000', emissionRate: '665000', currentEpoch: '1' },
+    });
+    mockTokenStats.mockReturnValue({
+      data: {
+        totalSupply: '210000000000000',
+        emissionPoolRemaining: '160000000000000',
+        circulatingSupply: '50000000000000',
+        name: 'FIRE', symbol: 'FIRE', maxSupply: '210000000000000',
+      },
+    });
+    mockTreasury.mockReturnValue({
+      data: { totalBacking: '10000000000', allocations: '0', teamVested: '0', redemptionRate: '0' },
+    });
+
     const { result } = renderHook(() => useFireChartData(), { wrapper: createWrapper() });
     const dist = result.current.stakerDistribution;
-    // Fallback: 10 demo staker addresses with percentages summing to 40%
-    expect(dist.length).toBe(10);
-    expect(dist[0].address).toContain('demo');
-    // Top staker should have ~8%
-    expect(dist[0].percentage).toBeCloseTo(8.0, 1);
+    const labels = dist.map(d => d.address);
+    expect(labels).toContain('Staked');
+    expect(labels).toContain('Emission Pool');
+    // No demo entries should creep back in.
+    expect(labels.every(l => !l.includes('demo'))).toBe(true);
   });
 
   it('price history dates are in YYYY-MM-DD format', () => {

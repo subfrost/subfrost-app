@@ -12,7 +12,20 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     include: ['**/*.{test,spec}.{ts,tsx}'],
-    exclude: ['**/node_modules/**', '.next', 'ts-sdk/**', 'reference/**'],
+    exclude: [
+      '**/node_modules/**',
+      '.next',
+      'ts-sdk/**',
+      'reference/**',
+      // Playwright e2e tests — run via `npx playwright test`, not vitest.
+      'e2e-tests/playwright/**',
+      // Devnet/SDK integration suites — require a running camoufoxd or
+      // local devnet daemon. They're invoked explicitly via `pnpm test:devnet`
+      // / `test:sdk` and would otherwise dominate the CI budget with
+      // env-dependent failures.
+      '__tests__/devnet/**',
+      '__tests__/sdk/**',
+    ],
     testTimeout: 30000,
     hookTimeout: 30000,
     // Setup file to polyfill fetch for Node.js

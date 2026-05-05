@@ -169,9 +169,10 @@ describe('Amount conversion for liquidity', () => {
   });
 
   it('should handle very small display amounts', () => {
-    // toAlks('0.00000001', 8) => whole='0', frac='00000001' => '000000001'
-    // The leading zero from whole part is preserved (normalized '0' stays '0')
-    expect(toAlks('0.00000001', 8)).toBe('000000001');
+    // 0.00000001 BTC = 1 sat = 1 alks sub-unit. The helper strips leading
+    // zeros from the concatenated whole+frac string (post-012ccfca SDK
+    // rejects leading-zero cellpack ints), so '0' + '00000001' → '1'.
+    expect(toAlks('0.00000001', 8)).toBe('1');
   });
 
   it('should pad fractional part to correct decimals', () => {

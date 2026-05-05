@@ -10,6 +10,7 @@ vi.mock('@/hooks/useTranslation', () => ({
     t: (key: string) => {
       const translations: Record<string, string> = {
         'swap.swapTab': 'SWAP',
+        'swap.limitTab': 'LIMIT',
         'swap.liquidityTab': 'LIQUIDITY',
       };
       return translations[key] ?? key;

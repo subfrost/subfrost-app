@@ -3,7 +3,8 @@
  * useDemoGate Hook Tests
  *
  * Tests the demo gate logic which blocks features on mainnet when demo mode
- * is enabled, with exemptions for specific wallet types (OKX, UniSat).
+ * is enabled. Per-wallet ungating (OKX/UniSat) was removed in 940f42d4 —
+ * mainnet + DEMO_MODE_ENABLED is now the sole condition.
  *
  * Run with: pnpm test hooks/__tests__/useDemoGate.test.ts
  */
@@ -93,24 +94,24 @@ describe('useDemoGate', () => {
     expect(result.current).toBe(false);
   });
 
-  it('returns false for OKX wallet on mainnet with demo mode', () => {
+  it('returns true for OKX wallet on mainnet with demo mode (no per-wallet exemption)', () => {
     mockUseWallet.mockReturnValue({
       network: 'mainnet',
       browserWallet: { info: { id: 'okx' } },
     });
 
     const { result } = renderHook(() => useDemoGate());
-    expect(result.current).toBe(false);
+    expect(result.current).toBe(true);
   });
 
-  it('returns false for UniSat wallet on mainnet with demo mode', () => {
+  it('returns true for UniSat wallet on mainnet with demo mode (no per-wallet exemption)', () => {
     mockUseWallet.mockReturnValue({
       network: 'mainnet',
       browserWallet: { info: { id: 'unisat' } },
     });
 
     const { result } = renderHook(() => useDemoGate());
-    expect(result.current).toBe(false);
+    expect(result.current).toBe(true);
   });
 
   it('returns true for Xverse wallet on mainnet with demo mode', () => {

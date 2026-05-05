@@ -252,7 +252,13 @@ describe('Browser wallet address handling in useSwapMutation', () => {
     // options_json; the hook passes the single `txContext` field instead
     // of `fromAddresses` / `changeAddress` / `alkanesChangeAddress` /
     // `protectTaproot` / `ordinalsStrategy` separately.
-    expect(src).toMatch(/alkanesExecuteTyped\(\s*\{[\s\S]*?\btxContext\b/);
+    //
+    // Inline form: alkanesExecuteTyped({ txContext, ... })
+    // Factory form: buildExecuteOpts = () => ({ txContext, ... });
+    //               alkanesExecuteTyped(buildExecuteOpts())
+    const inline = /alkanesExecuteTyped\(\s*\{[\s\S]*?\btxContext\b/.test(src);
+    const factory = /buildExecuteOpts\s*=\s*\(\)\s*=>\s*\(\{[\s\S]*?\btxContext\b[\s\S]*?\}\)[\s\S]*?alkanesExecuteTyped\(\s*buildExecuteOpts\(\)/.test(src);
+    expect(inline || factory).toBe(true);
   });
 
   it('should not redundantly pass individual txContext fields', () => {
@@ -439,8 +445,17 @@ describe('ordinalsStrategy in swap hook', () => {
     // After 2026-04-30 ordinalsStrategy is unpacked from `txContext` inside
     // the wrapper. Keystore → 'burn' (skips inscription/rune lookup),
     // browser → 'exclude'. Per-call overrides still take precedence.
-    const execCall = src.match(/alkanesExecuteTyped\(\{[\s\S]*?\btxContext\b[\s\S]*?\}\)/);
-    expect(execCall).toBeTruthy();
+    //
+    // The hook may pass options inline OR factor them out into a
+    // `buildExecuteOpts` helper (added 2026-05-04 for the indexer-sync
+    // retry loop). Either form is acceptable.
+    const inlineCall = src.match(
+      /alkanesExecuteTyped\(\{[\s\S]*?\btxContext\b[\s\S]*?\}\)/,
+    );
+    const factoryCall = src.match(
+      /buildExecuteOpts\s*=\s*\(\)\s*=>\s*\(\{[\s\S]*?\btxContext\b[\s\S]*?\}\)[\s\S]*?alkanesExecuteTyped\(\s*buildExecuteOpts\(\)/,
+    );
+    expect(inlineCall || factoryCall).toBeTruthy();
   });
 
   it('should not hardcode the legacy ordinalsStrategy: txContext.defaultOrdinalsStrategy field', () => {

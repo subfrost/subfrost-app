@@ -106,7 +106,10 @@ describe('WalletDashboardPage (page.tsx)', () => {
 
   it('conditionally renders tab content based on activeTab', () => {
     expect(src).toMatch(/activeTab\s*===\s*['"]transactions['"]\s*&&\s*<TransactionHistory/);
-    expect(src).toMatch(/activeTab\s*===\s*['"]settings['"]\s*&&\s*<WalletSettings/);
+    // The settings branch wraps WalletSettings in a fragment alongside
+    // RegtestControls, so the conditional is followed by `(<>` then a
+    // newline then WalletSettings.
+    expect(src).toMatch(/activeTab\s*===\s*['"]settings['"]\s*&&\s*\([\s\S]*?<WalletSettings/);
   });
 
   it('passes initialAlkane prop to SendModal from sendAlkane state', () => {
@@ -233,9 +236,12 @@ describe('BitcoinBalanceCard', () => {
     expect(src).toMatch(/balances/);
   });
 
-  it('uses useAlkanesSDK for bitcoinPrice', () => {
-    expect(src).toMatch(/useAlkanesSDK\(\)/);
-    expect(src).toMatch(/bitcoinPrice/);
+  it('uses useBtcPrice for BTC/USD price', () => {
+    // Migrated from useAlkanesSDK → useBtcPrice (queries/market.ts) so
+    // mainnet uses subpricer primary + rpc.ts/coingecko fallbacks rather
+    // than the SDK's per-component fetch path.
+    expect(src).toMatch(/useBtcPrice\(\)/);
+    expect(src).toMatch(/btcPriceUsd/);
   });
 
   it('displays BTC balance using formatBTC function', () => {
@@ -245,7 +251,9 @@ describe('BitcoinBalanceCard', () => {
 
   it('displays USD equivalent using formatUSD function', () => {
     expect(src).toMatch(/formatUSD/);
-    expect(src).toMatch(/bitcoinPrice\.usd/);
+    // formatUSD multiplies sats * btcPriceUsd / 1e8 — stable name across
+    // the useBtcPrice migration (was bitcoinPrice.usd before).
+    expect(src).toMatch(/btcPriceUsd/);
   });
 
   it('shows both SegWit and Taproot address sections', () => {

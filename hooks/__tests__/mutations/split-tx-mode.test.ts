@@ -40,11 +40,16 @@ describe('useSwapMutation: splitTransactions plumbing', () => {
   });
 
   it('forwards splitTransactions to alkanesExecuteTyped', () => {
-    // Single regex matches the alkanesExecuteTyped call shape including
-    // the splitTransactions option somewhere within the same call.
-    const callRegex =
+    // The hook used to inline the options object directly into the call
+    // site. After 2026-05-04 it factored it into `buildExecuteOpts()` so
+    // the indexer-sync retry loop can rebuild the same options on retry.
+    // Either shape is acceptable as long as `splitTransactions` is part
+    // of the options object the SDK is called with.
+    const inlineForm =
       /provider\.alkanesExecuteTyped\(\{[\s\S]*?splitTransactions:\s*\(swapData as any\)\.splitTransactions[\s\S]*?\}\)/;
-    expect(src).toMatch(callRegex);
+    const factoryForm =
+      /buildExecuteOpts\s*=\s*\(\)\s*=>\s*\(\{[\s\S]*?splitTransactions:\s*\(swapData as any\)\.splitTransactions[\s\S]*?\}\)[\s\S]*?provider\.alkanesExecuteTyped\(\s*buildExecuteOpts\(\)/;
+    expect(inlineForm.test(src) || factoryForm.test(src)).toBe(true);
   });
 
   it('uses === true so missing/undefined flag is treated as false', () => {

@@ -199,9 +199,16 @@ describe('useEnrichedWalletData', () => {
       expect(querySrc).toContain('esplora fallback');
     });
 
-    it('fetches alkane balances via SDK dataApiGetAlkanesByAddress in separate query', () => {
+    it('fetches alkane balances via per-outpoint protorunes fanout', () => {
+      // 2026-05-04: codebase-wide ban on `protorunesbyaddress` /
+      // `dataApiGetAlkanesByAddress` (phantom-balance bug). The canonical
+      // path is `esplora_address::utxo` → Promise.all per-outpoint
+      // `getProtorunesByOutpoint`, aggregated per (block,tx). See
+      // `fetchAlkaneBalancesViaProtobuf` in queries/account.ts.
       expect(querySrc).toContain('alkaneBalanceQueryOptions');
-      expect(querySrc).toContain('dataApiGetAlkanesByAddress');
+      expect(querySrc).toContain('fetchAlkaneBalancesViaProtobuf');
+      // Negative assertion: the banned API must not creep back in.
+      expect(querySrc).not.toContain('dataApiGetAlkanesByAddress');
     });
 
     it('aggregates alkane balances across multiple addresses using BigInt', () => {
@@ -255,6 +262,8 @@ describe('useEnrichedWalletData', () => {
 // ---------------------------------------------------------------------------
 
 describe('useDemoGate', () => {
+  // Per-wallet ungating (UNGATED_WALLET_IDS) was removed in 940f42d4.
+  // Demo gate is now a one-liner: DEMO_MODE_ENABLED && network === 'mainnet'.
   const src = readSrc('hooks/useDemoGate.ts');
   const demoSrc = readSrc('utils/demoMode.ts');
 
@@ -267,37 +276,12 @@ describe('useDemoGate', () => {
     expect(src).toContain('useWallet');
   });
 
-  it('returns false early when DEMO_MODE_ENABLED is false', () => {
-    expect(src).toContain('!DEMO_MODE_ENABLED');
-    expect(src).toMatch(/if\s*\(\s*!DEMO_MODE_ENABLED/);
-  });
-
-  it('returns false early when network is not mainnet', () => {
-    expect(src).toContain("network !== 'mainnet'");
-  });
-
-  it('returns true only when demo mode is on AND network is mainnet', () => {
-    // The final return statement should be `return true` — reached only if demo && mainnet
-    expect(src).toMatch(/return\s+true\s*;?\s*\}/);
+  it('gates on DEMO_MODE_ENABLED && network === "mainnet"', () => {
+    expect(src).toMatch(/DEMO_MODE_ENABLED\s*&&\s*network\s*===\s*['"]mainnet['"]/);
   });
 
   it('DEMO_MODE_ENABLED reads from NEXT_PUBLIC_DEMO_MODE env var', () => {
     expect(demoSrc).toContain("process.env.NEXT_PUBLIC_DEMO_MODE === '1'");
-  });
-
-  it('has UNGATED_WALLET_IDS set for okx and unisat', () => {
-    expect(src).toContain('UNGATED_WALLET_IDS');
-    expect(src).toContain("'okx'");
-    expect(src).toContain("'unisat'");
-  });
-
-  it('ungates OKX and UniSat wallets even on mainnet with demo mode', () => {
-    expect(src).toContain('UNGATED_WALLET_IDS.has(walletId)');
-    expect(src).toMatch(/if\s*\(walletId\s*&&\s*UNGATED_WALLET_IDS\.has\(walletId\)\)\s*return\s+false/);
-  });
-
-  it('reads browserWallet info id for wallet identification', () => {
-    expect(src).toContain('browserWallet?.info?.id');
   });
 });
 

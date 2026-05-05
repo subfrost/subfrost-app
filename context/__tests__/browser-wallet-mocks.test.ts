@@ -414,11 +414,13 @@ describe('Address handling in wallet context', () => {
     expect(source).toContain("changeAddress: 'nativeSegwit'");
   });
 
-  it('pubKeyXOnly strips the 02/03 prefix from compressed pubkey', () => {
-    // For browser wallets with explicit taproot pubkey
-    expect(source).toContain("taprootAddr!.publicKey.slice(2)");
-    // For keystore wallets
-    expect(source).toContain("taprootInfo.publicKey.slice(2)");
+  it('pubKeyXOnly is derived via toXOnlyPubKeyHex helper', () => {
+    // Earlier the context did `publicKey.slice(2)` inline. That hard-codes
+    // the assumption that the input is always 02/03-prefixed; the helper
+    // (lib/wallet/pubkeyHelpers.ts) handles 32-byte x-only inputs and
+    // 33-byte compressed inputs uniformly.
+    expect(source).toMatch(/pubKeyXOnly:\s*toXOnlyPubKeyHex\(/);
+    expect(source).toContain('toXOnlyPubKeyHex(taprootAddr!.publicKey)');
   });
 });
 

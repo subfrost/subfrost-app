@@ -136,8 +136,14 @@ describe('txContext-driven address handling', () => {
       // After 2026-04-30 the wrapper unpacks `txContext` into the WASM
       // options_json itself; callers pass the single `txContext` field instead
       // of the five individual address / strategy fields.
+      //
+      // Inline form: alkanesExecuteTyped({ txContext, ... })
+      // Factory form: buildExecuteOpts = () => ({ txContext, ... });
+      //               alkanesExecuteTyped(buildExecuteOpts())
       const codeOnly = stripComments(src);
-      expect(codeOnly).toMatch(/alkanesExecuteTyped\(\s*(?:provider,\s*)?\{[\s\S]*?\btxContext\b/);
+      const inline = /alkanesExecuteTyped\(\s*(?:provider,\s*)?\{[\s\S]*?\btxContext\b/.test(codeOnly);
+      const factory = /buildExecuteOpts\s*=\s*\(\)\s*=>\s*\(\{[\s\S]*?\btxContext\b[\s\S]*?\}\)[\s\S]*?alkanesExecuteTyped\(\s*buildExecuteOpts\(\)/.test(codeOnly);
+      expect(inline || factory).toBe(true);
     });
 
     it('should not pass symbolic addresses (p2tr:0 / p2wpkh:0) into alkanesExecuteTyped', () => {
@@ -188,11 +194,13 @@ describe('ordinalsStrategy via txContext', () => {
       // call site (e.g. SendModal escalating to 'preserve').
       const src = readHook(hookFile);
       const codeOnly = stripComments(src);
-      const execCallMatch = codeOnly.match(/alkanesExecuteTyped\s*\(\s*(?:\w+,\s*)?\{[\s\S]*?\}\s*\)/);
-      expect(execCallMatch).toBeTruthy();
-      const call = execCallMatch![0];
-      const passesTxContext = /\btxContext\b/.test(call);
-      const passesExplicitOrdinals = /ordinalsStrategy\s*:/.test(call);
+      // Either the inline call site or the buildExecuteOpts factory.
+      const inlineMatch = codeOnly.match(/alkanesExecuteTyped\s*\(\s*(?:\w+,\s*)?\{[\s\S]*?\}\s*\)/);
+      const factoryMatch = codeOnly.match(/buildExecuteOpts\s*=\s*\(\)\s*=>\s*\(\{[\s\S]*?\}\)/);
+      const block = inlineMatch?.[0] || factoryMatch?.[0];
+      expect(block).toBeTruthy();
+      const passesTxContext = /\btxContext\b/.test(block!);
+      const passesExplicitOrdinals = /ordinalsStrategy\s*:/.test(block!);
       expect(passesTxContext || passesExplicitOrdinals).toBe(true);
     });
   });
