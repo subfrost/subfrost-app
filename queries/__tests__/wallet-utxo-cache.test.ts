@@ -129,9 +129,13 @@ describe('useAddLiquidityMutation cache wiring', () => {
     expect(HOOK).toMatch(/no RPC fanout/);
   });
 
-  it('mutationFn gates submission when out of sync (mainnet)', () => {
+  it('mutationFn parks on waitForIndexerSync when out of sync (mainnet)', () => {
+    // The old behavior threw "Indexer catching up — try again". After
+    // 2026-05-05 mutations call `waitForIndexerSync` instead, surfacing
+    // live progress to the IndexerSyncOverlay and proceeding
+    // automatically when sync resolves.
     expect(HOOK).toMatch(/syncStatus\.inSync/);
-    expect(HOOK).toMatch(/Indexer catching up/);
+    expect(HOOK).toMatch(/waitForIndexerSync/);
   });
 });
 
@@ -169,9 +173,12 @@ describe.each(MUTATION_HOOKS)('%s — cache + sync gate wiring', (hookName) => {
     expect(src).toMatch(/cachedUtxos:\s*utxoCache\.utxos/);
   });
 
-  it('refuses submission when metashrew is behind bitcoind (sync gate)', () => {
+  it('parks on waitForIndexerSync when metashrew is behind bitcoind', () => {
+    // Old behavior threw "Indexer catching up — try again". After
+    // 2026-05-05 mutations poll until sync resolves and proceed
+    // automatically (see lib/alkanes/waitForIndexerSync.ts).
     expect(src).toMatch(/syncStatus\.inSync/);
-    expect(src).toMatch(/Indexer catching up/);
+    expect(src).toMatch(/waitForIndexerSync/);
   });
 });
 

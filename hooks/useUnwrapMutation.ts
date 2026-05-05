@@ -72,6 +72,8 @@ import * as ecc from '@bitcoinerlab/secp256k1';
 import { patchInputsOnly } from '@/lib/psbt-patching';
 import { useWallet } from '@/context/WalletContext';
 import { useTransactionConfirm } from '@/context/TransactionConfirmContext';
+import { useIndexerSync } from '@/context/IndexerSyncContext';
+import { waitForIndexerSync } from '@/lib/alkanes/waitForIndexerSync';
 import { useSandshrewProvider } from './useSandshrewProvider';
 import { useWalletUtxoCache, useSyncStatus } from './useWalletUtxoCache';
 import { getConfig } from '@/utils/getConfig';
@@ -91,6 +93,7 @@ export function useUnwrapMutation() {
   const provider = useSandshrewProvider();
   const queryClient = useQueryClient();
   const { requestConfirmation } = useTransactionConfirm();
+  const indexerSync = useIndexerSync();
   const { FRBTC_ALKANE_ID } = getConfig(network);
   // Pre-warmed UTXO cache + sync gate.
   const utxoCache = useWalletUtxoCache();
@@ -101,9 +104,15 @@ export function useUnwrapMutation() {
       if (!isConnected) throw new Error('Wallet not connected');
       const isLocal = ['devnet', 'regtest-local', 'qubitcoin-regtest'].includes(network ?? '');
       if (!isLocal && syncStatus.metashrewHeight > 0 && !syncStatus.inSync) {
-        throw new Error(
-          `Indexer catching up (${syncStatus.lag} block${syncStatus.lag === 1 ? '' : 's'} behind). Try again in a moment.`,
-        );
+        indexerSync.start('Preparing unwrap');
+        try {
+          await waitForIndexerSync({
+            network: network ?? 'mainnet',
+            onProgress: (p) => indexerSync.update(p),
+          });
+        } finally {
+          indexerSync.finish();
+        }
       }
       // Ensure browser wallet session is active before building PSBT
       if (walletType === 'browser') {

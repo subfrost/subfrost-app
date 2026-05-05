@@ -154,6 +154,8 @@ import { useWallet } from '@/context/WalletContext';
 import { useSandshrewProvider } from '@/hooks/useSandshrewProvider';
 import { useWalletUtxoCache, useSyncStatus } from '@/hooks/useWalletUtxoCache';
 import { useTransactionConfirm } from '@/context/TransactionConfirmContext';
+import { useIndexerSync } from '@/context/IndexerSyncContext';
+import { waitForIndexerSync } from '@/lib/alkanes/waitForIndexerSync';
 import { getConfig } from '@/utils/getConfig';
 import { getTokenSymbol } from '@/lib/alkanes-client';
 import { FRBTC_WRAP_FEE_PER_1000 } from '@/constants/alkanes';
@@ -230,6 +232,7 @@ export function useSwapMutation() {
   const provider = useSandshrewProvider();
   const queryClient = useQueryClient();
   const { requestConfirmation } = useTransactionConfirm();
+  const indexerSync = useIndexerSync();
   const { FRBTC_ALKANE_ID, ALKANE_FACTORY_ID } = getConfig(network);
   // Pre-warmed UTXO snapshot — passed into alkanesExecuteTyped so the
   // SDK skips its internal BTC-fee fanout. Per-click latency win on
@@ -252,9 +255,15 @@ export function useSwapMutation() {
       // Skipped on local devnet/regtest where the user mines blocks.
       const isLocalNetwork = ['devnet', 'regtest-local', 'qubitcoin-regtest'].includes(network ?? '');
       if (!isLocalNetwork && syncStatus.metashrewHeight > 0 && !syncStatus.inSync) {
-        throw new Error(
-          `Indexer catching up (${syncStatus.lag} block${syncStatus.lag === 1 ? '' : 's'} behind). Try again in a moment.`,
-        );
+        indexerSync.start('Preparing swap');
+        try {
+          await waitForIndexerSync({
+            network: network ?? 'mainnet',
+            onProgress: (p) => indexerSync.update(p),
+          });
+        } finally {
+          indexerSync.finish();
+        }
       }
 
       // Ensure browser wallet session is active before building PSBT

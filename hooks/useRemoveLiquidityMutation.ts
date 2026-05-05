@@ -50,6 +50,8 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useWallet } from '@/context/WalletContext';
 import { useTransactionConfirm } from '@/context/TransactionConfirmContext';
+import { useIndexerSync } from '@/context/IndexerSyncContext';
+import { waitForIndexerSync } from '@/lib/alkanes/waitForIndexerSync';
 import { useSandshrewProvider } from '@/hooks/useSandshrewProvider';
 import { useWalletUtxoCache, useSyncStatus } from '@/hooks/useWalletUtxoCache';
 import { getTokenSymbol } from '@/lib/alkanes-client';
@@ -90,6 +92,7 @@ export function useRemoveLiquidityMutation() {
   const provider = useSandshrewProvider();
   const queryClient = useQueryClient();
   const { requestConfirmation } = useTransactionConfirm();
+  const indexerSync = useIndexerSync();
   // Pre-warmed UTXO snapshot — feeds clean BTC payment_utxos to the
   // SDK so it skips the WASM's internal coinselect fanout. Same
   // perf-fix pattern as useSwapMutation / useAlkaneSendMutation.
@@ -107,9 +110,15 @@ export function useRemoveLiquidityMutation() {
       // Sync gate (skipped on local networks).
       const isLocal = ['devnet', 'regtest-local', 'qubitcoin-regtest'].includes(network ?? '');
       if (!isLocal && syncStatus.metashrewHeight > 0 && !syncStatus.inSync) {
-        throw new Error(
-          `Indexer catching up (${syncStatus.lag} block${syncStatus.lag === 1 ? '' : 's'} behind). Try again in a moment.`,
-        );
+        indexerSync.start('Preparing remove liquidity');
+        try {
+          await waitForIndexerSync({
+            network: network ?? 'mainnet',
+            onProgress: (p) => indexerSync.update(p),
+          });
+        } finally {
+          indexerSync.finish();
+        }
       }
       // Ensure browser wallet session is active before building PSBT
       if (walletType === 'browser') {

@@ -16,6 +16,8 @@ import { NotificationProvider } from '@/context/NotificationContext';
 import { HeightPoller } from '@/queries/height';
 import { WalletStatePrewarmer } from '@/components/WalletStatePrewarmer';
 import { PendingTxHUD } from '@/components/PendingTxHUD';
+import { IndexerSyncProvider } from '@/context/IndexerSyncContext';
+import { IndexerSyncOverlay } from '@/components/IndexerSyncOverlay';
 import { DevnetProvider } from '@/context/DevnetContext';
 import { DevnetBootModal, DevnetErrorModal } from '@/components/DevnetBootModal';
 import { DevnetControlPanel, DevnetNetworkBanner } from '@/components/DevnetControlPanel';
@@ -135,17 +137,20 @@ export default function Providers({ children }: { children: ReactNode }) {
                     <WalletProvider network={network}>
                       <WalletStatePrewarmer />
                       <PendingTxHUD />
-                      <TransactionConfirmProvider>
-                        <NotificationProvider>
-                          <DevnetNetworkBanner />
-                          {children}
-                          <DevnetBootModal />
-                          <DevnetErrorModal />
-                          <DevnetControlPanel />
-                          <TransactionConfirmModal />
-                          <GlobalNotificationArea />
-                        </NotificationProvider>
-                      </TransactionConfirmProvider>
+                      <IndexerSyncProvider>
+                        <IndexerSyncOverlay />
+                        <TransactionConfirmProvider>
+                          <NotificationProvider>
+                            <DevnetNetworkBanner />
+                            {children}
+                            <DevnetBootModal />
+                            <DevnetErrorModal />
+                            <DevnetControlPanel />
+                            <TransactionConfirmModal />
+                            <GlobalNotificationArea />
+                          </NotificationProvider>
+                        </TransactionConfirmProvider>
+                      </IndexerSyncProvider>
                     </WalletProvider>
                   </DevnetProvider>
                 </AlkanesSDKProvider>

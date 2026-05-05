@@ -4,8 +4,10 @@ import * as ecc from '@bitcoinerlab/secp256k1';
 
 import { useWallet } from '@/context/WalletContext';
 import { useTransactionConfirm } from '@/context/TransactionConfirmContext';
+import { useIndexerSync } from '@/context/IndexerSyncContext';
 import { useSandshrewProvider } from './useSandshrewProvider';
 import { useWalletUtxoCache, useSyncStatus } from './useWalletUtxoCache';
+import { waitForIndexerSync } from '@/lib/alkanes/waitForIndexerSync';
 import { getBitcoinNetwork, extractPsbtBase64 } from '@/lib/alkanes/helpers';
 import { patchInputsOnly } from '@/lib/psbt-patching';
 import {
@@ -40,6 +42,7 @@ export function useAlkaneSendMutation() {
   const provider = useSandshrewProvider();
   const queryClient = useQueryClient();
   const { requestConfirmation } = useTransactionConfirm();
+  const indexerSync = useIndexerSync();
   // Pre-warmed UTXO snapshot — lets the SDK skip its internal BTC-fee
   // fanout. Latency win for wallets with many dust UTXOs.
   const utxoCache = useWalletUtxoCache();
@@ -54,11 +57,20 @@ export function useAlkaneSendMutation() {
         throw new Error('Provider wallet not loaded. Please reconnect your wallet.');
       }
       // Sync gate (skipped on local devnet/regtest where the user mines blocks).
+      // If metashrew is behind bitcoind, we PARK here and poll until it
+      // catches up — surfacing live progress to the IndexerSyncOverlay
+      // — instead of throwing and forcing the user to retry.
       const isLocal = ['devnet', 'regtest-local', 'qubitcoin-regtest'].includes(network ?? '');
       if (!isLocal && syncStatus.metashrewHeight > 0 && !syncStatus.inSync) {
-        throw new Error(
-          `Indexer catching up (${syncStatus.lag} block${syncStatus.lag === 1 ? '' : 's'} behind). Try again in a moment.`,
-        );
+        indexerSync.start('Preparing send');
+        try {
+          await waitForIndexerSync({
+            network: network ?? 'mainnet',
+            onProgress: (p) => indexerSync.update(p),
+          });
+        } finally {
+          indexerSync.finish();
+        }
       }
 
       const isKeystoreWallet = walletType === 'keystore';

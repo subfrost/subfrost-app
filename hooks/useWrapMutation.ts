@@ -79,8 +79,10 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useWallet } from '@/context/WalletContext';
 import { useTransactionConfirm } from '@/context/TransactionConfirmContext';
+import { useIndexerSync } from '@/context/IndexerSyncContext';
 import { useSandshrewProvider } from './useSandshrewProvider';
 import { useWalletUtxoCache, useSyncStatus } from './useWalletUtxoCache';
+import { waitForIndexerSync } from '@/lib/alkanes/waitForIndexerSync';
 import { getConfig } from '@/utils/getConfig';
 import { buildPlanFromTx } from '@/lib/alkanes/planBuilder';
 import * as bitcoin from 'bitcoinjs-lib';
@@ -102,6 +104,7 @@ export function useWrapMutation() {
   const provider = useSandshrewProvider();
   const queryClient = useQueryClient();
   const { requestConfirmation } = useTransactionConfirm();
+  const indexerSync = useIndexerSync();
   const { FRBTC_ALKANE_ID } = getConfig(network);
   const { data: premiumData } = useFrbtcPremium();
   // Pre-warmed UTXO cache + sync gate. Same perf-fix pattern as the
@@ -115,9 +118,15 @@ export function useWrapMutation() {
       if (!isConnected) throw new Error('Wallet not connected');
       const isLocal = ['devnet', 'regtest-local', 'qubitcoin-regtest'].includes(network ?? '');
       if (!isLocal && syncStatus.metashrewHeight > 0 && !syncStatus.inSync) {
-        throw new Error(
-          `Indexer catching up (${syncStatus.lag} block${syncStatus.lag === 1 ? '' : 's'} behind). Try again in a moment.`,
-        );
+        indexerSync.start('Preparing wrap');
+        try {
+          await waitForIndexerSync({
+            network: network ?? 'mainnet',
+            onProgress: (p) => indexerSync.update(p),
+          });
+        } finally {
+          indexerSync.finish();
+        }
       }
       // Ensure browser wallet session is active before building PSBT
       if (walletType === 'browser') {
