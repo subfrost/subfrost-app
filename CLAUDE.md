@@ -85,6 +85,93 @@ When you see this error, the tokens are NOT in the wallet's UTXOs even though th
 
 ---
 
+## Source-of-Truth Tiering (CRITICAL — Read Before Touching Any Read-Path)
+
+All rules below were laid down by the protocol owner on 2026-05-04 after a
+recurring "pool not found" / DIESEL-undercount class of bug traced to reading
+state-of-record off of espo (a tertiary aggregator) instead of metashrew (the
+primary indexer). Espo is allowed to lag, drop entries, or 502 — and when it
+does, the app silently shows wrong data. **It is never the source of truth on
+mainnet.**
+
+### Rule SoT-1 — Balances read from outpoints, not from address-keyed views
+
+For mainnet wallet balances (BTC and alkanes), the canonical path is:
+
+1. `esplora_address::utxo` → list confirmed UTXOs
+2. Filter to dust (≤1000 sats) → these carry alkanes
+3. **Promise.all** `alkanes_protorunesbyoutpoint` for each dust outpoint
+4. Aggregate per `(block, tx)` to produce the per-token total
+
+This is what `queries/account.ts:fetchAlkaneBalancesViaProtobuf` already does.
+Do **NOT** add a code path that reads balances from any of the following:
+
+| Source | Why it's wrong |
+|---|---|
+| `alkanes_protorunesbyaddress` (address-keyed view) | Reports phantom balances on previously-spent outpoints — confirmed 2026-05-03 (showed 1800 DIESEL when wallet held 58). |
+| `espo /get-alkanes-by-address` | Same staleness class + indexer lag on freshly-confirmed UTXOs. |
+| `dataApiGetAlkanesByAddress` (SDK shortcut) | Same upstream problem; bypassed for this reason. |
+
+Per-outpoint queries in parallel are more reliable than any address-keyed
+aggregation.
+
+### Rule SoT-2 — Pool reserves read directly from metashrew (`alkanes_simulate`)
+
+For pool state (reserves, fees, K), the canonical path is `alkanes_simulate`
+on the pool's `GetReserves` (opcode 97) or `PoolDetails` (opcode 999) opcode.
+Simulate reads the metashrew state trie directly — always current, no
+intermediate cache.
+
+Do **NOT** read pool reserves from:
+
+| Source | Why it's wrong |
+|---|---|
+| `mainnet.subfrost.io/.../get-all-pools-details` | Aggregator cache; flaps to `total: 0` during indexer hiccups. Verified outage 2026-05-04. |
+| `api.alkanode.com/rpc ammdata.get_pools` for swap quotes | Third-party rate-limited; staleness window unclear. OK as a *list of pool IDs* (Rule SoT-3) but not for live reserves on the swap path. |
+| Espo on any non-devnet network | Espo is the in-browser devnet indexer; never the mainnet source of truth. |
+
+If a hook uses pool reserves to compute a quote, slippage floor, or invariant
+check, those reserves MUST come from metashrew via simulate.
+
+### Rule SoT-3 — Pool **discovery** is allowed via espo / alkanode
+
+Listing the complete set of pools (without their state) is realistic to do
+through aggregators. Two acceptable paths:
+
+- **Devnet**: in-browser espo via the fetch interceptor (`get_pools`).
+- **Mainnet**: `api.alkanode.com/rpc ammdata.get_pools` is acceptable as a
+  pool-ID enumerator. After getting the list, individual pool reserves come
+  from simulate (Rule SoT-2).
+
+Pool discovery being slightly stale is fine (a missed pool just won't show
+in the picker for a few minutes); pool RESERVES being stale is not (silently
+wrong quotes / failed swaps).
+
+### Rule SoT-4 — Unconfirmed-state tracking is corrected, not reverted
+
+Balance flicker during pending mempool tx is acceptable; the answer is to
+**fix the unconfirmed-state tracking**, not to revert to a simpler model
+that ignores mempool. If a balance briefly shows the wrong number while a
+swap mines, that's a UX gap to close — not a reason to remove the
+mempool-pending logic.
+
+When in doubt: **the balance display should be eventually correct**, and
+intermediate states are tolerable as long as they self-heal once the next
+block lands or the mempool tx is replaced.
+
+### Cheat sheet for read-path decisions
+
+| Question | Source |
+|---|---|
+| What's the wallet's BTC balance? | `esplora_address::utxo` → sum non-dust |
+| What's the wallet's DIESEL/frBTC/etc balance? | esplora UTXOs → per-outpoint protorune fan-out |
+| What pools exist? | espo (devnet) / alkanode `ammdata.get_pools` (mainnet) |
+| What are pool X's reserves right now? | `alkanes_simulate` opcode 97 or 999 |
+| Did this swap quote slip? | simulate against current reserves |
+| What's the canonical block height? | `metashrew_height` |
+
+---
+
 ## Devnet Architecture (CRITICAL — Read Before Touching Devnet Code)
 
 All rules below were established 2026-03-31 after 16+ hours debugging. Each one prevented a bug from being re-introduced. Test enforcement exists for all of them.
