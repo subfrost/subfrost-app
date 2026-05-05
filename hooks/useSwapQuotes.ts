@@ -37,6 +37,8 @@ import { useDebounce } from 'use-debounce';
 import { useWallet } from '@/context/WalletContext';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { getConfig } from '@/utils/getConfig';
+import { decodePendingSwapsOnPool } from '@/lib/alkanes/poolSimulation';
+import { usePendingTxs } from '@/hooks/usePendingTxs';
 import { usePools, type PoolsListItem } from '@/hooks/usePools';
 import { queryPoolFeeWithProvider } from '@/hooks/usePoolFee';
 import { FRBTC_UNWRAP_FEE_PER_1000, FRBTC_WRAP_FEE_PER_1000 } from '@/constants/alkanes';
@@ -122,6 +124,14 @@ async function calculateSwapPrice(
   originalSellCurrency?: string,
   originalBuyCurrency?: string,
   liveState?: LivePoolState | null,
+  pendingSwapsForPool?: Array<{
+    factoryId: string;
+    poolPath: Array<{ block: bigint; tx: bigint }>;
+    amountIn: bigint;
+    amountOutMin: bigint;
+    sellsToken0?: boolean;
+    isExactIn: boolean;
+  }>,
 ) {
   const effectiveSell = originalSellCurrency ?? sellCurrency;
   const effectiveBuy = originalBuyCurrency ?? buyCurrency;
@@ -177,8 +187,33 @@ async function calculateSwapPrice(
       reservesUnavailable: true,
     } as SwapQuote;
   }
-  const r0 = liveState.reserve0;
-  const r1 = liveState.reserve1;
+  // Chain-aware reserves: replay our pending swaps targeting this
+  // pool through the same constant-product math the on-chain pool
+  // applies, so a Swap #2 submitted while Swap #1 is still in
+  // mempool gets a quote against the *post-Swap-#1* reserves.
+  // Without this, slippage minimums are computed against the wrong
+  // baseline and the pool's predicate check reverts (verified
+  // 2026-05-05 against mainnet reverts 2c51b734… / c52ef600…).
+  let r0 = BigInt(liveState.reserve0);
+  let r1 = BigInt(liveState.reserve1);
+  if (pendingSwapsForPool && pendingSwapsForPool.length > 0) {
+    const feePer1000 = BigInt(Math.round(poolFee * 1000));
+    for (const s of pendingSwapsForPool) {
+      if (!s.isExactIn || s.sellsToken0 === undefined) continue;
+      const amountInWithFee = (s.amountIn * (1000n - feePer1000)) / 1000n;
+      if (s.sellsToken0) {
+        if (r0 <= 0n || r1 <= 0n) continue;
+        const out = (amountInWithFee * r1) / (r0 + amountInWithFee);
+        r0 += s.amountIn;
+        r1 -= out;
+      } else {
+        if (r0 <= 0n || r1 <= 0n) continue;
+        const out = (amountInWithFee * r0) / (r1 + amountInWithFee);
+        r1 += s.amountIn;
+        r0 -= out;
+      }
+    }
+  }
   const reserveIn = isSellToken0 ? Number(r0) : Number(r1);
   const reserveOut = isSellToken0 ? Number(r1) : Number(r0);
 
@@ -286,6 +321,32 @@ export function useSwapQuotes(
   const liveReserve0 = liveDirect.data?.reserve0;
   const liveReserve1 = liveDirect.data?.reserve1;
 
+  // Chain-aware quote: if we have pending swaps targeting this pool,
+  // simulate them against `liveState` so the next swap's `amount_out_min`
+  // reflects the post-mempool reserves rather than the pre-mempool
+  // snapshot. Re-decoded on every render — cheap pure work, no extra
+  // RPC. Without this, two same-block swaps in chain consistently
+  // revert at the predicate gate (mainnet 2c51b734… / c52ef600…).
+  const { pendingTxs } = usePendingTxs();
+  const factoryId = (getConfig(network) as any).ALKANE_FACTORY_ID as string | undefined;
+  const pendingSwapsForDirect = useMemo(() => {
+    if (!directPool || !factoryId || pendingTxs.length === 0) return [];
+    try {
+      return decodePendingSwapsOnPool(
+        pendingTxs,
+        factoryId,
+        directPool.token0.id,
+        directPool.token1.id,
+      );
+    } catch (e) {
+      console.warn('[useSwapQuotes] pending-swap decode failed, ignoring:', e);
+      return [];
+    }
+  }, [pendingTxs, directPool, factoryId]);
+  const pendingSwapsKey = pendingSwapsForDirect.map(s =>
+    `${s.amountIn}:${s.sellsToken0 ? '0' : '1'}:${s.isExactIn ? 'in' : 'out'}`
+  ).join('|');
+
   return useQuery<SwapQuote>({
     queryKey: [
       'swap-quotes',
@@ -300,6 +361,7 @@ export function useSwapQuotes(
       unwrapFee,
       liveReserve0,
       liveReserve1,
+      pendingSwapsKey,
     ],
     enabled: !!sellCurrencyId && !!buyCurrencyId && isInitialized && !!provider,
     queryFn: async () => {
@@ -433,6 +495,7 @@ export function useSwapQuotes(
           sellCurrency,
           buyCurrency,
           liveDirect.data,
+          pendingSwapsForDirect,
         );
 
         // Check if Universal Router offers a better price (hybrid CLOB+AMM).
