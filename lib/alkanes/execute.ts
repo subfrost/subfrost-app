@@ -55,7 +55,7 @@
  * handle_message() returns Err on revert → atomic.commit() never called → rollback.
  */
 
-import { parseMaxVoutFromProtostones } from './helpers';
+import { parseMaxVoutFromProtostones, extractPsbtBase64 } from './helpers';
 import type { AlkanesExecuteTypedParams } from './types';
 
 type WebProvider = import('@alkanes/ts-sdk/wasm').WebProvider;
@@ -253,8 +253,18 @@ export async function alkanesExecuteTyped(
   if (wantPreview && params.previewBeforeBroadcast && params.txContext?.walletType === 'keystore') {
     const psbtBase64 = extractPsbtBase64FromExecuteResult(parsed);
     if (!psbtBase64) {
-      console.warn('[alkanesExecuteTyped] previewBeforeBroadcast supplied but no PSBT in SDK result; falling back to direct return');
-      return parsed;
+      // Hard-fail rather than silently `return parsed` — the caller
+      // expects either a real txid (on approve) or a thrown error
+      // ("Transaction rejected by user" on reject). Returning a
+      // PSBT-less parsed object misleads `useAlkaneSendMutation` into
+      // reporting `success: true, txid: null` and the UI shows
+      // "broadcast" with an empty explorer link. Bug repro:
+      // __tests__/repro/diesel-send-30000.test.ts (2026-05-05).
+      console.error(
+        '[alkanesExecuteTyped] previewBeforeBroadcast supplied but no PSBT in SDK result',
+        { topLevelKeys: Object.keys(parsed ?? {}) },
+      );
+      throw new Error('SDK did not return a signable PSBT');
     }
     const approved = await params.previewBeforeBroadcast(psbtBase64);
     if (!approved) {
@@ -273,9 +283,20 @@ export async function alkanesExecuteTyped(
 
 /**
  * Best-effort PSBT base64 extraction from the polymorphic SDK result.
- * The SDK has shipped a few different shapes over time; we cover the
- * known ones and return undefined when nothing matches (caller falls
- * back to direct return).
+ *
+ * The SDK has shipped a few different shapes over time:
+ *   - Plain base64 string
+ *   - Uint8Array (raw bytes — toBase64 needed)
+ *   - Numeric-key object `{"0":112,"1":115,...}` (serialized Uint8Array
+ *     after the WASM bridge crosses a JSON boundary). This is the
+ *     dominant shape returned by alkanesExecuteWithStrings on mainnet
+ *     today (verified 2026-05-05 via __tests__/repro/diesel-send-30000).
+ *     If we don't decode it, we silently fall through to "no PSBT"
+ *     and the caller mistakenly reports broadcast success with no txid.
+ *
+ * `extractPsbtBase64` (from `helpers.ts`) handles all three shapes; we
+ * defer to it but swallow throws so the central preview path can still
+ * gracefully fall back when a candidate is malformed.
  */
 function extractPsbtBase64FromExecuteResult(result: any): string | undefined {
   if (!result || typeof result !== 'object') return undefined;
@@ -288,9 +309,14 @@ function extractPsbtBase64FromExecuteResult(result: any): string | undefined {
     result?.unsigned_psbt,
   ];
   for (const c of candidates) {
-    if (typeof c === 'string' && c.length > 0) {
-      // Strip any data: prefix or hex marker the SDK might attach.
-      return c;
+    if (c == null) continue;
+    if (typeof c === 'string' && c.length > 0) return c;
+    if (c instanceof Uint8Array && c.length > 0) {
+      try { return extractPsbtBase64(c); } catch { continue; }
+    }
+    if (typeof c === 'object') {
+      // Numeric-keyed Uint8Array → base64 via the shared helper.
+      try { return extractPsbtBase64(c); } catch { continue; }
     }
   }
   return undefined;
