@@ -82,6 +82,13 @@ export type SwapQuote = {
    * Undefined when no router is configured (mainnet/regtest).
    */
   routeSource?: 'amm' | 'clob' | 'router';
+  /**
+   * True when the live state-trie reserve fetch hasn't returned yet.
+   * The UI must disable the swap button and show "Loading reserves…"
+   * — submitting against this quote would hand the slippage gate a
+   * nonsense `amount_out_min`. See SoT-2 / 2026-05-05 incident.
+   */
+  reservesUnavailable?: boolean;
 };
 
 const ALKS_DECIMALS = 8;
@@ -141,10 +148,37 @@ async function calculateSwapPrice(
   }
 
   const isSellToken0 = pool?.token0.id === sellCurrency;
-  // Prefer live state-trie reserves when available — falls back to the cached
-  // markets snapshot if the live fetch failed.
-  const r0 = liveState?.reserve0 ?? pool?.token0Amount;
-  const r1 = liveState?.reserve1 ?? pool?.token1Amount;
+  // Reserves MUST come from the live state-trie (`alkanes_simulate` opcode
+  // 999 PoolDetails via `usePoolStateLive`). Using cached aggregator data
+  // (`pool.token0Amount`) here is a Rule SoT-2 violation — verified
+  // 2026-05-05 by recomputing user-reported failed swaps:
+  //   Tx 2c51b734… min_out = 1197 DIESEL, pool actual = 762 DIESEL
+  //   Tx c52ef600… min_out = 392 DIESEL, pool actual = 289 DIESEL
+  // Both reverted with `predicate failed: insufficient output`. The
+  // aggregator was showing reserves ~1.57× the live values and the
+  // silent fallback meant slippage was applied to the wrong number.
+  //
+  // If `liveState` isn't available yet (in-flight, errored, or disabled),
+  // return a zero quote so the UI can show "Loading…" / disable the
+  // swap button. Anything else is silently wrong.
+  if (!liveState) {
+    return {
+      direction,
+      inputAmount: amount,
+      buyAmount: '0',
+      sellAmount: '0',
+      exchangeRate: '0',
+      minimumReceived: '0',
+      maximumSent: '0',
+      displayBuyAmount: '0',
+      displaySellAmount: '0',
+      displayMinimumReceived: '0',
+      displayMaximumSent: '0',
+      reservesUnavailable: true,
+    } as SwapQuote;
+  }
+  const r0 = liveState.reserve0;
+  const r1 = liveState.reserve1;
   const reserveIn = isSellToken0 ? Number(r0) : Number(r1);
   const reserveOut = isSellToken0 ? Number(r1) : Number(r0);
 
