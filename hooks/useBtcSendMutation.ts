@@ -4,10 +4,14 @@ import * as ecc from '@bitcoinerlab/secp256k1';
 import { computeSendFee } from '@alkanes/ts-sdk';
 
 import { useWallet } from '@/context/WalletContext';
+import { useTransactionConfirm } from '@/context/TransactionConfirmContext';
 import { useSandshrewProvider } from './useSandshrewProvider';
+import { useWalletUtxoCache } from './useWalletUtxoCache';
 import { getBitcoinNetwork } from '@/lib/alkanes/helpers';
 import { injectRedeemScripts } from '@/lib/psbt-patching';
 import { sendBtcViaWallet } from '@/lib/wallet/walletCapabilities';
+import { buildPlanFromTx } from '@/lib/alkanes/planBuilder';
+import type { WalletUtxoCache } from '@/queries/account';
 
 bitcoin.initEccLib(ecc);
 
@@ -43,6 +47,8 @@ export function useBtcSendMutation() {
   const { account, network, isConnected, signTaprootPsbt, walletType, txContext, browserWallet } = useWallet();
   const provider = useSandshrewProvider();
   const queryClient = useQueryClient();
+  const { requestConfirmation } = useTransactionConfirm();
+  const utxoCache = useWalletUtxoCache();
 
   return useMutation<BtcSendResult, Error, BtcSendData>({
     mutationFn: async (data: BtcSendData) => {
@@ -64,7 +70,18 @@ export function useBtcSendMutation() {
           browserWalletId: browserWallet?.info?.id,
         });
       }
-      return await sendKeystore({ data, provider, network, txContext });
+      return await sendKeystore({
+        data,
+        provider,
+        network,
+        txContext,
+        ourAddresses: [
+          account?.taproot?.address,
+          account?.nativeSegwit?.address,
+        ].filter((a): a is string => !!a),
+        utxoCache,
+        requestConfirmation,
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['btc-balance'] });
@@ -212,9 +229,13 @@ async function sendKeystore(args: {
   provider: NonNullable<ReturnType<typeof useSandshrewProvider>>;
   network: ReturnType<typeof useWallet>['network'];
   txContext: NonNullable<ReturnType<typeof useWallet>['txContext']>;
+  ourAddresses: string[];
+  utxoCache: WalletUtxoCache;
+  requestConfirmation: ReturnType<typeof useTransactionConfirm>['requestConfirmation'];
 }): Promise<BtcSendResult> {
-  const { data, provider, network, txContext } = args;
+  const { data, provider, network, txContext, ourAddresses, utxoCache, requestConfirmation } = args;
   const { recipientAddress, amountSats, feeRate } = data;
+  const btcNetwork = getBitcoinNetwork(network);
 
   // Not `walletSend`: WASM `WebProvider::create_transaction` ignores
   // change_address / lock_alkanes / ordinals_strategy (alkanes-rs origin/develop
@@ -229,6 +250,26 @@ async function sendKeystore(args: {
     toAddresses: [recipientAddress, txContext.alkanesChangeAddress],
     autoConfirm: true,
     network,
+    previewBeforeBroadcast: async (psbtBase64: string) => {
+      const plan = buildPlanFromTx({
+        psbtBase64,
+        cache: utxoCache,
+        ourAddresses,
+        network: btcNetwork,
+        feeRateSatVb: feeRate,
+        label: 'Send BTC',
+        summary: `Sends ${(amountSats / 1e8).toFixed(8)} BTC to ${recipientAddress}.`,
+      });
+      return await requestConfirmation({
+        type: 'send',
+        title: 'Confirm Send',
+        recipient: recipientAddress,
+        fromAmount: (amountSats / 1e8).toString(),
+        fromSymbol: 'BTC',
+        feeRate,
+        plan: [plan],
+      });
+    },
   });
 
   const txid =

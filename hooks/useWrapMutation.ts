@@ -82,6 +82,7 @@ import { useTransactionConfirm } from '@/context/TransactionConfirmContext';
 import { useSandshrewProvider } from './useSandshrewProvider';
 import { useWalletUtxoCache, useSyncStatus } from './useWalletUtxoCache';
 import { getConfig } from '@/utils/getConfig';
+import { buildPlanFromTx } from '@/lib/alkanes/planBuilder';
 import * as bitcoin from 'bitcoinjs-lib';
 import * as ecc from '@bitcoinerlab/secp256k1';
 import { getBitcoinNetwork, getSignerAddressDynamic, extractPsbtBase64 } from '@/lib/alkanes/helpers';
@@ -372,13 +373,42 @@ export function useWrapMutation() {
             logInputDetails(tempPsbt, 'AFTER PATCHING');
           }
 
-          // For keystore wallets, request user confirmation before signing
-          // Browser wallets have their own confirmation UI from the wallet extension
+          // For keystore wallets, request user confirmation before signing.
+          // The plan visualizes the actual built PSBT — the BTC payment
+          // input(s), the dust output to the frBTC signer (which mints
+          // frBTC back to us), and the change. The frBTC receive amount
+          // is exact (1:1 minus wrapFee) so we mark it as not uncertain.
           if (walletType === 'keystore') {
-            console.log('[WRAP] Keystore wallet - requesting user confirmation...');
             const wrapFee = premiumData?.wrapFeePerThousand ?? FRBTC_WRAP_FEE_PER_1000;
             const amountSats = Math.round(parseFloat(wrapData.amount) * 1e8);
             const receiveAfterFee = Math.floor((amountSats * (1000 - wrapFee)) / 1000);
+            const ourAddresses = [
+              account?.taproot?.address,
+              account?.nativeSegwit?.address,
+            ].filter((a): a is string => !!a);
+            const plan = buildPlanFromTx({
+              psbtBase64,
+              cache: utxoCache,
+              ourAddresses,
+              network: btcNetwork,
+              feeRateSatVb: wrapData.feeRate,
+              label: 'Wrap BTC → frBTC',
+              summary: `Locks ${wrapData.amount} BTC with the frBTC reserve and mints ${(receiveAfterFee / 1e8).toFixed(8)} frBTC back to your wallet.`,
+            });
+            // Find the change/return output (last output paying us) and
+            // attach the predicted frBTC receive amount.
+            const ourReturnIdx = plan.outputs.findIndex((o) => o.isOurs);
+            if (ourReturnIdx >= 0) {
+              plan.outputs[ourReturnIdx].alkanes = [
+                {
+                  alkaneId: '32:0',
+                  symbol: 'frBTC',
+                  amount: BigInt(receiveAfterFee),
+                  // Wrap is 1:1 minus a fixed-rate fee — no slippage curve.
+                  uncertain: false,
+                },
+              ];
+            }
             const approved = await requestConfirmation({
               type: 'wrap',
               title: 'Confirm Wrap',
@@ -387,13 +417,12 @@ export function useWrapMutation() {
               toAmount: (receiveAfterFee / 1e8).toFixed(8),
               toSymbol: 'frBTC',
               feeRate: wrapData.feeRate,
+              plan: [plan],
             });
 
             if (!approved) {
-              console.log('[WRAP] User rejected transaction');
               throw new Error('Transaction rejected by user');
             }
-            console.log('[WRAP] User approved transaction');
           }
 
           // Sign the PSBT with both SegWit and Taproot keys

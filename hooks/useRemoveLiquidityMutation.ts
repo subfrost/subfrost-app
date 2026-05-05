@@ -61,6 +61,7 @@ import * as ecc from '@bitcoinerlab/secp256k1';
 import { patchInputsOnly } from '@/lib/psbt-patching';
 import { buildFactoryBurnProtostone, buildRemoveLiquidityInputRequirements } from '@/lib/alkanes/builders';
 import { getBitcoinNetwork, toAlks, extractPsbtBase64 } from '@/lib/alkanes/helpers';
+import { buildPlanFromTx } from '@/lib/alkanes/planBuilder';
 import { getConfig } from '@/utils/getConfig';
 
 bitcoin.initEccLib(ecc);
@@ -268,20 +269,62 @@ export function useRemoveLiquidityMutation() {
 
           // For keystore wallets, request user confirmation before signing
           if (walletType === 'keystore') {
-            console.log('[RemoveLiquidity] Keystore wallet - requesting user confirmation...');
             const token0Sym = getTokenSymbol(data.token0Id, data.token0Symbol);
             const token1Sym = getTokenSymbol(data.token1Id, data.token1Symbol);
+            const ourAddresses = [
+              account?.taproot?.address,
+              account?.nativeSegwit?.address,
+            ].filter((a): a is string => !!a);
+            const plan = buildPlanFromTx({
+              psbtBase64: finalPsbtBase64,
+              cache: utxoCache,
+              ourAddresses,
+              network: btcNetwork,
+              feeRateSatVb: data.feeRate,
+              label: `Remove Liquidity ${token0Sym} / ${token1Sym}`,
+              summary:
+                `Burns ${data.lpAmount} LP for at least ${data.minAmount0 || data.minToken0Amount || '0'} ${token0Sym} ` +
+                `and ${data.minAmount1 || data.minToken1Amount || '0'} ${token1Sym}.`,
+            });
+            // Predicted token0 + token1 receive lands on the cellpack-bound
+            // output paying us. Mark uncertain — actual amount depends on
+            // current pool reserves at inclusion time.
+            const targetIdx = plan.outputs.findIndex(
+              (o) => o.isOurs && !o.isOpReturn,
+            );
+            if (targetIdx >= 0) {
+              const t0Min = data.minAmount0 || data.minToken0Amount;
+              const t1Min = data.minAmount1 || data.minToken1Amount;
+              const additions = [];
+              if (t0Min) {
+                additions.push({
+                  alkaneId: data.token0Id,
+                  symbol: token0Sym,
+                  amount: BigInt(Math.floor(parseFloat(t0Min) * 1e8)),
+                  uncertain: true,
+                });
+              }
+              if (t1Min) {
+                additions.push({
+                  alkaneId: data.token1Id,
+                  symbol: token1Sym,
+                  amount: BigInt(Math.floor(parseFloat(t1Min) * 1e8)),
+                  uncertain: true,
+                });
+              }
+              if (additions.length) {
+                plan.outputs[targetIdx].alkanes = [
+                  ...(plan.outputs[targetIdx].alkanes ?? []),
+                  ...additions,
+                ];
+              }
+            }
 
             const approved = await requestConfirmation({
               type: 'removeLiquidity',
               title: 'Confirm Remove Liquidity',
-              // data.lpAmount is already in display units (what the user typed),
-              // not raw 1e8 sub-units. Don't divide.
               lpAmount: data.lpAmount,
               poolName: data.poolName || `${token0Sym} / ${token1Sym}`,
-              // Callers pass minAmount0 / minAmount1 (display units) — use those
-              // directly. minToken0Amount / minToken1Amount were leftover legacy
-              // aliases that nothing populated, hence the "~—" placeholders.
               token0Amount: data.minAmount0 || data.minToken0Amount,
               token0Symbol: token0Sym,
               token0Id: data.token0Id,
@@ -289,13 +332,12 @@ export function useRemoveLiquidityMutation() {
               token1Symbol: token1Sym,
               token1Id: data.token1Id,
               feeRate: data.feeRate,
+              plan: [plan],
             });
 
             if (!approved) {
-              console.log('[RemoveLiquidity] User rejected transaction');
               throw new Error('Transaction rejected by user');
             }
-            console.log('[RemoveLiquidity] User approved transaction');
           }
 
           // Single signing call for both wallet types:

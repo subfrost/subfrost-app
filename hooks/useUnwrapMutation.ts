@@ -75,6 +75,7 @@ import { useTransactionConfirm } from '@/context/TransactionConfirmContext';
 import { useSandshrewProvider } from './useSandshrewProvider';
 import { useWalletUtxoCache, useSyncStatus } from './useWalletUtxoCache';
 import { getConfig } from '@/utils/getConfig';
+import { buildPlanFromTx } from '@/lib/alkanes/planBuilder';
 import { buildUnwrapProtostone, buildUnwrapInputRequirements } from '@/lib/alkanes/builders';
 import { getBitcoinNetwork, extractPsbtBase64, toAlks, getSignerAddressDynamic } from '@/lib/alkanes/helpers';
 
@@ -271,9 +272,24 @@ export function useUnwrapMutation() {
           }
         }
 
-        // For keystore wallets, request user confirmation before signing
+        // For keystore wallets, request user confirmation before signing.
+        // The plan visualizes the actual built PSBT — what UTXOs are
+        // being consumed and which outputs are created. Edicts route
+        // the alkane carrier so the input side is exact; the unwrap
+        // BTC return amount is also exact (1:1 minus protocol fee).
         if (walletType === 'keystore') {
-          console.log('[useUnwrapMutation] Keystore wallet - requesting user confirmation...');
+          const plan = buildPlanFromTx({
+            psbtBase64: finalPsbtBase64,
+            cache: utxoCache,
+            ourAddresses: [
+              account?.taproot?.address,
+              account?.nativeSegwit?.address,
+            ].filter((a): a is string => !!a),
+            network: btcNetwork,
+            feeRateSatVb: unwrapData.feeRate,
+            label: 'Unwrap frBTC → BTC',
+            summary: `Burns ${unwrapData.amount} frBTC and releases the corresponding BTC from the protocol reserve.`,
+          });
           const approved = await requestConfirmation({
             type: 'unwrap',
             title: 'Confirm Unwrap',
@@ -282,13 +298,12 @@ export function useUnwrapMutation() {
             toAmount: unwrapData.amount,
             toSymbol: 'BTC',
             feeRate: unwrapData.feeRate,
+            plan: [plan],
           });
 
           if (!approved) {
-            console.log('[useUnwrapMutation] User rejected transaction');
             throw new Error('Transaction rejected by user');
           }
-          console.log('[useUnwrapMutation] User approved transaction');
         }
 
         // Single signing path. Browser wallets sign all input types via the wallet

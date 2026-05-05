@@ -82,4 +82,27 @@ export interface AlkanesExecuteTypedParams {
    *  OOG when block_fuel is exhausted. Default: caller's choice — most
    *  atomic-flow hooks default to `network === 'mainnet'`. */
   splitTransactions?: boolean;
+  /**
+   * Pre-broadcast confirmation hook for keystore wallets. When supplied,
+   * alkanesExecuteTyped:
+   *
+   *   1. Calls the SDK with `autoConfirm: false` so the unsigned PSBT is
+   *      returned instead of being auto-signed and broadcast.
+   *   2. Invokes `previewBeforeBroadcast(psbtBase64)` so the caller can
+   *      build a `TxPlan` from the PSBT, show the rich confirmation
+   *      modal, and resolve to `true` (approve) or `false` (reject).
+   *   3. On approve: signs via `provider.walletSignPsbtBase64` and
+   *      broadcasts via `provider.broadcastTransaction`. The IDB push
+   *      mirror runs after broadcast as usual.
+   *   4. On reject: throws "Transaction rejected by user".
+   *
+   * Browser wallets ignore this callback — their wallet popup is the
+   * canonical confirmation, and the existing PSBT-return path through
+   * the SDK (no SDK-side broadcast) is unchanged.
+   *
+   * For multi-tx flows (`splitTransactions: true`) the callback is
+   * invoked once with the combined-PSBT bundle; callers should detect
+   * and stack two TxPlan cards in the modal.
+   */
+  previewBeforeBroadcast?: (psbtBase64: string) => Promise<boolean>;
 }

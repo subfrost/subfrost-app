@@ -66,6 +66,7 @@ import { buildCreateNewPoolProtostone, buildFactoryAddLiquidityProtostones, buil
 import { getAddressUtxos, getProtorunesByOutpoint } from '@/lib/alkanes/rpc';
 import { useWalletUtxoCache, useSyncStatus, type WalletUtxoCache } from '@/hooks/useWalletUtxoCache';
 import { getBitcoinNetwork, toAlks, extractPsbtBase64 } from '@/lib/alkanes/helpers';
+import { buildPlanFromTx } from '@/lib/alkanes/planBuilder';
 import { getFutureBlockHeight } from '@/utils/amm';
 import { encodeSimulateCalldata } from '@/utils/simulateCalldata';
 
@@ -603,24 +604,56 @@ export function useAddLiquidityMutation() {
           // divide by 1e8. Same bug we fixed in useRemoveLiquidityMutation
           // a few commits back.
           if (walletType === 'keystore') {
-            console.log('[AddLiquidity] Keystore wallet - requesting user confirmation...');
+            const ourAddresses = [
+              account?.taproot?.address,
+              account?.nativeSegwit?.address,
+            ].filter((a): a is string => !!a);
+            const t0Sym = getTokenSymbol(data.token0Id, data.token0Symbol);
+            const t1Sym = getTokenSymbol(data.token1Id, data.token1Symbol);
+            const plan = buildPlanFromTx({
+              psbtBase64,
+              cache: utxoCache,
+              ourAddresses,
+              network: btcNetwork,
+              feeRateSatVb: data.feeRate,
+              label: `Add Liquidity ${t0Sym} + ${t1Sym}`,
+              summary:
+                `Deposits ${data.token0Amount} ${t0Sym} and ${data.token1Amount} ${t1Sym} ` +
+                `to mint LP tokens (slippage tolerance ${data.maxSlippage ?? '0.5'}%).`,
+            });
+            // Predicted LP receive lands on the first cellpack-bound
+            // output paying us. We don't know the exact LP amount without
+            // calling the contract — mark uncertain.
+            const targetIdx = plan.outputs.findIndex(
+              (o) => o.isOurs && !o.isOpReturn,
+            );
+            if (targetIdx >= 0 && data.poolId) {
+              plan.outputs[targetIdx].alkanes = [
+                ...(plan.outputs[targetIdx].alkanes ?? []),
+                {
+                  alkaneId: `${data.poolId.block}:${data.poolId.tx}`,
+                  symbol: 'LP',
+                  amount: BigInt(0),
+                  uncertain: true,
+                },
+              ];
+            }
             const approved = await requestConfirmation({
               type: 'addLiquidity',
               title: 'Confirm Add Liquidity',
               token0Amount: data.token0Amount,
-              token0Symbol: getTokenSymbol(data.token0Id, data.token0Symbol),
+              token0Symbol: t0Sym,
               token0Id: data.token0Id,
               token1Amount: data.token1Amount,
-              token1Symbol: getTokenSymbol(data.token1Id, data.token1Symbol),
+              token1Symbol: t1Sym,
               token1Id: data.token1Id,
               feeRate: data.feeRate,
+              plan: [plan],
             });
 
             if (!approved) {
-              console.log('[AddLiquidity] User rejected transaction');
               throw new Error('Transaction rejected by user');
             }
-            console.log('[AddLiquidity] User approved transaction');
           }
 
           // Single signing path. Browser wallets handle all input types in one

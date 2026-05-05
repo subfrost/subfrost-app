@@ -3,6 +3,7 @@ import * as bitcoin from 'bitcoinjs-lib';
 import * as ecc from '@bitcoinerlab/secp256k1';
 
 import { useWallet } from '@/context/WalletContext';
+import { useTransactionConfirm } from '@/context/TransactionConfirmContext';
 import { useSandshrewProvider } from './useSandshrewProvider';
 import { useWalletUtxoCache, useSyncStatus } from './useWalletUtxoCache';
 import { getBitcoinNetwork, extractPsbtBase64 } from '@/lib/alkanes/helpers';
@@ -11,6 +12,8 @@ import {
   buildTransferProtostone,
   buildTransferInputRequirements,
 } from '@/lib/alkanes/builders';
+import { buildPlanFromTx } from '@/lib/alkanes/planBuilder';
+import { getTokenSymbol } from '@/lib/alkanes-client';
 
 bitcoin.initEccLib(ecc);
 
@@ -36,6 +39,7 @@ export function useAlkaneSendMutation() {
   } = useWallet();
   const provider = useSandshrewProvider();
   const queryClient = useQueryClient();
+  const { requestConfirmation } = useTransactionConfirm();
   // Pre-warmed UTXO snapshot — lets the SDK skip its internal BTC-fee
   // fanout. Latency win for wallets with many dust UTXOs.
   const utxoCache = useWalletUtxoCache();
@@ -74,6 +78,13 @@ export function useAlkaneSendMutation() {
       // ordinals_strategy + paymentUtxos are auto-applied by alkanesExecuteTyped
       // from txContext.walletType: browser → 'preserve' + UniSat-clean-utxos,
       // keystore → 'burn' + no payment_utxos. See lib/alkanes/execute.ts.
+      const btcNetwork = getBitcoinNetwork(network);
+      const ourAddresses = [
+        account?.taproot?.address,
+        account?.nativeSegwit?.address,
+      ].filter((a): a is string => !!a);
+      const symbol = getTokenSymbol(data.alkaneId, undefined);
+      const displayAmount = (Number(data.amountBaseUnits) / 1e8).toString();
       const execResult = await provider.alkanesExecuteTyped({
         txContext,
         protostones,
@@ -83,6 +94,46 @@ export function useAlkaneSendMutation() {
         autoConfirm: isKeystoreWallet,
         network,
         cachedUtxos: utxoCache.utxos,
+        // Keystore-only: PSBT preview before broadcast.
+        previewBeforeBroadcast: isKeystoreWallet
+          ? async (psbtBase64: string) => {
+              const plan = buildPlanFromTx({
+                psbtBase64,
+                cache: utxoCache,
+                ourAddresses,
+                network: btcNetwork,
+                feeRateSatVb: data.feeRate,
+                label: `Send ${symbol}`,
+                summary: `Transfers ${displayAmount} ${symbol} to ${data.recipientAddress}.`,
+              });
+              // The recipient (v1) output is dust — annotate it with the
+              // outgoing alkane edict so the modal shows what's leaving.
+              const recipientIdx = plan.outputs.findIndex(
+                (o) => o.address === data.recipientAddress,
+              );
+              if (recipientIdx >= 0) {
+                plan.outputs[recipientIdx].alkanes = [
+                  ...(plan.outputs[recipientIdx].alkanes ?? []),
+                  {
+                    alkaneId: data.alkaneId,
+                    symbol,
+                    amount: BigInt(data.amountBaseUnits),
+                    uncertain: false,
+                  },
+                ];
+              }
+              return await requestConfirmation({
+                type: 'send',
+                title: 'Confirm Send',
+                recipient: data.recipientAddress,
+                fromAmount: displayAmount,
+                fromSymbol: symbol,
+                fromId: data.alkaneId,
+                feeRate: data.feeRate,
+                plan: [plan],
+              });
+            }
+          : undefined,
       });
 
       // Keystore (autoConfirm=true): SDK signs + broadcasts internally.
@@ -111,7 +162,6 @@ export function useAlkaneSendMutation() {
         throw new Error('SDK did not return a signable PSBT');
       }
 
-      const btcNetwork = getBitcoinNetwork(network);
       let psbtBase64: string = extractPsbtBase64(readyToSign.psbt);
 
       // SDK builds the PSBT with a dummy wallet, so witnessUtxo.script and any

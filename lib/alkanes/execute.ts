@@ -204,7 +204,17 @@ export async function alkanesExecuteTyped(
   // 2. Keystore wallets (auto_confirm=true) on any network — mnemonic loaded in provider,
   //    SDK signs + broadcasts internally. alkanesExecuteWithStrings only returns a PSBT
   //    without signing, which is useless for keystore wallets.
-  const useFullExecution = (isLocalNetwork || params.autoConfirm) &&
+  //
+  // EXCEPTION (2026-05-05): when `previewBeforeBroadcast` is supplied,
+  // we always use alkanesExecuteWithStrings (returns PSBT) for keystore
+  // too. The caller previews the unsigned PSBT (rich confirmation
+  // modal), then we sign + broadcast manually via walletSignPsbtBase64
+  // + broadcastTransaction. Devnet/regtest still uses the auto-mine
+  // path because the user controls block production there.
+  const wantPreview = !!params.previewBeforeBroadcast && !isLocalNetwork;
+  const useFullExecution =
+    !wantPreview &&
+    (isLocalNetwork || params.autoConfirm) &&
     typeof (provider as any).alkanesExecuteFull === 'function';
 
   if (useFullExecution) {
@@ -227,7 +237,7 @@ export async function alkanesExecuteTyped(
     return typeof result === 'string' ? JSON.parse(result) : result;
   }
 
-  // Browser wallets: return PSBT for external signing
+  // PSBT-return path (browser wallets always; keystore when previewing).
   const result = await provider.alkanesExecuteWithStrings(
     toAddressesJson,
     params.inputRequirements,
@@ -236,6 +246,52 @@ export async function alkanesExecuteTyped(
     params.envelopeHex ?? null,
     optionsJson
   );
+  const parsed = typeof result === 'string' ? JSON.parse(result) : result;
 
-  return typeof result === 'string' ? JSON.parse(result) : result;
+  // Keystore preview path: extract PSBT, hand to caller for confirmation,
+  // sign + broadcast on approve.
+  if (wantPreview && params.previewBeforeBroadcast && params.txContext?.walletType === 'keystore') {
+    const psbtBase64 = extractPsbtBase64FromExecuteResult(parsed);
+    if (!psbtBase64) {
+      console.warn('[alkanesExecuteTyped] previewBeforeBroadcast supplied but no PSBT in SDK result; falling back to direct return');
+      return parsed;
+    }
+    const approved = await params.previewBeforeBroadcast(psbtBase64);
+    if (!approved) {
+      throw new Error('Transaction rejected by user');
+    }
+    if (typeof (provider as any).walletSignPsbtBase64 !== 'function') {
+      throw new Error('Provider missing walletSignPsbtBase64 — bump @alkanes/ts-sdk');
+    }
+    const signedHex: string = await (provider as any).walletSignPsbtBase64(psbtBase64);
+    const txid: string = await (provider as any).broadcastTransaction(signedHex);
+    return { ...parsed, txid, tx_hex: signedHex, signed_hex: signedHex };
+  }
+
+  return parsed;
+}
+
+/**
+ * Best-effort PSBT base64 extraction from the polymorphic SDK result.
+ * The SDK has shipped a few different shapes over time; we cover the
+ * known ones and return undefined when nothing matches (caller falls
+ * back to direct return).
+ */
+function extractPsbtBase64FromExecuteResult(result: any): string | undefined {
+  if (!result || typeof result !== 'object') return undefined;
+  const candidates = [
+    result?.readyToSign?.psbt,
+    result?.ready_to_sign?.psbt,
+    result?.psbt,
+    result?.psbtBase64,
+    result?.psbt_base64,
+    result?.unsigned_psbt,
+  ];
+  for (const c of candidates) {
+    if (typeof c === 'string' && c.length > 0) {
+      // Strip any data: prefix or hex marker the SDK might attach.
+      return c;
+    }
+  }
+  return undefined;
 }

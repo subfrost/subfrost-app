@@ -170,6 +170,8 @@ import { patchInputsOnly } from '@/lib/psbt-patching';
 import { buildSwapProtostone, buildSwapExactOutputProtostone, buildSwapInputRequirements, buildRouterSwapProtostone } from '@/lib/alkanes/builders';
 import { FACTORY_SWAP_OPCODE } from '@/lib/alkanes/constants';
 import { uint8ArrayToBase64, getBitcoinNetwork, extractPsbtBase64 } from '@/lib/alkanes/helpers';
+import { buildPlanFromTx } from '@/lib/alkanes/planBuilder';
+import type { PlanAlkaneEntry } from '@/context/TransactionConfirmContext';
 
 bitcoin.initEccLib(ecc);
 
@@ -573,19 +575,77 @@ export function useSwapMutation() {
             logSwapInputDetails(tempPsbt, 'AFTER PATCHING');
           }
 
-          // For keystore wallets, request user confirmation before signing
-          // Browser wallets handle confirmation via their own popup
+          // For keystore wallets, request user confirmation before signing.
+          // Browser wallets handle confirmation via their own popup.
+          //
+          // We render the actual built PSBT via planBuilder, then annotate
+          // the cellpack-receiving output with the predicted alkane payout
+          // from the quote (with `uncertain: true` because the AMM may
+          // move between quote-time and inclusion-time — slippage protects
+          // the *minimum*, not the displayed value).
           if (walletType === 'keystore' && !swapData.skipConfirmation) {
+            const ourAddresses = [taprootAddress, segwitAddress].filter(
+              (a): a is string => !!a,
+            );
+            const isBuyBtc = swapData.buyCurrency === 'btc';
+            const isSellBtc = swapData.sellCurrency === 'btc';
+            const buySymbol = getTokenSymbol(
+              swapData.buyCurrency,
+              swapData.buySymbol,
+            );
+            const sellSymbol = getTokenSymbol(
+              swapData.sellCurrency,
+              swapData.sellSymbol,
+            );
+            const plan = buildPlanFromTx({
+              psbtBase64: finalPsbtBase64,
+              cache: utxoCache,
+              ourAddresses,
+              network: btcNetwork,
+              feeRateSatVb: swapData.feeRate,
+              label: `Swap ${sellSymbol} → ${buySymbol}`,
+              summary:
+                `Sells ${(parseFloat(swapData.sellAmount) / 1e8).toString()} ${sellSymbol} for ` +
+                `≥${(parseFloat(minAmountOut) / 1e8).toFixed(8)} ${buySymbol} ` +
+                `(slippage tolerance ${swapData.maxSlippage}%).`,
+            });
+            // Predicted alkane receive lands on the first cellpack-bound
+            // output — by SDK convention this is the first non-OP_RETURN
+            // output paying us (dust for token receives, BTC payout for
+            // Token→BTC). For Token→BTC we don't add an alkane override
+            // (the receive is BTC sats, already shown on the output).
+            if (!isBuyBtc) {
+              const buyId = swapData.buyCurrency === 'btc'
+                ? FRBTC_ALKANE_ID
+                : swapData.buyCurrency;
+              const targetIdx = plan.outputs.findIndex(
+                (o) => o.isOurs && !o.isOpReturn,
+              );
+              if (targetIdx >= 0) {
+                plan.outputs[targetIdx].alkanes = [
+                  ...(plan.outputs[targetIdx].alkanes ?? []),
+                  {
+                    alkaneId: buyId,
+                    symbol: buySymbol,
+                    amount: BigInt(
+                      Math.floor(parseFloat(swapData.buyAmount)),
+                    ),
+                    uncertain: true,
+                  } satisfies PlanAlkaneEntry,
+                ];
+              }
+            }
             const approved = await requestConfirmation({
               type: 'swap',
               title: 'Confirm Swap',
               fromAmount: (parseFloat(swapData.sellAmount) / 1e8).toString(),
-              fromSymbol: getTokenSymbol(swapData.sellCurrency, swapData.sellSymbol),
-              fromId: swapData.sellCurrency === 'btc' ? undefined : swapData.sellCurrency,
+              fromSymbol: sellSymbol,
+              fromId: isSellBtc ? undefined : swapData.sellCurrency,
               toAmount: (parseFloat(swapData.buyAmount) / 1e8).toString(),
-              toSymbol: getTokenSymbol(swapData.buyCurrency, swapData.buySymbol),
-              toId: swapData.buyCurrency === 'btc' ? undefined : swapData.buyCurrency,
+              toSymbol: buySymbol,
+              toId: isBuyBtc ? undefined : swapData.buyCurrency,
               feeRate: swapData.feeRate,
+              plan: [plan],
             });
 
             if (!approved) {
