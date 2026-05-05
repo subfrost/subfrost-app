@@ -498,6 +498,20 @@ export function patchInputsOnly(params: PatchInputsOnlyParams): {
     paymentPubkeyHex,
   } = params;
 
+  if (!taprootAddress) {
+    // Without this guard the failure mode is `bitcoin.address.toOutputScript(undefined)`
+    // → "undefined has no matching Script" — useless to the user. Connect-time
+    // refusal in WalletContext should make this unreachable for UniSat/OKX, but
+    // we re-check here so any future regression surfaces a clear message instead
+    // of a cryptic bitcoinjs error. (See unisat-single-address-bugs.test.ts.)
+    throw new Error(
+      'patchInputsOnly: taprootAddress is required. The connected wallet ' +
+      'does not expose a taproot (P2TR) address — alkanes cannot be sent or ' +
+      'received from a non-taproot address. Switch your wallet extension ' +
+      'to Taproot mode and reconnect.'
+    );
+  }
+
   const psbt = bitcoin.Psbt.fromBase64(psbtBase64, { network });
 
   let totalPatched = 0;

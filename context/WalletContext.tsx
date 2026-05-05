@@ -1720,16 +1720,19 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
         if (!addr) throw new Error('No address returned from OKX');
 
         const isTaproot = addr.startsWith('bc1p') || addr.startsWith('tb1p') || addr.startsWith('bcrt1p');
-        if (isTaproot) {
-          additionalAddresses.taproot = { address: addr, publicKey: pubKey };
-        } else {
-          additionalAddresses.nativeSegwit = { address: addr, publicKey: pubKey };
+        if (!isTaproot) {
+          throw new Error(
+            'OKX is in Native Segwit / Nested Segwit mode. Subfrost requires Taproot — ' +
+            'alkanes (DIESEL, frBTC, LP tokens, etc.) only live at P2TR addresses. ' +
+            'Open OKX → Switch Address Type → Taproot, then reconnect.'
+          );
         }
+        additionalAddresses.taproot = { address: addr, publicKey: pubKey };
 
         connected = new (ConnectedWallet as any)(walletInfo, okxProvider, {
           address: addr,
           publicKey: pubKey,
-          addressType: isTaproot ? 'p2tr' : 'p2wpkh',
+          addressType: 'p2tr',
         });
       } else if (walletId === 'unisat') {
         // Unisat exposes window.unisat with requestAccounts(), getPublicKey(), signPsbt()
@@ -1807,16 +1810,19 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
         try { pubKey = await unisatProvider.getPublicKey(); } catch {}
 
         const isTaproot = addr.startsWith('bc1p') || addr.startsWith('tb1p') || addr.startsWith('bcrt1p');
-        if (isTaproot) {
-          additionalAddresses.taproot = { address: addr, publicKey: pubKey };
-        } else {
-          additionalAddresses.nativeSegwit = { address: addr, publicKey: pubKey };
+        if (!isTaproot) {
+          throw new Error(
+            'UniSat is in Native Segwit / Nested Segwit / Legacy mode. Subfrost requires Taproot — ' +
+            'alkanes (DIESEL, frBTC, LP tokens, etc.) only live at P2TR addresses. ' +
+            'Open UniSat → Settings → Address Type → Taproot (P2TR), then reconnect.'
+          );
         }
+        additionalAddresses.taproot = { address: addr, publicKey: pubKey };
 
         connected = new (ConnectedWallet as any)(walletInfo, unisatProvider, {
           address: addr,
           publicKey: pubKey,
-          addressType: isTaproot ? 'p2tr' : 'p2wpkh',
+          addressType: 'p2tr',
         });
       } else {
         // For other wallets, use the standard connector

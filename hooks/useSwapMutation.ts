@@ -525,10 +525,17 @@ export function useSwapMutation() {
           // ============================================================================
           let finalPsbtBase64 = psbtBase64;
           if (isBrowserWallet) {
+            if (!taprootAddress) {
+              throw new Error(
+                'Connected wallet has no taproot address. Switch your wallet ' +
+                'extension to Taproot (P2TR) mode and reconnect — alkanes only ' +
+                'live at P2TR addresses.'
+              );
+            }
             const result = patchInputsOnly({
               psbtBase64,
               network: btcNetwork,
-              taprootAddress: taprootAddress!,
+              taprootAddress,
               segwitAddress,
               paymentPubkeyHex: account?.nativeSegwit?.pubkey,
             });
