@@ -149,6 +149,8 @@ const MUTATION_HOOKS = [
   'useSwapMutation',
   'useAlkaneSendMutation',
   'useRemoveLiquidityMutation',
+  'useWrapMutation',
+  'useUnwrapMutation',
 ];
 
 describe.each(MUTATION_HOOKS)('%s — cache + sync gate wiring', (hookName) => {

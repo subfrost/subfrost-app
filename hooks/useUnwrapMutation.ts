@@ -73,6 +73,7 @@ import { patchInputsOnly } from '@/lib/psbt-patching';
 import { useWallet } from '@/context/WalletContext';
 import { useTransactionConfirm } from '@/context/TransactionConfirmContext';
 import { useSandshrewProvider } from './useSandshrewProvider';
+import { useWalletUtxoCache, useSyncStatus } from './useWalletUtxoCache';
 import { getConfig } from '@/utils/getConfig';
 import { buildUnwrapProtostone, buildUnwrapInputRequirements } from '@/lib/alkanes/builders';
 import { getBitcoinNetwork, extractPsbtBase64, toAlks, getSignerAddressDynamic } from '@/lib/alkanes/helpers';
@@ -90,10 +91,19 @@ export function useUnwrapMutation() {
   const queryClient = useQueryClient();
   const { requestConfirmation } = useTransactionConfirm();
   const { FRBTC_ALKANE_ID } = getConfig(network);
+  // Pre-warmed UTXO cache + sync gate.
+  const utxoCache = useWalletUtxoCache();
+  const syncStatus = useSyncStatus();
 
   return useMutation({
     mutationFn: async (unwrapData: UnwrapTransactionBaseData) => {
       if (!isConnected) throw new Error('Wallet not connected');
+      const isLocal = ['devnet', 'regtest-local', 'qubitcoin-regtest'].includes(network ?? '');
+      if (!isLocal && syncStatus.metashrewHeight > 0 && !syncStatus.inSync) {
+        throw new Error(
+          `Indexer catching up (${syncStatus.lag} block${syncStatus.lag === 1 ? '' : 's'} behind). Try again in a moment.`,
+        );
+      }
       // Ensure browser wallet session is active before building PSBT
       if (walletType === 'browser') {
         const { ensureWalletSession } = await import('@/lib/wallet/browserWalletSigning');
@@ -201,6 +211,7 @@ export function useUnwrapMutation() {
         protostones: protostone,
         feeRate: unwrapData.feeRate,
         autoConfirm: false,
+        cachedUtxos: utxoCache.utxos,
       });
 
       console.log('[useUnwrapMutation] Called alkanesExecuteTyped (browser:', isBrowserWallet, ')');

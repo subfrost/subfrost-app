@@ -80,6 +80,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useWallet } from '@/context/WalletContext';
 import { useTransactionConfirm } from '@/context/TransactionConfirmContext';
 import { useSandshrewProvider } from './useSandshrewProvider';
+import { useWalletUtxoCache, useSyncStatus } from './useWalletUtxoCache';
 import { getConfig } from '@/utils/getConfig';
 import * as bitcoin from 'bitcoinjs-lib';
 import * as ecc from '@bitcoinerlab/secp256k1';
@@ -102,10 +103,21 @@ export function useWrapMutation() {
   const { requestConfirmation } = useTransactionConfirm();
   const { FRBTC_ALKANE_ID } = getConfig(network);
   const { data: premiumData } = useFrbtcPremium();
+  // Pre-warmed UTXO cache + sync gate. Same perf-fix pattern as the
+  // other alkane mutation hooks — feeds clean BTC payment_utxos and
+  // refuses submission while metashrew is behind bitcoind.
+  const utxoCache = useWalletUtxoCache();
+  const syncStatus = useSyncStatus();
 
   return useMutation({
     mutationFn: async (wrapData: WrapTransactionBaseData) => {
       if (!isConnected) throw new Error('Wallet not connected');
+      const isLocal = ['devnet', 'regtest-local', 'qubitcoin-regtest'].includes(network ?? '');
+      if (!isLocal && syncStatus.metashrewHeight > 0 && !syncStatus.inSync) {
+        throw new Error(
+          `Indexer catching up (${syncStatus.lag} block${syncStatus.lag === 1 ? '' : 's'} behind). Try again in a moment.`,
+        );
+      }
       // Ensure browser wallet session is active before building PSBT
       if (walletType === 'browser') {
         const { ensureWalletSession } = await import('@/lib/wallet/browserWalletSigning');
@@ -183,6 +195,8 @@ export function useWrapMutation() {
           autoConfirm: walletType === 'keystore',
           traceEnabled: walletType !== 'keystore',
           mineEnabled: false,
+          // Pre-warmed clean BTC UTXOs — skips the WASM coinselect fanout.
+          cachedUtxos: utxoCache.utxos,
         });
 
         console.log('[WRAP] Execute result:', result);
