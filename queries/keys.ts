@@ -40,11 +40,26 @@ export const queryKeys = {
       ['btc-balance', address, network] as const,
     alkaneBalances: (network: string, addresses: string) =>
       ['alkane-balances', network, addresses] as const,
+    /**
+     * Pre-warmed UTXO + balance-sheet snapshot for the wallet's
+     * addresses. Mounted eagerly on connect so swap/send mutations
+     * read out of cache instead of fanning out RPC at click time.
+     * Invalidated by HeightPoller on every block-tip change.
+     */
+    walletUtxoCache: (network: string, addresses: string) =>
+      ['wallet-utxo-cache', network, addresses] as const,
     sellableCurrencies: (
       network: string,
       walletAddress: string,
       tokensKey: string,
     ) => ['sellable-currencies', walletAddress, tokensKey, network] as const,
+  },
+
+  // -------------------------------------------------------------------------
+  // Sync status — metashrew vs bitcoind tip
+  // -------------------------------------------------------------------------
+  sync: {
+    status: (network: string) => ['sync-status', network] as const,
   },
 
   // -------------------------------------------------------------------------

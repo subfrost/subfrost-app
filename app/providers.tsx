@@ -14,6 +14,7 @@ import { LanguageProvider } from '@/context/LanguageContext';
 import { TransactionConfirmProvider } from '@/context/TransactionConfirmContext';
 import { NotificationProvider } from '@/context/NotificationContext';
 import { HeightPoller } from '@/queries/height';
+import { WalletStatePrewarmer } from '@/components/WalletStatePrewarmer';
 import { DevnetProvider } from '@/context/DevnetContext';
 import { DevnetBootModal, DevnetErrorModal } from '@/components/DevnetBootModal';
 import { DevnetControlPanel, DevnetNetworkBanner } from '@/components/DevnetControlPanel';
@@ -131,6 +132,7 @@ export default function Providers({ children }: { children: ReactNode }) {
                   <DevnetProvider network={network}>
                     <HeightPoller network={network} />
                     <WalletProvider network={network}>
+                      <WalletStatePrewarmer />
                       <TransactionConfirmProvider>
                         <NotificationProvider>
                           <DevnetNetworkBanner />

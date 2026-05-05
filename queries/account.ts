@@ -313,6 +313,257 @@ export async function fetchAlkaneBalancesViaProtobuf(
 }
 
 // ---------------------------------------------------------------------------
+// Pre-warmed wallet UTXO cache
+// ---------------------------------------------------------------------------
+//
+// Why this exists: PSBT construction in useSwapMutation /
+// useAddLiquidityMutation / useAlkaneSendMutation needs to know which
+// dust UTXOs carry alkanes. The naive path runs
+// `esplora_address::utxo + Promise.all(protorunesbyoutpoint per dust)`
+// at click-time. For wallets with >100 UTXOs that's ~5 seconds of
+// blocking I/O between the click and the wallet popup — a real UX
+// complaint surfaced by users.
+//
+// Architecture: a single TanStack Query, mounted eagerly when the
+// wallet connects, that owns the canonical view of the wallet's
+// UTXO set + balance sheets. `staleTime: Infinity` and only the
+// HeightPoller invalidates it on block-tip change. Mutation hooks
+// read out of the cached snapshot — no on-demand fanout.
+//
+// `protorunesbyaddress` is forbidden here too — same phantom-balance
+// bug. The fanout uses `alkanes_protorunesbyoutpoint` per dust UTXO,
+// which the indexer returns from current state and never carries
+// stale entries.
+
+/**
+ * One UTXO + its alkane balance sheet (if any). The same shape mutation
+ * hooks need for protostone construction.
+ */
+export interface CachedUtxo {
+  txid: string;
+  vout: number;
+  value: number;
+  /** Owning address — useful for wallets with both segwit + taproot. */
+  address: string;
+  /** Per-alkane amounts on this outpoint. Empty for non-dust BTC UTXOs. */
+  alkanes: Array<{ block: number; tx: number; amount: bigint }>;
+}
+
+/**
+ * The pre-warmed wallet view used everywhere a swap/send/addLiq
+ * mutation needs to know what's on-chain. Lookups are O(1).
+ */
+export interface WalletUtxoCache {
+  /** All UTXOs across the wallet's addresses, in fetch order. */
+  utxos: CachedUtxo[];
+  /** Lookup by `txid:vout`. Same entries as `utxos`. */
+  byOutpoint: Map<string, CachedUtxo>;
+  /** Lookup by alkane id (`block:tx`) → outpoints carrying it. */
+  byAlkane: Map<string, CachedUtxo[]>;
+  /** Aggregated per-alkane balance (sub-units). */
+  balances: Map<string, bigint>;
+  /** Snapshot height. Lets consumers reason about freshness. */
+  height: number;
+}
+
+interface WalletUtxoCacheDeps {
+  network: string;
+  isInitialized: boolean;
+  account: any;
+  isConnected: boolean;
+}
+
+const EMPTY_UTXO_CACHE: WalletUtxoCache = {
+  utxos: [],
+  byOutpoint: new Map(),
+  byAlkane: new Map(),
+  balances: new Map(),
+  height: 0,
+};
+
+export function walletUtxoCacheQueryOptions(deps: WalletUtxoCacheDeps) {
+  const addresses: string[] = [];
+  if (deps.account?.nativeSegwit?.address) addresses.push(deps.account.nativeSegwit.address);
+  if (deps.account?.taproot?.address) addresses.push(deps.account.taproot.address);
+  const addressKey = addresses.sort().join(',');
+
+  return queryOptions<WalletUtxoCache>({
+    queryKey: queryKeys.account.walletUtxoCache(deps.network, addressKey),
+    enabled:
+      deps.isInitialized &&
+      !!deps.account &&
+      deps.isConnected &&
+      addresses.length > 0,
+    // Staleness is governed by HeightPoller invalidation — block-tip
+    // change is the only event that can mutate UTXO truth.
+    staleTime: Infinity,
+    refetchOnMount: true,
+    refetchOnWindowFocus: false,
+    retry: 3,
+    retryDelay: (attempt: number) => Math.min(1000 * 2 ** attempt, 10_000),
+    placeholderData: EMPTY_UTXO_CACHE,
+    queryFn: async () => {
+      // Step 1: pull UTXOs for both addresses in parallel.
+      const utxoArrays = await Promise.all(
+        addresses.map(async (addr) => {
+          try {
+            const list = await getAddressUtxos(deps.network, addr, AbortSignal.timeout(15_000));
+            return list.map((u) => ({ ...u, address: addr }));
+          } catch (err) {
+            console.warn(`[walletUtxoCache] getAddressUtxos failed for ${addr}:`, err);
+            // Throw to trigger React Query's retry — preserves prior cache
+            // rather than overwriting with [].
+            throw err;
+          }
+        }),
+      );
+      const allUtxos = utxoArrays.flat();
+
+      // Step 2: fan out alkanes_protorunesbyoutpoint for dust UTXOs.
+      // Non-dust UTXOs are pure BTC and have no protorunes balance to
+      // fetch (querying anyway just doubles the indexer load).
+      const dustUtxos = allUtxos.filter((u) => u.value <= 1000);
+      const alkaneMap = new Map<string, Array<{ block: number; tx: number; amount: bigint }>>();
+      if (dustUtxos.length > 0) {
+        const RETRY_DELAYS = [0, 500, 1500];
+        const fetchWithRetry = async (txid: string, vout: number) => {
+          let lastErr: unknown;
+          for (const delay of RETRY_DELAYS) {
+            if (delay > 0) await new Promise((r) => setTimeout(r, delay));
+            try {
+              const resp = await getProtorunesByOutpoint(
+                deps.network,
+                txid,
+                vout,
+                AbortSignal.timeout(15_000),
+              );
+              return resp?.balance_sheet?.cached?.balances ?? [];
+            } catch (e) {
+              lastErr = e;
+            }
+          }
+          throw new Error(`getProtorunesByOutpoint(${txid}:${vout}) failed: ${lastErr}`);
+        };
+        const sheets = await Promise.all(
+          dustUtxos.map((u) => fetchWithRetry(u.txid, u.vout)),
+        );
+        for (let i = 0; i < dustUtxos.length; i++) {
+          const u = dustUtxos[i];
+          const balances = sheets[i] ?? [];
+          const alkanes: Array<{ block: number; tx: number; amount: bigint }> = [];
+          for (const b of balances) {
+            const amount = BigInt(String(b.amount ?? 0));
+            if (amount === 0n) continue;
+            alkanes.push({
+              block: Number(b.block),
+              tx: Number(b.tx),
+              amount,
+            });
+          }
+          if (alkanes.length > 0) {
+            alkaneMap.set(`${u.txid}:${u.vout}`, alkanes);
+          }
+        }
+      }
+
+      // Step 3: assemble lookups.
+      const utxos: CachedUtxo[] = allUtxos.map((u) => ({
+        txid: u.txid,
+        vout: u.vout,
+        value: u.value,
+        address: u.address,
+        alkanes: alkaneMap.get(`${u.txid}:${u.vout}`) ?? [],
+      }));
+      const byOutpoint = new Map<string, CachedUtxo>();
+      const byAlkane = new Map<string, CachedUtxo[]>();
+      const balances = new Map<string, bigint>();
+      for (const u of utxos) {
+        byOutpoint.set(`${u.txid}:${u.vout}`, u);
+        for (const a of u.alkanes) {
+          const id = `${a.block}:${a.tx}`;
+          if (!byAlkane.has(id)) byAlkane.set(id, []);
+          byAlkane.get(id)!.push(u);
+          balances.set(id, (balances.get(id) ?? 0n) + a.amount);
+        }
+      }
+
+      return { utxos, byOutpoint, byAlkane, balances, height: 0 };
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Sync status — metashrew vs bitcoind tip
+// ---------------------------------------------------------------------------
+//
+// Alkane operations require the indexer to be caught up to bitcoind.
+// If metashrew is behind, simulated swap quotes use stale reserves and
+// the SDK's pre-broadcast sync check (which compares metashrew_height to
+// getblockcount) errors with "Indexer sync timed out".
+//
+// Mutation hooks should refuse to submit alkane txs while !inSync, so
+// the user sees a clear "indexer catching up" state instead of a
+// generic mid-flight failure.
+
+export interface SyncStatus {
+  metashrewHeight: number;
+  bitcoindHeight: number;
+  /** True when metashrew >= bitcoind. */
+  inSync: boolean;
+  /** Number of blocks metashrew is behind. 0 = caught up or ahead. */
+  lag: number;
+}
+
+const EMPTY_SYNC: SyncStatus = {
+  metashrewHeight: 0,
+  bitcoindHeight: 0,
+  inSync: false,
+  lag: 0,
+};
+
+export function syncStatusQueryOptions(network: string) {
+  return queryOptions<SyncStatus>({
+    queryKey: queryKeys.sync.status(network),
+    // 4-second poll while a wallet flow is potentially active. Cheap
+    // (two RPC calls) and guarantees the gate doesn't lag user clicks
+    // by more than ~4s.
+    refetchInterval: 4_000,
+    staleTime: 3_500,
+    placeholderData: EMPTY_SYNC,
+    queryFn: async () => {
+      const rpcUrl = getRpcUrl(network);
+      const rpc = async (method: string, params: unknown[] = []): Promise<unknown> => {
+        const res = await fetch(rpcUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
+          signal: AbortSignal.timeout(8_000),
+        });
+        if (!res.ok) throw new Error(`${method} ${res.status}`);
+        const json = await res.json();
+        if (json.error) throw new Error(`${method}: ${json.error.message ?? 'rpc error'}`);
+        return json.result;
+      };
+      const [metashrewRaw, bitcoindRaw] = await Promise.all([
+        rpc('metashrew_height').catch(() => 0),
+        rpc('btc_getblockcount').catch(() => 0),
+      ]);
+      const metashrewHeight =
+        typeof metashrewRaw === 'string' ? parseInt(metashrewRaw, 10) : Number(metashrewRaw ?? 0);
+      const bitcoindHeight =
+        typeof bitcoindRaw === 'string' ? parseInt(bitcoindRaw, 10) : Number(bitcoindRaw ?? 0);
+      const lag = Math.max(0, bitcoindHeight - metashrewHeight);
+      return {
+        metashrewHeight,
+        bitcoindHeight,
+        inSync: metashrewHeight > 0 && metashrewHeight >= bitcoindHeight,
+        lag,
+      };
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Enriched wallet data
 // ---------------------------------------------------------------------------
 

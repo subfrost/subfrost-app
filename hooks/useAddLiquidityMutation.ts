@@ -64,6 +64,7 @@ import { patchInputsOnly } from '@/lib/psbt-patching';
 import { toXOnlyPubKeyHex, X_ONLY_HEX_LENGTH } from '@/lib/wallet/pubkeyHelpers';
 import { buildCreateNewPoolProtostone, buildFactoryAddLiquidityProtostones, buildAddLiquidityInputRequirements } from '@/lib/alkanes/builders';
 import { getAddressUtxos, getProtorunesByOutpoint } from '@/lib/alkanes/rpc';
+import { useWalletUtxoCache, useSyncStatus, type WalletUtxoCache } from '@/hooks/useWalletUtxoCache';
 import { getBitcoinNetwork, toAlks, extractPsbtBase64 } from '@/lib/alkanes/helpers';
 import { getFutureBlockHeight } from '@/utils/amm';
 import { encodeSimulateCalldata } from '@/utils/simulateCalldata';
@@ -188,7 +189,31 @@ export async function findPoolId(
 async function discoverAlkaneUtxos(
   taprootAddress: string,
   network: string = 'mainnet',
+  prefetched?: WalletUtxoCache,
 ): Promise<{ txid: string; vout: number; value: number; alkanes: { block: number; tx: number; amount: number }[] }[]> {
+  // Cache-fast path: use the pre-warmed snapshot from
+  // useWalletUtxoCache. Mounted eagerly on connect so by click time
+  // we already have the answer in memory. No fanout, no waiting on
+  // the indexer for outpoints we already enumerated.
+  if (prefetched && prefetched.utxos.length > 0) {
+    const fromCache = prefetched.utxos
+      .filter((u) => u.address === taprootAddress && u.alkanes.length > 0)
+      .map((u) => ({
+        txid: u.txid,
+        vout: u.vout,
+        value: u.value,
+        alkanes: u.alkanes.map((a) => ({
+          block: a.block,
+          tx: a.tx,
+          amount: Number(a.amount),
+        })),
+      }));
+    console.log(
+      `[AddLiquidity] Discovered ${fromCache.length} alkane UTXOs from prefetched cache (no RPC fanout)`,
+    );
+    return fromCache;
+  }
+
   console.log('[AddLiquidity] Discovering alkane UTXOs at', taprootAddress);
 
   // 1. Fetch UTXOs via SDK-mediated rpc.ts (handles devnet localhost
@@ -315,12 +340,30 @@ export function useAddLiquidityMutation() {
   const provider = useSandshrewProvider();
   const queryClient = useQueryClient();
   const { requestConfirmation } = useTransactionConfirm();
+  // Pre-warmed UTXO cache: read from this instead of fetching at click
+  // time. Eliminates the multi-second pause between Confirm and the
+  // wallet popup for wallets with many dust UTXOs.
+  const utxoCache = useWalletUtxoCache();
+  const syncStatus = useSyncStatus();
   const config = getConfig(network);
   const ALKANE_FACTORY_ID = config.ALKANE_FACTORY_ID;
   const defaultPoolId = 'DEFAULT_POOL_ID' in config ? (config as any).DEFAULT_POOL_ID as string : undefined;
 
   return useMutation({
     mutationFn: async (data: AddLiquidityTransactionData) => {
+      // Sync gate: alkane operations require metashrew to be caught
+      // up to bitcoind. Without this, simulated quotes use stale
+      // reserves and the SDK's pre-broadcast sync check errors with
+      // "Indexer sync timed out" mid-flight. Surface the wait up
+      // front so the UI can show a clear "indexer catching up" state.
+      // Skip the gate on local networks (devnet/regtest) — there the
+      // user controls block production via the control panel.
+      const isLocal = ['devnet', 'regtest-local', 'qubitcoin-regtest'].includes(network ?? '');
+      if (!isLocal && syncStatus.metashrewHeight > 0 && !syncStatus.inSync) {
+        throw new Error(
+          `Indexer catching up (${syncStatus.lag} block${syncStatus.lag === 1 ? '' : 's'} behind). Try again in a moment.`,
+        );
+      }
       console.log('[AddLiquidity] ═══════════════════════════════════════════');
       console.log('[AddLiquidity] Starting add liquidity transaction');
       console.log('[AddLiquidity] Input data:', JSON.stringify(data, null, 2));
@@ -502,7 +545,7 @@ export function useAddLiquidityMutation() {
           // so the PSBT is built WITHOUT alkane-bearing inputs. We manually discover
           // alkane UTXOs and inject them into the PSBT before signing.
           console.log('[AddLiquidity] Discovering alkane UTXOs for injection...');
-          const alkaneUtxos = await discoverAlkaneUtxos(taprootAddress!, network || 'mainnet');
+          const alkaneUtxos = await discoverAlkaneUtxos(taprootAddress!, network || 'mainnet', utxoCache);
 
           if (alkaneUtxos.length > 0) {
             const tapInternalKeyHex = account?.taproot?.pubKeyXOnly;
