@@ -1214,6 +1214,7 @@ export default function SwapShell() {
           minimumReceived: quote.minimumReceived || '1',
           maxSlippage,
           deadlineBlocks,
+          feeRate: fee.feeRate,
         });
 
         if (result?.success && result.transactionId) {
@@ -1270,6 +1271,7 @@ export default function SwapShell() {
           sellAmount: quote.sellAmount,
           buyAmount: quote.buyAmount,
           poolId: quote.poolId,
+          feeRate: fee.feeRate,
           onProgress: (p) => setSwapFlowStep(p as any),
           onNotify: (txId, op, ctx) => showNotification(txId, op, ctx),
         });
@@ -1407,6 +1409,7 @@ export default function SwapShell() {
           tokenAmount,
           maxSlippage,
           deadlineBlocks,
+          feeRate: fee.feeRate,
           poolId,
         });
         if (result?.success && result.transactionId) {
