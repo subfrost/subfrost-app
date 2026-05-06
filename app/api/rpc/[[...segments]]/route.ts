@@ -45,11 +45,89 @@ const BATCH_RPC_ENDPOINTS: Record<string, string> = {
   oylnet: 'https://regtest.subfrost.io/v4/jsonrpc',
 };
 
+/**
+ * Best-effort fetch of mempool.space's tip height. Used when reshaping a
+ * mempool.space UTXO array into the WASM SDK's lua-script response shape
+ * (`spendable`/`immature`/`currentHeight`/`address`). Failure returns null
+ * — the caller falls back to confirmations=0, which is conservative but
+ * doesn't break the SDK's downstream consumption.
+ */
+async function fetchMempoolTipHeight(): Promise<number | null> {
+  try {
+    const r = await fetch('https://mempool.space/api/blocks/tip/height', {
+      headers: { 'Accept': 'text/plain' },
+    });
+    if (!r.ok) return null;
+    const text = (await r.text()).trim();
+    const n = parseInt(text, 10);
+    return Number.isFinite(n) ? n : null;
+  } catch {
+    return null;
+  }
+}
+
 function pickEndpoint(body: any, network: string) {
   const isBatch = Array.isArray(body);
   const single = RPC_ENDPOINTS[network] || RPC_ENDPOINTS.regtest;
   const batch = BATCH_RPC_ENDPOINTS[network] || BATCH_RPC_ENDPOINTS.regtest;
   return isBatch ? batch : single;
+}
+
+/**
+ * Translate a JSON-RPC esplora method to the equivalent mempool.space REST
+ * path so we can fall back when the upstream gateway's internal esplora pod
+ * is unreachable. Returns null when the method has no clean REST equivalent
+ * (caller skips the fallback and surfaces the original error).
+ *
+ * Why: the WASM SDK calls `esplora_address::utxo` etc. as JSON-RPC methods.
+ * The subfrost gateway proxies those to its internal esplora; when that pod
+ * dies, every UTXO-touching mutation fails with "Insufficient funds" because
+ * the SDK has no UTXOs to work with. Mempool.space exposes the same REST
+ * shape on mainnet, so we re-route the failing method there. Mainnet only —
+ * mempool.space doesn't carry our regtest/signet networks at this URL shape.
+ */
+function mapJsonRpcToEsploraRestPath(
+  method: string | undefined,
+  params: unknown[] | undefined,
+  errorMessage?: string,
+): string | null {
+  if (!method || !Array.isArray(params)) return null;
+  const [first, second] = params as [string?, string?];
+  switch (method) {
+    case 'esplora_address::utxo':
+      return first ? `address/${first}/utxo` : null;
+    case 'esplora_address::txs':
+      return first ? `address/${first}/txs` : null;
+    case 'esplora_address::txs:mempool':
+      return first ? `address/${first}/txs/mempool` : null;
+    case 'esplora_tx':
+      return first ? `tx/${first}` : null;
+    case 'esplora_tx::hex':
+      return first ? `tx/${first}/hex` : null;
+    case 'esplora_blocks::tip-height':
+      return 'blocks/tip/height';
+    case 'esplora_blocks::tip-hash':
+      return 'blocks/tip/hash';
+    // The WASM SDK's wallet provider runs an inline lua script before falling
+    // back to direct JSON-RPC. The script calls `_RPC.esplora_addressutxo(addr)`
+    // internally, so the same upstream-esplora-down condition surfaces here.
+    // Detect via the error stack-trace mentioning the lua field name; the
+    // address is always the second param (first is the script text).
+    case 'lua_evalscript':
+      if (typeof second !== 'string' || !errorMessage) return null;
+      if (errorMessage.includes('esplora_addressutxo')) {
+        return `address/${second}/utxo`;
+      }
+      if (errorMessage.includes('esplora_address') && errorMessage.includes('mempool')) {
+        return `address/${second}/txs/mempool`;
+      }
+      if (errorMessage.includes('esplora_address')) {
+        return `address/${second}/txs`;
+      }
+      return null;
+    default:
+      return null;
+  }
 }
 
 export async function POST(
@@ -221,6 +299,82 @@ export async function POST(
       signet: 'https://signet.subfrost.io/v4/jsonrpc',
     };
 
+    // Direct mempool.space route for the WASM SDK's wallet-provider lua script.
+    //
+    // Why this is a *bypass* rather than just a fallback: the upstream gateway's
+    // lua executor was observed (2026-05-06) to return a stale UTXO snapshot
+    // for confirmed addresses — missing entire UTXOs that esplora and
+    // mempool.space both report. The WASM SDK trusts this list and ignores the
+    // `payment_utxos` we pass into alkanesExecuteTyped, so the SDK ends up
+    // selecting only the dust UTXOs the lua list happens to contain and fails
+    // with "Insufficient funds: inputs (X) < outputs (Y) + fee (Z)".
+    //
+    // The standard wallet-provider script is identifiable by its body — it
+    // calls `_RPC.esplora_addressutxo(address)` and returns a
+    // `{spendable, immature, currentHeight, address}` shape. When we see that
+    // exact pattern on mainnet, we skip the upstream and serve a mempool.space
+    // response in the same shape. Other lua scripts (custom user calls) still
+    // go through upstream untouched.
+    //
+    // Mainnet only — mempool.space doesn't carry our other networks at this
+    // URL shape.
+    if (
+      method === 'lua_evalscript' &&
+      network === 'mainnet' &&
+      Array.isArray(body?.params) &&
+      typeof body.params[0] === 'string' &&
+      typeof body.params[1] === 'string' &&
+      body.params[0].includes('_RPC.esplora_addressutxo') &&
+      body.params[0].includes('spendable')
+    ) {
+      const address = body.params[1];
+      console.log(`[RPC Proxy] lua_evalscript wallet-provider script intercepted, serving from mempool.space for ${address}`);
+      try {
+        const [utxosResp, tipHeight] = await Promise.all([
+          fetch(`https://mempool.space/api/address/${address}/utxo`, {
+            headers: { 'Accept': 'application/json' },
+          }),
+          fetchMempoolTipHeight(),
+        ]);
+        if (utxosResp.ok) {
+          const raw = await utxosResp.json();
+          if (Array.isArray(raw)) {
+            const spendable: any[] = [];
+            const immature: any[] = [];
+            for (const u of raw) {
+              if (!u?.status?.confirmed) continue;
+              const height = u.status.block_height;
+              const confirmations =
+                typeof tipHeight === 'number' && typeof height === 'number'
+                  ? tipHeight - height + 1
+                  : 0;
+              spendable.push({
+                txid: u.txid,
+                vout: u.vout,
+                value: u.value,
+                outpoint: `${u.txid}:${u.vout}`,
+                height,
+                confirmations,
+                is_coinbase: false,
+              });
+            }
+            return NextResponse.json({
+              jsonrpc: '2.0',
+              result: {
+                spendable,
+                immature,
+                currentHeight: tipHeight ?? 0,
+                address,
+              },
+              id: body?.id ?? null,
+            });
+          }
+        }
+      } catch (e) {
+        console.warn(`[RPC Proxy] mempool.space bypass failed, falling through to upstream:`, e);
+      }
+    }
+
     let response = await fetch(targetUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -259,6 +413,88 @@ export async function POST(
           data = fallbackData;
         }
       } catch { /* fallback failed, use original error */ }
+    }
+
+    // Mempool.space fallback for esplora-down errors on mainnet.
+    //
+    // Why: the upstream gateway proxies several JSON-RPC methods to an internal
+    // esplora pod. When that pod is unreachable, calls fail with
+    // `error sending request for url (http://esplora:50010/...)`. The WASM SDK
+    // calls these methods directly and, despite us pre-supplying `payment_utxos`
+    // to alkanesExecuteTyped, the WASM still fetches its own UTXO list before
+    // building the PSBT — so an esplora outage manifests to the user as
+    // "Insufficient BTC for transaction fees" even though all params were correct.
+    //
+    // Mempool.space exposes the same esplora REST API for mainnet. We translate
+    // the failing JSON-RPC method to a mempool.space REST GET, then re-shape the
+    // response to a JSON-RPC envelope. Mainnet only — testnet/signet/regtest are
+    // not on mempool.space at this URL shape.
+    const isEsploraUpstreamDown =
+      data?.error?.message?.includes('error sending request for url') &&
+      data.error.message.includes('esplora:');
+    if (isEsploraUpstreamDown && network === 'mainnet') {
+      const mempoolPath = mapJsonRpcToEsploraRestPath(
+        method,
+        body?.params,
+        data?.error?.message,
+      );
+      if (mempoolPath) {
+        console.log(`[RPC Proxy] esplora upstream down, falling back to mempool.space: ${mempoolPath}`);
+        try {
+          const mempoolResp = await fetch(`https://mempool.space/api/${mempoolPath}`, {
+            method: 'GET',
+            headers: { 'Accept': 'application/json' },
+          });
+          if (mempoolResp.ok) {
+            const raw = await mempoolResp.json();
+            // The WASM SDK's lua wallet-provider script returns a structured
+            // shape: `{ spendable, immature, currentHeight, address }`. We
+            // re-shape mempool.space's plain UTXO array into that contract so
+            // the SDK can consume the response without a downstream change.
+            // Coinbase maturity check (100-block rule) is preserved at best
+            // effort using the tip height we already had to fetch.
+            let result: unknown = raw;
+            if (method === 'lua_evalscript' && Array.isArray(raw)) {
+              const address = (body?.params as string[] | undefined)?.[1] ?? '';
+              const tipHeight = await fetchMempoolTipHeight();
+              const COINBASE_MATURITY = 100;
+              const spendable: any[] = [];
+              const immature: any[] = [];
+              for (const u of raw) {
+                if (!u?.status?.confirmed) continue;
+                const height = u.status.block_height;
+                const confirmations =
+                  typeof tipHeight === 'number' && typeof height === 'number'
+                    ? tipHeight - height + 1
+                    : 0;
+                // mempool.space doesn't expose is_coinbase on the utxo list;
+                // we treat all confirmed UTXOs as spendable here. The SDK's
+                // own coin selection would re-check is_coinbase via tx detail
+                // if it cared. This mirrors the original lua script's
+                // best-effort behavior when esplora_tx is unavailable.
+                spendable.push({
+                  txid: u.txid,
+                  vout: u.vout,
+                  value: u.value,
+                  outpoint: `${u.txid}:${u.vout}`,
+                  height,
+                  confirmations,
+                  is_coinbase: false,
+                });
+              }
+              result = {
+                spendable,
+                immature,
+                currentHeight: tipHeight ?? 0,
+                address,
+              };
+            }
+            data = { jsonrpc: '2.0', result, id: body?.id ?? null };
+          }
+        } catch (e) {
+          console.warn(`[RPC Proxy] mempool.space fallback failed:`, e);
+        }
+      }
     }
 
     // Non-200 status with valid JSON body — forward the JSON-RPC error as-is
