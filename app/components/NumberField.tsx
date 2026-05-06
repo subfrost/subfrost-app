@@ -8,10 +8,11 @@ type NumberFieldProps = {
   onChange?: (v: string) => void;
   onFocus?: () => void;
   onBlur?: () => void;
+  className?: string;
 };
 
 const NumberField = forwardRef<HTMLInputElement, NumberFieldProps>(
-  ({ placeholder = "0.00", disabled = false, align = "right", value, onChange, onFocus, onBlur }, ref) => {
+  ({ placeholder = "0.00", disabled = false, align = "right", value, onChange, onFocus, onBlur, className }, ref) => {
     const alignClass = align === "left" ? "text-left" : "text-right";
     return (
       <input
@@ -25,7 +26,7 @@ const NumberField = forwardRef<HTMLInputElement, NumberFieldProps>(
         onFocus={onFocus}
         onBlur={onBlur}
         style={{ outline: 'none', boxShadow: 'none', border: 'none' }}
-        className={`h-11 w-full rounded-lg border-0 border-none border-transparent bg-transparent px-0 ${alignClass} text-2xl font-bold text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/20 disabled:opacity-60 !outline-none !ring-0 !border-none focus:!outline-none focus:!ring-0 focus:!border-none focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]`}
+        className={`h-11 w-full rounded-lg border-0 border-none border-transparent bg-transparent px-0 ${alignClass} text-2xl font-bold text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-text)]/20 disabled:opacity-60 !outline-none !ring-0 !border-none focus:!outline-none focus:!ring-0 focus:!border-none focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield] ${className ?? ''}`}
       />
     );
   }

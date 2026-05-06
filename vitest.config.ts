@@ -12,7 +12,20 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     include: ['**/*.{test,spec}.{ts,tsx}'],
-    exclude: ['**/node_modules/**', '.next', 'ts-sdk/**'],
+    exclude: [
+      '**/node_modules/**',
+      '.next',
+      'ts-sdk/**',
+      'reference/**',
+      // Playwright e2e tests — run via `npx playwright test`, not vitest.
+      'e2e-tests/playwright/**',
+      // Devnet/SDK integration suites — require a running camoufoxd or
+      // local devnet daemon. They're invoked explicitly via `pnpm test:devnet`
+      // / `test:sdk` and would otherwise dominate the CI budget with
+      // env-dependent failures.
+      '__tests__/devnet/**',
+      '__tests__/sdk/**',
+    ],
     testTimeout: 30000,
     hookTimeout: 30000,
     // Setup file to polyfill fetch for Node.js
@@ -20,7 +33,9 @@ export default defineConfig({
     // Enable WASM support in tests
     server: {
       deps: {
-        // Inline the SDK to allow vite to process WASM imports
+        // Inline the alkanes SDK to allow vite to process WASM imports.
+        // NOTE: @qubitcoin/sdk is NOT inlined — it loads WASM via fs.readFileSync
+        // and Vite's transform can cache stale WASM binaries.
         inline: ['@alkanes/ts-sdk'],
       },
     },
@@ -35,9 +50,14 @@ export default defineConfig({
   optimizeDeps: {
     // Don't exclude - let vite process it
     include: ['@alkanes/ts-sdk', '@alkanes/ts-sdk/wasm'],
+    // Exclude qubitcoin SDK — it loads WASM via fs.readFileSync and
+    // Vite's dep optimization can cache stale WASM binaries.
+    exclude: ['@qubitcoin/sdk'],
   },
   // Enable WASM in SSR/Node context
   ssr: {
     noExternal: ['@alkanes/ts-sdk'],
+    // Let @qubitcoin/sdk be external — it loads its own WASM from disk
+    external: ['@qubitcoin/sdk'],
   },
 });

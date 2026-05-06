@@ -8,7 +8,7 @@ import { useTheme } from "@/context/ThemeContext";
 import { useModalStore } from "@/stores/modals";
 import { useGlobalStore } from "@/stores/global";
 import type { SlippageSelection } from "@/stores/global";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Settings, Plus, Minus, Loader2 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import type { FeeSelection } from "@/hooks/useFeeRate";
 import { useTranslation } from '@/hooks/useTranslation';
@@ -143,6 +143,9 @@ export default function LiquidityInputs({
   const [token0Focused, setToken0Focused] = useState(false);
   const [token1Focused, setToken1Focused] = useState(false);
   const [removeFocused, setRemoveFocused] = useState(false);
+  // Refs for focusing inputs when clicking the container
+  const token0InputRef = useRef<HTMLInputElement>(null);
+  const token1InputRef = useRef<HTMLInputElement>(null);
 
   const canAddLiquidity = isConnected &&
     !!token0Amount && !!token1Amount &&
@@ -169,7 +172,16 @@ export default function LiquidityInputs({
 
   const isDemoGated = useDemoGate();
 
+  // While a mutation is in flight, the CTA must visibly disable AND
+  // ignore extra clicks. Users in a hurry double-click thinking the
+  // first click didn't register; without this guard the second click
+  // re-fires the mutation and broadcasts a duplicate tx (or — worse —
+  // re-uses the same alkane carrier and double-spends in the mempool).
+  const isMutationPending =
+    liquidityMode === 'remove' ? isRemoveLoading : isLoading;
+
   const onCtaClick = () => {
+    if (isMutationPending) return;  // hard guard against double-clicks
     if (!isConnected) {
       onConnectModalOpenChange(true);
       return;
@@ -190,26 +202,26 @@ export default function LiquidityInputs({
 
   return (
     <>
-      {/* Add/Remove Tabs */}
-      <div className="flex gap-4 mb-6">
+      {/* Add/Remove Tabs — mirrors the Buy/Sell toggle in LimitOrderPanel */}
+      <div className="sf-tab-group w-full mb-3">
         <button
           onClick={() => onModeChange?.('provide')}
-          className={`pb-3 px-1 text-sm font-semibold ${
-            liquidityMode === 'provide'
-              ? 'text-[color:var(--sf-primary)] border-b-2 border-[color:var(--sf-primary)]'
-              : 'text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]'
+          className={`sf-tab-btn flex-1 flex items-center justify-center gap-1.5 ${
+            liquidityMode === 'provide' ? 'sf-tab-btn--active' : ''
           }`}
+          style={liquidityMode === 'provide' ? { '--sf-tab-active-bg': '#16a34a' } as React.CSSProperties : undefined}
         >
+          <Plus className="h-3.5 w-3.5" />
           {t('liquidity.add')}
         </button>
         <button
           onClick={() => onModeChange?.('remove')}
-          className={`pb-3 px-1 text-sm font-semibold ${
-            liquidityMode === 'remove'
-              ? 'text-[color:var(--sf-primary)] border-b-2 border-[color:var(--sf-primary)]'
-              : 'text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]'
+          className={`sf-tab-btn flex-1 flex items-center justify-center gap-1.5 ${
+            liquidityMode === 'remove' ? 'sf-tab-btn--active' : ''
           }`}
+          style={liquidityMode === 'remove' ? { '--sf-tab-active-bg': '#dc2626' } as React.CSSProperties : undefined}
         >
+          <Minus className="h-3.5 w-3.5" />
           {t('liquidity.remove')}
         </button>
       </div>
@@ -218,32 +230,55 @@ export default function LiquidityInputs({
         {liquidityMode === 'remove' ? (
         /* Remove Mode: LP Position Selector */
         <>
-          <div className="relative z-20 rounded-2xl bg-[color:var(--sf-panel-bg)] p-5 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]">
-            <span className="mb-3 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">
-              {t('liquidity.selectLpPosition')}
-            </span>
-            <button
-              type="button"
-              onClick={onOpenLPSelector}
-              className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-white/[0.03] px-4 py-3 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] hover:bg-white/[0.06] focus:outline-none"
-            >
+          <button
+            type="button"
+            onClick={onOpenLPSelector}
+            className="sf-tile w-full inline-flex items-center justify-between gap-2 px-4 py-3 !rounded-[0.375rem] focus:outline-none"
+          >
+            {selectedLPPosition ? (
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="flex -space-x-2 shrink-0">
+                  <div className="relative z-10">
+                    <TokenIcon symbol={selectedLPPosition.token0Symbol} id={selectedLPPosition.token0Id} size="md" network={network} />
+                  </div>
+                  <div className="relative">
+                    <TokenIcon symbol={selectedLPPosition.token1Symbol} id={selectedLPPosition.token1Id} size="md" network={network} />
+                  </div>
+                </div>
+                <div className="min-w-0 text-left">
+                  <div className="font-medium text-sm text-[color:var(--sf-text)] truncate">
+                    {selectedLPPosition.token0Symbol}/{selectedLPPosition.token1Symbol} LP
+                  </div>
+                  <div className="text-[10px] text-[color:var(--sf-text)]/40 truncate">
+                    LP · {selectedLPPosition.id}
+                  </div>
+                </div>
+              </div>
+            ) : (
               <span className="font-bold text-sm text-[color:var(--sf-text)]">
-                {selectedLPPosition ? `${selectedLPPosition.amount} ${selectedLPPosition.token0Symbol}/${selectedLPPosition.token1Symbol} LP` : t('liquidity.selectPosition')}
+                {t('liquidity.selectPosition')}
               </span>
+            )}
+            <div className="flex items-center gap-2 shrink-0">
+              {selectedLPPosition && (
+                <span className="font-bold text-sm text-[color:var(--sf-text)]">
+                  {selectedLPPosition.amount}
+                </span>
+              )}
               <ChevronDown size={16} className="text-[color:var(--sf-text)]/60" />
-            </button>
-          </div>
+            </div>
+          </button>
 
           {/* Remove Amount Input */}
           {selectedLPPosition && (
             <>
               <div
-                className={`relative z-20 rounded-2xl bg-[color:var(--sf-panel-bg)] p-5 backdrop-blur-md transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${removeFocused ? "shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]" : "shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]"}`}
+                className={`sf-panel group relative z-20 p-5 transition-shadow duration-[200ms] ${removeFocused ? "shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]" : "hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]"}`}
                 onFocusCapture={() => setRemoveFocused(true)}
                 onBlurCapture={() => setRemoveFocused(false)}
               >
                 <span className="mb-3 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">{t('liquidity.amountToRemove')}</span>
-                <div className="rounded-xl bg-[color:var(--sf-input-bg)] p-3 shadow-[0_2px_12px_rgba(0,0,0,0.08)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none">
+                <div className="sf-input p-3">
                   <div className="flex flex-col gap-2">
                     {/* Row 1: Input */}
                     <NumberField 
@@ -264,7 +299,7 @@ export default function LiquidityInputs({
                     </div>
                     
                     {/* Row 3: Percentage Buttons */}
-                    <div className="flex items-center justify-end gap-1.5">
+                    <div className={`flex items-center justify-end gap-1.5 transition-opacity duration-300 ${removeFocused ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
                       {[
                         { label: '25%', value: 0.25 },
                         { label: '50%', value: 0.5 },
@@ -290,15 +325,15 @@ export default function LiquidityInputs({
               </div>
 
               {/* Transaction Details - collapsible panel */}
-              <div className="relative z-[5] rounded-2xl bg-[color:var(--sf-panel-bg)] backdrop-blur-md shadow-[0_2px_12px_rgba(0,0,0,0.08)] overflow-visible">
+              <div className="sf-panel relative z-[5] overflow-visible mt-3 mb-3">
                 {/* Toggle button */}
                 <button
                   type="button"
                   onClick={() => setDetailsOpen(!detailsOpen)}
-                  className="flex items-center justify-between w-full p-4 text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60"
+                  className="sf-collapsible-trigger"
                 >
                   <span>{t('vaultDeposit.transactionDetails')}</span>
-                  <ChevronDown
+                  <Settings
                     size={14}
                     className={`transition-transform duration-[200ms] ${detailsOpen ? 'rotate-180' : ''}`}
                   />
@@ -344,8 +379,7 @@ export default function LiquidityInputs({
                             }
                           }}
                           placeholder="3"
-                          style={{ outline: 'none', border: focusedField === 'deadline' ? '1px solid rgba(91,156,255,0.5)' : '1px solid transparent' }}
-                          className={`h-7 w-16 rounded-lg bg-[color:var(--sf-input-bg)] px-2 text-base font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 transition-all duration-[200ms] ${focusedField === 'deadline' ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
+                          className="sf-pill-input"
                         />
                       </div>
                     </div>
@@ -423,8 +457,7 @@ export default function LiquidityInputs({
                               }
                             }}
                             placeholder="0"
-                            style={{ outline: 'none', border: focusedField === 'fee' ? '1px solid rgba(91,156,255,0.5)' : '1px solid transparent' }}
-                            className={`h-7 w-16 rounded-lg bg-[color:var(--sf-input-bg)] px-2 text-base font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 transition-all duration-[200ms] ${focusedField === 'fee' ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
+                            className="sf-pill-input"
                           />
                         </div>
                       ) : (
@@ -449,169 +482,202 @@ export default function LiquidityInputs({
           )}
         </>
       ) : (
-        /* Provide Mode: Token Pair Selection */
+        /* Provide Mode: side-by-side sf-input cards matching market/limit design */
         <>
-          {/* Select Pair Panel */}
-          <div className="relative z-20 rounded-2xl bg-[color:var(--sf-panel-bg)] p-5 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]">
-            <span className="mb-3 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">
-              {t('liquidity.selectPair')}
-            </span>
-            
-            {/* Side-by-side token selectors */}
-            <div className="flex flex-row items-center gap-3">
-              {/* Token 0 selector + divider row */}
-              <div className="contents">
-                <button
-                  type="button"
-                  onClick={() => openTokenSelector('pool0')}
-                  className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-white/[0.03] px-4 py-3 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] hover:bg-white/[0.06] focus:outline-none"
+          <div className="relative z-20 flex items-stretch gap-2">
+            {/* Token 0 input — sf-input card (half width) */}
+            <div className="flex-1 min-w-0">
+              <div className={`relative h-full ${token0Focused ? 'z-30' : ''}`}>
+                <div
+                  className="sf-input group relative h-full z-20 px-3 pt-3 pb-3 cursor-text"
+                  onClick={() => token0InputRef.current?.focus()}
                 >
-                  {token0 && (
-                    <TokenIcon 
-                      key={`pool0-${token0.id}-${token0.symbol}`} 
-                      symbol={token0.symbol} 
-                      id={token0.id} 
-                      iconUrl={token0.iconUrl} 
-                      size="sm" 
-                      network={network} 
-                    />
-                  )}
-                  <span className="font-bold text-sm text-[color:var(--sf-text)] whitespace-nowrap">
-                    {token0?.name || token0?.symbol || t('liquidity.selectToken')}
-                  </span>
-                  <ChevronDown size={16} className="text-[color:var(--sf-text)]/60" />
-                </button>
+                  {/* Token Selector — floating top-right (compact: icon + chevron) */}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openTokenSelector('pool0');
+                    }}
+                    className="sf-tile absolute right-3 top-3 inline-flex items-center gap-2 px-3 py-2 !rounded-[0.375rem] focus:outline-none z-10"
+                  >
+                    {token0 && (
+                      <TokenIcon
+                        key={`pool0-${token0.id}-${token0.symbol}`}
+                        symbol={token0.symbol}
+                        id={token0.id}
+                        iconUrl={token0.iconUrl}
+                        size="sm"
+                        network={network}
+                      />
+                    )}
+                    <span className="font-bold text-sm text-[color:var(--sf-text)] whitespace-nowrap">
+                      {token0?.name || token0?.symbol || t('liquidity.selectToken')}
+                    </span>
+                    <ChevronDown size={16} className="text-[color:var(--sf-text)]/60 flex-shrink-0" />
+                  </button>
 
-              </div>
-
-              {/* Divider between selectors */}
-              <span className="text-xl font-bold text-[color:var(--sf-text)]/40">/</span>
-
-              {/* Token 1 selector */}
-              <button
-                type="button"
-                onClick={() => openTokenSelector('pool1')}
-                className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-white/[0.03] px-4 py-3 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] hover:bg-white/[0.06] focus:outline-none"
-              >
-                {token1 && (
-                  <TokenIcon 
-                    key={`pool1-${token1.id}-${token1.symbol}`} 
-                    symbol={token1.symbol} 
-                    id={token1.id} 
-                    iconUrl={token1.iconUrl} 
-                    size="sm" 
-                    network={network} 
-                  />
-                )}
-                <span className="font-bold text-sm text-[color:var(--sf-text)] whitespace-nowrap">
-                  {token1?.name || token1?.symbol || 'BTC'}
-                </span>
-                <ChevronDown size={16} className="text-[color:var(--sf-text)]/60" />
-              </button>
-            </div>
-      </div>
-
-          {/* Token Amount Inputs - Side by Side */}
-          {token0 && token1 && (
-            <>
-              <div className="relative z-20 grid grid-cols-2 gap-3">
-            {/* Token 0 Amount Input */}
-            <div
-              className={`rounded-2xl bg-[color:var(--sf-panel-bg)] p-3 backdrop-blur-md transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${token0Focused ? "shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]" : "shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]"}`}
-              onFocusCapture={() => setToken0Focused(true)}
-              onBlurCapture={() => setToken0Focused(false)}
-            >
-              <div className="mb-2 flex items-center gap-2">
-                <TokenIcon
-                  symbol={token0.symbol}
-                  id={token0.id}
-                  iconUrl={token0.iconUrl}
-                  size="sm"
-                  network={network}
-                />
-                <span className="text-xs font-bold text-[color:var(--sf-text)]">{token0.name || token0.symbol}</span>
-              </div>
-              <div className="rounded-xl bg-[color:var(--sf-input-bg)] p-2 shadow-[0_2px_12px_rgba(0,0,0,0.08)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none">
-                <NumberField placeholder={"0.00"} align="left" value={token0Amount} onChange={onChangeToken0Amount} />
-                <div className="mt-1 flex flex-col items-end gap-1">
-                  <div className="text-xs font-medium text-[color:var(--sf-text)]/60">{token0BalanceText}</div>
-                  {onPercentToken0 && (
-                    <div className="flex flex-wrap items-center gap-1">
-                      {[
-                        { label: '25%', value: 0.25 },
-                        { label: '50%', value: 0.5 },
-                        { label: '75%', value: 0.75 },
-                        { label: 'Max', value: 1 },
-                      ].map(({ label, value }) => (
-                        <button
-                          key={label}
-                          type="button"
-                          onClick={() => onPercentToken0(value)}
-                          className={`inline-flex items-center rounded-md px-1 py-0.5 text-[9px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${activePercentToken0 === value ? "bg-[color:var(--sf-primary)]/20" : `${theme === 'dark' ? 'bg-white/[0.03]' : 'bg-[color:var(--sf-surface)]'} hover:bg-white/[0.06]`}`}
-                        >
-                          {label}
-                        </button>
-                      ))}
+                  <div className="flex flex-col gap-1">
+                    <div className="mt-10">
+                      <NumberField
+                        ref={token0InputRef}
+                        placeholder="0.00"
+                        align="left"
+                        value={token0Amount}
+                        onChange={onChangeToken0Amount}
+                        onFocus={() => setToken0Focused(true)}
+                        onBlur={() => setToken0Focused(false)}
+                      />
                     </div>
-                  )}
+
+                    <div className="flex items-center justify-between">
+                      <div className="text-xs font-medium text-[color:var(--sf-text)]/50 truncate">
+                        {token0FiatText}
+                      </div>
+                      <div className="text-xs font-medium text-[color:var(--sf-text)]/60 truncate">
+                        {token0BalanceText}
+                      </div>
+                    </div>
+
+                    {onPercentToken0 && (
+                      <div
+                        className="flex items-center justify-end w-full"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <div className={`flex items-center gap-1.5 transition-opacity duration-300 ${
+                          token0Focused ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                        }`}>
+                          {[
+                            { label: '25%', value: 0.25, max: false },
+                            { label: '50%', value: 0.5, max: false },
+                            { label: '75%', value: 0.75, max: false },
+                            { label: 'MAX', value: 1, max: true },
+                          ].map(({ label, value, max }) => (
+                            <button
+                              key={label}
+                              type="button"
+                              onClick={() => onPercentToken0(value)}
+                              className={`inline-flex items-center rounded-md ${max ? 'px-2 text-[11px]' : 'px-1.5 text-[10px]'} py-0.5 font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${
+                                activePercentToken0 === value
+                                  ? 'bg-[color:var(--sf-primary)]/20'
+                                  : `${theme === 'dark' ? 'bg-white/[0.03]' : 'bg-[color:var(--sf-surface)]'} hover:bg-white/[0.06]`
+                              }`}
+                            >
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
 
-            {/* Token 1 Amount Input */}
-            <div
-              className={`rounded-2xl bg-[color:var(--sf-panel-bg)] p-3 backdrop-blur-md transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${token1Focused ? "shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]" : "shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]"}`}
-              onFocusCapture={() => setToken1Focused(true)}
-              onBlurCapture={() => setToken1Focused(false)}
-            >
-              <div className="mb-2 flex items-center gap-2">
-                <TokenIcon
-                  symbol={token1.symbol}
-                  id={token1.id}
-                  iconUrl={token1.iconUrl}
-                  size="sm"
-                  network={network}
-                />
-                <span className="text-xs font-bold text-[color:var(--sf-text)]">{token1.name || token1.symbol}</span>
-              </div>
-              <div className="rounded-xl bg-[color:var(--sf-input-bg)] p-2 shadow-[0_2px_12px_rgba(0,0,0,0.08)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none">
-                <NumberField placeholder={"0.00"} align="left" value={token1Amount} onChange={onChangeToken1Amount} />
-                <div className="mt-1 flex flex-col items-end gap-1">
-                  <div className="text-xs font-medium text-[color:var(--sf-text)]/60">{token1BalanceText}</div>
-                  {onPercentToken1 && (
-                    <div className="flex flex-wrap items-center gap-1">
-                      {[
-                        { label: '25%', value: 0.25 },
-                        { label: '50%', value: 0.5 },
-                        { label: '75%', value: 0.75 },
-                        { label: 'Max', value: 1 },
-                      ].map(({ label, value }) => (
-                        <button
-                          key={label}
-                          type="button"
-                          onClick={() => onPercentToken1(value)}
-                          className={`inline-flex items-center rounded-md px-1 py-0.5 text-[9px] font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${activePercentToken1 === value ? "bg-[color:var(--sf-primary)]/20" : `${theme === 'dark' ? 'bg-white/[0.03]' : 'bg-[color:var(--sf-surface)]'} hover:bg-white/[0.06]`}`}
-                        >
-                          {label}
-                        </button>
-                      ))}
+            {/* Token 1 input — sf-input card (half width) */}
+            <div className="flex-1 min-w-0">
+              <div className={`relative h-full ${token1Focused ? 'z-30' : ''}`}>
+                <div
+                  className="sf-input group relative h-full z-20 px-3 pt-3 pb-3 cursor-text"
+                  onClick={() => token1InputRef.current?.focus()}
+                >
+                  {/* Token Selector — floating top-right (compact: icon + chevron) */}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openTokenSelector('pool1');
+                    }}
+                    className="sf-tile absolute right-3 top-3 inline-flex items-center gap-2 px-3 py-2 !rounded-[0.375rem] focus:outline-none z-10"
+                  >
+                    {token1 && (
+                      <TokenIcon
+                        key={`pool1-${token1.id}-${token1.symbol}`}
+                        symbol={token1.symbol}
+                        id={token1.id}
+                        iconUrl={token1.iconUrl}
+                        size="sm"
+                        network={network}
+                      />
+                    )}
+                    <span className="font-bold text-sm text-[color:var(--sf-text)] whitespace-nowrap">
+                      {token1?.name || token1?.symbol || t('liquidity.selectToken')}
+                    </span>
+                    <ChevronDown size={16} className="text-[color:var(--sf-text)]/60 flex-shrink-0" />
+                  </button>
+
+                  <div className="flex flex-col gap-1">
+                    <div className="mt-10">
+                      <NumberField
+                        ref={token1InputRef}
+                        placeholder="0.00"
+                        align="left"
+                        value={token1Amount}
+                        onChange={onChangeToken1Amount}
+                        onFocus={() => setToken1Focused(true)}
+                        onBlur={() => setToken1Focused(false)}
+                      />
                     </div>
-                  )}
+
+                    <div className="flex items-center justify-between">
+                      <div className="text-xs font-medium text-[color:var(--sf-text)]/50 truncate">
+                        {token1FiatText}
+                      </div>
+                      <div className="text-xs font-medium text-[color:var(--sf-text)]/60 truncate">
+                        {token1BalanceText}
+                      </div>
+                    </div>
+
+                    {onPercentToken1 && (
+                      <div
+                        className="flex items-center justify-end w-full"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <div className={`flex items-center gap-1.5 transition-opacity duration-300 ${
+                          token1Focused ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                        }`}>
+                          {[
+                            { label: '25%', value: 0.25, max: false },
+                            { label: '50%', value: 0.5, max: false },
+                            { label: '75%', value: 0.75, max: false },
+                            { label: 'MAX', value: 1, max: true },
+                          ].map(({ label, value, max }) => (
+                            <button
+                              key={label}
+                              type="button"
+                              onClick={() => onPercentToken1(value)}
+                              className={`inline-flex items-center rounded-md ${max ? 'px-2 text-[11px]' : 'px-1.5 text-[10px]'} py-0.5 font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] outline-none focus:outline-none text-[color:var(--sf-percent-btn)] ${
+                                activePercentToken1 === value
+                                  ? 'bg-[color:var(--sf-primary)]/20'
+                                  : `${theme === 'dark' ? 'bg-white/[0.03]' : 'bg-[color:var(--sf-surface)]'} hover:bg-white/[0.06]`
+                              }`}
+                            >
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
           </div>
 
+          {/* Transaction Details + Summary — only when both tokens selected */}
+          {token0 && token1 && (
+            <>
+
           {/* Transaction Details - collapsible panel */}
-          <div className="relative z-[5] rounded-2xl bg-[color:var(--sf-panel-bg)] backdrop-blur-md shadow-[0_2px_12px_rgba(0,0,0,0.08)] overflow-visible">
+          <div className="sf-panel relative z-[5] overflow-visible mt-3 mb-3">
             {/* Toggle button */}
             <button
               type="button"
               onClick={() => setDetailsOpen(!detailsOpen)}
-              className="flex items-center justify-between w-full p-4 text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60"
+              className="sf-collapsible-trigger"
             >
               <span>{t('vaultDeposit.transactionDetails')}</span>
-              <ChevronDown
+              <Settings
                 size={14}
                 className={`transition-transform duration-[200ms] ${detailsOpen ? 'rotate-180' : ''}`}
               />
@@ -623,7 +689,7 @@ export default function LiquidityInputs({
               {/* Minimum Received row */}
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60">
-                  Minimum Received
+                  {t('liquidity.minimumReceived')}
                 </span>
                 <span className="font-semibold text-[color:var(--sf-text)]">
                   {minimumToken0 || (token0.id === 'btc' || token0.symbol === 'frBTC' ? '0.00000000' : '0.00')} {token0.symbol} / {minimumToken1 || (token1.id === 'btc' || token1.symbol === 'frBTC' ? '0.00000000' : '0.00')} {token1.symbol}
@@ -633,7 +699,7 @@ export default function LiquidityInputs({
               {/* Deadline (blocks) row */}
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60">
-                  Deadline (blocks)
+                  {t('swapSummary.deadlineBlocks')}
                 </span>
                 <div className="flex items-center gap-2">
                   <div className="relative">
@@ -657,8 +723,7 @@ export default function LiquidityInputs({
                         }
                       }}
                       placeholder="3"
-                      style={{ outline: 'none', border: focusedField === 'deadline' ? '1px solid rgba(91,156,255,0.5)' : '1px solid transparent' }}
-                          className={`h-7 w-16 rounded-lg bg-[color:var(--sf-input-bg)] px-2 text-base font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 transition-all duration-[200ms] ${focusedField === 'deadline' ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
+                      className="sf-pill-input"
                     />
                   </div>
                 </div>
@@ -736,8 +801,7 @@ export default function LiquidityInputs({
                           }
                         }}
                         placeholder="0"
-                        style={{ outline: 'none', border: focusedField === 'fee' ? '1px solid rgba(91,156,255,0.5)' : '1px solid transparent' }}
-                            className={`h-7 w-16 rounded-lg bg-[color:var(--sf-input-bg)] px-2 text-base font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 transition-all duration-[200ms] ${focusedField === 'fee' ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
+                        className="sf-pill-input"
                       />
                     </div>
                   ) : (
@@ -774,9 +838,24 @@ export default function LiquidityInputs({
         <button
           type="button"
           onClick={onCtaClick}
-          className={`mt-2 h-12 w-full rounded-xl font-bold text-sm uppercase tracking-wider transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none focus:outline-none ${isConnected && isDemoGated ? 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)]/30 cursor-not-allowed' : 'bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] text-white shadow-[0_4px_16px_rgba(0,0,0,0.3)] hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98]'}`}
+          disabled={isMutationPending}
+          aria-busy={isMutationPending}
+          className={`mt-2 h-12 w-full rounded-xl font-bold text-sm uppercase tracking-wider transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none focus:outline-none ${
+            isMutationPending
+              ? 'bg-[color:var(--sf-primary-pressed)] text-white/90 cursor-wait shadow-[0_2px_8px_rgba(0,0,0,0.2)]'
+              : isConnected && isDemoGated
+              ? 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)]/30 cursor-not-allowed'
+              : 'bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] text-white shadow-[0_4px_16px_rgba(0,0,0,0.3)] hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98]'
+          }`}
         >
-          {showLiquidityComingSoon ? (
+          {isMutationPending ? (
+            <span className="inline-flex items-center justify-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              {liquidityMode === 'remove'
+                ? t('liquidity.removingLiquidity')
+                : t('liquidity.addingLiquidity')}
+            </span>
+          ) : showLiquidityComingSoon ? (
             <span className="animate-pulse">{t('badge.comingSoon')}</span>
           ) : (
             ctaText
@@ -839,14 +918,14 @@ function MinerFeeButton({ selection, setSelection, presets }: MinerFeeButtonProp
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="inline-flex items-center gap-1.5 rounded-lg bg-[color:var(--sf-input-bg)] px-3 py-1.5 text-xs font-semibold text-[color:var(--sf-text)] shadow-[0_2px_12px_rgba(0,0,0,0.08)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)] focus:outline-none"
+        className={`sf-dropdown-trigger ${isOpen ? 'sf-dropdown-trigger--open' : ''}`}
       >
         <span>{getDisplayText()}</span>
         <ChevronDown size={12} className={`transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 mt-1 z-50 w-32 rounded-lg bg-[color:var(--sf-surface)] shadow-[0_8px_32px_rgba(0,0,0,0.2)] backdrop-blur-xl">
+        <div className="sf-dropdown absolute right-0 mt-1 z-50 w-32">
           {(['slow', 'medium', 'fast', 'custom'] as FeeSelection[]).map((option) => (
             <button
               key={option}
@@ -931,14 +1010,14 @@ function SlippageButton({ selection, setSelection, setValue }: SlippageButtonPro
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="inline-flex items-center gap-1.5 rounded-lg bg-[color:var(--sf-input-bg)] px-3 py-1.5 text-xs font-semibold text-[color:var(--sf-text)] shadow-[0_2px_12px_rgba(0,0,0,0.08)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)] focus:outline-none"
+        className={`sf-dropdown-trigger ${isOpen ? 'sf-dropdown-trigger--open' : ''}`}
       >
         <span>{getDisplayText()}</span>
         <ChevronDown size={12} className={`transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 mt-1 z-50 w-32 rounded-lg bg-[color:var(--sf-surface)] shadow-[0_8px_32px_rgba(0,0,0,0.2)] backdrop-blur-xl">
+        <div className="sf-dropdown absolute right-0 mt-1 z-50 w-32">
           {(['low', 'medium', 'high', 'custom'] as SlippageSelection[]).map((option) => (
             <button
               key={option}

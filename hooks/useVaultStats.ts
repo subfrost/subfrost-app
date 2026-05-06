@@ -70,18 +70,76 @@ export function useVaultStats(vaultContractId: string, baseTokenId: string, enab
           }
         }
 
-        // TODO: Fetch TVL and total supply from vault contract
-        // For now, use placeholder values
-        // Real implementation would query the vault's internal storage
-        const tvl = '0';
-        const tvlFormatted = '0.00';
-        const totalSupply = '0';
-        const vaultBalance = '0';
-        const sharePrice = '1';
+        // Fetch total vault balance via opcode 11 (TotalAssets) on dx-btc vault
+        let tvl = '0';
+        let tvlFormatted = '0.00';
+        let totalSupply = '0';
+        let vaultBalance = '0';
+        let sharePrice = '1';
+        let apy = '0.00';
 
-        // TODO: Calculate APY from historical data or oracle
-        // For now, return a placeholder
-        const apy = '0.00';
+        const contractId = `${vaultId.block}:${vaultId.tx}`;
+
+        // Opcode 11: TotalAssets — returns total base asset held by vault
+        try {
+          const totalAssetsContext = JSON.stringify({
+            alkanes: [],
+            calldata: encodeSimulateCalldata(contractId, [11]),
+            height: 1000000,
+            txindex: 0,
+            pointer: 0,
+            refund_pointer: 0,
+            vout: 0,
+            transaction: [],
+            block: [],
+          });
+          const totalAssetsResult = await provider.alkanesSimulate(contractId, totalAssetsContext, 'latest');
+          if (totalAssetsResult?.execution?.data && !totalAssetsResult.execution.error) {
+            vaultBalance = parseU128FromBytes(totalAssetsResult.execution.data);
+            tvl = vaultBalance;
+            tvlFormatted = new BigNumber(tvl).dividedBy(1e8).toFixed(8);
+          }
+        } catch (error) {
+          console.warn('[useVaultStats] Failed to fetch TotalAssets (opcode 11):', error);
+        }
+
+        // Opcode 101: GetTotalSupply — returns total vault tokens in circulation
+        try {
+          const totalSupplyContext = JSON.stringify({
+            alkanes: [],
+            calldata: encodeSimulateCalldata(contractId, [101]),
+            height: 1000000,
+            txindex: 0,
+            pointer: 0,
+            refund_pointer: 0,
+            vout: 0,
+            transaction: [],
+            block: [],
+          });
+          const totalSupplyResult = await provider.alkanesSimulate(contractId, totalSupplyContext, 'latest');
+          if (totalSupplyResult?.execution?.data && !totalSupplyResult.execution.error) {
+            totalSupply = parseU128FromBytes(totalSupplyResult.execution.data);
+          }
+        } catch (error) {
+          console.warn('[useVaultStats] Failed to fetch GetTotalSupply (opcode 101):', error);
+        }
+
+        // Calculate share price = totalAssets / totalSupply
+        if (totalSupply !== '0' && tvl !== '0') {
+          sharePrice = new BigNumber(tvl).dividedBy(new BigNumber(totalSupply)).toFixed(8);
+        }
+
+        // Estimate APY from share price appreciation.
+        // If sharePrice > 1.0, the vault has accumulated fees over its lifetime.
+        // Without historical timestamps we use a conservative annualization.
+        const sp = new BigNumber(sharePrice);
+        if (sp.isGreaterThan(1)) {
+          // Conservative estimate: assume vault has been live ~30 days
+          // APY = (sharePrice - 1) * (365 / 30) * 100
+          const appreciation = sp.minus(1);
+          const annualized = appreciation.times(365).div(30).times(100);
+          apy = annualized.toFixed(2);
+        }
 
         return {
           tvl,
@@ -116,7 +174,7 @@ export function useVaultStats(vaultContractId: string, baseTokenId: string, enab
  * Parse u128 from little-endian byte array
  * Same logic as useFrbtcPremium
  */
-function parseU128FromBytes(bytes: number[]): string {
+export function parseU128FromBytes(bytes: number[]): string {
   if (bytes.length < 16) {
     throw new Error(`Insufficient bytes for u128: ${bytes.length} < 16`);
   }

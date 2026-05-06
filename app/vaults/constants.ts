@@ -26,6 +26,20 @@ export interface VaultConfig {
   escrowNftName?: string; // For special vaults like dxBTC
 }
 
+/**
+ * Generate a 30-day random walk APY series clamped to [min, max].
+ */
+function generateApyRandomWalk(days: number, start: number, min: number, max: number): number[] {
+  const data: number[] = [];
+  let value = start;
+  for (let i = 0; i < days; i++) {
+    data.push(Number(value.toFixed(2)));
+    const step = (Math.random() - 0.5) * 0.4;
+    value = Math.min(max, Math.max(min, value + step));
+  }
+  return data;
+}
+
 export const AVAILABLE_VAULTS: VaultConfig[] = [
   {
     id: 'yv-frbtc',
@@ -113,20 +127,50 @@ export const AVAILABLE_VAULTS: VaultConfig[] = [
     tokenId: '32:0', // Use frBTC icon (dxBTC = yvfrBTC + derivatives obligations)
     tokenSymbol: 'BTC',
     iconPath: '/tokens/btc_snowflake.svg',
-    contractAddress: '4:xxxx',
+    contractAddress: '4:7020',
     badge: 'Coming Soon',
     type: 'unit-vault',
     inputAsset: 'BTC',
     outputAsset: 'dxBTC',
     estimatedApy: '5.2',
-    apyHistory: [4.9, 5.0, 5.0, 5.1, 5.1, 5.2, 5.1, 5.0, 4.9, 4.9, 5.0, 5.0, 5.1, 5.1, 5.2, 5.2, 5.2, 5.3, 5.3, 5.3, 5.4, 5.4, 5.3, 5.4, 5.4, 5.4, 5.5, 5.4, 5.5, 5.4],
+    apyHistory: generateApyRandomWalk(30, 4.2, 2.1, 6.2),
     riskLevel: 'medium',
     hasBoost: true,
     boostTokenSymbol: 'vxFUEL',
     boostTokenName: 'Staked FUEL',
     boostIconPath: '/tokens/btc_snowflake.svg', // Uses BTC snowflake icon as placeholder
     boostMultiplier: 1.5,
-    isBoostComingSoon: true, // Grey out FUEL features
-    escrowNftName: 'Escrow NFT', // TODO: needs proper name
+    isBoostComingSoon: false,
+    escrowNftName: 'Escrow NFT',
+  },
+  {
+    id: 'vx-fuel',
+    name: 'vxFUEL Gauge',
+    description: 'Stake FUEL/frBTC LP to boost dxBTC yield',
+    tokenId: '2:0',
+    tokenSymbol: 'FUEL',
+    contractAddress: '4:7030',
+    type: 'unit-vault',
+    inputAsset: 'FUEL/frBTC LP',
+    outputAsset: 'vxFUEL',
+    estimatedApy: '8.5',
+    apyHistory: generateApyRandomWalk(30, 8.5, 5.0, 12.0),
+    riskLevel: 'medium',
+    hasBoost: false,
+  },
+  {
+    id: 'vx-btcusd',
+    name: 'vxBTCUSD Gauge',
+    description: 'Stake frBTC/frUSD LP to earn FIRE emissions',
+    tokenId: '32:0',
+    tokenSymbol: 'frBTC/frUSD',
+    contractAddress: '4:7031',
+    type: 'unit-vault',
+    inputAsset: 'Synth Pool LP',
+    outputAsset: 'vxBTCUSD',
+    estimatedApy: '15.3',
+    apyHistory: generateApyRandomWalk(30, 15.3, 10.0, 20.0),
+    riskLevel: 'high',
+    hasBoost: false,
   },
 ];

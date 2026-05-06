@@ -3,18 +3,12 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useWallet } from '@/context/WalletContext';
 import { useTheme } from '@/context/ThemeContext';
-import { Network, Key, Save, Eye, EyeOff, Copy, Check, ChevronDown, ChevronUp, Download, Shield, Lock, Cloud, AlertTriangle, X, Settings } from 'lucide-react';
+import { Network, Save, Eye, Copy, Check, ChevronDown, Download, Shield, Lock, Cloud, AlertTriangle, X, Settings } from 'lucide-react';
 import { initGoogleDrive, isDriveConfigured, backupWalletToDrive } from '@/utils/clientSideDrive';
 import { unlockKeystore } from '@alkanes/ts-sdk';
 import { useTranslation } from '@/hooks/useTranslation';
 
-type NetworkType = 'mainnet' | 'signet' | 'regtest' | 'regtest-local' | 'subfrost-regtest' | 'oylnet' | 'custom';
-
-interface DerivationConfig {
-  accountIndex: number;
-  changeIndex: number;
-  addressIndex: number;
-}
+type NetworkType = 'mainnet' | 'signet' | 'regtest' | 'regtest-local' | 'qubitcoin-regtest' | 'subfrost-regtest' | 'oylnet' | 'devnet' | 'custom';
 
 // Helper to detect network from a Bitcoin address
 function detectNetworkFromAddress(address: string): { network: NetworkType | null; isRecognized: boolean } {
@@ -39,7 +33,7 @@ function detectNetworkFromAddress(address: string): { network: NetworkType | nul
 }
 
 export default function WalletSettings() {
-  const { network: currentNetwork, account, wallet, walletType, browserWallet } = useWallet() as any;
+  const { network: currentNetwork, wallet, walletType, browserWallet } = useWallet() as any;
   const { theme } = useTheme();
   const { t } = useTranslation();
 
@@ -63,7 +57,9 @@ export default function WalletSettings() {
       case 'signet': return 'Signet';
       case 'regtest': return 'Local Regtest (localhost)';
       case 'regtest-local': return 'Local Docker (localhost:18888)';
+      case 'qubitcoin-regtest': return 'Qubitcoin Regtest (local)';
       case 'subfrost-regtest': return 'Subfrost Regtest (regtest.subfrost.io)';
+      case 'devnet': return 'Devnet (in-browser)';
       default: return networkType;
     }
   };
@@ -73,34 +69,13 @@ export default function WalletSettings() {
   const [customDataApiUrl, setCustomDataApiUrl] = useState('');
   const [customSandshrewUrl, setCustomSandshrewUrl] = useState('');
 
-  // Derivation config
-  const [taprootConfig, setTaprootConfig] = useState<DerivationConfig>({
-    accountIndex: 0,
-    changeIndex: 0,
-    addressIndex: 0,
-  });
-  const [segwitConfig, setSegwitConfig] = useState<DerivationConfig>({
-    accountIndex: 0,
-    changeIndex: 0,
-    addressIndex: 0,
-  });
-
   const [saved, setSaved] = useState(false);
-  const [showAdvanced, setShowAdvanced] = useState(false);
-  const [showDerivationConfig, setShowDerivationConfig] = useState(false);
   const [networkDropdownOpen, setNetworkDropdownOpen] = useState(false);
   const networkDropdownRef = useRef<HTMLDivElement>(null);
 
-  // Change dropdown states
-  const [taprootChangeDropdownOpen, setTaprootChangeDropdownOpen] = useState(false);
-  const [segwitChangeDropdownOpen, setSegwitChangeDropdownOpen] = useState(false);
-  const taprootChangeDropdownRef = useRef<HTMLDivElement>(null);
-  const segwitChangeDropdownRef = useRef<HTMLDivElement>(null);
-
   // Track if network has unsaved changes
   const hasNetworkChanges = network !== initialNetwork;
-  const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
-  
+
   // Security features
   const [showSeedModal, setShowSeedModal] = useState(false);
   const [password, setPassword] = useState('');
@@ -113,33 +88,6 @@ export default function WalletSettings() {
   const [backupSuccess, setBackupSuccess] = useState(false);
   const [backupProgress, setBackupProgress] = useState(0);
   const [backupError, setBackupError] = useState<string | null>(null);
-
-  // Compute derivation paths
-  const taprootPath = useMemo(() => {
-    return `m/86'/${taprootConfig.accountIndex}'/${taprootConfig.changeIndex}'/${taprootConfig.addressIndex}`;
-  }, [taprootConfig]);
-
-  const segwitPath = useMemo(() => {
-    return `m/84'/${segwitConfig.accountIndex}'/${segwitConfig.changeIndex}'/${segwitConfig.addressIndex}`;
-  }, [segwitConfig]);
-
-  // Generate preview addresses using wallet
-  const previewAddresses = useMemo(() => {
-    if (!wallet) return { taproot: null, segwit: null };
-
-    try {
-      const taprootAddr = wallet.deriveAddress('p2tr', taprootConfig.changeIndex, taprootConfig.addressIndex);
-      const segwitAddr = wallet.deriveAddress('p2wpkh', segwitConfig.changeIndex, segwitConfig.addressIndex);
-      
-      return {
-        taproot: taprootAddr?.address || null,
-        segwit: segwitAddr?.address || null,
-      };
-    } catch (error) {
-      console.error('Failed to generate preview addresses:', error);
-      return { taproot: null, segwit: null };
-    }
-  }, [wallet, taprootConfig, segwitConfig]);
 
   // Sync initial network when currentNetwork changes from context
   useEffect(() => {
@@ -174,86 +122,25 @@ export default function WalletSettings() {
     };
   }, [networkDropdownOpen]);
 
-  // Close taproot change dropdown on click outside
-  useEffect(() => {
-    if (!taprootChangeDropdownOpen) return;
-    const handleClickOutside = (e: MouseEvent) => {
-      if (taprootChangeDropdownRef.current && !taprootChangeDropdownRef.current.contains(e.target as Node)) {
-        setTaprootChangeDropdownOpen(false);
-      }
-    };
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setTaprootChangeDropdownOpen(false);
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    document.addEventListener('keydown', handleEscape);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('keydown', handleEscape);
-    };
-  }, [taprootChangeDropdownOpen]);
-
-  // Close segwit change dropdown on click outside
-  useEffect(() => {
-    if (!segwitChangeDropdownOpen) return;
-    const handleClickOutside = (e: MouseEvent) => {
-      if (segwitChangeDropdownRef.current && !segwitChangeDropdownRef.current.contains(e.target as Node)) {
-        setSegwitChangeDropdownOpen(false);
-      }
-    };
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setSegwitChangeDropdownOpen(false);
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    document.addEventListener('keydown', handleEscape);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('keydown', handleEscape);
-    };
-  }, [segwitChangeDropdownOpen]);
-
-  const CHANGE_OPTIONS = [
-    { value: 0, label: t('settings.external') },
-    { value: 1, label: t('settings.changeAddr') },
-  ];
-
   const NETWORK_OPTIONS: { value: NetworkType; label: string }[] = [
+    { value: 'devnet', label: 'Devnet (in-browser)' },
     { value: 'mainnet', label: t('settings.mainnet') },
     { value: 'signet', label: t('settings.signet') },
     { value: 'subfrost-regtest', label: t('settings.subfrostRegtest') + ' (regtest.subfrost.io)' },
+    { value: 'qubitcoin-regtest', label: 'Qubitcoin Regtest (meta.lake.direct)' },
     { value: 'regtest-local', label: t('settings.localRegtest') + ' (localhost:18888)' },
     { value: 'regtest', label: t('settings.localRegtest') + ' (legacy)' },
     { value: 'custom', label: t('settings.customNetwork') },
   ];
 
   const handleSave = () => {
-    console.log('Saving settings:', {
-      network,
-      customDataApiUrl,
-      customSandshrewUrl,
-      taprootPath,
-      segwitPath,
-      taprootConfig,
-      segwitConfig,
-    });
-
-    // Save network to localStorage
     localStorage.setItem('subfrost_selected_network', network);
-
-    // Dispatch custom event to notify other components (same tab)
     window.dispatchEvent(new CustomEvent('network-changed', { detail: network }));
 
-    // Update initial network to reflect saved state
     setInitialNetwork(network);
 
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
-  };
-
-  const copyAddress = (address: string, type: string) => {
-    navigator.clipboard.writeText(address);
-    setCopiedAddress(type);
-    setTimeout(() => setCopiedAddress(null), 2000);
   };
 
   const exportKeystore = () => {
@@ -538,282 +425,6 @@ export default function WalletSettings() {
             </div>
           </div>
         )}
-
-        {/* HD Wallet Derivation */}
-        <div className="rounded-xl bg-gradient-to-br from-yellow-500/10 to-orange-600/5 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <Key size={24} className="text-yellow-400" />
-              <h3 className="text-xl font-bold text-[color:var(--sf-text)]">{t('settings.hdDerivation')}</h3>
-            </div>
-          </div>
-
-          {!wallet ? (
-            <div className="rounded-lg border border-[color:var(--sf-info-yellow-border)] bg-[color:var(--sf-info-yellow-bg)] p-4 text-sm text-[color:var(--sf-info-yellow-text)]">
-              Derivation paths are only available for keystore wallets. Browser extension wallets manage their own paths.
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {/* Current Addresses Display */}
-              <div className="rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-primary)]/5 p-4">
-                <div className="text-sm font-medium text-[color:var(--sf-text)]/80 mb-3">{t('settings.currentAddresses')}</div>
-                <div className="space-y-3">
-                  {account?.taproot && (
-                    <div className="flex items-center justify-between p-3 rounded-lg bg-[color:var(--sf-primary)]/5">
-                      <div>
-                        <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">{t('settings.taprootP2tr')}</div>
-                        <div className="text-sm text-[color:var(--sf-text)] break-all">{account.taproot.address}</div>
-                        <div className="text-xs text-[color:var(--sf-text)]/40 mt-1">{account.taproot.hdPath}</div>
-                      </div>
-                    </div>
-                  )}
-                  {account?.nativeSegwit && (
-                    <div className="flex items-center justify-between p-3 rounded-lg bg-[color:var(--sf-primary)]/5">
-                      <div>
-                        <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">{t('settings.segwitP2wpkh')}</div>
-                        <div className="text-sm text-[color:var(--sf-text)] break-all">{account.nativeSegwit.address}</div>
-                        <div className="text-xs text-[color:var(--sf-text)]/40 mt-1">{account.nativeSegwit.hdPath}</div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="rounded-lg border border-[color:var(--sf-primary)]/30 bg-[color:var(--sf-primary)]/10 p-4 text-sm text-[color:var(--sf-primary)]">
-                {t('settings.accountTip')}
-              </div>
-
-              <button
-                onClick={() => setShowDerivationConfig(!showDerivationConfig)}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 border border-[color:var(--sf-outline)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)]"
-              >
-                {showDerivationConfig ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-                <span>{t('settings.advConfig')}</span>
-              </button>
-
-              {showDerivationConfig && (
-                <div className="space-y-6 pt-2">
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <label className="text-sm font-medium text-[color:var(--sf-text)]">
-                        {t('settings.taprootBip86')} - {taprootPath}
-                      </label>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      <div>
-                        <label className="block text-xs text-[color:var(--sf-text)]/60 mb-1">{t('settings.account')}</label>
-                        <input
-                          type="number"
-                          min="0"
-                          max="2147483647"
-                          value={taprootConfig.accountIndex}
-                          onChange={(e) => setTaprootConfig({ ...taprootConfig, accountIndex: parseInt(e.target.value) || 0 })}
-                          className="w-full rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-primary)]/5 px-3 py-2 text-sm text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)]"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-[color:var(--sf-text)]/60 mb-1">{t('settings.change')}</label>
-                        <div className="relative" ref={taprootChangeDropdownRef}>
-                          <button
-                            type="button"
-                            onClick={() => setTaprootChangeDropdownOpen((v) => !v)}
-                            className="w-full flex items-center gap-2 rounded-xl bg-[color:var(--sf-surface)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] px-4 py-3 text-sm text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none cursor-pointer"
-                          >
-                            <span className="flex-1 text-left">{CHANGE_OPTIONS.find((o) => o.value === taprootConfig.changeIndex)?.label ?? 'External (0)'}</span>
-                            <ChevronDown size={16} className={`transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${taprootChangeDropdownOpen ? 'rotate-180' : ''}`} />
-                          </button>
-                          {taprootChangeDropdownOpen && (
-                            <div className="absolute left-0 top-full z-50 mt-1 w-full overflow-hidden rounded-xl bg-[color:var(--sf-surface)] backdrop-blur-xl shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
-                              {CHANGE_OPTIONS.map((option) => (
-                                <button
-                                  key={option.value}
-                                  type="button"
-                                  onClick={() => {
-                                    setTaprootConfig({ ...taprootConfig, changeIndex: option.value });
-                                    setTaprootChangeDropdownOpen(false);
-                                  }}
-                                  className={`w-full px-4 py-2.5 text-left text-sm font-medium transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
-                                    taprootConfig.changeIndex === option.value
-                                      ? 'bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]'
-                                      : 'text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10'
-                                  }`}
-                                >
-                                  {option.label}
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      <div>
-                        <label className="block text-xs text-[color:var(--sf-text)]/60 mb-1">{t('settings.addressIndex')}</label>
-                        <input
-                          type="number"
-                          min="0"
-                          max="2147483647"
-                          value={taprootConfig.addressIndex}
-                          onChange={(e) => setTaprootConfig({ ...taprootConfig, addressIndex: parseInt(e.target.value) || 0 })}
-                          className="w-full rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-primary)]/5 px-3 py-2 text-sm text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)]"
-                        />
-                      </div>
-                    </div>
-                    {previewAddresses.taproot && (
-                      <div className="flex items-center justify-between p-3 rounded-lg bg-[color:var(--sf-primary)]/10 border border-[color:var(--sf-primary)]/30">
-                        <div className="flex-1 mr-2">
-                          <div className="text-xs text-[color:var(--sf-primary)] mb-1">{t('settings.previewAddress')}</div>
-                          <div className="text-sm text-[color:var(--sf-text)] break-all">{previewAddresses.taproot}</div>
-                        </div>
-                        <button
-                          onClick={() => copyAddress(previewAddresses.taproot!, 'taproot')}
-                          className="p-2 rounded hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
-                          title="Copy address"
-                        >
-                          {copiedAddress === 'taproot' ? (
-                            <Check size={16} className="text-green-400" />
-                          ) : (
-                            <Copy size={16} className="text-[color:var(--sf-text)]/60" />
-                          )}
-                        </button>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <label className="text-sm font-medium text-[color:var(--sf-text)]">
-                        {t('settings.segwitBip84')} - {segwitPath}
-                      </label>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      <div>
-                        <label className="block text-xs text-[color:var(--sf-text)]/60 mb-1">{t('settings.account')}</label>
-                        <input
-                          type="number"
-                          min="0"
-                          max="2147483647"
-                          value={segwitConfig.accountIndex}
-                          onChange={(e) => setSegwitConfig({ ...segwitConfig, accountIndex: parseInt(e.target.value) || 0 })}
-                          className="w-full rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-primary)]/5 px-3 py-2 text-sm text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)]"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-[color:var(--sf-text)]/60 mb-1">{t('settings.change')}</label>
-                        <div className="relative" ref={segwitChangeDropdownRef}>
-                          <button
-                            type="button"
-                            onClick={() => setSegwitChangeDropdownOpen((v) => !v)}
-                            className="w-full flex items-center gap-2 rounded-xl bg-[color:var(--sf-surface)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] px-4 py-3 text-sm text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none cursor-pointer"
-                          >
-                            <span className="flex-1 text-left">{CHANGE_OPTIONS.find((o) => o.value === segwitConfig.changeIndex)?.label ?? 'External (0)'}</span>
-                            <ChevronDown size={16} className={`transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${segwitChangeDropdownOpen ? 'rotate-180' : ''}`} />
-                          </button>
-                          {segwitChangeDropdownOpen && (
-                            <div className="absolute left-0 top-full z-50 mt-1 w-full overflow-hidden rounded-xl bg-[color:var(--sf-surface)] backdrop-blur-xl shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
-                              {CHANGE_OPTIONS.map((option) => (
-                                <button
-                                  key={option.value}
-                                  type="button"
-                                  onClick={() => {
-                                    setSegwitConfig({ ...segwitConfig, changeIndex: option.value });
-                                    setSegwitChangeDropdownOpen(false);
-                                  }}
-                                  className={`w-full px-4 py-2.5 text-left text-sm font-medium transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
-                                    segwitConfig.changeIndex === option.value
-                                      ? 'bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]'
-                                      : 'text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10'
-                                  }`}
-                                >
-                                  {option.label}
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      <div>
-                        <label className="block text-xs text-[color:var(--sf-text)]/60 mb-1">{t('settings.addressIndex')}</label>
-                        <input
-                          type="number"
-                          min="0"
-                          max="2147483647"
-                          value={segwitConfig.addressIndex}
-                          onChange={(e) => setSegwitConfig({ ...segwitConfig, addressIndex: parseInt(e.target.value) || 0 })}
-                          className="w-full rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-primary)]/5 px-3 py-2 text-sm text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)]"
-                        />
-                      </div>
-                    </div>
-                    {previewAddresses.segwit && (
-                      <div className="flex items-center justify-between p-3 rounded-lg bg-[color:var(--sf-primary)]/10 border border-[color:var(--sf-primary)]/30">
-                        <div className="flex-1 mr-2">
-                          <div className="text-xs text-[color:var(--sf-primary)] mb-1">{t('settings.previewAddress')}</div>
-                          <div className="text-sm text-[color:var(--sf-text)] break-all">{previewAddresses.segwit}</div>
-                        </div>
-                        <button
-                          onClick={() => copyAddress(previewAddresses.segwit!, 'segwit')}
-                          className="p-2 rounded hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
-                          title="Copy address"
-                        >
-                          {copiedAddress === 'segwit' ? (
-                            <Check size={16} className="text-green-400" />
-                          ) : (
-                            <Copy size={16} className="text-[color:var(--sf-text)]/60" />
-                          )}
-                        </button>
-                      </div>
-                    )}
-                  </div>
-
-                  <button
-                    onClick={handleSave}
-                    className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg rounded-lg font-medium transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white"
-                  >
-                    <Save size={20} />
-                    {saved ? t('settings.settingsSaved') : t('settings.saveSettings')}
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-        {/* Advanced Options */}
-        <div className="rounded-xl bg-[color:var(--sf-primary)]/5 p-6">
-          <div className="flex items-center gap-3 mb-4">
-            <Settings size={24} className="text-[color:var(--sf-primary)]" />
-            <h3 className="text-xl font-bold text-[color:var(--sf-text)]">{t('settings.advancedOptions')}</h3>
-          </div>
-
-          <div className="space-y-4">
-            {/* Ignore Ordinals */}
-            <div className="flex items-center justify-between p-4 rounded-lg bg-[color:var(--sf-primary)]/5 border border-[color:var(--sf-outline)]">
-              <div className="flex-1 mr-4">
-                <div className="text-sm font-medium text-[color:var(--sf-text)]">{t('settings.ignoreOrdinals')}</div>
-                <div className="text-xs text-[color:var(--sf-text)]/60 mt-1">{t('settings.ignoreOrdinalsDescription')}</div>
-              </div>
-              <button
-                disabled
-                className="relative inline-flex h-6 w-11 shrink-0 cursor-not-allowed items-center rounded-full bg-[color:var(--sf-primary)] opacity-60 transition-colors"
-                title="Enabled — ordinal detection coming soon"
-              >
-                <span className="inline-block h-4 w-4 translate-x-6 rounded-full bg-white transition-transform" />
-              </button>
-            </div>
-
-            {/* Ignore Runes */}
-            <div className="flex items-center justify-between p-4 rounded-lg bg-[color:var(--sf-primary)]/5 border border-[color:var(--sf-outline)]">
-              <div className="flex-1 mr-4">
-                <div className="text-sm font-medium text-[color:var(--sf-text)]">{t('settings.ignoreRunes')}</div>
-                <div className="text-xs text-[color:var(--sf-text)]/60 mt-1">{t('settings.ignoreRunesDescription')}</div>
-              </div>
-              <button
-                disabled
-                className="relative inline-flex h-6 w-11 shrink-0 cursor-not-allowed items-center rounded-full bg-[color:var(--sf-primary)] opacity-60 transition-colors"
-                title="Enabled — rune detection coming soon"
-              >
-                <span className="inline-block h-4 w-4 translate-x-6 rounded-full bg-white transition-transform" />
-              </button>
-            </div>
-          </div>
-        </div>
       </div>
 
       {/* Seed Phrase Modal */}

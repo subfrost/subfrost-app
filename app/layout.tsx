@@ -21,7 +21,7 @@ const geistMono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "SUBFROST | Cross-Chain DeFi on Bitcoin - dxBTC Yield & Native Asset Swaps",
+  title: "SUBFROST | Layer-0 App on Bitcoin",
   description: "The Bitcoin-native Layer 0 for seamless DeFi. Swap BTC, ETH, ZEC & stablecoins on L1. Earn real BTC yield with dxBTC tokenized staking. No lock-ups, no wrapped tokens - pure Bitcoin DeFi.",
   keywords: ["Bitcoin DeFi", "dxBTC", "frBTC", "cross-chain swaps", "BTC yield", "Bitcoin Layer 0", "native asset swaps", "Bitcoin AMM", "BTC staking", "Subfrost"],
   icons: {
@@ -29,7 +29,7 @@ export const metadata: Metadata = {
     apple: "/brand/Logo.png",
   },
   openGraph: {
-    title: "SUBFROST | Cross-Chain DeFi on Bitcoin - dxBTC Yield & Native Asset Swaps",
+    title: "SUBFROST | Layer-0 App on Bitcoin",
     description: "The Bitcoin-native Layer 0 for seamless DeFi. Swap BTC, ETH, ZEC & stablecoins directly on L1. Earn real BTC yield with dxBTC - no lock-ups, no wrapped tokens.",
     images: [
       {
@@ -44,7 +44,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "SUBFROST | Cross-Chain DeFi on Bitcoin - dxBTC Yield & Native Asset Swaps",
+    title: "SUBFROST | Layer-0 App on Bitcoin",
     description: "The Bitcoin-native Layer 0 for seamless DeFi. Swap BTC, ETH, ZEC & stablecoins on L1. Earn real BTC yield with dxBTC - no lock-ups.",
     images: ["/brand/Logo.png"],
   },

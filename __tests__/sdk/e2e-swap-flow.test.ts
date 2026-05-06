@@ -4,10 +4,10 @@
  * Tests actual swap execution on regtest using `alkanesExecuteTyped` — the same
  * abstraction all webapp hooks use (see lib/alkanes/extendedProvider.ts).
  *
- * Swap flows tested:
- * 1. BTC -> DIESEL (wrap + swap in one tx) — matches useWrapSwapMutation.ts
- * 2. DIESEL -> frBTC (alkane swap) — matches useSwapMutation.ts
- * 3. DIESEL -> BTC (swap + unwrap in one tx) — matches useSwapUnwrapMutation.ts
+ * Currently covers DIESEL → frBTC alkane-to-alkane swap (matches
+ * `useSwapMutation`). BTC↔Token atomic flows used to live here too but were
+ * deprecated — BTC→Token is now atomic via `useAtomicWrapSwapMutation`,
+ * Token→BTC is sequential two-tx via `useTokenToBtcSwap`.
  *
  * Gated behind INTEGRATION=true env var — skipped during normal `vitest run`.
  * Run with: INTEGRATION=true pnpm test:sdk
@@ -97,36 +97,6 @@ async function signAndBroadcast(
 // ---------------------------------------------------------------------------
 
 /**
- * BTC -> Token (wrap + swap) — matches useWrapSwapMutation.ts
- *
- * p0: Wrap  [frbtc_block,frbtc_tx,77]:p1:v0
- * p1: Swap  [factory_block,factory_tx,13,2,frbtc_block,frbtc_tx,buy_block,buy_tx,amount,minOut,deadline]:v0:v0
- */
-function buildWrapSwapProtostone(params: {
-  frbtcId: string;
-  factoryId: string;
-  buyTokenId: string;
-  frbtcAmount: string;
-  minOutput: string;
-  deadline: string;
-}): string {
-  const [frbtcBlock, frbtcTx] = params.frbtcId.split(':');
-  const [factoryBlock, factoryTx] = params.factoryId.split(':');
-  const [buyBlock, buyTx] = params.buyTokenId.split(':');
-
-  const p0 = `[${frbtcBlock},${frbtcTx},77]:p1:v0`;
-
-  const swapCellpack = [
-    factoryBlock, factoryTx, 13, 2,
-    frbtcBlock, frbtcTx, buyBlock, buyTx,
-    params.frbtcAmount, params.minOutput, params.deadline,
-  ].join(',');
-  const p1 = `[${swapCellpack}]:v0:v0`;
-
-  return `${p0},${p1}`;
-}
-
-/**
  * Alkane -> Alkane swap — matches useSwapMutation.ts
  *
  * p0: Edict  [sell_block:sell_tx:amount:p1]:v0:v0
@@ -157,40 +127,6 @@ function buildSwapProtostone(params: {
   return `${p0},${p1}`;
 }
 
-/**
- * Token -> BTC (swap + unwrap) — matches useSwapUnwrapMutation.ts
- *
- * p0: Edict   [sell_block:sell_tx:amount:p1]:v0:v0
- * p1: Swap    [factory_block,factory_tx,13,2,sell_block,sell_tx,frbtc_block,frbtc_tx,amount,minFrbtc,deadline]:p2:v0
- * p2: Unwrap  [frbtc_block,frbtc_tx,78]:v0:v0
- */
-function buildSwapUnwrapProtostone(params: {
-  sellTokenId: string;
-  sellAmount: string;
-  frbtcId: string;
-  factoryId: string;
-  minFrbtcOutput: string;
-  deadline: string;
-}): string {
-  const [sellBlock, sellTx] = params.sellTokenId.split(':');
-  const [frbtcBlock, frbtcTx] = params.frbtcId.split(':');
-  const [factoryBlock, factoryTx] = params.factoryId.split(':');
-
-  const edict = `[${sellBlock}:${sellTx}:${params.sellAmount}:p1]`;
-  const p0 = `${edict}:v0:v0`;
-
-  const swapCellpack = [
-    factoryBlock, factoryTx, 13, 2,
-    sellBlock, sellTx, frbtcBlock, frbtcTx,
-    params.sellAmount, params.minFrbtcOutput, params.deadline,
-  ].join(',');
-  const p1 = `[${swapCellpack}]:p2:v0`;
-
-  const unwrapCellpack = [frbtcBlock, frbtcTx, 78].join(',');
-  const p2 = `[${unwrapCellpack}]:v0:v0`;
-
-  return `${p0},${p1},${p2}`;
-}
 
 // ---------------------------------------------------------------------------
 // Pool existence check via alkanes_simulate RPC
@@ -492,59 +428,9 @@ describe.runIf(INTEGRATION)('E2E Swap Flow (integration)', () => {
   });
 
   // -----------------------------------------------------------------------
-  // 4. BTC -> DIESEL (wrap + swap) — matches useWrapSwapMutation.ts
+  // 4. Mint DIESEL to wallet — ensure wallet has DIESEL for swap tests
   // -----------------------------------------------------------------------
-  describe('4. BTC -> DIESEL (wrap + swap)', () => {
-    it('should wrap BTC and swap to DIESEL in one tx', async () => {
-      const btcAmountSats = '10000'; // 10,000 sats to wrap
-
-      // Apply wrap fee (3/1000 default)
-      const wrapFeePerThousand = 3;
-      const frbtcAmountAfterFee = Math.floor(
-        (parseInt(btcAmountSats, 10) * (1000 - wrapFeePerThousand)) / 1000
-      ).toString();
-
-      const minOutput = '1'; // Accept any output for test
-      const deadline = '999999999';
-
-      const protostone = buildWrapSwapProtostone({
-        frbtcId: FRBTC_ID,
-        factoryId: FACTORY_ID,
-        buyTokenId: DIESEL_ID,
-        frbtcAmount: frbtcAmountAfterFee,
-        minOutput,
-        deadline,
-      });
-
-      const inputRequirements = `B:${btcAmountSats}:v1`;
-      const toAddresses = [walletAddress, SIGNER_ADDRESS];
-
-      console.log('[WrapSwap] protostone:', protostone);
-      console.log('[WrapSwap] inputRequirements:', inputRequirements);
-
-      const result = await alkanesExecuteTyped(provider, {
-        inputRequirements,
-        protostones: protostone,
-        feeRate: 10,
-        toAddresses,
-      });
-
-      console.log('[WrapSwap] Execute result:', JSON.stringify(result).slice(0, 500));
-
-      const txid = await signAndBroadcast(provider, result, testSigner, walletAddress);
-      console.log('[WrapSwap] Broadcast txid:', txid);
-      expect(txid).toBeTruthy();
-
-      // Verify via trace
-      const trace = await provider.alkanesTrace(`${txid}:0`);
-      console.log('[WrapSwap] Trace:', JSON.stringify(trace).slice(0, 500));
-    }, 60000);
-  });
-
-  // -----------------------------------------------------------------------
-  // 4b. Mint DIESEL to wallet — ensure wallet has DIESEL for swap tests
-  // -----------------------------------------------------------------------
-  describe('4b. Mint DIESEL to wallet', () => {
+  describe('4. Mint DIESEL to wallet', () => {
     it('should mint DIESEL to wallet address', async () => {
       // Opcode 77 = mint on DIESEL (2:0), output to v0 = walletAddress
       const protostone = '[2,0,77]:v0:v0';
@@ -624,55 +510,7 @@ describe.runIf(INTEGRATION)('E2E Swap Flow (integration)', () => {
   });
 
   // -----------------------------------------------------------------------
-  // 6. DIESEL -> BTC (swap + unwrap) — matches useSwapUnwrapMutation.ts
-  // -----------------------------------------------------------------------
-  describe('6. DIESEL -> BTC (swap + unwrap)', () => {
-    it('should swap DIESEL to frBTC then unwrap to BTC in one tx', async () => {
-      const sellAmount = '1000';
-      const minFrbtcOutput = '1';
-      const deadline = '999999999';
-
-      const protostone = buildSwapUnwrapProtostone({
-        sellTokenId: DIESEL_ID,
-        sellAmount,
-        frbtcId: FRBTC_ID,
-        factoryId: FACTORY_ID,
-        minFrbtcOutput,
-        deadline,
-      });
-
-      const inputRequirements = `2:0:${sellAmount}`;
-      const toAddresses = [walletAddress, SIGNER_ADDRESS];
-
-      console.log('[SwapUnwrap] protostone:', protostone);
-      console.log('[SwapUnwrap] inputRequirements:', inputRequirements);
-
-      // Pass actual addresses — same workaround as section 5
-      const segwitAddr = testSigner.addresses.nativeSegwit.address;
-      const result = await alkanesExecuteTyped(provider, {
-        inputRequirements,
-        protostones: protostone,
-        feeRate: 10,
-        toAddresses,
-        fromAddresses: [segwitAddr, walletAddress],
-        changeAddress: segwitAddr,
-        alkanesChangeAddress: walletAddress,
-      });
-
-      console.log('[SwapUnwrap] Execute result:', JSON.stringify(result).slice(0, 500));
-
-      const txid = await signAndBroadcast(provider, result, testSigner, walletAddress);
-      console.log('[SwapUnwrap] Broadcast txid:', txid);
-      expect(txid).toBeTruthy();
-
-      // Verify via trace
-      const trace = await provider.alkanesTrace(`${txid}:0`);
-      console.log('[SwapUnwrap] Trace:', JSON.stringify(trace).slice(0, 500));
-    }, 60000);
-  });
-
-  // -----------------------------------------------------------------------
-  // 7. Verify Final State
+  // 6. Verify Final State
   // -----------------------------------------------------------------------
   describe('7. Verify Final State', () => {
     it('should show wallet balances after operations', async () => {

@@ -2,11 +2,16 @@
  * FIRE Protocol Address Handling Tests
  *
  * Source analysis tests that verify all FIRE mutation hooks properly handle
- * browser wallet addresses. Follows the pattern from
- * hooks/__tests__/mutations/address-handling.test.ts.
+ * browser wallet addresses. After the 2026-04-30 refactor, the address-
+ * fallback chain (`isBrowserWallet ? [taprootAddress] : ['p2tr:0']` etc.)
+ * lives in `WalletContext.txContext` rather than being recomputed in every
+ * hook. These tests now assert that each FIRE mutation routes its address
+ * parameters through `txContext` and never embeds symbolic addresses
+ * directly.
  *
- * This prevents regression of the browser wallet output address bug
- * (see CLAUDE.md "2026-03-01: Browser Wallet Output Address Bug").
+ * This still prevents regression of the original browser wallet output
+ * address bug (see CLAUDE.md "2026-03-01: Browser Wallet Output Address
+ * Bug") because `txContext` only ever yields actual user addresses.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -24,6 +29,12 @@ const FIRE_MUTATION_HOOKS = [
 
 const HOOKS_DIR = path.join(process.cwd(), 'hooks', 'fire');
 
+function stripComments(src: string): string {
+  return src
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/\/\/[^\n]*/g, '');
+}
+
 describe('FIRE mutation hooks browser wallet address handling', () => {
   for (const hookFile of FIRE_MUTATION_HOOKS) {
     describe(hookFile, () => {
@@ -39,37 +50,33 @@ describe('FIRE mutation hooks browser wallet address handling', () => {
         expect(source).toContain("walletType === 'browser'");
       });
 
-      it('should use conditional toAddresses', () => {
-        expect(source).toContain('isBrowserWallet ? [taprootAddress]');
+      it('should destructure txContext from useWallet()', () => {
+        const match = source.match(/const\s*\{[^}]*\}\s*=\s*useWallet\s*\(\s*\)/);
+        expect(match).toBeTruthy();
+        expect(match![0]).toContain('txContext');
       });
 
-      it('should use conditional changeAddress', () => {
-        expect(source).toContain('isBrowserWallet ? (segwitAddress || taprootAddress)');
+      it('should pass txContext into alkanesExecuteTyped (single-field consolidation)', () => {
+        // After 2026-04-30 the wrapper unpacks `txContext` into options_json
+        // itself; FIRE hooks pass the single `txContext` field instead of
+        // the individual changeAddress / alkanesChangeAddress / ordinalsStrategy.
+        const codeOnly = stripComments(source);
+        expect(codeOnly).toMatch(/alkanesExecuteTyped\s*\(\s*\{[\s\S]*?\btxContext\b/);
       });
 
-      it('should use conditional alkanesChangeAddress', () => {
-        expect(source).toContain('isBrowserWallet ? taprootAddress');
+      it('should not redundantly pass individual txContext fields', () => {
+        const codeOnly = stripComments(source);
+        expect(codeOnly).not.toMatch(/changeAddress:\s*txContext\.btcChangeAddress/);
+        expect(codeOnly).not.toMatch(/alkanesChangeAddress:\s*txContext\.alkanesChangeAddress/);
+        expect(codeOnly).not.toMatch(/ordinalsStrategy:\s*txContext\.defaultOrdinalsStrategy/);
       });
 
-      it('should NOT use bare p2tr:0 without conditional', () => {
-        // Every p2tr:0 usage should be inside a ternary (after a colon)
-        const lines = source.split('\n');
-        for (const line of lines) {
-          if (line.includes("'p2tr:0'") && !line.includes('?') && !line.includes(':')) {
-            // Allow in comments
-            if (line.trim().startsWith('//') || line.trim().startsWith('*')) continue;
-            throw new Error(`Found bare p2tr:0 usage: ${line.trim()}`);
-          }
-        }
-      });
-
-      it('should NOT use bare p2wpkh:0 without conditional', () => {
-        const lines = source.split('\n');
-        for (const line of lines) {
-          if (line.includes("'p2wpkh:0'") && !line.includes('?') && !line.includes(':')) {
-            if (line.trim().startsWith('//') || line.trim().startsWith('*')) continue;
-            throw new Error(`Found bare p2wpkh:0 usage: ${line.trim()}`);
-          }
+      it('should never pass symbolic addresses (p2tr:0 / p2wpkh:0) to alkanesExecuteTyped', () => {
+        const codeOnly = stripComments(source);
+        const calls = codeOnly.match(/alkanesExecuteTyped\s*\(\s*\{?[\s\S]*?\}\s*\)/g) || [];
+        for (const call of calls) {
+          expect(call).not.toContain("'p2tr:0'");
+          expect(call).not.toContain("'p2wpkh:0'");
         }
       });
     });

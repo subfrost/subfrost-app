@@ -13,9 +13,16 @@
 
 import {
   FACTORY_SWAP_OPCODE,
+  FACTORY_SWAP_EXACT_OUT_OPCODE,
+  FACTORY_ADD_LIQUIDITY_OPCODE,
+  FACTORY_BURN_OPCODE,
   FRBTC_WRAP_OPCODE,
   FRBTC_UNWRAP_OPCODE,
-  POOL_OPCODES,
+  FRZEC_WRAP_OPCODE,
+  FRZEC_UNWRAP_OPCODE,
+  FRETH_WRAP_OPCODE,
+  FRETH_UNWRAP_OPCODE,
+  ROUTER_OPCODES,
 } from './constants';
 
 // ---------------------------------------------------------------------------
@@ -75,6 +82,59 @@ export function buildSwapProtostone(params: {
 }
 
 /**
+ * Build protostone for AMM swap via factory opcode 14 (SwapTokensForExactTokens).
+ *
+ * Same cellpack shape as opcode 13 but the two amount slots are semantically
+ * swapped: caller specifies the exact buy amount and the maximum input they're
+ * willing to spend. The factory routes the swap and refunds any unspent input
+ * to `alkanes_change_address`.
+ *
+ * Factory opcode 14 format:
+ *   [factory_block,factory_tx,14,path_len,sell_block,sell_tx,buy_block,buy_tx,amount_out,amount_in_max,deadline]
+ */
+export function buildSwapExactOutputProtostone(params: {
+  factoryId: string;
+  sellTokenId: string;
+  buyTokenId: string;
+  amountOut: string;
+  amountInMax: string;
+  deadline: string;
+  pointer?: string;
+  refund?: string;
+}): string {
+  const {
+    factoryId,
+    sellTokenId,
+    buyTokenId,
+    amountOut,
+    amountInMax,
+    deadline,
+    pointer = 'v0',
+    refund = 'v0',
+  } = params;
+
+  const [sellBlock, sellTx] = sellTokenId.split(':');
+  const [buyBlock, buyTx] = buyTokenId.split(':');
+  const [factoryBlock, factoryTx] = factoryId.split(':');
+
+  const cellpack = [
+    factoryBlock,
+    factoryTx,
+    FACTORY_SWAP_EXACT_OUT_OPCODE,
+    2, // path_len
+    sellBlock,
+    sellTx,
+    buyBlock,
+    buyTx,
+    amountOut,
+    amountInMax,
+    deadline,
+  ].join(',');
+
+  return `[${cellpack}]:${pointer}:${refund}`;
+}
+
+/**
  * Build input requirements for swap.
  * Format: "B:amount" for bitcoin, "block:tx:amount" for alkanes.
  */
@@ -96,6 +156,187 @@ export function buildSwapInputRequirements(params: {
   }
 
   return parts.join(',');
+}
+
+// ---------------------------------------------------------------------------
+// Atomic Wrap + Swap (single transaction)
+// ---------------------------------------------------------------------------
+
+/**
+ * Build protostones for atomic BTC → frBTC → Token swap in one transaction.
+ *
+ * Two chained protostones:
+ *   p0: [32,0,77] — wrap BTC to frBTC, pointer=p1 (frBTC flows to swap)
+ *   p1: [factory,13,...] — swap frBTC for target token, pointer=v1 (output to user)
+ *
+ * Output layout:
+ *   v0 = signer address (receives BTC for wrap)
+ *   v1 = user address (receives swapped tokens)
+ *
+ * Verified pattern from alkanes-rs/crates/alkanes-integ-tests/tests/atomic_wrap_swap.rs
+ */
+export function buildAtomicWrapSwapProtostones(params: {
+  factoryId: string;
+  buyTokenId: string;
+  sellAmount: string;
+  minOutput: string;
+  deadline: string;
+}): string {
+  const { factoryId, buyTokenId, sellAmount, minOutput, deadline } = params;
+  const [factoryBlock, factoryTx] = factoryId.split(':');
+  const [buyBlock, buyTx] = buyTokenId.split(':');
+
+  // p0: wrap BTC → frBTC, pointer=p1 (forward minted frBTC to swap), refund=v1 (fail → user)
+  const wrapProtostone = `[32,0,${FRBTC_WRAP_OPCODE}]:p1:v1`;
+
+  // p1: swap frBTC → buyToken via factory, pointer=v1 (output to user), refund=v1 (fail → frBTC to user)
+  const swapCellpack = [
+    factoryBlock, factoryTx, FACTORY_SWAP_OPCODE,
+    2, // path_len
+    32, 0, // frBTC (sell)
+    buyBlock, buyTx, // buy token
+    sellAmount, minOutput, deadline,
+  ].join(',');
+  const swapProtostone = `[${swapCellpack}]:v1:v1`;
+
+  return `${wrapProtostone},${swapProtostone}`;
+}
+
+/**
+ * Atomic BTC → frBTC + Token X → AddLiquidity in a single transaction.
+ *
+ * Two chained protostones:
+ *   p0: [32,0,FRBTC_WRAP_OPCODE] — wrap BTC to frBTC, pointer=p1
+ *       Token X (auto-allocated from input UTXO) is forwarded by frBTC's
+ *       CallResponse::forward(incoming_alkanes), so [X, frBTC] both arrive at p1.
+ *   p1: [factory,11,...] — factory.AddLiquidity, pointer=v0 (LP tokens to user)
+ *
+ * Output layout:
+ *   v0 = signer address (receives BTC for wrap)
+ *   v1 = user address (receives LP tokens + token refunds)
+ *
+ * Verified: frBTC contract uses CallResponse::forward at lib.rs:496 — incoming
+ * alkanes pass through wrap. Factory opcode 11 signature confirmed at
+ * fujin-factory/src/lib.rs:63 (token_a, token_b, amount_a_desired, amount_b_desired,
+ * amount_a_min, amount_b_min, deadline).
+ */
+export function buildAtomicWrapAddLiquidityProtostones(params: {
+  factoryId: string;
+  tokenA: string;
+  tokenB: string;
+  amountADesired: string;
+  amountBDesired: string;
+  amountAMin: string;
+  amountBMin: string;
+  deadline: string;
+}): string {
+  const { factoryId, tokenA, tokenB, amountADesired, amountBDesired, amountAMin, amountBMin, deadline } = params;
+  const [factoryBlock, factoryTx] = factoryId.split(':');
+  const [tokenABlock, tokenATx] = tokenA.split(':');
+  const [tokenBBlock, tokenBTx] = tokenB.split(':');
+
+  // p0: wrap BTC → frBTC, pointer=p1 (forwards [auto-alloc X + minted frBTC] to addLiquidity).
+  // refund=v1 (failure → any incoming alkanes refunded to user).
+  const wrapProtostone = `[32,0,${FRBTC_WRAP_OPCODE}]:p1:v1`;
+
+  // p1: factory.AddLiquidity, pointer=v1 (LP tokens to user), refund=v1 (failure → tokens to user).
+  const addLiquidityCellpack = [
+    factoryBlock, factoryTx, FACTORY_ADD_LIQUIDITY_OPCODE,
+    tokenABlock, tokenATx,
+    tokenBBlock, tokenBTx,
+    amountADesired, amountBDesired,
+    amountAMin, amountBMin,
+    deadline,
+  ].join(',');
+  const addLiquidityProtostone = `[${addLiquidityCellpack}]:v1:v1`;
+
+  return `${wrapProtostone},${addLiquidityProtostone}`;
+}
+
+/**
+ * Atomic BTC → frBTC + Token X → CreateNewPool in a single transaction.
+ *
+ * Same wrap pattern as `buildAtomicWrapAddLiquidityProtostones`, but the second
+ * protostone calls factory opcode 1 (CreateNewPool) — no min-amounts and no
+ * deadline since there's nothing to slip against (caller defines the initial
+ * price). User-provided amounts become the pool's initial reserves; the first
+ * LP-token mint is `sqrt(amount_a * amount_b) - 1000` (Uniswap MINIMUM_LIQUIDITY).
+ */
+export function buildAtomicWrapCreatePoolProtostones(params: {
+  factoryId: string;
+  tokenA: string;       // Always frBTC (32:0) for atomic-wrap path
+  tokenB: string;
+  amountA: string;
+  amountB: string;
+}): string {
+  const { factoryId, tokenA, tokenB, amountA, amountB } = params;
+  const [factoryBlock, factoryTx] = factoryId.split(':');
+  const [tokenABlock, tokenATx] = tokenA.split(':');
+  const [tokenBBlock, tokenBTx] = tokenB.split(':');
+
+  const wrapProtostone = `[32,0,${FRBTC_WRAP_OPCODE}]:p1:v1`;
+
+  const createPoolCellpack = [
+    factoryBlock, factoryTx,
+    1, // CreateNewPool
+    tokenABlock, tokenATx,
+    tokenBBlock, tokenBTx,
+    amountA, amountB,
+  ].join(',');
+  const createPoolProtostone = `[${createPoolCellpack}]:v1:v1`;
+
+  return `${wrapProtostone},${createPoolProtostone}`;
+}
+
+// ---------------------------------------------------------------------------
+// Router Swap (hybrid CLOB+AMM via Universal Router)
+// ---------------------------------------------------------------------------
+
+/**
+ * Build protostone for swap via Universal Router opcode 1 (Swap).
+ *
+ * The router internally compares CLOB and AMM quotes and routes to the
+ * source providing the best price. Calldata format:
+ *   [router_block, router_tx, 1, input_block, input_tx, output_block, output_tx, amount_in, min_amount_out]
+ *
+ * Source: reference/subfrost-alkanes/alkanes/universal-router/src/lib.rs
+ */
+export function buildRouterSwapProtostone(params: {
+  routerId: string;
+  sellTokenId: string;
+  buyTokenId: string;
+  sellAmount: string;
+  minOutput: string;
+  pointer?: string;
+  refund?: string;
+}): string {
+  const {
+    routerId,
+    sellTokenId,
+    buyTokenId,
+    sellAmount,
+    minOutput,
+    pointer = 'v0',
+    refund = 'v0',
+  } = params;
+
+  const [routerBlock, routerTx] = routerId.split(':');
+  const [sellBlock, sellTx] = sellTokenId.split(':');
+  const [buyBlock, buyTx] = buyTokenId.split(':');
+
+  const cellpack = [
+    routerBlock,
+    routerTx,
+    ROUTER_OPCODES.Swap,
+    sellBlock,
+    sellTx,
+    buyBlock,
+    buyTx,
+    sellAmount,
+    minOutput,
+  ].join(',');
+
+  return `[${cellpack}]:${pointer}:${refund}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -123,15 +364,46 @@ export function buildWrapProtostone(params: {
 
 /**
  * Build protostone for frBTC → BTC unwrap operation.
+ *
+ * Cellpack: `[32, 0, 78, dustVout, amount]`
+ *
+ * The frBTC contract's `unwrap(vout: u128, amount_requested: u128)` requires
+ * BOTH arguments. With them omitted (the long-standing bug), the runtime read
+ * `vout = 0`, `amount_requested = 0`, then `min(0, frbtc_sent) = 0` triggered
+ * the `actual_amount_burn < 546` branch → `Cannot burn less than dust amount`
+ * (espo renders this as "dust limit underflow"). All incoming frBTC was then
+ * refunded via the `Refund` pointer — tokens were not destroyed but the
+ * unwrap never settled. See `fr-btc/src/lib.rs:519-545`.
+ *
+ * `dustVout` is the index of a P2TR output in this same tx that pays the
+ * FROST signer's tweaked address. The contract's `burn()` enforces
+ * `tx.output[dustVout].script_pubkey == signer_script`; the signer later
+ * spends that dust UTXO to settle the BTC payment via the `Payment` records
+ * stored under `/payments/byheight/`. The CLI canonical layout
+ * (`alkanes-cli/src/main.rs:3192-3197`) is:
+ *   - output 0: alkanes refund (taproot)
+ *   - output 1: BTC recipient (segwit) — destination for the queued BTC payment
+ *   - output 2: signer dust (P2TR) — `dustVout = 2`
+ * with `pointer = 'v1'` (BTC recipient) and `refund = 'v0'` (alkanes refund).
+ *
+ * Source: see `fr-btc/contract.wit` (signature) + `fr-btc/alkanes.toml`
+ *         (opcode 78) + `alkanes-cli/src/main.rs:3477-3502`
+ *         (`build_unwrap_protostone`).
  */
 export function buildUnwrapProtostone(params: {
   frbtcId: string;
+  /** Index of the P2TR signer dust output in this tx (the `vout` arg). */
+  dustVout: number;
+  /** frBTC amount to burn, in u128 sats (the `amount_requested` arg). */
+  amount: string;
+  /** Where the unwrapped BTC payment (queued for signer) is recorded. Default `v1`. */
   pointer?: string;
+  /** Where unspent frBTC bounces back. Default `v0` (alkanes recipient). */
   refund?: string;
 }): string {
-  const { frbtcId, pointer = 'v1', refund = 'v1' } = params;
+  const { frbtcId, dustVout, amount, pointer = 'v1', refund = 'v0' } = params;
   const [frbtcBlock, frbtcTx] = frbtcId.split(':');
-  const cellpack = [frbtcBlock, frbtcTx, FRBTC_UNWRAP_OPCODE].join(',');
+  const cellpack = [frbtcBlock, frbtcTx, FRBTC_UNWRAP_OPCODE, dustVout, amount].join(',');
   return `[${cellpack}]:${pointer}:${refund}`;
 }
 
@@ -148,102 +420,59 @@ export function buildUnwrapInputRequirements(params: {
 }
 
 // ---------------------------------------------------------------------------
-// Wrap + Swap (BTC → Token, atomic)
+// Wrap ZEC (ZEC → frZEC)
 // ---------------------------------------------------------------------------
 
 /**
- * Build combined wrap+swap protostone.
+ * Build protostone for ZEC → frZEC wrap operation.
  *
- * Two protostones chained:
- *   p0: Wrap (frBTC contract opcode 77) with pointer=p1
- *   p1: Swap (factory opcode 13)
+ * frZEC [42:0] uses the same wrap opcode (77) as frBTC [32:0], but the
+ * signer address is a P2PKH t-address (ECDSA/CGGMP21) instead of P2TR (Schnorr/FROST).
  *
- * NOTE: This atomic approach is DEPRECATED — pointer=pN doesn't work for
- * cellpack chaining. SwapShell uses two separate txs instead.
- * Kept for reference and integration test coverage.
+ * Output ordering:
+ *   - Output 0 (v0): CGGMP21 signer t-address (receives ZEC)
+ *   - Output 1 (v1): user address (receives minted frZEC via pointer=v1)
  */
-export function buildWrapSwapProtostone(params: {
-  frbtcId: string;
-  factoryId: string;
-  buyTokenId: string;
-  frbtcAmount: string;
-  minOutput: string;
-  deadline: string;
+export function buildWrapZecProtostone(params: {
+  frzecId: string;
 }): string {
-  const { frbtcId, factoryId, buyTokenId, frbtcAmount, minOutput, deadline } = params;
-  const [frbtcBlock, frbtcTx] = frbtcId.split(':');
-  const [factoryBlock, factoryTx] = factoryId.split(':');
-  const [buyBlock, buyTx] = buyTokenId.split(':');
-
-  const blockNum = parseInt(frbtcBlock, 10);
-  const txNum = parseInt(frbtcTx, 10);
-  const wrapCellpack = `${blockNum},${txNum},${FRBTC_WRAP_OPCODE}`;
-  const p0 = `[${wrapCellpack}]:p1:v0`;
-
-  const swapCellpack = [
-    factoryBlock,
-    factoryTx,
-    FACTORY_SWAP_OPCODE,
-    2,
-    frbtcBlock,
-    frbtcTx,
-    buyBlock,
-    buyTx,
-    frbtcAmount,
-    minOutput,
-    deadline,
-  ].join(',');
-  const p1 = `[${swapCellpack}]:v0:v0`;
-
-  return `${p0},${p1}`;
+  const [block, tx] = params.frzecId.split(':');
+  const cellpack = `${block},${tx},${FRZEC_WRAP_OPCODE}`;
+  return `[${cellpack}]:v1:v1`;
 }
 
 // ---------------------------------------------------------------------------
-// Swap + Unwrap (Token → BTC, atomic)
+// Unwrap ZEC (frZEC → ZEC)
 // ---------------------------------------------------------------------------
 
 /**
- * Build combined swap+unwrap protostone.
+ * Build protostone for frZEC → ZEC unwrap operation.
  *
- * Returns TWO cellpack protostones (no manual edict). The SDK auto-generates
- * the edict at p0 from inputRequirements:
- *   p0: SDK auto-edict → sends sell tokens to p1
- *   p1: Swap cellpack → pointer=p2 forwards frBTC
- *   p2: Unwrap cellpack → outputs BTC to v0
+ * Burns frZEC and queues a ZEC payment via CGGMP21 threshold ECDSA signing.
+ * The pointer MUST resolve to a Zcash t-address (P2PKH or P2SH).
+ * Z-address pointers trigger the fallback chain (see docs/zcash.md).
  */
-export function buildSwapUnwrapProtostone(params: {
-  sellTokenId: string;
-  sellAmount: string;
-  frbtcId: string;
-  factoryId: string;
-  minFrbtcOutput: string;
-  deadline: string;
+export function buildUnwrapZecProtostone(params: {
+  frzecId: string;
+  pointer?: string;
+  refund?: string;
 }): string {
-  const { sellTokenId, sellAmount, frbtcId, factoryId, minFrbtcOutput, deadline } = params;
+  const { frzecId, pointer = 'v1', refund = 'v1' } = params;
+  const [block, tx] = frzecId.split(':');
+  const cellpack = [block, tx, FRZEC_UNWRAP_OPCODE].join(',');
+  return `[${cellpack}]:${pointer}:${refund}`;
+}
 
-  const [sellBlock, sellTx] = sellTokenId.split(':');
-  const [frbtcBlock, frbtcTx] = frbtcId.split(':');
-  const [factoryBlock, factoryTx] = factoryId.split(':');
-
-  const swapCellpack = [
-    factoryBlock,
-    factoryTx,
-    FACTORY_SWAP_OPCODE,
-    2,
-    sellBlock,
-    sellTx,
-    frbtcBlock,
-    frbtcTx,
-    sellAmount,
-    minFrbtcOutput,
-    deadline,
-  ].join(',');
-  const p1 = `[${swapCellpack}]:p2:v0`;
-
-  const unwrapCellpack = [frbtcBlock, frbtcTx, FRBTC_UNWRAP_OPCODE].join(',');
-  const p2 = `[${unwrapCellpack}]:v0:v0`;
-
-  return `${p1},${p2}`;
+/**
+ * Build input requirements for frZEC unwrap.
+ * Format: "42:0:amount"
+ */
+export function buildUnwrapZecInputRequirements(params: {
+  frzecId: string;
+  amount: string;
+}): string {
+  const [block, tx] = params.frzecId.split(':');
+  return `${block}:${tx}:${params.amount}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -318,35 +547,46 @@ export function buildCreateNewPoolProtostone(params: {
 }
 
 /**
- * Build protostone for AddLiquidity to existing pool.
+ * Build protostone for AddLiquidity through the factory router (opcode 11).
  *
- * Two-protostone pattern:
- *   p0: Two edicts transferring token0 AND token1 to p1
- *   p1: Cellpack calling pool directly with opcode 1 (AddLiquidity)
+ * Single-protostone pattern (same shape as swap):
+ *   p0: Cellpack calling factory.AddLiquidity with full Uniswap-style params:
+ *       (token_a, token_b, amount_a_desired, amount_b_desired,
+ *        amount_a_min, amount_b_min, deadline)
+ *
+ * Input alkanes auto-allocate to this single protostone; the factory looks
+ * them up by token_a/token_b in the cellpack params and refunds excess via
+ * the refund pointer. No manual edicts needed.
+ *
+ * Factory enforces slippage via amount_*_min. Pool opcode 1 has no slippage
+ * protection — use this builder for any case that needs it.
+ *
+ * Source: fujin-factory/src/lib.rs:63 (#[opcode(11)] AddLiquidity {...})
  */
-export function buildAddLiquidityToPoolProtostone(params: {
-  poolId: { block: string | number; tx: string | number };
-  token0Id: string;
-  token1Id: string;
-  amount0: string;
-  amount1: string;
+export function buildFactoryAddLiquidityProtostones(params: {
+  factoryId: string;
+  tokenA: string;
+  tokenB: string;
+  amountADesired: string;
+  amountBDesired: string;
+  amountAMin: string;
+  amountBMin: string;
+  deadline: string;
 }): string {
-  const poolBlock = params.poolId.block.toString();
-  const poolTx = params.poolId.tx.toString();
-  const [token0Block, token0Tx] = params.token0Id.split(':');
-  const [token1Block, token1Tx] = params.token1Id.split(':');
-
-  const edict0 = `[${token0Block}:${token0Tx}:${params.amount0}:p1]`;
-  const edict1 = `[${token1Block}:${token1Tx}:${params.amount1}:p1]`;
-  const p0 = `${edict0}:${edict1}:v0:v0`;
+  const { factoryId, tokenA, tokenB, amountADesired, amountBDesired, amountAMin, amountBMin, deadline } = params;
+  const [factoryBlock, factoryTx] = factoryId.split(':');
+  const [tokenABlock, tokenATx] = tokenA.split(':');
+  const [tokenBBlock, tokenBTx] = tokenB.split(':');
 
   const cellpack = [
-    poolBlock, poolTx,
-    POOL_OPCODES.AddLiquidity,
+    factoryBlock, factoryTx, FACTORY_ADD_LIQUIDITY_OPCODE,
+    tokenABlock, tokenATx,
+    tokenBBlock, tokenBTx,
+    amountADesired, amountBDesired,
+    amountAMin, amountBMin,
+    deadline,
   ].join(',');
-  const p1 = `[${cellpack}]:v0:v0`;
-
-  return `${p0},${p1}`;
+  return `[${cellpack}]:v0:v0`;
 }
 
 /**
@@ -369,50 +609,48 @@ export function buildAddLiquidityInputRequirements(params: {
 // ---------------------------------------------------------------------------
 
 /**
- * Build protostone for RemoveLiquidity (burn LP tokens).
+ * Build protostone for Burn / RemoveLiquidity through the factory router (opcode 12).
  *
- * Two-protostone pattern:
- *   p0: Edict transferring LP tokens to p1
- *   p1: Cellpack calling pool with opcode 2 (RemoveLiquidity)
+ * Single-protostone pattern (same shape as addLiquidity):
+ *   p0: Cellpack calling factory.Burn with full Uniswap-style params:
+ *       (token_a, token_b, liquidity, amount_a_min, amount_b_min, deadline)
  *
- * The LP token ID IS the pool ID.
+ * LP tokens auto-allocate to this single protostone; the factory looks them
+ * up against the pool identified by token_a/token_b and burns. No manual
+ * edicts needed.
+ *
+ * Source: fujin-factory/src/lib.rs:75 (#[opcode(12)] Burn {...})
  */
-export function buildRemoveLiquidityProtostone(params: {
-  lpTokenId: string;
-  lpAmount: string;
-  minAmount0: string;
-  minAmount1: string;
+export function buildFactoryBurnProtostone(params: {
+  factoryId: string;
+  tokenA: string;
+  tokenB: string;
+  liquidity: string;
+  amountAMin: string;
+  amountBMin: string;
   deadline: string;
   pointer?: string;
   refund?: string;
 }): string {
   const {
-    lpTokenId,
-    lpAmount,
-    minAmount0,
-    minAmount1,
-    deadline,
-    pointer = 'v0',
-    refund = 'v0',
+    factoryId, tokenA, tokenB, liquidity, amountAMin, amountBMin, deadline,
+    pointer = 'v0', refund = 'v0',
   } = params;
-
-  const [lpBlock, lpTx] = lpTokenId.split(':');
-
-  const edict = `[${lpBlock}:${lpTx}:${lpAmount}:p1]`;
-  const p0 = `${edict}:${pointer}:${refund}`;
+  const [factoryBlock, factoryTx] = factoryId.split(':');
+  const [tokenABlock, tokenATx] = tokenA.split(':');
+  const [tokenBBlock, tokenBTx] = tokenB.split(':');
 
   const cellpack = [
-    lpBlock,
-    lpTx,
-    POOL_OPCODES.RemoveLiquidity,
-    minAmount0,
-    minAmount1,
+    factoryBlock, factoryTx, FACTORY_BURN_OPCODE,
+    tokenABlock, tokenATx,
+    tokenBBlock, tokenBTx,
+    liquidity,
+    amountAMin, amountBMin,
     deadline,
   ].join(',');
-  const p1 = `[${cellpack}]:${pointer}:${refund}`;
-
-  return `${p0},${p1}`;
+  return `[${cellpack}]:${pointer}:${refund}`;
 }
+
 
 /**
  * Build input requirements for RemoveLiquidity.
@@ -424,4 +662,55 @@ export function buildRemoveLiquidityInputRequirements(params: {
 }): string {
   const [block, tx] = params.lpTokenId.split(':');
   return `${block}:${tx}:${params.lpAmount}`;
+}
+
+// ---------------------------------------------------------------------------
+// Wrap ETH (ETH → frETH on BTC alkanes)
+// ---------------------------------------------------------------------------
+
+/**
+ * Build protostone for ETH → frETH wrap.
+ *
+ * frETH is deployed at [4:n] on BTC alkanes. The FROST signer (P2TR) holds
+ * the key that authenticates the ETH vault on Ethereum.
+ *
+ * Uses same opcode 77 as frBTC and frZEC wraps.
+ */
+export function buildWrapEthProtostone(params: {
+  frethId: string;
+}): string {
+  const [block, tx] = params.frethId.split(':');
+  return `[${block},${tx},${FRETH_WRAP_OPCODE}]:v1:v1`;
+}
+
+// ---------------------------------------------------------------------------
+// Unwrap ETH (frETH → ETH via vault release)
+// ---------------------------------------------------------------------------
+
+/**
+ * Build protostone for frETH → ETH unwrap (BurnAndBridge).
+ *
+ * Burns frETH on BTC alkanes and queues a vault release on Ethereum.
+ * The coordinator detects the pending bridge and sends an authenticated
+ * call to ETHVault to release ETH to the user's Ethereum address.
+ */
+export function buildUnwrapEthProtostone(params: {
+  frethId: string;
+  pointer?: string;
+  refund?: string;
+}): string {
+  const { frethId, pointer = 'v1', refund = 'v1' } = params;
+  const [block, tx] = frethId.split(':');
+  return `[${block},${tx},${FRETH_UNWRAP_OPCODE}]:${pointer}:${refund}`;
+}
+
+/**
+ * Build input requirements for frETH unwrap.
+ */
+export function buildUnwrapEthInputRequirements(params: {
+  frethId: string;
+  amount: string;
+}): string {
+  const [block, tx] = params.frethId.split(':');
+  return `${block}:${tx}:${params.amount}`;
 }

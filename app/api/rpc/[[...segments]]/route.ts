@@ -23,13 +23,14 @@ import { NextRequest, NextResponse } from 'next/server';
 
 // All RPC endpoints point to subfrost infrastructure
 const RPC_ENDPOINTS: Record<string, string> = {
-  mainnet: 'https://mainnet.subfrost.io/v4/subfrost',
-  testnet: 'https://testnet.subfrost.io/v4/subfrost',
-  signet: 'https://signet.subfrost.io/v4/subfrost',
-  regtest: 'https://regtest.subfrost.io/v4/subfrost',
+  mainnet: 'https://mainnet.subfrost.io/v4/5d37098b75581792a44b9d230d48aa75',
+  testnet: 'https://testnet.subfrost.io/v4/5d37098b75581792a44b9d230d48aa75',
+  signet: 'https://signet.subfrost.io/v4/5d37098b75581792a44b9d230d48aa75',
+  regtest: 'https://regtest.subfrost.io/v4/5d37098b75581792a44b9d230d48aa75',
   'regtest-local': 'http://localhost:18888',
-  'subfrost-regtest': 'https://regtest.subfrost.io/v4/subfrost',
-  oylnet: 'https://regtest.subfrost.io/v4/subfrost',
+  'qubitcoin-regtest': 'https://meta.lake.direct',
+  'subfrost-regtest': 'https://regtest.subfrost.io/v4/5d37098b75581792a44b9d230d48aa75',
+  oylnet: 'https://regtest.subfrost.io/v4/5d37098b75581792a44b9d230d48aa75',
 };
 
 // Batch JSON-RPC requests are more reliably handled by the explicit /jsonrpc path
@@ -39,6 +40,7 @@ const BATCH_RPC_ENDPOINTS: Record<string, string> = {
   signet: 'https://signet.subfrost.io/v4/jsonrpc',
   regtest: 'https://regtest.subfrost.io/v4/jsonrpc',
   'regtest-local': 'http://localhost:18888',
+  'qubitcoin-regtest': 'https://meta.lake.direct',
   'subfrost-regtest': 'https://regtest.subfrost.io/v4/jsonrpc',
   oylnet: 'https://regtest.subfrost.io/v4/jsonrpc',
 };
@@ -61,12 +63,61 @@ export async function POST(
     let network: string;
     let targetUrl: string;
 
+    // Qubitcoin-regtest service URLs (VPN-only, from env)
+    const QBC_HOST = process.env.QUBITCOIN_REGTEST_HOST || '127.0.0.1';
+    const QBC_LOCAL = QBC_HOST === '127.0.0.1' || QBC_HOST === 'localhost';
+    // Local qubitcoind: all services on single port 19443 (built-in indexers)
+    // Remote k3s: separate services on NodePorts
+    const QBC_METASHREW = QBC_LOCAL ? `http://${QBC_HOST}:19443` : `http://${QBC_HOST}:31080`;
+    const QBC_ESPLORA = QBC_LOCAL ? `http://${QBC_HOST}:19443` : `http://${QBC_HOST}:31050`;
+    const QBC_JSONRPC = QBC_LOCAL ? `http://${QBC_HOST}:19443` : `http://${QBC_HOST}:31944`;
+    const QBC_ESPO = QBC_LOCAL ? `http://${QBC_HOST}:31578` : `http://${QBC_HOST}:31578`;
+
     if (segments && segments.length > 0) {
       // Path-based: /api/rpc/mainnet  or  /api/rpc/mainnet/get-alkanes-by-address
       const [networkSegment, ...restPath] = segments;
       network = networkSegment;
 
       if (restPath.length > 0) {
+        if (networkSegment === 'qubitcoin-regtest') {
+          // Route /espo sub-path to espo JSON-RPC on server
+          if (restPath[0] === 'espo') {
+            const espoUrl = QBC_ESPO + '/rpc';
+            console.log(`[RPC Proxy] qubitcoin-regtest /espo → ${espoUrl}`);
+            try {
+              const espoBody = await request.clone().json().catch(() => ({}));
+              const espoResp = await fetch(espoUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(espoBody),
+              });
+              const espoData = await espoResp.json();
+              return NextResponse.json(espoData);
+            } catch (e) {
+              console.log(`[RPC Proxy] qubitcoin-regtest /espo failed:`, e);
+              return NextResponse.json({ jsonrpc: '2.0', error: { code: -32603, message: 'espo unavailable' }, id: null });
+            }
+          }
+          // /get-block-height → fetch from metashrew
+          if (restPath[0] === 'get-block-height') {
+            try {
+              const hResp = await fetch(QBC_METASHREW, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ jsonrpc: '2.0', method: 'metashrew_height', params: [], id: 1 }),
+              });
+              const hData = await hResp.json();
+              const height = parseInt(hData.result, 10) || 0;
+              console.log(`[RPC Proxy] qubitcoin-regtest /get-block-height → ${height}`);
+              return NextResponse.json({ height });
+            } catch {
+              return NextResponse.json({ height: 0 });
+            }
+          }
+          // Other REST sub-paths — return empty for SDK fallback
+          console.log(`[RPC Proxy] qubitcoin-regtest REST /${restPath.join('/')} → empty (no data API)`);
+          return NextResponse.json({ statusCode: 200, data: [] });
+        }
         // REST sub-path: forward to backend base URL + rest path
         const baseUrl = (RPC_ENDPOINTS[network] || RPC_ENDPOINTS.regtest).replace(/\/$/, '');
         targetUrl = `${baseUrl}/${restPath.join('/')}`;
@@ -80,11 +131,97 @@ export async function POST(
       targetUrl = pickEndpoint(body, network);
     }
 
-    // Log for debugging UTXO fetches
+    // Devnet runs in-browser only — server-side API routes can't reach it.
+    // regtest-local is a real Docker stack at localhost:18888 — DO NOT block it here.
+    if (network === 'devnet') {
+      return NextResponse.json({
+        jsonrpc: '2.0',
+        error: { code: -32603, message: 'Devnet is in-browser only; use fetch interceptor' },
+        id: body?.id ?? null,
+      }, { status: 503 });
+    }
+
+    // Qubitcoin-regtest: route methods to the correct service on the remote server.
+    //   :31944 — qubitcoin-jsonrpc (bitcoin RPC + secondaryview/secondaryheight)
+    //   :31080 — metashrew/rockshrew (metashrew_view, metashrew_height)
+    //   :31050 — esplora (REST block explorer)
+    //   :31443 — bitcoind (raw bitcoin RPC)
+    if (network === 'qubitcoin-regtest' && !Array.isArray(body)) {
+      const m = body.method || '';
+
+      // Esplora methods → esplora REST service
+      if (m.startsWith('esplora_')) {
+        // Convert esplora_address::utxo → /address/{addr}/utxo REST call
+        const esploraBase = QBC_ESPLORA;
+        const params = body.params || [];
+
+        let esploraPath = '';
+        if (m === 'esplora_address::utxo' && params[0]) {
+          esploraPath = `/address/${params[0]}/utxo`;
+        } else if (m === 'esplora_address::txs:mempool' && params[0]) {
+          esploraPath = `/address/${params[0]}/txs/mempool`;
+        } else if (m === 'esplora_tx' && params[0]) {
+          esploraPath = `/tx/${params[0]}`;
+        }
+
+        if (esploraPath) {
+          console.log(`[RPC Proxy] ${m} -> ${esploraBase}${esploraPath}`);
+          try {
+            const esploraResp = await fetch(`${esploraBase}${esploraPath}`);
+            const esploraData = await esploraResp.json();
+            return NextResponse.json({ jsonrpc: '2.0', result: esploraData, id: body.id ?? 1 });
+          } catch (e) {
+            return NextResponse.json({ jsonrpc: '2.0', result: [], id: body.id ?? 1 });
+          }
+        }
+      }
+
+      // metashrew methods → metashrew service directly (supports all view functions)
+      if (m === 'metashrew_view' || m === 'metashrew_height') {
+        targetUrl = QBC_METASHREW;
+      }
+      // Lua methods → metashrew (it handles lua_evalscript/lua_evalsaved)
+      else if (m.startsWith('lua_')) {
+        targetUrl = QBC_METASHREW;
+      }
+      // Bitcoin RPC methods → qubitcoin-jsonrpc
+      else if (['getblockcount', 'getblockhash', 'getblock', 'getrawtransaction',
+                 'sendrawtransaction', 'generatetoaddress', 'getrawmempool',
+                 'gettxout', 'getmempoolinfo'].includes(m)) {
+        if (m === 'sendrawtransaction') {
+          console.log(`[RPC Proxy] sendrawtransaction: ${body.params?.[0]?.length || 0} hex chars, params: ${body.params?.length}`);
+        }
+        targetUrl = QBC_JSONRPC;
+      }
+      // ord methods → not available, return empty
+      else if (m.startsWith('ord_')) {
+        return NextResponse.json({ jsonrpc: '2.0', result: { indexed: false, inscriptions: [], runes: {} }, id: body.id ?? 1 });
+      }
+      // alkanes_ prefixed → translate to secondaryview on qubitcoin
+      else if (m.startsWith('alkanes_')) {
+        const viewName = m.replace('alkanes_', '');
+        body.method = 'secondaryview';
+        body.params = ['alkanes', viewName, ...(body.params || [])];
+        targetUrl = QBC_JSONRPC;
+      }
+      // Default → qubitcoin-jsonrpc
+      else {
+        targetUrl = QBC_JSONRPC;
+      }
+    }
+
+    // Log for debugging
     const method = Array.isArray(body) ? 'batch' : body?.method;
     console.log(`[RPC Proxy] ${method} -> ${targetUrl}`);
 
-    const response = await fetch(targetUrl, {
+    // Fallback endpoint for mainnet when primary hits metashrew-unwrap errors
+    const FALLBACK_ENDPOINTS: Record<string, string> = {
+      mainnet: 'https://mainnet.subfrost.io/v4/jsonrpc',
+      testnet: 'https://testnet.subfrost.io/v4/jsonrpc',
+      signet: 'https://signet.subfrost.io/v4/jsonrpc',
+    };
+
+    let response = await fetch(targetUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -92,7 +229,7 @@ export async function POST(
 
     // Read the response body once. Upstream is always JSON-RPC, but infrastructure
     // errors (nginx 502, rate limits, service unavailable) may return plain text or HTML.
-    const responseText = await response.text();
+    let responseText = await response.text();
     let data;
     try {
       data = JSON.parse(responseText);
@@ -105,6 +242,23 @@ export async function POST(
         { jsonrpc: '2.0', error: { code: -32603, message: `Upstream error (${response.status}): ${snippet}` }, id: body?.id ?? null },
         { status: 502 }
       );
+    }
+
+    // Retry on metashrew-unwrap errors — fallback to /v4/jsonrpc which routes correctly
+    if (data?.error?.message?.includes('metashrew-unwrap') && network && FALLBACK_ENDPOINTS[network]) {
+      console.log(`[RPC Proxy] metashrew-unwrap error, retrying via fallback: ${FALLBACK_ENDPOINTS[network]}`);
+      try {
+        const fallbackResp = await fetch(FALLBACK_ENDPOINTS[network], {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        const fallbackText = await fallbackResp.text();
+        const fallbackData = JSON.parse(fallbackText);
+        if (!fallbackData?.error) {
+          data = fallbackData;
+        }
+      } catch { /* fallback failed, use original error */ }
     }
 
     // Non-200 status with valid JSON body — forward the JSON-RPC error as-is

@@ -5,6 +5,7 @@ import { X, ArrowRight, ArrowDown, Loader2, AlertTriangle } from 'lucide-react';
 import { useTransactionConfirm, type TransactionDetails } from '@/context/TransactionConfirmContext';
 import { useTranslation } from '@/hooks/useTranslation';
 import TokenIcon from './TokenIcon';
+import { TxPlanCard } from './TxPlanCard';
 
 function formatAmount(amount: string | undefined, symbol: string | undefined): string {
   if (!amount) return '—';
@@ -276,15 +277,11 @@ export default function TransactionConfirmModal() {
   const { details } = pendingTransaction;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center">
-      {/* Backdrop */}
+    <div className="sf-popup-overlay p-4" style={{ zIndex: 100 }} onClick={reject}>
       <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-        onClick={reject}
-      />
-
-      {/* Modal */}
-      <div className="relative z-10 w-full max-w-md mx-4 rounded-3xl bg-[color:var(--sf-glass-bg)] shadow-[0_24px_96px_rgba(0,0,0,0.4)] backdrop-blur-xl overflow-hidden">
+        className="sf-popup w-full max-w-md max-h-[92vh] overflow-hidden flex flex-col"
+        onClick={e => e.stopPropagation()}
+      >
         {/* Header */}
         <div className="bg-[color:var(--sf-panel-bg)] px-6 py-5 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
           <div className="flex items-center justify-between">
@@ -306,8 +303,8 @@ export default function TransactionConfirmModal() {
           )}
         </div>
 
-        {/* Content */}
-        <div className="p-6 space-y-4">
+        {/* Content — scrollable so big plans (multi-tx, many UTXOs) fit. */}
+        <div className="p-6 space-y-4 overflow-y-auto no-scrollbar flex-1 min-h-0">
           {/* Transaction details based on type */}
           {details.type === 'swap' && <SwapDetails details={details} t={t} />}
           {details.type === 'wrap' && <WrapUnwrapDetails details={details} t={t} />}
@@ -317,8 +314,19 @@ export default function TransactionConfirmModal() {
           )}
           {details.type === 'send' && <SendDetails details={details} t={t} />}
 
-          {/* Fee info (not shown for 'send' type since it's included in SendDetails) */}
-          {details.type !== 'send' && (details.feeRate || details.estimatedFee) && (
+          {/* Rich plan — input/output breakdown. Multi-tx flows render
+           *  multiple cards stacked. */}
+          {details.plan && details.plan.length > 0 && (
+            <div className="space-y-3">
+              {details.plan.map((p, i) => (
+                <TxPlanCard key={i} plan={p} idx={i} total={details.plan!.length} />
+              ))}
+            </div>
+          )}
+
+          {/* Fee info (not shown for 'send' type since it's included in SendDetails;
+           *  not shown when a plan is supplied since each plan card renders its own fee row). */}
+          {details.type !== 'send' && !details.plan?.length && (details.feeRate || details.estimatedFee) && (
             <div className="flex items-center justify-between p-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-sm">
               <span className="text-[color:var(--sf-text)]/60">{t('confirm.networkFee')}</span>
               <span className="text-[color:var(--sf-text)]">
@@ -333,8 +341,9 @@ export default function TransactionConfirmModal() {
           </div>
         </div>
 
-        {/* Actions */}
-        <div className="flex gap-3 px-6 pb-6">
+        {/* Actions — sticky bottom so the buttons stay visible while the
+         *  body scrolls. */}
+        <div className="flex gap-3 px-6 pb-6 pt-3 border-t border-[color:var(--sf-outline)] bg-[color:var(--sf-panel-bg)]/30 backdrop-blur">
           <button
             onClick={approve}
             className="flex-1 px-4 py-3 rounded-xl bg-[color:var(--sf-primary)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white font-bold uppercase tracking-wide"

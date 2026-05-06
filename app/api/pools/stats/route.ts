@@ -113,6 +113,32 @@ export async function GET(request: NextRequest) {
     const dashboardParam = searchParams.get('dashboard');
     const network = searchParams.get('network') || 'mainnet';
 
+    // Devnet runs in-browser only — server-side API routes can't reach it.
+    // Return empty data for devnet; the frontend will query the in-browser
+    // devnet directly via fetch interceptor.
+    if (network === 'devnet' || network === 'regtest-local') {
+      const emptyStats = {
+        success: true,
+        data: dashboardParam === 'true'
+          ? {
+              marketStats: {
+                totalSupply: '0',
+                totalSupplyFormatted: 0,
+                priceUsd: 0,
+                priceBtc: 0,
+                marketCapUsd: 0,
+                timestamp: Date.now(),
+              },
+              tvlStats: { pools: {}, totalTvlUsd: 0, timestamp: Date.now() },
+              btcPrice: { usd: 100000, timestamp: Date.now() },
+              pools: {},
+              timestamp: Date.now(),
+            }
+          : {},
+      };
+      return NextResponse.json(emptyStats);
+    }
+
     const config = getConfig(network);
     const apiUrl = SUBFROST_API_URLS[network] || SUBFROST_API_URLS.mainnet;
     const [factoryBlock, factoryTx] = config.ALKANE_FACTORY_ID.split(':');

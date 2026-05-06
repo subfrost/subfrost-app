@@ -10,12 +10,21 @@ import FireRedemptionPanel from './panels/FireRedemptionPanel';
 import FireDistributionPanel from './panels/FireDistributionPanel';
 import { useFireTokenStats } from '@/hooks/fire/useFireTokenStats';
 import { useFireStakingStats } from '@/hooks/fire/useFireStakingStats';
-import { useFireMockData } from '@/hooks/fire/useFireMockData';
+import { useFireChartData } from '@/hooks/fire/useFireChartData';
 import { formatCompact, LOCK_TIERS } from '@/utils/fireCalculations';
 import { useTranslation } from '@/hooks/useTranslation';
 import BigNumber from 'bignumber.js';
 
 const FirePriceChart = dynamic(() => import('./charts/FirePriceChart'), { ssr: false });
+
+const LOCK_TIER_KEYS: Record<string, string> = {
+  'None': 'fire.lockNone',
+  '1 Week': 'fire.lock1Week',
+  '1 Month': 'fire.lock1Month',
+  '3 Months': 'fire.lock3Months',
+  '6 Months': 'fire.lock6Months',
+  '1 Year': 'fire.lock1Year',
+};
 
 export default function FireDashboard() {
   const { t } = useTranslation();
@@ -23,13 +32,13 @@ export default function FireDashboard() {
   const [showMobileVaultDetails, setShowMobileVaultDetails] = useState(false);
   const { data: tokenStats } = useFireTokenStats();
   const { data: stakingStats } = useFireStakingStats();
-  const mockData = useFireMockData();
+  const mockData = useFireChartData();
 
   const heroMetrics = useMemo(() => {
     const circSupply = new BigNumber(tokenStats?.circulatingSupply || '0').dividedBy(1e8);
     const lastPrice = mockData.priceHistory[mockData.priceHistory.length - 1]?.value || 0;
-    const prevPrice = mockData.priceHistory[mockData.priceHistory.length - 2]?.value || lastPrice;
-    const priceDelta = prevPrice > 0 ? ((lastPrice - prevPrice) / prevPrice * 100) : 0;
+    const firstPrice = mockData.priceHistory[0]?.value || lastPrice;
+    const priceDelta = firstPrice > 0 ? ((lastPrice - firstPrice) / firstPrice * 100) : 0;
     const marketCap = circSupply.multipliedBy(lastPrice);
     const totalStaked = new BigNumber(stakingStats?.totalStaked || '0').dividedBy(1e8);
     const emissionRate = new BigNumber(stakingStats?.emissionRate || '0').dividedBy(1e8);
@@ -48,7 +57,7 @@ export default function FireDashboard() {
 
   // Mobile hero card content (reused in multiple places)
   const mobileHeroCard = (
-    <div className="rounded-2xl p-5 shadow-[0_4px_20px_rgba(0,0,0,0.2)] bg-[color:var(--sf-glass-bg)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)] relative overflow-hidden">
+    <div className="sf-card p-5 relative">
       <div className="flex items-center gap-3 mb-4">
         <div className="h-11 w-11 rounded-2xl bg-gradient-to-br from-orange-500 to-red-600 flex items-center justify-center shadow-[0_4px_16px_rgba(249,115,22,0.35)] flex-shrink-0">
           <svg className="h-5 w-5 text-white" viewBox="0 0 24 24" fill="currentColor">
@@ -84,7 +93,7 @@ export default function FireDashboard() {
           { label: t('fire.circSupply'), value: heroMetrics.circSupply, unit: 'FIRE' },
           { label: t('fire.totalStaked'), value: heroMetrics.totalStaked, unit: 'LP' },
         ].map(({ label, value, unit }) => (
-          <div key={label} className="rounded-2xl bg-[color:var(--sf-surface)]/40 px-3 py-2.5 shadow-[0_4px_20px_rgba(0,0,0,0.2)]">
+          <div key={label} className="sf-card-small px-3 py-2.5">
             <div className="text-[10px] font-semibold uppercase tracking-wider text-[color:var(--sf-muted)] mb-0.5">{label}</div>
             <div className="text-base font-bold text-[color:var(--sf-text)] truncate">{value}</div>
             <div className="text-[10px] text-[color:var(--sf-muted)]">{unit}</div>
@@ -133,7 +142,7 @@ export default function FireDashboard() {
 
         {/* Desktop: full hero — spans right column, both rows */}
         <div className="hidden md:flex md:flex-col md:col-start-2 md:row-start-1 md:row-span-2">
-          <div className="rounded-2xl p-5 sm:p-8 shadow-[0_4px_20px_rgba(0,0,0,0.2)] bg-[color:var(--sf-glass-bg)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)] relative overflow-hidden">
+          <div className="sf-card p-5 sm:p-8 relative">
             {/* Background glow accent */}
             <div className="absolute -top-20 -right-20 w-64 h-64 bg-orange-500/10 rounded-full blur-3xl pointer-events-none" />
             <div className="absolute -bottom-16 -left-16 w-48 h-48 bg-orange-600/5 rounded-full blur-3xl pointer-events-none" />
@@ -179,7 +188,7 @@ export default function FireDashboard() {
                   { label: t('fire.circSupply'), value: heroMetrics.circSupply, unit: 'FIRE' },
                   { label: t('fire.totalStaked'), value: heroMetrics.totalStaked, unit: 'LP' },
                 ].map(({ label, value, unit }) => (
-                  <div key={label} className="rounded-2xl bg-[color:var(--sf-surface)]/40 px-3 py-2.5 sm:px-4 sm:py-3 shadow-[0_4px_20px_rgba(0,0,0,0.2)]">
+                  <div key={label} className="sf-card-small px-3 py-2.5 sm:px-4 sm:py-3">
                     <div className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-muted)] mb-0.5">{label}</div>
                     <div className="text-base sm:text-lg font-bold text-[color:var(--sf-text)] truncate">{value}</div>
                     <div className="text-[10px] text-[color:var(--sf-muted)]">{unit}</div>
@@ -221,32 +230,32 @@ function StakingOverviewContent({ t, heroMetrics }: { t: (key: string) => string
         {t('fire.stakingOverview')}
       </div>
 
-      {/* APY by tier table */}
-      <div className="rounded-xl bg-[color:var(--sf-panel-bg)] border border-[color:var(--sf-glass-border)] overflow-hidden">
-        <table className="w-full text-xs">
-          <thead>
-            <tr className="text-[color:var(--sf-muted)] border-b border-[color:var(--sf-row-border)]">
-              <th className="text-left py-2.5 px-3 font-semibold">{t('fire.lockTier')}</th>
-              <th className="text-right py-2.5 px-3 font-semibold">{t('fire.boost')}</th>
-              <th className="text-right py-2.5 px-3 font-semibold">{t('fire.duration')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {LOCK_TIERS.map((tier, i) => (
-              <tr key={tier.label} className="text-[color:var(--sf-text)]/80 border-b border-[color:var(--sf-row-border)] last:border-0">
-                <td className="py-2 px-3">{tier.label}</td>
-                <td className="text-right px-3">
-                  <span className={`font-bold ${i === 0 ? 'text-[color:var(--sf-muted)]' : 'text-orange-400'}`}>
-                    {tier.multiplier}x
-                  </span>
-                </td>
-                <td className="text-right px-3 text-[color:var(--sf-muted)]">
-                  {tier.duration > 0 ? `${tier.duration} blks` : t('fire.flex')}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      {/* APY by tier list */}
+      <div className="rounded-2xl overflow-hidden">
+        {/* Column headers */}
+        <div className="grid grid-cols-3 gap-2 px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/70 border-b border-[color:var(--sf-row-border)]">
+          <div>{t('fire.lockTier')}</div>
+          <div className="text-right">{t('fire.duration')}</div>
+          <div className="text-right">{t('fire.boost')}</div>
+        </div>
+
+        {/* Rows */}
+        {LOCK_TIERS.map((tier, i) => (
+          <div
+            key={tier.label}
+            className="grid grid-cols-3 items-center gap-2 px-4 py-2 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-primary)]/10 border-b border-[color:var(--sf-row-border)] last:border-0"
+          >
+            <div className="text-sm font-bold text-[color:var(--sf-text)]">{t(LOCK_TIER_KEYS[tier.label] || tier.label)}</div>
+            <div className="text-sm text-[color:var(--sf-muted)] text-right">
+              {tier.duration > 0 ? `${tier.duration} ${t('fire.blocks')}` : t('fire.flex')}
+            </div>
+            <div className="text-right">
+              <span className={`text-sm font-bold ${i === 0 ? 'text-[color:var(--sf-muted)]' : 'text-orange-400'}`}>
+                {tier.multiplier}x
+              </span>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );

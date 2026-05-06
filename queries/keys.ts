@@ -34,13 +34,32 @@ export const queryKeys = {
   account: {
     enrichedWallet: (network: string, addresses: string) =>
       ['enriched-wallet', network, addresses] as const,
+    btcBalanceFast: (network: string, addresses: string, walletType?: string | null) =>
+      ['btc-balance-fast', network, addresses, walletType ?? 'none'] as const,
     btcBalance: (network: string, address: string) =>
       ['btc-balance', address, network] as const,
+    alkaneBalances: (network: string, addresses: string) =>
+      ['alkane-balances', network, addresses] as const,
+    /**
+     * Pre-warmed UTXO + balance-sheet snapshot for the wallet's
+     * addresses. Mounted eagerly on connect so swap/send mutations
+     * read out of cache instead of fanning out RPC at click time.
+     * Invalidated by HeightPoller on every block-tip change.
+     */
+    walletUtxoCache: (network: string, addresses: string) =>
+      ['wallet-utxo-cache', network, addresses] as const,
     sellableCurrencies: (
       network: string,
       walletAddress: string,
       tokensKey: string,
     ) => ['sellable-currencies', walletAddress, tokensKey, network] as const,
+  },
+
+  // -------------------------------------------------------------------------
+  // Sync status — metashrew vs bitcoind tip
+  // -------------------------------------------------------------------------
+  sync: {
+    status: (network: string) => ['sync-status', network] as const,
   },
 
   // -------------------------------------------------------------------------
@@ -57,6 +76,8 @@ export const queryKeys = {
       ['poolFee', network, alkaneId] as const,
     metadata: (network: string, poolIdsKey: string) =>
       ['poolsMetadata', network, poolIdsKey] as const,
+    liveState: (network: string, poolId: string) =>
+      ['pool-live-state', network, poolId] as const,
   },
 
   // -------------------------------------------------------------------------

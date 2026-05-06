@@ -9,6 +9,9 @@ import { queryOptions } from '@tanstack/react-query';
 import { queryKeys } from './keys';
 import { FRBTC_WRAP_FEE_PER_1000, FRBTC_UNWRAP_FEE_PER_1000 } from '@/constants/alkanes';
 import { encodeSimulateCalldata } from '@/utils/simulateCalldata';
+import { getBitcoinPrice as rpcGetBitcoinPrice } from '@/lib/alkanes/rpc';
+// Pricing data is global — always use mainnet subpricer regardless of connected network
+const SUBPRICER_BASE = 'https://mainnet.subfrost.io/v4/subfrost';
 
 // Re-export the premium type so hooks can use it
 export type FrbtcPremiumData = {
@@ -39,32 +42,77 @@ interface BitcoinPriceCtx {
   lastUpdated: number;
 }
 
+/**
+ * BTC price source-of-truth contract (2026-05-04, fixes the $110K/$79K oscillation):
+ *
+ *   1. Subpricer — protocol-canonical. Same endpoint the contracts price against.
+ *   2. rpc.getBitcoinPrice() — Next.js `/api/btc-price` route through the
+ *      shared SDK-mediated rpc.ts layer. Whatever upstream that route resolves
+ *      to (currently coingecko in the route handler).
+ *   3. Last-resort coingecko direct-fetch with a 5s timeout.
+ *
+ * "First non-zero wins, no second writer." Each leg returns immediately on
+ * a positive price, so a slow leg never races a fast leg and overwrites.
+ * `staleTime: Infinity` + HeightPoller invalidation means the cache is
+ * written exactly once per block — no flicker between divergent sources.
+ *
+ * `cachedPrice` from `AlkanesSDKContext` was previously consulted first
+ * here, but it's populated by a separate `/api/btc-price` one-shot in the
+ * context that bypasses subpricer — that's where the $79K-vs-$110K
+ * disagreement came from. Removed: subpricer is now the sole primary, and
+ * the context fetch becomes display-only. The `cachedPrice` parameter
+ * stays in the signature for backwards compat with existing callers.
+ */
 export function btcPriceQueryOptions(
   network: string,
   provider: WebProvider | null,
   isInitialized: boolean,
-  cachedPrice: BitcoinPriceCtx | null,
+  _cachedPrice: BitcoinPriceCtx | null,
 ) {
   return queryOptions<number>({
     queryKey: queryKeys.market.btcPrice(network),
     enabled: isInitialized && !!provider,
+    // Mainnet: pin until HeightPoller invalidates on new block.
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
     queryFn: async () => {
-      if (cachedPrice && cachedPrice.usd > 0) {
-        return cachedPrice.usd;
-      }
-      if (!provider) return 90000;
+      // Primary: subpricer — protocol-canonical price.
       try {
-        const response = await provider.dataApiGetBitcoinPrice();
-        const price =
-          typeof response === 'number'
-            ? response
-            : (response as { usd?: number; price?: number })?.usd ??
-              (response as { price?: number })?.price ??
-              0;
-        return price > 0 ? price : 90000;
-      } catch {
-        return 90000;
-      }
+        const resp = await fetch(`${SUBPRICER_BASE}/api/v1/bitcoin-price`, {
+          signal: AbortSignal.timeout(5000),
+        });
+        if (resp.ok) {
+          const data = await resp.json();
+          const price = data?.usd ?? data?.price ?? 0;
+          if (price > 0) return price;
+        }
+      } catch { /* fall through to rpc.ts */ }
+
+      // Fallback 1: SDK-mediated rpc.ts layer (Next.js /api/btc-price).
+      try {
+        const data = await rpcGetBitcoinPrice(AbortSignal.timeout(5000));
+        const price = (data as { usd?: number; price?: number })?.usd
+          ?? (data as { price?: number })?.price
+          ?? (typeof data === 'number' ? data : 0);
+        if (price > 0) return price;
+      } catch { /* fall through to coingecko */ }
+
+      // Fallback 2: coingecko public API (last resort).
+      try {
+        const resp = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd', {
+          signal: AbortSignal.timeout(5000),
+        });
+        if (resp.ok) {
+          const data = await resp.json();
+          const price = data?.bitcoin?.usd ?? 0;
+          if (price > 0) return price;
+        }
+      } catch { /* fall through */ }
+
+      // No source returned a price. Surface this honestly rather than
+      // returning a hardcoded 90000 — display "—" is better than a wrong
+      // number that triggers wrong USD math everywhere downstream.
+      return 0;
     },
   });
 }
@@ -175,21 +223,34 @@ function mapToObject(value: any): any {
  * JOURNAL ENTRY (2026-02-10):
  * Replaced raw essentials.get_alkane_info batch fetch with individual
  * SDK espoGetAlkaneInfo() calls. Slightly more HTTP requests but uses
- * the typed SDK path instead of raw JSON-RPC through the proxy.
+ * Direct RPC fetch — no WASM overhead. Each call is a simple JSON-RPC
+ * to essentials.get_alkane_info which returns { name, symbol, ... }.
  */
 async function fetchAlkaneNamesBatch(
-  provider: WebProvider,
+  _provider: WebProvider,
   alkaneIds: string[],
+  network?: string,
 ): Promise<Record<string, TokenDisplay>> {
   const map: Record<string, TokenDisplay> = {};
   if (alkaneIds.length === 0) return map;
 
+  const rpcUrl = `/api/rpc/${network || 'mainnet'}/espo`;
+
   const results = await Promise.all(
     alkaneIds.map(async (id) => {
       try {
-        const raw = await provider.espoGetAlkaneInfo(id);
-        const info = mapToObject(raw);
-        const data = info?.result ?? info;
+        const resp = await fetch(rpcUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          signal: AbortSignal.timeout(5000),
+          body: JSON.stringify({
+            jsonrpc: '2.0', id: 1,
+            method: 'essentials.get_alkane_info',
+            params: { alkane: id },
+          }),
+        });
+        const json = await resp.json();
+        const data = json?.result;
         if (data?.name) {
           const name = (data.name as string).replace('SUBFROST BTC', 'frBTC');
           return { id, name, symbol: data.symbol || '' };
@@ -223,6 +284,9 @@ export function tokenDisplayMapQueryOptions(
   return queryOptions<Record<string, TokenDisplay>>({
     queryKey: queryKeys.market.tokenDisplayMap(network, sortedKey),
     enabled: unique.length > 0 && !!provider,
+    // Token names/symbols never change — fetch once, cache forever
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
     queryFn: async () => {
       const map: Record<string, TokenDisplay> = {};
       const toFetch: string[] = [];
@@ -233,8 +297,8 @@ export function tokenDisplayMapQueryOptions(
           toFetch.push(id);
         }
       }
-      if (toFetch.length > 0 && provider) {
-        const batchResults = await fetchAlkaneNamesBatch(provider, toFetch);
+      if (toFetch.length > 0) {
+        const batchResults = await fetchAlkaneNamesBatch(provider as WebProvider, toFetch, network);
         Object.assign(map, batchResults);
       }
       return map;

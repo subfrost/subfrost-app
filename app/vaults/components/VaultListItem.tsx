@@ -15,7 +15,7 @@ type Props = {
   disabled?: boolean;
 };
 
-function formatApyBadge(apy: string | undefined): string {
+export function formatApyBadge(apy: string | undefined): string {
   if (!apy) return '-';
   const rounded = Math.ceil(parseFloat(apy));
   return `~${rounded}%`;
@@ -52,14 +52,13 @@ export default function VaultListItem({ vault, isSelected, onClick, interactive 
   const vaultDesc = VAULT_DESC_KEYS[vault.id] ? t(VAULT_DESC_KEYS[vault.id]) : vault.description;
   const badgeText = vault.badge && BADGE_KEYS[vault.badge] ? t(BADGE_KEYS[vault.badge]) : vault.badge;
 
-  // Mock data - replace with real vault queries
+  // Vault balances: zero until user deposits. Updated by useVaultStats hook.
   const depositsUsd = "$0.00";
   const depositsToken = "0.00";
   const availableUsd = "$0.00";
   const availableToken = "0.00";
 
-  // Mock 30-day APY history - replace with real data
-  // For now, all values are 0 (horizontal line)
+  // APY history: flat at 0 until historical data is available from quspo indexer
   const apyHistory = useMemo(() => Array(30).fill(0), []);
   const currentHistoricalApy = parseFloat(vault.historicalApy || "0");
 
@@ -106,7 +105,7 @@ export default function VaultListItem({ vault, isSelected, onClick, interactive 
           <div className="min-w-0 flex-1 text-left">
             <div className="flex items-center gap-2 mb-1">
               <h3 className="text-sm font-bold text-[color:var(--sf-text)] truncate">{vaultName}</h3>
-              {vault.badge && (
+              {vault.badge && vault.badge !== 'Coming Soon' && (
                 <span className={`text-xs px-2 py-0.5 rounded flex-shrink-0 whitespace-nowrap ${badgeColors[vault.badge as keyof typeof badgeColors] || 'bg-gray-400 text-gray-900'}`}>
                   {badgeText}
                 </span>
@@ -120,9 +119,7 @@ export default function VaultListItem({ vault, isSelected, onClick, interactive 
           {/* Row 1: EST. APY and RISK LEVEL */}
           <div className="h-[42px]">
             <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">{t('vaultList.estApy')}</div>
-            <div className="inline-flex items-center justify-center rounded-full bg-[color:var(--sf-info-green-bg)] border border-[color:var(--sf-info-green-border)] px-3 py-1 text-sm font-bold text-[color:var(--sf-info-green-title)] min-w-[60px]">
-              {formatApyBadge(vault.estimatedApy)}
-            </div>
+            <span className="sf-badge-apy">TBD</span>
           </div>
           <div className={`h-[42px] ${interactive ? 'flex flex-col items-center' : ''}`}>
             <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">{t('vaultList.riskLevel')}</div>
@@ -186,9 +183,7 @@ export default function VaultListItem({ vault, isSelected, onClick, interactive 
         {/* APY */}
         <div className="flex flex-col items-end min-w-[70px] lg:min-w-[90px] xl:min-w-[90px] flex-shrink-0">
           <div className="text-xs text-[color:var(--sf-text)]/60 mb-1 whitespace-nowrap">{t('vaultList.estApy')}</div>
-          <div className="inline-flex items-center justify-center rounded-full bg-[color:var(--sf-info-green-bg)] border border-[color:var(--sf-info-green-border)] px-2 py-0.5 text-xs font-bold text-[color:var(--sf-info-green-title)] min-w-[52px]">
-            {formatApyBadge(vault.estimatedApy)}
-          </div>
+          <span className="sf-badge-apy">TBD</span>
         </div>
 
         {/* Historical APY */}

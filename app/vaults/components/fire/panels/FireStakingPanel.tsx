@@ -1,15 +1,28 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
+import { ChevronDown, LogOut, Gift, Settings } from 'lucide-react';
 import LockTierSelector from '../widgets/LockTierSelector';
 import RewardsProjector from '../widgets/RewardsProjector';
-import StakingPositionCard from '../widgets/StakingPositionCard';
 import { useFireStakingStats } from '@/hooks/fire/useFireStakingStats';
+import { useFireStakeMutation } from '@/hooks/fire/useFireStakeMutation';
+import { useFireUnstakeMutation } from '@/hooks/fire/useFireUnstakeMutation';
+import { useFireClaimMutation } from '@/hooks/fire/useFireClaimMutation';
 import { useFireUserPositions } from '@/hooks/fire/useFireUserPositions';
 import { useWallet } from '@/context/WalletContext';
+import { useEnrichedWalletData } from '@/hooks/useEnrichedWalletData';
+import { getConfig } from '@/utils/getConfig';
 import { useDemoGate } from '@/hooks/useDemoGate';
 import { useTranslation } from '@/hooks/useTranslation';
-import BigNumber from 'bignumber.js';
+import { useFeeRate } from '@/hooks/useFeeRate';
+import type { FeeSelection } from '@/hooks/useFeeRate';
+import { useGlobalStore } from '@/stores/global';
+import type { SlippageSelection } from '@/stores/global';
+const SLIPPAGE_PRESETS: Record<Exclude<SlippageSelection, 'custom'>, string> = {
+  low: '1',
+  medium: '5',
+  high: '10',
+};
 
 interface FireStakingPanelProps {
   vaultDetailsSlot?: React.ReactNode;
@@ -17,63 +30,143 @@ interface FireStakingPanelProps {
 
 export default function FireStakingPanel({ vaultDetailsSlot }: FireStakingPanelProps) {
   const { t } = useTranslation();
-  const { isConnected } = useWallet();
+  const { isConnected, network } = useWallet();
   const isDemoGated = useDemoGate();
   const { data: stakingStats } = useFireStakingStats();
-  const { data: userPositions } = useFireUserPositions();
+  const stakeMutation = useFireStakeMutation();
+  const unstakeMutation = useFireUnstakeMutation();
+  const claimMutation = useFireClaimMutation();
+  const { data: positionsData, isLoading: isLoadingPositions } = useFireUserPositions();
+  const { balances } = useEnrichedWalletData();
+  const config = getConfig(network || 'mainnet');
+  const lpTokenId = (config as any).FIRE_LP_TOKEN_ID || '2:3';
+  const lpAlkane = balances.alkanes?.find((a: any) => a.alkaneId === lpTokenId);
+  const lpBalance = lpAlkane ? (Number(lpAlkane.balance) / 1e8).toFixed(8) : '0.00';
+
+
+  const { selection: feeSelection, setSelection: setFeeSelection, custom: customFee, setCustom: setCustomFee, feeRate, presets: feePresets } = useFeeRate({ storageKey: 'subfrost-fire-stake-fee-rate' });
+  const { maxSlippage, setMaxSlippage, slippageSelection, setSlippageSelection } = useGlobalStore();
 
   const amountRef = useRef<HTMLInputElement>(null);
   const [amount, setAmount] = useState('');
-  const [amountFocused, setAmountFocused] = useState(false);
+  const [inputFocused, setInputFocused] = useState(false);
   const [lockTier, setLockTier] = useState(0);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [deadlineLocal, setDeadlineLocal] = useState('3');
+  const [focusedField, setFocusedField] = useState<string | null>(null);
+
+  const actionPending = unstakeMutation.isPending || claimMutation.isPending;
+  const [actionTokenId, setActionTokenId] = useState<string | null>(null);
+
+  const handleClaim = (tokenId: string) => {
+    setActionTokenId(tokenId);
+    claimMutation.mutate(
+      { positionTokenId: tokenId, feeRate },
+      {
+        onSuccess: (data) => { console.log('[FireStaking] Claim success:', data); setActionTokenId(null); },
+        onError: (err) => { console.error('[FireStaking] Claim error:', err); window.alert(`Claim failed: ${err instanceof Error ? err.message : 'See console'}`); setActionTokenId(null); },
+      },
+    );
+  };
+
+  const handleUnstake = (tokenId: string) => {
+    setActionTokenId(tokenId);
+    unstakeMutation.mutate(
+      { positionTokenId: tokenId, feeRate },
+      {
+        onSuccess: (data) => { console.log('[FireStaking] Unstake success:', data); setActionTokenId(null); },
+        onError: (err) => { console.error('[FireStaking] Unstake error:', err); window.alert(`Unstake failed: ${err instanceof Error ? err.message : 'See console'}`); setActionTokenId(null); },
+      },
+    );
+  };
 
   const emissionRate = Number(stakingStats?.emissionRate || '0') / 1e8;
   const totalWeightedStake = Number(stakingStats?.totalStaked || '0') / 1e8;
   const parsedAmount = parseFloat(amount) || 0;
 
   const handleStake = () => {
-    if (isDemoGated) return;
-    console.log('[FireStakingPanel] Stake:', { amount, lockTier });
+    if (isDemoGated || !amount || parsedAmount <= 0) return;
+    const lpAmountBase = Math.floor(parsedAmount * 1e8).toString();
+    stakeMutation.mutate(
+      { lpAmount: lpAmountBase, lockTierIndex: lockTier, feeRate },
+      {
+        onSuccess: (data) => {
+          console.log('[FireStakingPanel] Stake success:', data);
+          setAmount('');
+        },
+        onError: (err) => {
+          console.error('[FireStakingPanel] Stake error:', err);
+          window.alert(`Stake failed: ${err instanceof Error ? err.message : 'See console'}`);
+        },
+      },
+    );
   };
 
-  const handleClaim = (positionId: number) => {
-    if (isDemoGated) return;
-    console.log('[FireStakingPanel] Claim:', { positionId });
-  };
-
-  const handleUnstake = (positionId: number) => {
-    if (isDemoGated) return;
-    console.log('[FireStakingPanel] Unstake:', { positionId });
-  };
 
   return (
     <div className="flex flex-col gap-4 sm:gap-6">
       {/* Stake form */}
       <div className="flex flex-col gap-4">
-        <div className="rounded-2xl p-4 sm:p-5 shadow-[0_4px_20px_rgba(0,0,0,0.2)] bg-[color:var(--sf-glass-bg)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)]">
+        <div className="sf-card p-4 sm:p-5">
+          <div className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-muted)] mb-4">
+            {t('fire.stakeLpForEmissions')}
+          </div>
+
           {/* Amount input */}
-          <div
-            className={`rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 backdrop-blur-md transition-shadow duration-[200ms] cursor-text mb-4 ${
-              amountFocused
-                ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]'
-                : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]'
-            }`}
-            onClick={() => amountRef.current?.focus()}
-          >
+          <div className="relative sf-input group p-4 cursor-text mb-4" onClick={() => amountRef.current?.focus()}>
+            <div className="absolute right-4 top-4 z-10">
+              <div className="inline-flex items-center rounded-xl bg-white/[0.03] px-3 py-2 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
+                <span className="font-bold text-sm text-[color:var(--sf-text)] whitespace-nowrap">LP</span>
+              </div>
+            </div>
             <span className="text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">{t('fire.stakeLpTokens')}</span>
-            <div className="flex items-center gap-2 mt-1">
+            <div className="flex items-center gap-2 mt-1 pr-20">
               <input
                 ref={amountRef}
                 type="number"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
-                onFocus={() => setAmountFocused(true)}
-                onBlur={() => setAmountFocused(false)}
                 placeholder="0.00"
+                onFocus={() => setInputFocused(true)}
+                onBlur={() => setInputFocused(false)}
                 className="w-full bg-transparent text-2xl font-bold text-[color:var(--sf-text)] placeholder:text-[color:var(--sf-muted)]/30 !outline-none !ring-0 !border-none focus:!outline-none focus:!ring-0 focus:!border-none focus-visible:!outline-none focus-visible:!ring-0"
                 style={{ outline: 'none', boxShadow: 'none', border: 'none' }}
               />
-              <span className="text-sm font-bold text-[color:var(--sf-muted)] flex-shrink-0">LP</span>
+            </div>
+            <div className="flex flex-col items-end gap-1">
+              <div className="text-xs font-medium text-[color:var(--sf-text)]/60">
+                {t('boost.balance', { amount: lpBalance })}
+              </div>
+              <div className={`flex items-center gap-1.5 transition-opacity duration-300 ${inputFocused ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`} onClick={(e) => e.stopPropagation()}>
+                <button
+                  type="button"
+                  onClick={() => setAmount((parseFloat(lpBalance) * 0.25).toFixed(8))}
+                  className="sf-percent-btn-pill"
+                >
+                  25%
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAmount((parseFloat(lpBalance) * 0.5).toFixed(8))}
+                  className="sf-percent-btn-pill"
+                >
+                  50%
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAmount((parseFloat(lpBalance) * 0.75).toFixed(8))}
+                  className="sf-percent-btn-pill"
+                >
+                  75%
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAmount(lpBalance)}
+                  className="sf-percent-btn-pill"
+                >
+                  {t('boost.max')}
+                </button>
+              </div>
             </div>
           </div>
 
@@ -92,13 +185,144 @@ export default function FireStakingPanel({ vaultDetailsSlot }: FireStakingPanelP
             />
           </div>
 
+          {/* Transaction Details - collapsible */}
+          <div className="sf-panel overflow-visible mb-4">
+            <button
+              type="button"
+              onClick={() => setDetailsOpen(!detailsOpen)}
+              className="sf-collapsible-trigger"
+            >
+              <span>{t('vaultDeposit.transactionDetails')}</span>
+              <Settings
+                size={14}
+                className={`transition-transform duration-300 ${detailsOpen ? 'rotate-180' : ''}`}
+              />
+            </button>
+
+            <div className={`transition-all duration-300 ease-in-out ${detailsOpen ? 'max-h-[1000px] opacity-100 pb-4 overflow-visible' : 'max-h-0 opacity-0 pb-0 overflow-hidden'}`}>
+              <div className="flex flex-col gap-2.5 px-4 text-sm">
+                {/* Deadline (blocks) */}
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60">
+                    {t('vaultDeposit.deadlineBlocks')}
+                  </span>
+                  <div className="relative">
+                    <input
+                      aria-label="Transaction deadline in blocks"
+                      type="number"
+                      min={1}
+                      max={100}
+                      step={1}
+                      value={deadlineLocal}
+                      onChange={(e) => setDeadlineLocal(e.target.value)}
+                      onFocus={() => setFocusedField('deadline')}
+                      onBlur={() => {
+                        setFocusedField(null);
+                        const val = parseInt(deadlineLocal, 10);
+                        if (!deadlineLocal || isNaN(val) || val < 1) {
+                          setDeadlineLocal('3');
+                        }
+                      }}
+                      placeholder="3"
+                      className="sf-pill-input"
+                    />
+                  </div>
+                </div>
+
+                {/* Slippage Tolerance */}
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60">
+                    {t('vaultDeposit.slippageTolerance')}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    {slippageSelection === 'custom' ? (
+                      <div className="relative">
+                        <input
+                          aria-label="Custom slippage tolerance"
+                          type="text"
+                          inputMode="numeric"
+                          value={maxSlippage}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val === '' || /^\d{0,2}$/.test(val)) {
+                              const num = parseInt(val, 10);
+                              if (val === '' || (num >= 0 && num <= 99)) {
+                                setMaxSlippage(val);
+                              }
+                            }
+                          }}
+                          onFocus={() => setFocusedField('slippage')}
+                          onBlur={() => {
+                            setFocusedField(null);
+                            if (!maxSlippage) setMaxSlippage('5');
+                          }}
+                          placeholder="5"
+                          style={{ outline: 'none', border: 'none' }}
+                          className={`h-7 w-14 rounded-lg bg-[color:var(--sf-input-bg)] px-2 pr-5 text-base font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[200ms] ${focusedField === 'slippage' ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
+                        />
+                        <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs font-bold text-[color:var(--sf-text)]/60">%</span>
+                      </div>
+                    ) : (
+                      <span className="font-semibold text-[color:var(--sf-text)]">
+                        {maxSlippage}%
+                      </span>
+                    )}
+                    <FireSlippageButton
+                      selection={slippageSelection}
+                      setSelection={setSlippageSelection}
+                      setValue={setMaxSlippage}
+                    />
+                  </div>
+                </div>
+
+                {/* Miner Fee Rate */}
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60">
+                    {t('vaultDeposit.minerFeeRate')}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    {feeSelection === 'custom' && setCustomFee ? (
+                      <div className="relative">
+                        <input
+                          aria-label="Custom miner fee rate"
+                          type="number"
+                          min={1}
+                          max={999}
+                          step={1}
+                          value={customFee}
+                          onChange={(e) => setCustomFee(e.target.value)}
+                          onFocus={() => setFocusedField('fee')}
+                          onBlur={() => {
+                            setFocusedField(null);
+                            if (!customFee) setCustomFee(String(feePresets.medium));
+                          }}
+                          placeholder="0"
+                          className="sf-pill-input"
+                        />
+                      </div>
+                    ) : (
+                      <span className="font-semibold text-[color:var(--sf-text)]">
+                        {Math.round(feeRate)}
+                      </span>
+                    )}
+                    <FireMinerFeeButton
+                      selection={feeSelection}
+                      setSelection={setFeeSelection}
+                      presets={feePresets}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* Stake button */}
           <button
             onClick={handleStake}
-            disabled={!isConnected || parsedAmount <= 0 || isDemoGated}
+            disabled={!isConnected || parsedAmount <= 0 || isDemoGated || stakeMutation.isPending}
             className="w-full rounded-xl py-3.5 text-sm font-bold text-white transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] disabled:opacity-30 disabled:cursor-not-allowed disabled:shadow-none bg-gradient-to-r from-orange-500 to-orange-600 hover:shadow-[0_4px_16px_rgba(249,115,22,0.3)]"
           >
-            {isDemoGated ? t('common.comingSoon') : !isConnected ? t('fire.connectWallet') : t('fire.stakeLp')}
+            {stakeMutation.isPending ? 'Staking...' : isDemoGated ? t('common.comingSoon') : !isConnected ? t('fire.connectWallet') : t('fire.stakeLp')}
           </button>
         </div>
       </div>
@@ -106,48 +330,206 @@ export default function FireStakingPanel({ vaultDetailsSlot }: FireStakingPanelP
       {vaultDetailsSlot}
 
       {/* Positions */}
-      <div className="flex flex-col gap-3 sm:gap-4">
-        <div className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-muted)]">
-          {t('fire.yourPositions')}
+      <div className="sf-card overflow-hidden flex flex-col">
+        <div className="sf-card-header">
+          <h3 className="text-base font-bold text-[color:var(--sf-text)]">{t('fire.stakePositions')}</h3>
+          {positionsData?.positions?.length ? (
+            <span className="text-xs text-[color:var(--sf-muted)]">{positionsData.positions.length}</span>
+          ) : null}
         </div>
 
         {!isConnected ? (
-          <div className="rounded-2xl bg-[color:var(--sf-glass-bg)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)] p-8 sm:p-12 text-center shadow-[0_4px_20px_rgba(0,0,0,0.2)]">
-            <div className="text-[color:var(--sf-muted)] text-sm">{t('fire.connectToViewPositions')}</div>
+          <div className="px-6 py-12 text-center text-sm text-[color:var(--sf-text)]/60">
+            {t('fire.connectToViewPositions')}
           </div>
-        ) : !userPositions?.positions?.length ? (
-          <div className="rounded-2xl bg-[color:var(--sf-glass-bg)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)] p-8 sm:p-12 text-center shadow-[0_4px_20px_rgba(0,0,0,0.2)]">
-            <div className="text-2xl mb-2">
-              <svg className="h-8 w-8 mx-auto text-[color:var(--sf-muted)]/30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-              </svg>
-            </div>
-            <div className="text-[color:var(--sf-muted)] text-sm">{t('fire.noPositions')}</div>
+        ) : isLoadingPositions ? (
+          <div className="px-6 py-12 text-center text-sm text-[color:var(--sf-text)]/60">
+            Loading positions...
+          </div>
+        ) : !positionsData?.positions?.length ? (
+          <div className="px-6 py-12 text-center text-sm text-[color:var(--sf-text)]/60">
+            No staking positions
           </div>
         ) : (
-          userPositions.positions.map((pos) => (
-            <StakingPositionCard
-              key={pos.positionId}
-              positionId={pos.positionId}
-              amount={pos.amount}
-              lockTier={pos.lockTier}
-              unlockBlock={pos.unlockBlock}
-              pendingRewards={pos.pendingRewards}
-              onClaim={handleClaim}
-              onUnstake={handleUnstake}
-              disabled={isDemoGated}
-            />
-          ))
-        )}
+          <>
+            <div className="sf-table-header grid grid-cols-5 gap-2 px-6">
+              <div>{t('fire.lpStaked')}</div>
+              <div>{t('fire.fireEarned')}</div>
+              <div>Mult.</div>
+              <div>ID</div>
+              <div className="text-right">Actions</div>
+            </div>
 
-        {userPositions?.pendingRewards && BigInt(userPositions.pendingRewards) > 0n && (
-          <div className="rounded-xl bg-orange-500/10 border border-orange-500/20 p-3 text-center">
-            <span className="text-sm font-bold text-orange-400">
-              {t('fire.totalPending')}: {new BigNumber(userPositions.pendingRewards).dividedBy(1e8).toFixed(6)} FIRE
-            </span>
-          </div>
+            <div className="overflow-auto no-scrollbar" style={{ maxHeight: 'calc(5 * 85px)' }}>
+              {positionsData.positions.map((pos) => (
+                <div key={pos.tokenId} className="sf-row grid grid-cols-5 items-center gap-2 px-6 py-3">
+                  <div className="text-sm font-bold text-[color:var(--sf-primary)]">
+                    {(Number(pos.depositAmount) / 1e8).toFixed(8)}
+                  </div>
+                  <div className="text-sm font-bold text-orange-500">
+                    {(Number(pos.pendingRewards) / 1e8).toFixed(8)}
+                  </div>
+                  <div className="text-xs font-bold text-[color:var(--sf-primary)]">
+                    {pos.multiplier.toFixed(1)}x
+                  </div>
+                  <div className="text-[10px] text-[color:var(--sf-muted)] font-mono">
+                    {pos.tokenId}
+                  </div>
+                  <div className="flex gap-1 justify-end">
+                    <button
+                      onClick={() => handleClaim(pos.tokenId)}
+                      disabled={actionPending}
+                      className="sf-btn-ghost text-[10px] px-1.5 py-0.5 text-orange-400 hover:text-orange-300 disabled:opacity-50"
+                      title="Claim FIRE rewards"
+                    >
+                      {actionTokenId === pos.tokenId && claimMutation.isPending ? '...' : <><Gift size={10} className="inline mr-0.5" />Claim</>}
+                    </button>
+                    <button
+                      onClick={() => handleUnstake(pos.tokenId)}
+                      disabled={actionPending}
+                      className="sf-btn-ghost text-[10px] px-1.5 py-0.5 text-red-400 hover:text-red-300 disabled:opacity-50"
+                      title="Unstake LP + claim rewards"
+                    >
+                      {actionTokenId === pos.tokenId && unstakeMutation.isPending ? '...' : <><LogOut size={10} className="inline mr-0.5" />Unstake</>}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
         )}
       </div>
+    </div>
+  );
+}
+
+/* ── Slippage Dropdown Button ── */
+function FireSlippageButton({ selection, setSelection, setValue }: {
+  selection: SlippageSelection;
+  setSelection: (s: SlippageSelection) => void;
+  setValue: (v: string) => void;
+}) {
+  const { t } = useTranslation();
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    if (isOpen) document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isOpen]);
+
+  const handleSelect = (s: SlippageSelection) => {
+    setSelection(s);
+    if (s !== 'custom') setValue(SLIPPAGE_PRESETS[s]);
+    setIsOpen(false);
+  };
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className={`sf-dropdown-trigger ${isOpen ? 'sf-dropdown-trigger--open' : ''}`}
+      >
+        <span>{selection === 'custom' ? t('vaultDeposit.custom') : t(`vaultDeposit.${selection}`)}</span>
+        <ChevronDown size={12} className={`transition-all duration-[200ms] ${isOpen ? 'rotate-180' : ''}`} />
+      </button>
+
+      {isOpen && (
+        <div className="sf-dropdown absolute right-0 mt-1 z-50 w-32">
+          {(['low', 'medium', 'high', 'custom'] as SlippageSelection[]).map((option) => (
+            <button
+              key={option}
+              type="button"
+              onClick={() => handleSelect(option)}
+              className={`w-full px-3 py-2 text-left text-xs font-semibold capitalize transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none first:rounded-t-md last:rounded-b-md ${
+                selection === option
+                  ? 'bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]'
+                  : 'text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/5'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span>{t(`vaultDeposit.${option}`)}</span>
+                {option !== 'custom' && (
+                  <span className="text-[10px] text-[color:var(--sf-text)]/50">
+                    {SLIPPAGE_PRESETS[option]}%
+                  </span>
+                )}
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Miner Fee Dropdown Button ── */
+function FireMinerFeeButton({ selection, setSelection, presets }: {
+  selection: FeeSelection;
+  setSelection?: (s: FeeSelection) => void;
+  presets: { slow: number; medium: number; fast: number };
+}) {
+  const { t } = useTranslation();
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    if (isOpen) document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isOpen]);
+
+  const handleSelect = (s: FeeSelection) => {
+    if (setSelection) setSelection(s);
+    setIsOpen(false);
+  };
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className={`sf-dropdown-trigger ${isOpen ? 'sf-dropdown-trigger--open' : ''}`}
+      >
+        <span>{selection === 'custom' ? t('vaultDeposit.custom') : t(`vaultDeposit.${selection}`)}</span>
+        <ChevronDown size={12} className={`transition-all duration-[200ms] ${isOpen ? 'rotate-180' : ''}`} />
+      </button>
+
+      {isOpen && (
+        <div className="sf-dropdown absolute right-0 mt-1 z-50 w-32">
+          {(['slow', 'medium', 'fast', 'custom'] as FeeSelection[]).map((option) => (
+            <button
+              key={option}
+              type="button"
+              onClick={() => handleSelect(option)}
+              className={`w-full px-3 py-2 text-left text-xs font-semibold capitalize transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none first:rounded-t-md last:rounded-b-md ${
+                selection === option
+                  ? 'bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]'
+                  : 'text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/5'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span>{t(`vaultDeposit.${option}`)}</span>
+                {option !== 'custom' && (
+                  <span className="text-[10px] text-[color:var(--sf-text)]/50">
+                    {presets[option as keyof typeof presets]}
+                  </span>
+                )}
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

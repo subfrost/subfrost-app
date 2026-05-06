@@ -20,6 +20,56 @@
 
 import * as bitcoin from 'bitcoinjs-lib';
 
+/**
+ * Ensure the browser wallet extension has an active session.
+ *
+ * Auto-reconnect from localStorage restores UI state (addresses, walletType)
+ * but doesn't activate the extension session. Without this, signPsbt() fails
+ * or shows a connect-only popup without proceeding to sign.
+ *
+ * Call this at the start of every mutation (swap, wrap, liquidity, etc.)
+ * before building the PSBT.
+ */
+export async function ensureWalletSession(): Promise<void> {
+  if (typeof window === 'undefined') return;
+
+  // Check which wallet is actually connected (not just installed)
+  const connectedId = localStorage.getItem('subfrost_browser_wallet_id');
+
+  if (connectedId === 'unisat') {
+    const unisat = (window as any).unisat;
+    if (unisat) {
+      const accounts = await unisat.getAccounts?.() || [];
+      if (!accounts.length && unisat.requestAccounts) {
+        await unisat.requestAccounts();
+      }
+    }
+  } else if (connectedId === 'okx') {
+    const okx = (window as any).okxwallet?.bitcoin;
+    if (okx?.connect) {
+      try { await okx.connect(); } catch { /* already connected */ }
+    }
+  } else if (connectedId === 'xverse') {
+    const xverse = (window as any).XverseProviders?.BitcoinProvider;
+    if (xverse?.request) {
+      try {
+        // wallet_getAccount is the silent check (no popup if already authorized)
+        await xverse.request('wallet_getAccount', null);
+      } catch {
+        // Not authorized or method not supported — try legacy getAccounts
+        try {
+          await xverse.request('getAccounts', { purposes: ['ordinals', 'payment'] });
+        } catch { /* user denied or extension not ready */ }
+      }
+    }
+  } else if (connectedId === 'oyl') {
+    const oyl = (window as any).oyl;
+    if (oyl?.getAddresses) {
+      try { await oyl.getAddresses(); } catch { /* already connected */ }
+    }
+  }
+}
+
 /** Standard signing timeout (60 seconds) */
 const SIGNING_TIMEOUT_MS = 60000;
 

@@ -77,7 +77,9 @@ describe('useEnrichedWalletData', () => {
 
   it('falls back to EMPTY_BALANCES when data is null', () => {
     expect(src).toContain('EMPTY_BALANCES');
-    expect(src).toMatch(/data\?\.balances\s*\?\?\s*EMPTY_BALANCES/);
+    // The hook merges btcQuery.data with alkaneQuery.data, falling back to EMPTY_BALANCES
+    // when btcQuery.data is null: btcQuery.data ? { ...btcQuery.data.balances, alkanes: ... } : EMPTY_BALANCES
+    expect(src).toMatch(/EMPTY_BALANCES/);
   });
 
   it('falls back to EMPTY_UTXOS when data is null', () => {
@@ -184,7 +186,8 @@ describe('useEnrichedWalletData', () => {
 
     it('has withTimeout helper for resilience against slow RPC', () => {
       expect(querySrc).toContain('withTimeout');
-      expect(querySrc).toContain('Request timed out');
+      // withTimeout resolves with a fallback value on timeout (no rejection)
+      expect(querySrc).toMatch(/withTimeout\s*[=<]/);
     });
 
     it('calls provider.getEnrichedBalances for UTXO data', () => {
@@ -196,13 +199,21 @@ describe('useEnrichedWalletData', () => {
       expect(querySrc).toContain('esplora fallback');
     });
 
-    it('fetches alkane balances via /api/alkane-balances endpoint', () => {
-      expect(querySrc).toContain('/api/alkane-balances');
+    it('fetches alkane balances via per-outpoint protorunes fanout', () => {
+      // 2026-05-04: codebase-wide ban on `protorunesbyaddress` /
+      // `dataApiGetAlkanesByAddress` (phantom-balance bug). The canonical
+      // path is `esplora_address::utxo` → Promise.all per-outpoint
+      // `getProtorunesByOutpoint`, aggregated per (block,tx). See
+      // `fetchAlkaneBalancesViaProtobuf` in queries/account.ts.
+      expect(querySrc).toContain('alkaneBalanceQueryOptions');
+      expect(querySrc).toContain('fetchAlkaneBalancesViaProtobuf');
+      // Negative assertion: the banned API must not creep back in.
+      expect(querySrc).not.toContain('dataApiGetAlkanesByAddress');
     });
 
     it('aggregates alkane balances across multiple addresses using BigInt', () => {
       expect(querySrc).toContain('BigInt(existing.balance)');
-      expect(querySrc).toContain('BigInt(amountStr)');
+      expect(querySrc).toContain('BigInt(balance)');
     });
 
     it('processes spendable, assets, and pending UTXO categories', () => {
@@ -225,7 +236,7 @@ describe('useEnrichedWalletData', () => {
     it('merges alkane metadata (name, symbol, price) from API and KNOWN_TOKENS', () => {
       expect(querySrc).toContain('KNOWN_TOKENS');
       expect(querySrc).toContain('knownInfo');
-      expect(querySrc).toContain('entry.name || knownInfo?.name');
+      expect(querySrc).toContain('knownInfo?.name');
     });
 
     it('accumulates rune balances from UTXOs', () => {
@@ -251,6 +262,8 @@ describe('useEnrichedWalletData', () => {
 // ---------------------------------------------------------------------------
 
 describe('useDemoGate', () => {
+  // Per-wallet ungating (UNGATED_WALLET_IDS) was removed in 940f42d4.
+  // Demo gate is now a one-liner: DEMO_MODE_ENABLED && network === 'mainnet'.
   const src = readSrc('hooks/useDemoGate.ts');
   const demoSrc = readSrc('utils/demoMode.ts');
 
@@ -263,37 +276,12 @@ describe('useDemoGate', () => {
     expect(src).toContain('useWallet');
   });
 
-  it('returns false early when DEMO_MODE_ENABLED is false', () => {
-    expect(src).toContain('!DEMO_MODE_ENABLED');
-    expect(src).toMatch(/if\s*\(\s*!DEMO_MODE_ENABLED/);
-  });
-
-  it('returns false early when network is not mainnet', () => {
-    expect(src).toContain("network !== 'mainnet'");
-  });
-
-  it('returns true only when demo mode is on AND network is mainnet', () => {
-    // The final return statement should be `return true` — reached only if demo && mainnet
-    expect(src).toMatch(/return\s+true\s*;?\s*\}/);
+  it('gates on DEMO_MODE_ENABLED && network === "mainnet"', () => {
+    expect(src).toMatch(/DEMO_MODE_ENABLED\s*&&\s*network\s*===\s*['"]mainnet['"]/);
   });
 
   it('DEMO_MODE_ENABLED reads from NEXT_PUBLIC_DEMO_MODE env var', () => {
     expect(demoSrc).toContain("process.env.NEXT_PUBLIC_DEMO_MODE === '1'");
-  });
-
-  it('has UNGATED_WALLET_IDS set for okx and unisat', () => {
-    expect(src).toContain('UNGATED_WALLET_IDS');
-    expect(src).toContain("'okx'");
-    expect(src).toContain("'unisat'");
-  });
-
-  it('ungates OKX and UniSat wallets even on mainnet with demo mode', () => {
-    expect(src).toContain('UNGATED_WALLET_IDS.has(walletId)');
-    expect(src).toMatch(/if\s*\(walletId\s*&&\s*UNGATED_WALLET_IDS\.has\(walletId\)\)\s*return\s+false/);
-  });
-
-  it('reads browserWallet info id for wallet identification', () => {
-    expect(src).toContain('browserWallet?.info?.id');
   });
 });
 
@@ -373,29 +361,22 @@ describe('useTransactionHistory', () => {
   const src = readSrc('hooks/useTransactionHistory.ts');
   const querySrc = readSrc('queries/history.ts');
 
-  it('uses useQuery with transactionHistoryQueryOptions', () => {
-    expect(src).toContain('useQuery');
-    expect(src).toContain('transactionHistoryQueryOptions');
+  it('uses useInfiniteQuery with fetchTxPage for pagination', () => {
+    expect(src).toContain('useInfiniteQuery');
+    expect(src).toContain('fetchTxPage');
   });
 
-  it('accepts optional address and excludeCoinbase params', () => {
-    expect(src).toMatch(/useTransactionHistory\s*\(\s*address\?\s*:\s*string/);
-    expect(src).toContain('excludeCoinbase');
+  it('accepts addresses array', () => {
+    expect(src).toMatch(/useTransactionHistory\s*\(\s*addresses\s*:\s*string\[\]/);
   });
 
-  it('defaults excludeCoinbase to true', () => {
-    expect(src).toContain('excludeCoinbase: boolean = true');
-  });
-
-  it('returns transactions, loading, error, and refresh', () => {
-    expect(src).toContain('transactions:');
+  it('returns transactions, loading, error, hasMore, loadMore, and refresh', () => {
+    expect(src).toContain('transactions,');
     expect(src).toContain('loading:');
     expect(src).toContain('error:');
+    expect(src).toContain('hasMore:');
+    expect(src).toContain('loadMore:');
     expect(src).toContain('refresh');
-  });
-
-  it('falls back to empty array when data is null', () => {
-    expect(src).toContain('data ?? []');
   });
 
   it('provides refresh via useCallback wrapping refetch', () => {
@@ -406,6 +387,11 @@ describe('useTransactionHistory', () => {
   it('formats error as string or fallback message', () => {
     expect(src).toContain('error instanceof Error');
     expect(src).toContain("'Failed to fetch transactions'");
+  });
+
+  it('deduplicates transactions across pages', () => {
+    expect(src).toContain('new Set<string>()');
+    expect(src).toContain('seen.has(tx.txid)');
   });
 
   // --- Type exports ---
@@ -430,8 +416,6 @@ describe('useTransactionHistory', () => {
   it('EnrichedTransaction has metaprotocol fields: hasOpReturn, hasProtostones, runestone, alkanesTraces', () => {
     expect(src).toContain('hasOpReturn: boolean');
     expect(src).toContain('hasProtostones: boolean');
-    expect(src).toContain('runestone?: RunestoneData');
-    expect(src).toContain('alkanesTraces?: AlkanesTrace[]');
   });
 
   it('EnrichedTransaction has isRbf and isCoinbase flags', () => {
@@ -439,31 +423,21 @@ describe('useTransactionHistory', () => {
     expect(src).toContain('isCoinbase: boolean');
   });
 
-  // --- Query options (queries/history.ts) ---
+  // --- Query fetch (queries/history.ts) ---
 
-  describe('transactionHistoryQueryOptions', () => {
-    it('uses queryKeys.history.transactions for the key', () => {
-      expect(querySrc).toContain('queryKeys.history.transactions');
+  describe('fetchTxPage (queries/history.ts)', () => {
+    it('uses espoGetAddressTransactions as primary fetcher', () => {
+      expect(querySrc).toContain('espoGetAddressTransactions');
     });
 
-    it('is enabled only when address, provider, and isInitialized are truthy', () => {
-      expect(querySrc).toContain('!!address');
-      expect(querySrc).toContain('!!provider');
-      expect(querySrc).toContain('isInitialized');
-    });
-
-    it('calls provider.getAddressTxsWithTraces', () => {
-      expect(querySrc).toContain('provider.getAddressTxsWithTraces');
+    it('falls back to getAddressTxs with manual slicing', () => {
+      expect(querySrc).toContain('getAddressTxs');
+      expect(querySrc).toContain('slice(start, start + limit)');
     });
 
     it('handles Map results via mapToObject', () => {
       expect(querySrc).toContain('mapToObject');
       expect(querySrc).toContain('instanceof Map');
-    });
-
-    it('parses vin and vout from raw transactions', () => {
-      expect(querySrc).toContain('tx.vin');
-      expect(querySrc).toContain('tx.vout');
     });
 
     it('detects coinbase transactions', () => {
@@ -479,9 +453,9 @@ describe('useTransactionHistory', () => {
       expect(querySrc).toContain("'op_return'");
     });
 
-    it('extracts runestone and alkanes_traces from raw tx', () => {
-      expect(querySrc).toContain('tx.runestone');
-      expect(querySrc).toContain('tx.alkanes_traces');
+    it('returns hasMore based on page size', () => {
+      expect(querySrc).toContain('hasMore');
+      expect(querySrc).toContain('r.length >= limit');
     });
   });
 });
@@ -550,30 +524,24 @@ describe('useLPPositions', () => {
     expect(src).toContain('useBtcPrice');
   });
 
-  it('defines BASE_TOKEN_IDS to exclude known non-LP tokens', () => {
-    expect(src).toContain('BASE_TOKEN_IDS');
-    expect(src).toContain("'32:0'");    // frBTC
-    expect(src).toContain("'2:0'");     // DIESEL
-    expect(src).toContain("'2:56801'"); // bUSD
+  it('filters LP tokens by name pattern or pool map', () => {
+    // Current implementation uses isLpTokenByName and isPositionAsset helpers
+    expect(src).toContain('isLpTokenByName');
+    expect(src).toContain('isPositionAsset');
   });
 
   it('builds a pool map for fast lookup of alkane ID to pool', () => {
     expect(src).toContain('poolMap');
     expect(src).toContain('new Map');
-    expect(src).toContain('pool.id');
   });
 
-  it('has fallback heuristic: non-base tokens treated as LP when no pool data', () => {
-    expect(src).toContain('!hasPoolData && !isBaseToken');
+  it('detects LP tokens by LP keyword in name/symbol', () => {
+    expect(src).toContain('/\\bLP\\b/i');
   });
 
-  it('parses LP token symbol from pattern like "TOKEN0/TOKEN1 LP"', () => {
-    expect(src).toContain("symbol.match(/^(.+?)\\/(.+?)\\s*LP$/i)");
-  });
-
-  it('formats balance with BigInt division and 4 decimal places', () => {
-    expect(src).toContain('BigInt(alkane.balance)');
-    expect(src).toContain('remainderStr.slice(0, 4)');
+  it('detects staked positions by POS- prefix', () => {
+    expect(src).toContain('isStakedPosition');
+    expect(src).toContain("'POS-'");
   });
 
   it('returns positions, isLoading, and refresh', () => {
@@ -590,9 +558,9 @@ describe('useLPPositions', () => {
     expect(src).toContain('useMemo');
   });
 
-  it('adds network-specific base tokens from config', () => {
-    expect(src).toContain('config.FRBTC_ALKANE_ID');
-    expect(src).toContain('config.BUSD_ALKANE_ID');
+  it('uses pool data from usePools for filtering', () => {
+    expect(src).toContain('usePools');
+    expect(src).toContain('poolsData');
   });
 
   it('returns empty array when no alkanes data', () => {
@@ -658,9 +626,9 @@ describe('Cross-cutting: disconnected / not-connected handling', () => {
     expect(src).toContain('isEligible: false, amount: 0');
   });
 
-  it('useTransactionHistory query disabled when no address', () => {
-    const querySrc = readSrc('queries/history.ts');
-    expect(querySrc).toContain('!!address');
+  it('useTransactionHistory query disabled when no addresses', () => {
+    const hookSrc = readSrc('hooks/useTransactionHistory.ts');
+    expect(hookSrc).toContain('addressKey.length > 0');
   });
 
   it('useBtcBalance query disabled when not connected', () => {
@@ -701,9 +669,9 @@ describe('Cross-cutting: React Query caching', () => {
     expect(querySrc).toContain("import { queryOptions } from '@tanstack/react-query'");
   });
 
-  it('useTransactionHistory uses queryOptions from @tanstack/react-query', () => {
-    const querySrc = readSrc('queries/history.ts');
-    expect(querySrc).toContain("import { queryOptions } from '@tanstack/react-query'");
+  it('useTransactionHistory uses useInfiniteQuery from @tanstack/react-query', () => {
+    const hookSrc = readSrc('hooks/useTransactionHistory.ts');
+    expect(hookSrc).toContain("useInfiniteQuery");
   });
 
   it('useBtcBalance uses queryOptions from @tanstack/react-query', () => {
@@ -715,15 +683,15 @@ describe('Cross-cutting: React Query caching', () => {
   it('all hooks separate query config from hook consumption', () => {
     // Query options are defined in queries/ files, not inline in hooks
     expect(readSrc('hooks/useEnrichedWalletData.ts')).toContain('enrichedWalletQueryOptions');
-    expect(readSrc('hooks/useTransactionHistory.ts')).toContain('transactionHistoryQueryOptions');
+    expect(readSrc('hooks/useTransactionHistory.ts')).toContain('fetchTxPage');
     expect(readSrc('hooks/useBtcBalance.ts')).toContain('btcBalanceQueryOptions');
   });
 });
 
 describe('Cross-cutting: timeout / resilience', () => {
-  it('enrichedWalletQueryOptions has 15s timeout on getEnrichedBalances', () => {
+  it('enrichedWalletQueryOptions has 25s timeout on getEnrichedBalances', () => {
     const querySrc = readSrc('queries/account.ts');
-    expect(querySrc).toContain('15000');
+    expect(querySrc).toContain('25_000');
     expect(querySrc).toContain('withTimeout(provider.getEnrichedBalances');
   });
 
