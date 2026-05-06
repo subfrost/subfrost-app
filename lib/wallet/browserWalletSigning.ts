@@ -15,7 +15,16 @@
  * | Xverse  | signPsbt(base64)| signInputs object    | No (we do it) | Base64    |
  * | UniSat  | signPsbts(hex[])| toSignInputs array   | Yes           | Hex[]     |
  * | OYL     | SDK adapter     | N/A (SDK handles)    | No            | Hex       |
- * | OKX     | SDK adapter     | N/A (SDK handles)    | No            | Hex       |
+ * | OKX     | SDK adapter     | N/A (SDK handles)    | Yes           | Hex       |
+ *
+ * JOURNAL (2026-05-06): OKX flipped from auto-finalized=false → true to mirror
+ * the UniSat fix from 2026-04-28. Both wallets are taproot-only single-address;
+ * passing auto_finalized=false through their providers leaves taproot inputs in
+ * a state bitcoinjs-lib can't reconcile ("Cannot finalize taproot input #N. No
+ * tapleaf script signature provided.") because key-path metadata is incomplete
+ * from the wallet side. The SDK's OkxAdapter already defaults autoFinalized to
+ * true; explicitly passing false was the source of the bug. Routing OKX through
+ * this helper with auto_finalized=true matches the SDK adapter's own default.
  */
 
 import * as bitcoin from 'bitcoinjs-lib';
@@ -45,9 +54,30 @@ export async function ensureWalletSession(): Promise<void> {
       }
     }
   } else if (connectedId === 'okx') {
+    // Mirror UniSat's pattern: silent `getAccounts()` first; only fall back
+    // to `connect()` (which may prompt) if the session is genuinely empty.
+    // Calling `connect()` unconditionally on every mutation made signing
+    // appear stuck — OKX's `connect()` can hang waiting for popup approval,
+    // which manifested as a ~90s wait between "Confirm Swap" and the actual
+    // sign popup. Wrapping the recovery in a 5s timeout caps the worst case.
     const okx = (window as any).okxwallet?.bitcoin;
-    if (okx?.connect) {
-      try { await okx.connect(); } catch { /* already connected */ }
+    if (okx) {
+      let hasSession = false;
+      try {
+        const accounts = (await okx.getAccounts?.()) || [];
+        hasSession = Array.isArray(accounts) && accounts.length > 0;
+      } catch { /* getAccounts unavailable — fall through to connect */ }
+
+      if (!hasSession && okx.connect) {
+        try {
+          await Promise.race([
+            okx.connect(),
+            new Promise((_, reject) =>
+              setTimeout(() => reject(new Error('OKX session connect timeout')), 5000),
+            ),
+          ]);
+        } catch { /* user denied, timeout, or already connecting */ }
+      }
     }
   } else if (connectedId === 'xverse') {
     const xverse = (window as any).XverseProviders?.BitcoinProvider;
@@ -382,7 +412,11 @@ export async function signWithOyl(
 /**
  * Sign PSBT with OKX wallet via SDK adapter
  *
- * OKX is similar to OYL - uses the SDK adapter path.
+ * OKX is taproot-only single-address (mirrors UniSat). The SDK's OkxAdapter
+ * defaults `autoFinalized: true` — we pass `auto_finalized: true` explicitly
+ * to match. Passing `false` left taproot inputs partially populated in
+ * bitcoinjs-lib's representation, which then could not be finalized
+ * downstream — the same regression UniSat hit on 2026-04-28.
  */
 export async function signWithOkx(
   psbt: bitcoin.Psbt,
@@ -392,7 +426,7 @@ export async function signWithOkx(
   console.log('[browserWalletSigning] OKX: PSBT hex length:', psbtHex.length);
 
   const signedHex: string = await withTimeout(
-    walletAdapter.signPsbt(psbtHex, { auto_finalized: false }),
+    walletAdapter.signPsbt(psbtHex, { auto_finalized: true }),
     SIGNING_TIMEOUT_MS,
     'OKX'
   );
@@ -402,7 +436,7 @@ export async function signWithOkx(
   const signedBuffer = Buffer.from(signedHex, 'hex');
   return {
     signedPsbtBase64: signedBuffer.toString('base64'),
-    isFinalized: false, // OKX does NOT auto-finalize
+    isFinalized: true, // OKX with auto_finalized: true returns finalized PSBTs
     walletId: 'okx',
   };
 }

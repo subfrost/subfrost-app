@@ -48,7 +48,13 @@
  * - `getCleanBtcUtxos()` — returns spendable BTC UTXOs filtered by the
  *   wallet itself to exclude inscriptions/runes. Currently only UniSat
  *   exposes this; other wallets return `null` and the SDK falls back to
- *   its own lua/esplora UTXO selection (still safe, just slower).
+ *   its own UTXO selection. The safety mechanism for those wallets is
+ *   `ordinals_strategy: 'preserve'` in the SDK (per-UTXO ord_outputs scan
+ *   + alkane-aware `build_split_psbt`) plus the `cachedUtxos` alkane
+ *   filter in `lib/alkanes/execute.ts`. `getCleanBtcUtxos` is a perf
+ *   shortcut that lets us trust UniSat's own indexer instead of running
+ *   our own ord-output fanout — not a safety invariant. OYL, Xverse,
+ *   Phantom, and OKX rely entirely on the SDK preserve path.
  *
  * Source: bug report 2026-04-28 — Xverse-connected user got a stray UniSat
  * "connect site" popup on swap because both swap and wrap mutations probed
@@ -131,12 +137,12 @@ const unisatCapabilities: WalletCapabilities = {
 const CAPABILITIES: Record<string, WalletCapabilities> = {
   unisat: unisatCapabilities,
 
-  // Future entries (none implement getCleanBtcUtxos today):
-  // oyl: {},
-  // okx: {},
-  // xverse: {},
-  // tokeo: {},
-  // ...
+  // OKX intentionally absent — relies on the SDK's `'preserve'` mode for
+  // inscription/rune safety (matches OYL/Xverse/Phantom). Add an entry only
+  // if OKX ships a `getBitcoinUtxos`-equivalent in a future version.
+  //
+  // Other wallets without entries (oyl, xverse, tokeo, leather, phantom, ...)
+  // follow the same pattern.
 };
 
 /**

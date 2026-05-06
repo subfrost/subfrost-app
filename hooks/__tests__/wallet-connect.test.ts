@@ -85,33 +85,45 @@ describe('Wallet detection (isWalletInstalled)', () => {
     expect(isWalletInstalled(unisatWallet)).toBe(true);
   });
 
-  it('OKX is in BROWSER_WALLETS but disabled in the connect modal UI', async () => {
-    // OKX was originally removed in commit 5d8bc5f3
-    // (`fix: prevent spending inscription UTXOs as swap fees`).
-    // Reason: OKX is single-address (taproot only) and exposes no
-    // `getBitcoinUtxos` API for clean-UTXO selection. Without that, swaps
-    // and wraps fall back to lua-fetched UTXOs which have no ordinal
-    // protection — exposing inscription/rune UTXOs to be spent as fees.
+  it('OKX is enabled and listed in ENABLED_WALLET_IDS', async () => {
+    // History (2026-04-28, commit 5d8bc5f3): OKX was removed because we
+    // believed a single-address wallet without `getBitcoinUtxos` would
+    // expose inscription/rune UTXOs to be spent as fees. That belief was
+    // wrong: the SDK's `ordinals_strategy: 'preserve'` runs a per-UTXO
+    // ord_outputs scan + alkane-aware split-tx for ALL browser wallets,
+    // including those without `getBitcoinUtxos` (OYL, Xverse, Phantom).
+    // OKX shares the same protection level as those wallets.
     //
-    // It has been re-added to BROWSER_WALLETS so it shows in the connect
-    // modal as "COMING SOON" (visual only, no click handler). The modal
-    // gates connection on ENABLED_WALLET_IDS in ConnectWalletModal.tsx,
-    // which intentionally OMITS 'okx'. Before promoting OKX to enabled,
-    // add a clean-UTXO source (capability registry entry) so single-address
-    // selection won't sweep collateral assets.
-    const { BROWSER_WALLETS } = await import('../../constants/wallets');
+    // OKX was re-enabled on 2026-05-06 along with:
+    // - A network gate refusing regtest/devnet at connect (OKX has no
+    //   bitcoinRegtest provider).
+    // - Routing OKX through `signWithOkx` with `auto_finalized: true` to
+    //   match the SDK adapter's own default and avoid the UniSat
+    //   regression class.
+    // - `ENABLED_WALLET_IDS` moved from inline JSX in ConnectWalletModal.tsx
+    //   to `constants/wallets.ts` so the release flag lives in one place.
+    const { BROWSER_WALLETS, ENABLED_WALLET_IDS } = await import('../../constants/wallets');
     const okxWallet = BROWSER_WALLETS.find(w => w.id === 'okx');
     expect(okxWallet).toBeDefined();
+    expect(ENABLED_WALLET_IDS.has('okx')).toBe(true);
 
+    // The modal must consume the exported set rather than redefining its
+    // own. If a future contributor re-introduces an inline definition,
+    // this assertion catches it.
     const fs = require('fs');
     const path = require('path');
     const modalSrc = fs.readFileSync(
       path.resolve(__dirname, '../../app/components/ConnectWalletModal.tsx'),
       'utf-8'
     );
-    const enabledMatch = modalSrc.match(/ENABLED_WALLET_IDS\s*=\s*new Set\(\[([^\]]*)\]\)/);
-    expect(enabledMatch).toBeTruthy();
-    expect(enabledMatch![1]).not.toContain("'okx'");
+    expect(modalSrc).toContain(
+      "import { ENABLED_WALLET_IDS } from '@/constants/wallets'",
+    );
+    // No inline `const ENABLED_WALLET_IDS = new Set([...])` in the modal
+    // (that's the smell the move addressed).
+    expect(modalSrc).not.toMatch(
+      /const\s+ENABLED_WALLET_IDS\s*=\s*new Set\(/,
+    );
   });
 });
 

@@ -5,6 +5,7 @@ import { useState, useEffect, useRef, startTransition } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { useWallet, type BrowserWalletInfo } from '@/context/WalletContext';
+import { ENABLED_WALLET_IDS } from '@/constants/wallets';
 import { initGoogleDrive, isDriveConfigured, type WalletBackupInfo } from '@/utils/clientSideDrive';
 import { WalletListPicker } from './WalletListPicker';
 import { useTranslation } from '@/hooks/useTranslation';
@@ -969,9 +970,9 @@ export default function ConnectWalletModal() {
           {view === 'browser-extension' && (
             <div className="flex flex-col gap-3">
               <div className="max-h-96 overflow-y-auto space-y-4 px-6 -mx-6">
-                {/* Enabled wallet IDs - only these wallets are fully supported */}
+                {/* Enabled wallet IDs come from `constants/wallets.ts` so the
+                    release flag lives in one place. */}
                 {(() => {
-                  const ENABLED_WALLET_IDS = new Set(['oyl', 'xverse', 'unisat']);
                   const installedIds = new Set(installedWallets.map(w => w.id));
 
                   // Separate installed wallets into enabled and coming soon

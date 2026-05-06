@@ -136,6 +136,30 @@ describe('WalletContext browser wallet connection patterns', () => {
     expect(okxSection).toMatch(/timed out after 10s/i);
   });
 
+  it('OKX connection refuses regtest networks at the gate', () => {
+    // OKX exposes only mainnet/testnet/signet provider objects — no
+    // bitcoinRegtest. Subfrost's primary regtest network is `subfrost-regtest`/
+    // devnet; the gate must throw before the network call is attempted.
+    const okxBranchStart = connectBody.indexOf("walletId === 'okx'");
+    expect(okxBranchStart).toBeGreaterThan(-1);
+
+    const okxSection = connectBody.slice(
+      okxBranchStart,
+      connectBody.indexOf("} else if (walletId === 'unisat'")
+    );
+
+    // Each incompatible network must appear in the gate set.
+    expect(okxSection).toContain("'subfrost-regtest'");
+    expect(okxSection).toContain("'devnet'");
+    expect(okxSection).toContain("'regtest'");
+
+    // Actionable error message that points the user to mainnet.
+    expect(okxSection).toMatch(
+      /OKX wallet does not support regtest networks/i,
+    );
+    expect(okxSection).toMatch(/Switch to mainnet/i);
+  });
+
   it('Xverse connection pattern exists and uses getAccounts', () => {
     const xverseBranchStart = connectBody.indexOf("walletId === 'xverse'");
     expect(xverseBranchStart).toBeGreaterThan(-1);

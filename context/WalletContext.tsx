@@ -66,7 +66,7 @@ import { BROWSER_WALLETS, getInstalledWallets, isWalletInstalled } from '@/const
 // import { patchTapInternalKeys } from '@/lib/psbt-patching';
 
 // Import browser wallet signing utilities with robust reconnection handling
-import { signWithOyl, signWithUnisat, signWithXverse, detectWalletId, getOylCallCount, resetOylCallCount, patchTapInternalKeys } from '@/lib/wallet/browserWalletSigning';
+import { signWithOyl, signWithUnisat, signWithXverse, signWithOkx, detectWalletId, getOylCallCount, resetOylCallCount, patchTapInternalKeys } from '@/lib/wallet/browserWalletSigning';
 import { toXOnlyPubKeyHex } from '@/lib/wallet/pubkeyHelpers';
 
 // Connection-specific counter for OYL getAddresses() calls during initial connection
@@ -906,37 +906,48 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
     // Browser wallet (or unconnected — both addresses absent → null below).
     if (!segwit && !taproot) return null;
 
-    // Dual-address wallets (Xverse, Leather, OYL) expose distinct segwit +
-    // taproot addresses. Single-address wallets (UniSat, OKX) expose only
-    // one — `isDualAddress` is false and we collapse the BTC + alkane
-    // change destinations to that single address.
+    // Browser wallets fall into two tiers, both with `'preserve'` ord-strategy
+    // (SDK's alkane-aware `build_split_psbt` keeps inscriptions + alkanes
+    // intact even when they share a UTXO):
+    //
+    //   - **Dual-address** (Xverse, Leather, OYL): distinct segwit + taproot
+    //     addresses. BTC fees source from segwit, alkane change lands at
+    //     taproot, and `shouldProtectTaproot=true` reserves taproot UTXOs for
+    //     alkanes.
+    //   - **Single-address** (UniSat, OKX, both taproot-only by enforcement):
+    //     one address for everything. Cannot reserve taproot — the same UTXOs
+    //     fund fees and carry alkanes — so `shouldProtectTaproot=false` and
+    //     all three change destinations collapse to the primary.
+    //
+    // Per-call overrides at the call site still win if some operation needs
+    // different semantics.
     const isDualAddress = !!segwit && !!taproot && segwit !== taproot;
-    const primary = (taproot || segwit)!;
+    const browserWalletId = browserWallet?.info?.id;
 
+    if (isDualAddress) {
+      return {
+        feeSourceAddresses: [segwit!, taproot!],
+        btcChangeAddress: segwit!,
+        alkanesChangeAddress: taproot!,
+        shouldProtectTaproot: true,
+        defaultOrdinalsStrategy: 'preserve',
+        walletType: 'browser',
+        browserWalletId,
+      };
+    }
+
+    // Single-address branch (UniSat, OKX). Connect-time taproot enforcement
+    // means `taproot` is set and `segwit` is undefined; if a future single-
+    // address wallet returns segwit only, `primary` falls back to that.
+    const primary = (taproot || segwit)!;
     return {
-      // Browser-dual: source from both. Single-address: just the one.
-      // `Set` dedupes when the wallet returns the same address for both
-      // purposes (some configurations of UniSat).
-      feeSourceAddresses: Array.from(new Set([segwit, taproot].filter(Boolean) as string[])),
-      // BTC change goes to segwit when available — taproot UTXOs are reserved
-      // for alkanes on dual-address wallets. Falls back to whatever single
-      // address exists.
-      btcChangeAddress: segwit || primary,
-      // Alkane change always goes to taproot (alkanes are P2TR). Single-
-      // address segwit-only wallets fall back to that address — there's
-      // nowhere else to send it.
-      alkanesChangeAddress: taproot || primary,
-      // Only meaningful when there's a separate segwit address to source
-      // BTC fees from. Single-address wallets must spend taproot UTXOs for
-      // both alkanes and fees, so reserving them would block fee selection.
-      shouldProtectTaproot: isDualAddress,
-      // Browser wallets opt into split-tx by default — SDK's alkane-aware
-      // `build_split_psbt` keeps both inscriptions and alkanes intact even
-      // when they share a UTXO. Per-call overrides at the call site still
-      // win if some operation needs different semantics.
+      feeSourceAddresses: [primary],
+      btcChangeAddress: primary,
+      alkanesChangeAddress: primary,
+      shouldProtectTaproot: false,
       defaultOrdinalsStrategy: 'preserve',
       walletType: 'browser',
-      browserWalletId: browserWallet?.info?.id,
+      browserWalletId,
     };
   }, [account, walletType, browserWallet?.info?.id]);
 
@@ -1700,6 +1711,26 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       } else if (walletId === 'okx') {
         // OKX wallet exposes window.okxwallet.bitcoin with connect(), signPsbt()
         // JOURNAL ENTRY (2026-03-02): Added 10s timeout - should respond quickly.
+        // JOURNAL ENTRY (2026-05-06): Network gate. OKX exposes only mainnet,
+        // testnet, and signet provider objects — no `bitcoinRegtest`. Subfrost's
+        // primary regtest network is `subfrost-regtest`/devnet, which OKX cannot
+        // sign on. Refuse at connect with an actionable error rather than letting
+        // the failure surface late as a cryptic signing error.
+        const okxIncompatibleNetworks = new Set([
+          'subfrost-regtest',
+          'regtest',
+          'regtest-local',
+          'devnet',
+          'oylnet',
+          'qubitcoin-regtest',
+        ]);
+        if (okxIncompatibleNetworks.has(network)) {
+          throw new Error(
+            'OKX wallet does not support regtest networks. ' +
+            'Switch to mainnet to use OKX, or use a keystore wallet for regtest testing.'
+          );
+        }
+
         const okxProvider = (window as any).okxwallet?.bitcoin;
         if (!okxProvider) throw new Error('OKX wallet not available');
 
@@ -2044,10 +2075,31 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
         }
       }
 
-      // For other browser wallets (OKX, Leather, Phantom, etc.), use the SDK
-      // adapter directly. UniSat is handled above and avoids this path because
-      // `auto_finalized: false` is broken for UniSat taproot inputs (see comment
-      // on the UniSat branch).
+      // OKX is taproot-only single-address (mirrors UniSat). The same
+      // `auto_finalized: false` regression that hit UniSat on 2026-04-28
+      // applies here: passing false leaves taproot inputs in a state
+      // bitcoinjs-lib can't finalize. `signWithOkx` passes
+      // `auto_finalized: true`, matching the SDK OkxAdapter's own default.
+      if (detectedWallet === 'okx') {
+        try {
+          const okxAddress = browserWalletAddresses?.taproot?.address || browserWallet?.address;
+          if (!okxAddress) {
+            throw new Error('OKX address not found');
+          }
+          console.log(`[WalletContext] OKX: Using signWithOkx (${psbt.inputCount} inputs, address=${okxAddress})`);
+          const result = await signWithOkx(psbt, walletAdapter);
+          console.log(`[WalletContext] OKX: signing succeeded (finalized: ${result.isFinalized})`);
+          return result.signedPsbtBase64;
+        } catch (e: any) {
+          console.error(`[WalletContext] OKX signing failed:`, e?.message || e);
+          throw new Error(`OKX signing failed: ${e?.message || e}`);
+        }
+      }
+
+      // For other browser wallets (Leather, Phantom, etc.), use the SDK
+      // adapter directly. UniSat and OKX are handled above and avoid this path
+      // because `auto_finalized: false` is broken for their taproot inputs
+      // (see comments on those branches).
       // IMPORTANT: Use the PATCHED psbt (with corrected tapInternalKey), not the original psbtBase64
       const patchedPsbtHex = psbt.toHex();
 
