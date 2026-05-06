@@ -80,6 +80,7 @@ import { getConfig } from '@/utils/getConfig';
 import { buildPlanFromTx } from '@/lib/alkanes/planBuilder';
 import { buildUnwrapProtostone, buildUnwrapInputRequirements } from '@/lib/alkanes/builders';
 import { getBitcoinNetwork, extractPsbtBase64, toAlks, getSignerAddressDynamic } from '@/lib/alkanes/helpers';
+import { requireTaprootForFrost } from '@/lib/wallet/frostGuard';
 
 bitcoin.initEccLib(ecc);
 
@@ -126,11 +127,16 @@ export function useUnwrapMutation() {
       if (!txContext) {
         throw new Error('No wallet address available. Please connect a wallet first.');
       }
-      const taprootAddress = account?.taproot?.address;
+      // Unwrap is a FROST flow — signers derive shared keys from the
+      // user's taproot address. Non-taproot wallets get a clear error
+      // here rather than silently passing an empty string into the
+      // signer protocol.
+      const taprootAddress = requireTaprootForFrost(
+        account?.taproot?.address,
+        'unwrap frBTC',
+      );
       const segwitAddress = account?.nativeSegwit?.address;
-      // For alkane operations, prefer taproot if available (alkanes use P2TR).
-      // Falls back to segwit on single-address segwit-only wallets.
-      const primaryAddress = (taprootAddress || segwitAddress)!;
+      const primaryAddress = taprootAddress;
       console.log('[useUnwrapMutation] Using addresses:', { taprootAddress, segwitAddress, primaryAddress });
 
       // Verify wallet is loaded in provider

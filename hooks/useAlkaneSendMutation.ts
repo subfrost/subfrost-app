@@ -178,10 +178,10 @@ export function useAlkaneSendMutation() {
 
       // SDK builds the PSBT with a dummy wallet, so witnessUtxo.script and any
       // P2SH redeemScript point at dummy keys. Patch inputs so browser wallets
-      // recognise their own keys before signing.
+      // recognise their own keys before signing. patchInputsOnly tolerates
+      // missing taprootAddress for segwit-only single-address wallets.
       const taprootAddress = account?.taproot?.address;
       const segwitAddress = account?.nativeSegwit?.address;
-      if (!taprootAddress) throw new Error('No taproot address available');
 
       const patchResult = patchInputsOnly({
         psbtBase64,

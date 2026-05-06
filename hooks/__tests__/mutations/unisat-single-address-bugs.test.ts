@@ -30,46 +30,36 @@ import { patchInputsOnly } from '@/lib/psbt-patching';
 bitcoin.initEccLib(ecc);
 
 // ---------------------------------------------------------------------------
-// Helpers — exact reproductions of the WalletContext checks (post-fix)
+// Helpers — reproductions of the WalletContext slot-routing logic
+// (post-relaxation: bc1p* / tb1p* / bcrt1p* → taproot slot, anything else
+// → nativeSegwit slot, no connect-time throw)
 // ---------------------------------------------------------------------------
 
-const UNISAT_ERROR =
-  'UniSat is in Native Segwit / Nested Segwit / Legacy mode. Subfrost requires Taproot — ' +
-  'alkanes (DIESEL, frBTC, LP tokens, etc.) only live at P2TR addresses. ' +
-  'Open UniSat → Settings → Address Type → Taproot (P2TR), then reconnect.';
+interface SlotAssignment {
+  taproot?: { address: string };
+  nativeSegwit?: { address: string };
+}
 
-const OKX_ERROR =
-  'OKX is in Native Segwit / Nested Segwit mode. Subfrost requires Taproot — ' +
-  'alkanes (DIESEL, frBTC, LP tokens, etc.) only live at P2TR addresses. ' +
-  'Open OKX → Switch Address Type → Taproot, then reconnect.';
-
-/** Reproduces WalletContext.tsx UniSat connect branch (post-fix). */
-function unisatConnectCheck(addr: string): void {
+/** Reproduces WalletContext.tsx UniSat connect branch (post-relaxation). */
+function unisatConnectRoute(addr: string): SlotAssignment {
   const isTaproot =
     addr.startsWith('bc1p') ||
     addr.startsWith('tb1p') ||
     addr.startsWith('bcrt1p');
-  if (!isTaproot) throw new Error(UNISAT_ERROR);
+  return isTaproot
+    ? { taproot: { address: addr } }
+    : { nativeSegwit: { address: addr } };
 }
 
-/** Reproduces WalletContext.tsx OKX connect branch (post-fix). */
-function okxConnectCheck(addr: string): void {
+/** Reproduces WalletContext.tsx OKX connect branch (post-relaxation). */
+function okxConnectRoute(addr: string): SlotAssignment {
   const isTaproot =
     addr.startsWith('bc1p') ||
     addr.startsWith('tb1p') ||
     addr.startsWith('bcrt1p');
-  if (!isTaproot) throw new Error(OKX_ERROR);
-}
-
-/** Reproduces useSwapMutation.ts defense-in-depth check (post-fix). */
-function swapMutationTaprootGuard(taprootAddress: string | undefined): void {
-  if (!taprootAddress) {
-    throw new Error(
-      'Connected wallet has no taproot address. Switch your wallet ' +
-      'extension to Taproot (P2TR) mode and reconnect — alkanes only ' +
-      'live at P2TR addresses.'
-    );
-  }
+  return isTaproot
+    ? { taproot: { address: addr } }
+    : { nativeSegwit: { address: addr } };
 }
 
 // ---------------------------------------------------------------------------
@@ -105,100 +95,92 @@ function buildMinimalP2trPsbt(): string {
 }
 
 // ===========================================================================
-// Connect-time refusal — primary fix
+// Connect-time slot routing — relaxation (was: refusal)
 // ===========================================================================
+//
+// Pre-relaxation behavior was a hard throw at connect time when UniSat/OKX
+// returned a non-Taproot address. That blocked users from doing ANYTHING —
+// including the operations that don't need Taproot at all (swap, LP, vault,
+// alkane send, BTC send). Post-relaxation:
+//   - Taproot addresses route to the `taproot` slot (unchanged)
+//   - Non-taproot addresses route to the `nativeSegwit` slot (new)
+//   - FROST flows (wrap/unwrap/bridge) gate themselves via
+//     requireTaprootForFrost — see lib/wallet/frostGuard.ts
 
-describe('UniSat connect-time check (primary fix)', () => {
-  it('accepts a Taproot (bc1p) address', () => {
-    expect(() => unisatConnectCheck(TAPROOT_ADDR)).not.toThrow();
+describe('UniSat connect-time slot routing', () => {
+  it('routes a Taproot (bc1p) address to the taproot slot', () => {
+    const slots = unisatConnectRoute(TAPROOT_ADDR);
+    expect(slots.taproot?.address).toBe(TAPROOT_ADDR);
+    expect(slots.nativeSegwit).toBeUndefined();
   });
 
-  it('refuses Native Segwit (bc1q) with a clear actionable error', () => {
-    expect(() => unisatConnectCheck(SEGWIT_ADDR)).toThrowError(
-      /UniSat is in Native Segwit/,
-    );
-    expect(() => unisatConnectCheck(SEGWIT_ADDR)).toThrowError(
-      /Settings → Address Type → Taproot/,
-    );
+  it('routes Native Segwit (bc1q) to the nativeSegwit slot (no throw)', () => {
+    const slots = unisatConnectRoute(SEGWIT_ADDR);
+    expect(slots.nativeSegwit?.address).toBe(SEGWIT_ADDR);
+    expect(slots.taproot).toBeUndefined();
   });
 
-  it('refuses P2SH-P2WPKH (3...) Nested Segwit', () => {
-    expect(() => unisatConnectCheck(P2SH_ADDR)).toThrowError(
-      /Subfrost requires Taproot/,
-    );
-  });
-
-  it('error message names the problem AND tells the user how to fix it', () => {
-    let caught: Error | null = null;
-    try {
-      unisatConnectCheck(SEGWIT_ADDR);
-    } catch (e) {
-      caught = e as Error;
-    }
-    expect(caught).not.toBeNull();
-    expect(caught!.message).toContain('UniSat');
-    expect(caught!.message).toContain('Taproot');
-    expect(caught!.message).toContain('alkanes');
-    expect(caught!.message).toContain('Settings');
+  it('routes P2SH-P2WPKH (3...) Nested Segwit to the nativeSegwit slot', () => {
+    const slots = unisatConnectRoute(P2SH_ADDR);
+    expect(slots.nativeSegwit?.address).toBe(P2SH_ADDR);
+    expect(slots.taproot).toBeUndefined();
   });
 });
 
-describe('OKX connect-time check (primary fix)', () => {
-  it('accepts a Taproot address', () => {
-    expect(() => okxConnectCheck(TAPROOT_ADDR)).not.toThrow();
+describe('OKX connect-time slot routing', () => {
+  it('routes Taproot to the taproot slot', () => {
+    const slots = okxConnectRoute(TAPROOT_ADDR);
+    expect(slots.taproot?.address).toBe(TAPROOT_ADDR);
   });
 
-  it('refuses Native Segwit', () => {
-    expect(() => okxConnectCheck(SEGWIT_ADDR)).toThrowError(
-      /OKX is in Native Segwit/,
-    );
+  it('routes Native Segwit to the nativeSegwit slot (no throw)', () => {
+    const slots = okxConnectRoute(SEGWIT_ADDR);
+    expect(slots.nativeSegwit?.address).toBe(SEGWIT_ADDR);
+    expect(slots.taproot).toBeUndefined();
   });
 
-  it('refuses Nested Segwit', () => {
-    expect(() => okxConnectCheck(P2SH_ADDR)).toThrowError(
-      /Switch Address Type → Taproot/,
-    );
+  it('routes Nested Segwit to the nativeSegwit slot (no throw)', () => {
+    const slots = okxConnectRoute(P2SH_ADDR);
+    expect(slots.nativeSegwit?.address).toBe(P2SH_ADDR);
+    expect(slots.taproot).toBeUndefined();
   });
 });
 
 // ===========================================================================
-// Defense-in-depth — useSwapMutation guard
+// Removed: useSwapMutation defense-in-depth taproot guard
 // ===========================================================================
+//
+// The "Connected wallet has no taproot address" throw in useSwapMutation
+// was deleted alongside the connect-time refusal. Swap is NOT a FROST flow
+// and works fine for segwit-only single-address wallets. This describe block
+// is intentionally a placeholder — the test name is preserved as a marker so
+// future regression hunts find the right history.
 
-describe('useSwapMutation defense-in-depth taproot guard', () => {
-  it('throws clear error when taprootAddress is undefined', () => {
-    expect(() => swapMutationTaprootGuard(undefined)).toThrowError(
-      /Connected wallet has no taproot address/,
-    );
+describe('useSwapMutation guard removed (relaxation)', () => {
+  it('used to throw on missing taprootAddress; now tolerates it via patchInputsOnly', () => {
+    // This is asserted directly by the next test —
+    // patchInputsOnly itself returns cleanly with taprootAddress undefined.
+    expect(true).toBe(true);
   });
 
-  it('passes through when taprootAddress is set', () => {
-    expect(() => swapMutationTaprootGuard(TAPROOT_ADDR)).not.toThrow();
-  });
-
-  it('error tells the user what to do, not just what failed', () => {
-    let caught: Error | null = null;
-    try {
-      swapMutationTaprootGuard(undefined);
-    } catch (e) {
-      caught = e as Error;
-    }
-    expect(caught!.message).toContain('Switch your wallet');
-    expect(caught!.message).toContain('Taproot');
-  });
-
-  it('patchInputsOnly itself now refuses undefined taprootAddress', () => {
-    // The guard moved into patchInputsOnly so every caller (9+ hooks) gets
-    // the same protection without needing per-site checks.
+  it('patchInputsOnly tolerates missing taprootAddress for segwit-only wallets', () => {
+    // Single-address segwit-only wallets (UniSat/OKX in Native SegWit
+    // mode) reach this path with no taproot. patchInputsOnly must
+    // gracefully no-op the P2TR-input branch rather than throwing —
+    // segwit witnessUtxo patches and Xverse redeemScript injection
+    // still happen for any segwit/P2SH inputs that need them.
     const psbtB64 = buildMinimalP2trPsbt();
-    expect(() =>
-      patchInputsOnly({
-        psbtBase64: psbtB64,
-        network,
-        taprootAddress: undefined as any,
-        segwitAddress: SEGWIT_ADDR,
-        paymentPubkeyHex: undefined,
-      }),
-    ).toThrowError(/taprootAddress is required/);
+    const result = patchInputsOnly({
+      psbtBase64: psbtB64,
+      network,
+      taprootAddress: undefined,
+      segwitAddress: SEGWIT_ADDR,
+      paymentPubkeyHex: undefined,
+    });
+    // The minimal P2TR PSBT has only a P2TR input with nothing for a
+    // segwit-only flow to patch — inputsPatched is 0 and the PSBT
+    // round-trips unchanged.
+    expect(result.inputsPatched).toBe(0);
+    expect(typeof result.psbtBase64).toBe('string');
   });
 });

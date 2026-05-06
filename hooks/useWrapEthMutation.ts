@@ -23,6 +23,7 @@ import * as ecc from '@bitcoinerlab/secp256k1';
 import { getBitcoinNetwork, extractPsbtBase64 } from '@/lib/alkanes/helpers';
 import { buildWrapEthProtostone } from '@/lib/alkanes/builders';
 import { FRETH_SIGNER_ADDRESSES } from '@/lib/alkanes/constants';
+import { requireTaprootForFrost } from '@/lib/wallet/frostGuard';
 
 bitcoin.initEccLib(ecc);
 
@@ -66,9 +67,11 @@ export function useWrapEthMutation() {
       const protostone = buildWrapEthProtostone({ frethId: FRETH_ALKANE_ID });
       const inputRequirements = `B:${wrapAmountSats}:v0`;
 
-      const userTaprootAddress = account?.taproot?.address;
+      const userTaprootAddress = requireTaprootForFrost(
+        account?.taproot?.address,
+        'wrap to frETH',
+      );
       const userSegwitAddress = account?.nativeSegwit?.address;
-      if (!userTaprootAddress) throw new Error('No taproot address available');
 
       const btcNetwork = getBitcoinNetwork(network);
       const signerAddress = getFrethSignerAddress(network);

@@ -24,6 +24,7 @@ import { useSandshrewProvider } from './useSandshrewProvider';
 import { buildUnwrapEthProtostone, buildUnwrapEthInputRequirements } from '@/lib/alkanes/builders';
 import { getBitcoinNetwork, extractPsbtBase64, toAlks } from '@/lib/alkanes/helpers';
 import { getConfig } from '@/utils/getConfig';
+import { requireTaprootForFrost } from '@/lib/wallet/frostGuard';
 
 bitcoin.initEccLib(ecc);
 
@@ -48,7 +49,10 @@ export function useUnwrapEthMutation() {
 
       // See `WalletContext.TxContext` jsdoc for the address-fallback semantics.
       if (!txContext) throw new Error('No wallet address available');
-      const taprootAddress = account?.taproot?.address;
+      const taprootAddress = requireTaprootForFrost(
+        account?.taproot?.address,
+        'unwrap frETH',
+      );
       const segwitAddress = account?.nativeSegwit?.address;
 
       if (!provider.walletIsLoaded()) {

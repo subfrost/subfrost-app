@@ -23,6 +23,7 @@ import * as ecc from '@bitcoinerlab/secp256k1';
 import { getBitcoinNetwork, extractPsbtBase64 } from '@/lib/alkanes/helpers';
 import { buildWrapZecProtostone } from '@/lib/alkanes/builders';
 import { FRZEC_SIGNER_ADDRESSES } from '@/lib/alkanes/constants';
+import { requireTaprootForFrost } from '@/lib/wallet/frostGuard';
 
 bitcoin.initEccLib(ecc);
 
@@ -66,9 +67,11 @@ export function useWrapZecMutation() {
       const protostone = buildWrapZecProtostone({ frzecId: FRZEC_ALKANE_ID });
       const inputRequirements = `B:${wrapAmountSats}:v0`;
 
-      const userTaprootAddress = account?.taproot?.address;
+      const userTaprootAddress = requireTaprootForFrost(
+        account?.taproot?.address,
+        'wrap to frZEC',
+      );
       const userSegwitAddress = account?.nativeSegwit?.address;
-      if (!userTaprootAddress) throw new Error('No taproot address available');
 
       const btcNetwork = getBitcoinNetwork(network);
       const signerAddress = getFrzecSignerAddress(network);

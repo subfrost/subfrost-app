@@ -24,6 +24,7 @@ import { getConfig } from '@/utils/getConfig';
 import { patchInputsOnly } from '@/lib/psbt-patching';
 import { getBitcoinNetwork, extractPsbtBase64, toAlks } from '@/lib/alkanes/helpers';
 import { buildBurnAndBridgeEthProtostone } from '@/lib/bridge/protostoneBuilder';
+import { requireTaprootForFrost } from '@/lib/wallet/frostGuard';
 import * as bitcoin from 'bitcoinjs-lib';
 import * as ecc from '@bitcoinerlab/secp256k1';
 
@@ -72,11 +73,14 @@ export function useBridgeEthMutation() {
         throw new Error('Calldata must be even-length hex.');
       }
 
-      // See `WalletContext.TxContext` jsdoc for the address-fallback semantics.
+      // FROST flow — taproot required for signer key derivation.
       if (!txContext) throw new Error('No wallet address available');
-      const taprootAddress = account?.taproot?.address;
+      const taprootAddress = requireTaprootForFrost(
+        account?.taproot?.address,
+        'bridge to ETH',
+      );
       const segwitAddress = account?.nativeSegwit?.address;
-      const primaryAddress = (taprootAddress || segwitAddress)!;
+      const primaryAddress = taprootAddress;
 
       const config = getConfig(network);
       const frethTokenId = (config as any).FRETH_ALKANE_ID as string;

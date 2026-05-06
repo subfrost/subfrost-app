@@ -31,6 +31,7 @@ import { patchInputsOnly } from '@/lib/psbt-patching';
 import { getBitcoinNetwork, extractPsbtBase64, toAlks } from '@/lib/alkanes/helpers';
 import { buildBurnAndBridgeZecProtostone } from '@/lib/bridge/protostoneBuilder';
 import { deriveZcashAddress, toZcashNetwork } from '@/lib/zcash/address';
+import { requireTaprootForFrost } from '@/lib/wallet/frostGuard';
 import * as bitcoin from 'bitcoinjs-lib';
 import * as ecc from '@bitcoinerlab/secp256k1';
 
@@ -87,11 +88,14 @@ export function useBridgeZecMutation() {
       if (!isConnected) throw new Error('Wallet not connected');
       if (!provider) throw new Error('Provider not available');
 
-      // See `WalletContext.TxContext` jsdoc for the address-fallback semantics.
+      // FROST flow — taproot required for signer key derivation.
       if (!txContext) throw new Error('No wallet address available');
-      const taprootAddress = account?.taproot?.address;
+      const taprootAddress = requireTaprootForFrost(
+        account?.taproot?.address,
+        'bridge to ZEC',
+      );
       const segwitAddress = account?.nativeSegwit?.address;
-      const primaryAddress = (taprootAddress || segwitAddress)!;
+      const primaryAddress = taprootAddress;
 
       const config = getConfig(network);
       const frzecTokenId = (config as any).FRZEC_ALKANE_ID as string;

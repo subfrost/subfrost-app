@@ -211,8 +211,12 @@ describe('Browser wallet address handling in useWrapMutation', () => {
     expect(match![1]).not.toContain("'p2tr:0'");
   });
 
-  it('should throw when taproot address is missing', () => {
-    expect(src).toContain("if (!userTaprootAddress) throw new Error('No taproot address available')");
+  it('throws via FROST guard when taproot address is missing', () => {
+    // Wrap is a FROST flow — must reject non-taproot wallets with a clear,
+    // actionable error pointing at wallet address-type settings, not the
+    // generic "No taproot address available" fallback.
+    expect(src).toContain('requireTaprootForFrost(');
+    expect(src).toMatch(/requireTaprootForFrost\(\s*account\?\.taproot\?\.address,\s*'wrap BTC',?\s*\)/);
   });
 });
 

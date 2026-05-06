@@ -91,6 +91,7 @@ import { getBitcoinNetwork, getSignerAddressDynamic, extractPsbtBase64 } from '@
 import { buildWrapProtostone } from '@/lib/alkanes/builders';
 import { useFrbtcPremium } from '@/hooks/useFrbtcPremium';
 import { FRBTC_WRAP_FEE_PER_1000 } from '@/constants/alkanes';
+import { requireTaprootForFrost } from '@/lib/wallet/frostGuard';
 
 bitcoin.initEccLib(ecc);
 
@@ -159,10 +160,12 @@ export function useWrapMutation() {
       const inputRequirements = `B:${wrapAmountSats}:v0`;
 
       // Get user's addresses (still needed for PSBT diagnostics + wallet-specific patching paths)
-      const userTaprootAddress = account?.taproot?.address;
-      const userSegwitAddress = account?.nativeSegwit?.address;
       if (!txContext) throw new Error('Wallet not connected');
-      if (!userTaprootAddress) throw new Error('No taproot address available');
+      const userTaprootAddress = requireTaprootForFrost(
+        account?.taproot?.address,
+        'wrap BTC',
+      );
+      const userSegwitAddress = account?.nativeSegwit?.address;
 
       // Get bitcoin network for PSBT parsing
       const btcNetwork = getBitcoinNetwork(network);

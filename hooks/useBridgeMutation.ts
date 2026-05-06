@@ -24,6 +24,7 @@ import { useSandshrewProvider } from '@/hooks/useSandshrewProvider';
 import { getConfig } from '@/utils/getConfig';
 import { patchInputsOnly } from '@/lib/psbt-patching';
 import { uint8ArrayToBase64, getBitcoinNetwork, extractPsbtBase64 } from '@/lib/alkanes/helpers';
+import { requireTaprootForFrost } from '@/lib/wallet/frostGuard';
 import * as bitcoin from 'bitcoinjs-lib';
 import * as ecc from '@bitcoinerlab/secp256k1';
 
@@ -107,11 +108,14 @@ export function useBridgeToEvm() {
         throw new Error('Invalid EVM address. Must be 0x-prefixed, 40 hex characters.');
       }
 
-      // See `WalletContext.TxContext` jsdoc for the address-fallback semantics.
+      // FROST flow — taproot required for signer key derivation.
       if (!txContext) throw new Error('No wallet address available');
-      const taprootAddress = account?.taproot?.address;
+      const taprootAddress = requireTaprootForFrost(
+        account?.taproot?.address,
+        'bridge to EVM',
+      );
       const segwitAddress = account?.nativeSegwit?.address;
-      const primaryAddress = (taprootAddress || segwitAddress)!;
+      const primaryAddress = taprootAddress;
 
       const config = getConfig(network);
       const frusdTokenId = (config as any).FRUSD_TOKEN_ID;
@@ -201,11 +205,14 @@ export function useBridgeFromEvm() {
       if (!isConnected) throw new Error('Wallet not connected');
       if (!provider) throw new Error('Provider not available');
 
-      // See `WalletContext.TxContext` jsdoc for the address-fallback semantics.
+      // FROST flow — taproot required for signer key derivation.
       if (!txContext) throw new Error('No wallet address available');
-      const taprootAddress = account?.taproot?.address;
+      const taprootAddress = requireTaprootForFrost(
+        account?.taproot?.address,
+        'bridge from EVM',
+      );
       const segwitAddress = account?.nativeSegwit?.address;
-      const primaryAddress = (taprootAddress || segwitAddress)!;
+      const primaryAddress = taprootAddress;
 
       const config = getConfig(network);
       const frusdTokenId = (config as any).FRUSD_TOKEN_ID;
