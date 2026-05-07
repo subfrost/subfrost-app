@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef } from 'react';
+import { Activity } from 'lucide-react';
 import { useInfiniteAmmTxHistory } from '@/hooks/useAmmHistory';
 import { useTokenDisplayMap } from '@/hooks/useTokenDisplayMap';
 import TokenIcon from '@/app/components/TokenIcon';
@@ -23,7 +24,7 @@ function formatAmount(raw: string, decimals = 8, tokenSymbol?: string) {
   if (!Number.isFinite(scaled)) return '0';
 
   // Use 4 decimals for BTC/frBTC, 2 for other tokens
-  const fractionDigits = (tokenSymbol === 'BTC' || tokenSymbol === 'frBTC') ? 4 : 2;
+  const fractionDigits = (tokenSymbol === 'BTC' || tokenSymbol === 'frBTC') ? 5 : 2;
 
   if (scaled > 0 && scaled < Math.pow(10, -fractionDigits)) {
     return `<${(Math.pow(10, -fractionDigits)).toFixed(fractionDigits)}`;
@@ -34,30 +35,6 @@ function formatAmount(raw: string, decimals = 8, tokenSymbol?: string) {
   }).format(scaled);
 }
 
-function PairIcon({
-  leftId,
-  rightId,
-  leftSymbol,
-  rightSymbol,
-  network,
-}: {
-  leftId?: string;
-  rightId?: string;
-  leftSymbol?: string;
-  rightSymbol?: string;
-  network?: Network;
-}) {
-  return (
-    <div className="relative h-8 w-12">
-      <div className="absolute left-0 top-0 h-8 w-8 rounded-full bg-transparent flex items-center justify-center overflow-hidden">
-        <TokenIcon id={leftId} symbol={leftSymbol || (leftId ?? '')} size="md" network={network} />
-      </div>
-      <div className="absolute right-0 top-0 h-8 w-8 rounded-full bg-transparent flex items-center justify-center overflow-hidden">
-        <TokenIcon id={rightId} symbol={rightSymbol || (rightId ?? '')} size="md" network={network} />
-      </div>
-    </div>
-  );
-}
 
 export default function MyWalletSwaps() {
   const { t } = useTranslation();
@@ -130,25 +107,24 @@ export default function MyWalletSwaps() {
   };
 
   return (
-    <div className="rounded-2xl bg-[color:var(--sf-glass-bg)] backdrop-blur-md overflow-hidden shadow-[0_4px_20px_rgba(0,0,0,0.2)] border-t border-[color:var(--sf-top-highlight)] flex flex-col">
-      <div className="px-6 py-4 border-b-2 border-[color:var(--sf-row-border)] bg-[color:var(--sf-surface)]/40 flex-shrink-0">
-        <h3 className="text-base font-bold text-[color:var(--sf-text)]">{t('myActivity.title')}</h3>
-      </div>
-
+    <div className="flex flex-col">
       {!address ? (
-        <div className="px-6 py-4 text-center text-sm text-[color:var(--sf-text)]/60 flex items-center justify-center min-h-[72px]">
-          {t('myActivity.connectWallet')}
+        <div className="flex flex-col items-center justify-center py-8 text-[color:var(--sf-text)]/20">
+          <Activity className="h-6 w-6 mb-2" />
+          <span className="text-xs">{t('myActivity.connectWallet')}</span>
         </div>
       ) : (
         <>
-          {/* Column Headers - matches ActivityFeed XS layout */}
-          <div className="grid grid-cols-[0.6fr_1fr_auto] gap-2 px-6 py-3 text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/70 border-b border-[color:var(--sf-row-border)]">
-            <div>{t('activity.txn')}</div>
-            <div>{t('myActivity.pair')}</div>
-            <div className="text-right">{t('myActivity.amounts')}</div>
+          {/* Column Headers */}
+          <div className="sf-table-header grid grid-cols-[0.5fr_0.7fr_0.7fr_1fr_0.6fr] gap-1 px-4 py-2">
+            <span>{t('trades.type')}</span>
+            <span>{t('trades.from')}</span>
+            <span>{t('trades.to')}</span>
+            <span className="text-right">{t('trades.amounts')}</span>
+            <span className="text-right">{t('trades.date')}</span>
           </div>
 
-          <div className="overflow-auto no-scrollbar" style={{ maxHeight: 'calc(5 * 85px)' }}>
+          <div className="overflow-auto no-scrollbar max-h-[240px]">
             {items.length === 0 && !isLoading ? (
               <div className="px-6 py-12 text-center text-sm text-[color:var(--sf-text)]/60">
                 {t('myActivity.noActivity')}
@@ -157,12 +133,7 @@ export default function MyWalletSwaps() {
               <>
                 {items.map((row, idx) => {
                   const time = new Date(row.timestamp);
-                  const timeLabel = new Intl.DateTimeFormat(undefined, {
-                    month: '2-digit',
-                    day: '2-digit',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  }).format(time);
+                  const timeLabel = `${String(time.getMonth() + 1).padStart(2, '0')}/${String(time.getDate()).padStart(2, '0')}/${String(time.getFullYear()).slice(-2)}`;
 
                   const typeLabel =
                     row.type === 'swap' ? t('myActivity.swap') :
@@ -210,75 +181,81 @@ export default function MyWalletSwaps() {
                     }
                   })();
 
+                  // Build amounts string parts with colors
+                  const amountParts = (() => {
+                    if (row.type === 'swap') {
+                      return {
+                        left: `-${formatAmount(row.soldAmount, 8, pairNames.leftName)} ${pairNames.leftName}`,
+                        leftColor: '',
+                        right: `+${formatAmount(row.boughtAmount, 8, pairNames.rightName)} ${pairNames.rightName}`,
+                        rightColor: 'text-green-400',
+                      };
+                    } else if (row.type === 'mint') {
+                      return {
+                        left: `-${formatAmount((row as any).token0Amount, 8, pairNames.leftName)} ${pairNames.leftName}`,
+                        leftColor: '',
+                        right: `-${formatAmount((row as any).token1Amount, 8, pairNames.rightName)} ${pairNames.rightName}`,
+                        rightColor: '',
+                      };
+                    } else if (row.type === 'burn' || row.type === 'creation') {
+                      return {
+                        left: `+${formatAmount((row as any).token0Amount, 8, pairNames.leftName)} ${pairNames.leftName}`,
+                        leftColor: 'text-green-400',
+                        right: `+${formatAmount((row as any).token1Amount, 8, pairNames.rightName)} ${pairNames.rightName}`,
+                        rightColor: 'text-green-400',
+                      };
+                    } else if (row.type === 'wrap') {
+                      return {
+                        left: `-${formatAmount((row as any).amount, 8, 'BTC')} BTC`,
+                        leftColor: '',
+                        right: `+${formatAmount((row as any).amount, 8, 'frBTC')} frBTC`,
+                        rightColor: 'text-green-400',
+                      };
+                    } else {
+                      return {
+                        left: `-${formatAmount((row as any).amount, 8, 'frBTC')} frBTC`,
+                        leftColor: '',
+                        right: `+${formatAmount((row as any).amount, 8, 'BTC')} BTC`,
+                        rightColor: 'text-green-400',
+                      };
+                    }
+                  })();
+
                   return (
                     <Link
                       key={(row as any).transactionId + '-' + idx}
                       href={`https://espo.sh/tx/${(row as any).transactionId}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="block px-6 py-4 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-primary)]/10 border-b border-[color:var(--sf-row-border)]"
+                      className="sf-row block"
                     >
-                      {/* Row 1: Txn, Pair, Amounts */}
-                      <div className="grid grid-cols-[0.6fr_1fr_auto] items-center gap-2">
-                        <div className="text-sm text-[color:var(--sf-text)]/80">{typeLabel}</div>
+                      <div className="grid grid-cols-[0.5fr_0.7fr_0.7fr_1fr_0.6fr] gap-1 text-[11px] leading-[20px] px-4 py-1.5 items-center">
+                        {/* TXN */}
+                        <span className="text-[color:var(--sf-text)]/40">{typeLabel}</span>
 
-                        <div className="flex flex-col gap-1">
-                          <PairIcon
-                            leftId={pairNames.leftId}
-                            rightId={pairNames.rightId}
-                            leftSymbol={pairNames.leftName}
-                            rightSymbol={pairNames.rightName}
-                            network={network}
-                          />
-                          <div className="min-w-0">
-                            <div className="truncate text-sm text-[color:var(--sf-text)]">
-                              {(row.type === 'mint' || row.type === 'burn')
-                                ? `${pairNames.leftName} / ${pairNames.rightName}`
-                                : (row.type === 'wrap' || row.type === 'unwrap' || row.type === 'swap')
-                                ? `${pairNames.leftName} → ${pairNames.rightName}`
-                                : `${pairNames.leftName} · ${pairNames.rightName}`
-                              }
-                            </div>
-                          </div>
+                        {/* From */}
+                        <div className="flex items-center gap-1 min-w-0">
+                          <TokenIcon symbol={pairNames.leftName} id={pairNames.leftId} size="sm" network={network} />
+                          <span className="text-[color:var(--sf-text)]/60 truncate">{pairNames.leftName}</span>
                         </div>
 
-                        <div className="text-right text-xs text-[color:var(--sf-text)]">
-                          {row.type === 'swap' && (
-                            <>
-                              <div>- {formatAmount(row.soldAmount, 8, pairNames.leftName)} {pairNames.leftName}</div>
-                              <div className="text-green-500">+ {formatAmount(row.boughtAmount, 8, pairNames.rightName)} {pairNames.rightName}</div>
-                            </>
-                          )}
-                          {row.type === 'mint' && (
-                            <>
-                              <div>- {formatAmount((row as any).token0Amount, 8, pairNames.leftName)} {pairNames.leftName}</div>
-                              <div>- {formatAmount((row as any).token1Amount, 8, pairNames.rightName)} {pairNames.rightName}</div>
-                            </>
-                          )}
-                          {(row.type === 'burn' || row.type === 'creation') && (
-                            <>
-                              <div className="text-green-500">+ {formatAmount((row as any).token0Amount, 8, pairNames.leftName)} {pairNames.leftName}</div>
-                              <div className="text-green-500">+ {formatAmount((row as any).token1Amount, 8, pairNames.rightName)} {pairNames.rightName}</div>
-                            </>
-                          )}
-                          {row.type === 'wrap' && (
-                            <>
-                              <div>- {formatAmount((row as any).amount, 8, 'BTC')} BTC</div>
-                              <div className="text-green-500">+ {formatAmount((row as any).amount, 8, 'frBTC')} frBTC</div>
-                            </>
-                          )}
-                          {row.type === 'unwrap' && (
-                            <>
-                              <div>- {formatAmount((row as any).amount, 8, 'frBTC')} frBTC</div>
-                              <div className="text-green-500">+ {formatAmount((row as any).amount, 8, 'BTC')} BTC</div>
-                            </>
-                          )}
+                        {/* To */}
+                        <div className="flex items-center gap-1 min-w-0">
+                          <TokenIcon symbol={pairNames.rightName} id={pairNames.rightId} size="sm" network={network} />
+                          <span className="text-[color:var(--sf-text)]/60 truncate">{pairNames.rightName}</span>
                         </div>
-                      </div>
 
-                      {/* Row 2: Time (right-aligned) */}
-                      <div className="flex justify-end items-center mt-1">
-                        <div className="text-xs text-[color:var(--sf-text)]/50">{timeLabel}</div>
+                        {/* Amounts (single line) */}
+                        <span className="text-right tabular-nums truncate">
+                          <span className={amountParts.leftColor || 'text-[color:var(--sf-text)]/60'}>{amountParts.left}</span>
+                          <span className="text-[color:var(--sf-text)]/25">{', '}</span>
+                          <span className={amountParts.rightColor || 'text-[color:var(--sf-text)]/60'}>{amountParts.right}</span>
+                        </span>
+
+                        {/* Time */}
+                        <span className="text-[color:var(--sf-text)]/25 tabular-nums text-right">
+                          {timeLabel}
+                        </span>
                       </div>
                     </Link>
                   );
@@ -286,7 +263,7 @@ export default function MyWalletSwaps() {
               </>
             )}
             {(isLoading || isFetchingNextPage) && (
-              <div className="px-4 py-3 text-center text-[color:var(--sf-text)]/60">{t('activity.loading')}</div>
+              <div className="px-4 py-3 text-center text-xs text-[color:var(--sf-text)]/20">{t('activity.loading')}</div>
             )}
             <div ref={loadingRef} className="h-6" />
           </div>

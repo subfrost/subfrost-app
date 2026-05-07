@@ -14,8 +14,16 @@ import { LanguageProvider } from '@/context/LanguageContext';
 import { TransactionConfirmProvider } from '@/context/TransactionConfirmContext';
 import { NotificationProvider } from '@/context/NotificationContext';
 import { HeightPoller } from '@/queries/height';
+import { WalletStatePrewarmer } from '@/components/WalletStatePrewarmer';
+import { PendingTxHUD } from '@/components/PendingTxHUD';
+import { IndexerSyncProvider } from '@/context/IndexerSyncContext';
+import { IndexerSyncOverlay } from '@/components/IndexerSyncOverlay';
+import { DevnetProvider } from '@/context/DevnetContext';
+import { DevnetBootModal, DevnetErrorModal } from '@/components/DevnetBootModal';
+import { DevnetControlPanel, DevnetNetworkBanner } from '@/components/DevnetControlPanel';
 import TransactionConfirmModal from '@/app/components/TransactionConfirmModal';
 import GlobalNotificationArea from '@/app/components/GlobalNotificationArea';
+
 
 // Define Network type locally
 import type { Network } from '@/utils/constants';
@@ -24,11 +32,14 @@ const NETWORK_STORAGE_KEY = 'subfrost_selected_network';
 
 // Detect network from localStorage, hostname, or env variable
 function detectNetwork(): Network {
-  if (typeof window === 'undefined') return 'subfrost-regtest';
+  if (typeof window === 'undefined') return 'mainnet';
 
   // First check localStorage for user selection
+  // JOURNAL (2026-03-31): Added 'devnet' to the allowlist — it was missing, so
+  // selecting devnet in the balances page would be saved to localStorage but
+  // detectNetwork() would ignore it, reverting to mainnet on next load.
   const stored = localStorage.getItem(NETWORK_STORAGE_KEY);
-  if (stored && ['mainnet', 'testnet', 'signet', 'regtest', 'regtest-local', 'subfrost-regtest', 'oylnet'].includes(stored)) {
+  if (stored && ['mainnet', 'testnet', 'signet', 'regtest', 'regtest-local', 'qubitcoin-regtest', 'subfrost-regtest', 'oylnet', 'devnet'].includes(stored)) {
     return stored as Network;
   }
 
@@ -39,10 +50,8 @@ function detectNetwork(): Network {
       return 'signet';
     } else if (host.startsWith('regtest.') || host.startsWith('staging-regtest.')) {
       return 'subfrost-regtest';
-    } else if (host.includes('localhost') || host.includes('127.0.0.1')) {
-      // Default to subfrost-regtest for local development
-      return 'subfrost-regtest';
     }
+    // Default to mainnet for all other cases (including localhost)
     return 'mainnet';
   }
   return process.env.NEXT_PUBLIC_NETWORK as Network;
@@ -50,7 +59,7 @@ function detectNetwork(): Network {
 
 export default function Providers({ children }: { children: ReactNode }) {
   const [mounted, setMounted] = useState(false);
-  const [network, setNetwork] = useState<Network>('subfrost-regtest');
+  const [network, setNetwork] = useState<Network>('mainnet');
 
   // Memoize QueryClient to prevent recreation on re-renders
   // All queries use staleTime: Infinity and never self-refresh.
@@ -123,16 +132,27 @@ export default function Providers({ children }: { children: ReactNode }) {
             <ThemeProvider>
               <LanguageProvider>
                 <AlkanesSDKProvider network={network}>
-                  <HeightPoller network={network} />
-                  <WalletProvider network={network}>
-                    <TransactionConfirmProvider>
-                      <NotificationProvider>
-                        {children}
-                        <TransactionConfirmModal />
-                        <GlobalNotificationArea />
-                      </NotificationProvider>
-                    </TransactionConfirmProvider>
-                  </WalletProvider>
+                  <DevnetProvider network={network}>
+                    <HeightPoller network={network} />
+                    <WalletProvider network={network}>
+                      <WalletStatePrewarmer />
+                      <PendingTxHUD />
+                      <IndexerSyncProvider>
+                        <IndexerSyncOverlay />
+                        <TransactionConfirmProvider>
+                          <NotificationProvider>
+                            <DevnetNetworkBanner />
+                            {children}
+                            <DevnetBootModal />
+                            <DevnetErrorModal />
+                            <DevnetControlPanel />
+                            <TransactionConfirmModal />
+                            <GlobalNotificationArea />
+                          </NotificationProvider>
+                        </TransactionConfirmProvider>
+                      </IndexerSyncProvider>
+                    </WalletProvider>
+                  </DevnetProvider>
                 </AlkanesSDKProvider>
               </LanguageProvider>
             </ThemeProvider>

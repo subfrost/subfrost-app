@@ -110,6 +110,7 @@ function getAlkanesNetwork(network: Network): 'mainnet' | 'testnet' | 'regtest' 
     case 'regtest':
     case 'regtest-local':
     case 'subfrost-regtest':
+    case 'devnet':
     case 'oylnet':
       return 'regtest';
     case 'signet':
@@ -131,6 +132,7 @@ function getBitcoinJsNetwork(network: Network): bitcoin.Network {
     case 'regtest':
     case 'regtest-local':
     case 'subfrost-regtest':
+    case 'devnet':
     case 'oylnet':
       return bitcoin.networks.regtest;
     default:
@@ -272,6 +274,8 @@ export async function createAlkanesProvider(
     signet: 'https://signet.sandshrew.io/v4/wrlckwrld',
     oylnet: 'https://ladder-chain-sieve.sandshrew.io/v4/wrlckwrld',
     'subfrost-regtest': 'https://regtest.subfrost.io/v4/subfrost',
+    'qubitcoin-regtest': 'https://meta.lake.direct',
+    devnet: 'https://regtest.subfrost.io/v4/subfrost',
   };
 
   const url = rpcUrl || defaultUrls[network] || defaultUrls.mainnet;

@@ -1,0 +1,416 @@
+/**
+ * AMM Contract Deployment for Devnet
+ *
+ * Deploys the full AMM stack (factory, pool, beacon) onto the in-process
+ * devnet so swap and liquidity tests can run.
+ *
+ * Deployment order (from subfrost-alkanes/src/tests/amm_setup.rs):
+ * 1. Pool Logic         → [3, 0xffef] → indexed as [4, 0xffef]
+ * 2. Factory Logic      → [3, 2]      → indexed as [4, 2]
+ * 3. Beacon Proxy Tmpl  → [3, 0xbeac1] → indexed as [4, 0xbeac1]
+ * 4. Upgradeable Beacon → [3, 0xbeac0] → indexed as [4, 0xbeac0]
+ * 5. Factory Proxy      → [3, 1]      → indexed as [4, 1]
+ * 6. Initialize Factory (opcode 0 on [4, 1])
+ */
+
+import { readFileSync } from 'fs';
+import { resolve } from 'path';
+import { signAndBroadcast } from '../shared/sign-and-broadcast';
+import { rpcCall } from './devnet-helpers';
+import type { TestSignerResult } from '../sdk/test-utils/createTestSigner';
+
+type WebProvider = import('@alkanes/ts-sdk/wasm').WebProvider;
+
+// All WASMs from ~/alkanes-rs (develop branch) prod_wasms/.
+// The indexer is prod_indexer/alkanes_v2.1.6_regtest.wasm and these WASMs match it.
+// Deployment pattern must exactly match scripts/deploy-subfrost-regtest.sh.
+const PROD_WASMS = resolve(__dirname, '../../prod_wasms');
+const STD_WASMS = PROD_WASMS;
+
+// Slot assignments — match scripts/deploy-subfrost-regtest.sh exactly
+const SLOTS = {
+  AUTH_TOKEN_FACTORY: 0xffed,  // 65517
+  POOL_BEACON_PROXY: 780993,   // beacon proxy template
+  FACTORY_LOGIC:     0xfff4,   // 65524
+  POOL_LOGIC:        0xfff0,   // 65520
+  FACTORY_PROXY:     0xfff2,   // 65522 (upgradeable proxy)
+  BEACON:            0xfff3,   // 65523 (upgradeable beacon)
+};
+
+// After indexing, block 3 becomes block 4
+const INDEXED = {
+  AUTH_TOKEN_FACTORY: `4:${SLOTS.AUTH_TOKEN_FACTORY}`,
+  POOL_BEACON_PROXY: `4:${SLOTS.POOL_BEACON_PROXY}`,
+  FACTORY_LOGIC:     `4:${SLOTS.FACTORY_LOGIC}`,
+  POOL_LOGIC:        `4:${SLOTS.POOL_LOGIC}`,
+  FACTORY_PROXY:     `4:${SLOTS.FACTORY_PROXY}`,
+  BEACON:            `4:${SLOTS.BEACON}`,
+};
+
+function loadWasm(name: string, useStd = false): string {
+  const dir = useStd ? STD_WASMS : PROD_WASMS;
+  const path = resolve(dir, name);
+  const bytes = readFileSync(path);
+  return bytes.toString('hex');
+}
+
+/**
+ * Deploy a single contract via envelope (commit/reveal).
+ *
+ * The protostone format for deployment is:
+ *   [3, slot, initOpcode, ...args]:v0:v0
+ *
+ * The envelope contains the WASM binary.
+ *
+ * CRITICAL: CREATERESERVED ATOMIC ROLLBACK
+ * The `initOpcode` and `args` are passed as cellpack inputs and executed
+ * by the WASM during deployment. If the opcode dispatch REVERTS (e.g.,
+ * "Unrecognized opcode"), the entire atomic transaction rolls back,
+ * INCLUDING the binary storage at [4:slot]. The deploy silently fails.
+ *
+ * For std alkanes contracts (auth_token, upgradeable, beacon), the init
+ * args like [100] or [0x7fff, 4, implSlot, 1] map to recognized opcodes.
+ * For custom contracts, ensure the opcode is valid and succeeds:
+ *   - Use opcode 0 (Initialize) with safe defaults
+ *   - Or a stateless read-only query opcode
+ *
+ * Source: alkanes-rs/src/message.rs handle_message() → atomic rollback on Err
+ */
+async function deployContract(
+  provider: WebProvider,
+  signer: TestSignerResult,
+  segwitAddress: string,
+  taprootAddress: string,
+  wasmHex: string,
+  slot: number,
+  inputs: number[],
+  mineHarness: any,
+): Promise<string> {
+  const cellpack = `[3,${slot},${inputs.join(',')}]`;
+  const protostone = `${cellpack}:v0:v0`;
+
+  console.log(`[amm-deploy] Deploying to [3,${slot}] with inputs [${inputs}]...`);
+
+  // Use alkanesExecuteFull which handles the complete commit/reveal flow internally
+  // (avoids PSBT serialization issues with the intermediate ReadyToSignCommit state)
+  const result = await (provider as any).alkanesExecuteFull(
+    JSON.stringify([taprootAddress]),
+    'B:100000:v0',
+    protostone,
+    '1',
+    wasmHex,
+    JSON.stringify({
+      from: [segwitAddress, taprootAddress],
+      change_address: segwitAddress,
+      alkanes_change_address: taprootAddress,
+      mine_enabled: true,
+    }),
+  );
+
+  // alkanesExecuteFull returns EnhancedExecuteResult with txids
+  const txid = result?.reveal_txid || result?.revealTxid || result?.txid || 'unknown';
+
+  // Compare: what did the SDK broadcast vs what esplorashrew stored?
+  if (result?.reveal_txid || result?.revealTxid) {
+    const revealTxid = result.reveal_txid || result.revealTxid;
+    const storedTxResult = await rpcCall('esplora_tx::hex', [revealTxid]);
+    if (storedTxResult?.result) {
+      const storedHex = storedTxResult.result as string;
+      console.log(`[amm-deploy]   Reveal tx stored hex length: ${storedHex.length / 2} bytes`);
+      // Check witness: parse the stored tx and count witness items
+      try {
+        const bitcoin = await import('bitcoinjs-lib');
+        const zlib = await import('zlib');
+        const tx = bitcoin.Transaction.fromHex(storedHex);
+        if (tx.ins[0]?.witness?.length >= 2) {
+          const script = tx.ins[0].witness[1]; // The reveal script
+          console.log(`[amm-deploy]   Reveal script: ${script.length} bytes`);
+
+          // Parse the script to extract BIN envelope payload
+          // Structure: OP_FALSE(00) OP_IF(63) PUSH3(03) "BIN" PUSH0(00) [chunks...] OP_ENDIF(68)
+          let pos = 0;
+          if (script[pos] === 0x00) pos++; // OP_FALSE
+          if (script[pos] === 0x63) pos++; // OP_IF
+          // Read PROTOCOL_ID
+          const pushLen = script[pos]; pos++;
+          pos += pushLen; // Skip "BIN"
+          // Read BODY_TAG
+          if (script[pos] === 0x00) pos++; // OP_0 (empty push = BODY_TAG)
+
+          // Now read data chunks until OP_ENDIF (0x68)
+          const chunks: Buffer[] = [];
+          while (pos < script.length && script[pos] !== 0x68) {
+            // Read push opcode
+            let chunkLen: number;
+            if (script[pos] <= 0x4b) {
+              // Direct push (1-75 bytes)
+              chunkLen = script[pos]; pos++;
+            } else if (script[pos] === 0x4c) {
+              // OP_PUSHDATA1
+              chunkLen = script[pos + 1]; pos += 2;
+            } else if (script[pos] === 0x4d) {
+              // OP_PUSHDATA2
+              chunkLen = script[pos + 1] | (script[pos + 2] << 8); pos += 3;
+            } else if (script[pos] === 0x4e) {
+              // OP_PUSHDATA4
+              chunkLen = script[pos + 1] | (script[pos + 2] << 8) | (script[pos + 3] << 16) | (script[pos + 4] << 24); pos += 5;
+            } else {
+              break; // Unknown opcode
+            }
+            chunks.push(script.slice(pos, pos + chunkLen) as Buffer);
+            pos += chunkLen;
+          }
+
+          const payload = Buffer.concat(chunks);
+          console.log(`[amm-deploy]   Extracted payload: ${payload.length} bytes (${chunks.length} chunks)`);
+          console.log(`[amm-deploy]   First 4 bytes: ${payload[0]?.toString(16)} ${payload[1]?.toString(16)} ${payload[2]?.toString(16)} ${payload[3]?.toString(16)}`);
+
+          // Try to decompress
+          if (payload[0] === 0x1f && payload[1] === 0x8b) {
+            try {
+              const decompressed = zlib.gunzipSync(payload);
+              console.log(`[amm-deploy]   Decompressed: ${decompressed.length} bytes`);
+              // Check WASM magic
+              if (decompressed[0] === 0x00 && decompressed[1] === 0x61 && decompressed[2] === 0x73 && decompressed[3] === 0x6d) {
+                console.log(`[amm-deploy]   Valid WASM binary!`);
+              }
+            } catch (e: any) {
+              console.log(`[amm-deploy]   Decompression failed: ${e.message}`);
+            }
+          } else {
+            console.log(`[amm-deploy]   NOT gzip compressed (first bytes: ${payload.slice(0, 4).toString('hex')})`);
+          }
+        }
+      } catch (e) {
+        console.log(`[amm-deploy]   Parse error: ${e}`);
+      }
+    }
+  }
+
+  mineHarness.mineBlocks(1);
+  console.log(`[amm-deploy] Deployed [3,${slot}] → txid: ${txid}`);
+  return txid;
+}
+
+/**
+ * Discover auth tokens ([2:N] with balance=1) at an address.
+ * These are created during upgradeable proxy/beacon deployments.
+ */
+async function discoverAuthTokens(address: string): Promise<string[]> {
+  const result = await rpcCall('alkanes_protorunesbyaddress', [
+    { address, protocolTag: '1' }
+  ]);
+
+  const tokens: string[] = [];
+  if (result?.result?.outpoints) {
+    for (const outpoint of result.result.outpoints) {
+      const balances = outpoint.balance_sheet?.cached?.balances
+        || outpoint.runes
+        || [];
+      for (const entry of balances) {
+        const block = parseInt(entry.block ?? '0', 10);
+        const tx = parseInt(entry.tx ?? '0', 10);
+        const amount = parseInt(entry.amount ?? '0', 10);
+        // Auth tokens are at block=2 (amount varies by auth_units param)
+        if (block === 2 && amount > 0) {
+          const id = `${block}:${tx}`;
+          if (!tokens.includes(id)) {
+            tokens.push(id);
+          }
+        }
+      }
+    }
+  }
+
+  return tokens;
+}
+
+/**
+ * Deploy the full AMM infrastructure and return the factory proxy ID.
+ */
+export async function deployAmmContracts(
+  provider: WebProvider,
+  signer: TestSignerResult,
+  segwitAddress: string,
+  taprootAddress: string,
+  harness: any,
+): Promise<{ factoryId: string; beaconId: string; poolLogicId: string }> {
+  console.log('[amm-deploy] Loading WASM binaries...');
+
+  const poolWasm = loadWasm('pool.wasm');
+  const factoryWasm = loadWasm('factory.wasm');
+  // Use std WASMs for standard contracts (same alkanes-rs source as indexer)
+  const beaconProxyWasm = loadWasm('alkanes_std_beacon_proxy.wasm', true);
+  const upgradeableBeaconWasm = loadWasm('alkanes_std_upgradeable_beacon.wasm', true);
+  const upgradeableWasm = loadWasm('alkanes_std_upgradeable.wasm', true);
+
+  const authTokenWasm = loadWasm('alkanes_std_auth_token.wasm', true);
+
+  // Deploy order matches scripts/deploy-subfrost-regtest.sh EXACTLY
+  console.log('[amm-deploy] Deploying 6 contracts (matching deploy-subfrost-regtest.sh)...');
+
+  // Step 1: Auth Token Factory
+  await deployContract(
+    provider, signer, segwitAddress, taprootAddress,
+    authTokenWasm, SLOTS.AUTH_TOKEN_FACTORY, [100],
+    harness,
+  );
+
+  // Step 2: Beacon Proxy Template
+  await deployContract(
+    provider, signer, segwitAddress, taprootAddress,
+    beaconProxyWasm, SLOTS.POOL_BEACON_PROXY, [36863], // 0x8fff
+    harness,
+  );
+
+  // Step 3: Factory Logic Implementation
+  await deployContract(
+    provider, signer, segwitAddress, taprootAddress,
+    factoryWasm, SLOTS.FACTORY_LOGIC, [50],
+    harness,
+  );
+
+  // Step 4: Pool Logic Implementation
+  await deployContract(
+    provider, signer, segwitAddress, taprootAddress,
+    poolWasm, SLOTS.POOL_LOGIC, [50],
+    harness,
+  );
+
+  // Step 5: Factory Proxy (Upgradeable) → points to Factory Logic, auth_units=5
+  await deployContract(
+    provider, signer, segwitAddress, taprootAddress,
+    upgradeableWasm, SLOTS.FACTORY_PROXY, [0x7fff, 4, SLOTS.FACTORY_LOGIC, 5],
+    harness,
+  );
+
+  // Step 6: Upgradeable Beacon → points to Pool Logic, auth_units=5
+  await deployContract(
+    provider, signer, segwitAddress, taprootAddress,
+    upgradeableBeaconWasm, SLOTS.BEACON, [0x7fff, 4, SLOTS.POOL_LOGIC, 5],
+    harness,
+  );
+
+  // Verify contracts are deployed by checking if they respond
+  console.log('[amm-deploy] Verifying deployments...');
+  for (const [name, id] of Object.entries(INDEXED)) {
+    const [b, t] = id.split(':');
+    // Use opcode 0x8fff for beacon proxy (it only supports 0x7fff and 0x8fff)
+    const testOpcode = name === 'POOL_BEACON_PROXY' ? '36863' : '99';
+    const check = await rpcCall('alkanes_simulate', [{
+      target: { block: b, tx: t },
+      inputs: [testOpcode],
+      alkanes: [],
+      transaction: '0x',
+      block: '0x',
+      height: '500',
+      txindex: 0,
+      vout: 0,
+    }]);
+    const err = check?.result?.execution?.error;
+    const status = err ? `ERROR: ${err.slice(0, 80)}` : 'OK';
+    console.log(`[amm-deploy]   ${name} [${id}]: ${status}`);
+  }
+
+  // Test beacon proxy with its actual opcodes
+  const beaconProxyId = INDEXED.POOL_BEACON_PROXY;
+  const [bpB, bpT] = beaconProxyId.split(':');
+  for (const opcode of [0x8fff]) {
+    const check = await rpcCall('alkanes_simulate', [{
+      target: { block: bpB, tx: bpT },
+      inputs: [opcode.toString()],
+      alkanes: [],
+      transaction: '0x',
+      block: '0x',
+      height: '500',
+      txindex: 0,
+      vout: 0,
+    }]);
+    const err = check?.result?.execution?.error;
+    console.log(`[amm-deploy]   BEACON_PROXY opcode ${opcode}: ${err ? err.slice(0, 80) : 'OK'}`);
+  }
+
+  // Also test the upgradeable beacon
+  const beaconId = INDEXED.BEACON;
+  const [beB, beT] = beaconId.split(':');
+  const beaconCheck = await rpcCall('alkanes_simulate', [{
+    target: { block: beB, tx: beT },
+    inputs: ['32765'],  // 0x7ffd = get implementation
+    alkanes: [],
+    transaction: '0x',
+    block: '0x',
+    height: '500',
+    txindex: 0,
+    vout: 0,
+  }]);
+  console.log(`[amm-deploy]   BEACON get_impl: ${beaconCheck?.result?.execution?.error || 'data=' + beaconCheck?.result?.execution?.data?.slice(0, 40)}`);
+
+  // 6. Discover auth tokens created during proxy deployments.
+  //    The upgradeable proxy (0x7fff) creates an auth token at [2:N].
+  //    We need to find it and send it with the factory init call.
+  console.log('[amm-deploy] Discovering auth tokens...');
+
+  // Check both addresses for auth tokens
+  let authTokens = await discoverAuthTokens(taprootAddress);
+  console.log('[amm-deploy] Auth tokens on taproot:', authTokens);
+  if (authTokens.length === 0) {
+    authTokens = await discoverAuthTokens(segwitAddress);
+    console.log('[amm-deploy] Auth tokens on segwit:', authTokens);
+  }
+  // Also try checking all [2:N] via simulate
+  if (authTokens.length === 0) {
+    // Try querying the factory proxy for its auth token
+    const authCheck = await rpcCall('alkanes_simulate', [{
+      target: { block: '4', tx: SLOTS.FACTORY_PROXY.toString() },
+      inputs: ['32765'],  // 0x7ffd = get implementation (upgradeable query)
+      alkanes: [],
+      transaction: '0x',
+      block: '0x',
+      height: '500',
+      txindex: 0,
+      vout: 0,
+    }]);
+    console.log('[amm-deploy] Factory proxy impl check:', JSON.stringify(authCheck?.result?.execution).slice(0, 200));
+  }
+
+  if (authTokens.length === 0) {
+    throw new Error('No auth tokens found after proxy deployment. Factory init requires an auth token.');
+  }
+
+  // The factory proxy auth token is typically the first one created.
+  // Both the factory proxy and beacon create auth tokens.
+  // Factory proxy auth token = authTokens[0], beacon auth token = authTokens[1]
+  const factoryAuthToken = authTokens[0];
+  console.log('[amm-deploy] Using factory auth token:', factoryAuthToken);
+
+  // 7. Initialize Factory (opcode 0 on the deployed proxy)
+  //    Send the auth token as incomingAlkanes via inputRequirements.
+  console.log('[amm-deploy] Initializing factory...');
+  const [fpBlock, fpTx] = INDEXED.FACTORY_PROXY.split(':');
+  // Matches: [4,$AMM_FACTORY_PROXY_TX,0,$POOL_BEACON_PROXY_TX,4,$POOL_UPGRADEABLE_BEACON_TX]:v0:v0
+  const initProtostone = `[${fpBlock},${fpTx},0,${SLOTS.POOL_BEACON_PROXY},4,${SLOTS.BEACON}]:v0:v0`;
+
+  const initResult = await provider.alkanesExecuteWithStrings(
+    JSON.stringify([taprootAddress]),
+    `${factoryAuthToken}:1`,   // Send 1 auth token as input
+    initProtostone,
+    '1',
+    null,
+    JSON.stringify({
+      from: [segwitAddress, taprootAddress],
+      change_address: segwitAddress,
+      alkanes_change_address: taprootAddress,
+      auto_confirm: false,
+    }),
+  );
+
+  const initTxid = await signAndBroadcast(provider, initResult, signer, segwitAddress);
+  harness.mineBlocks(1);
+  console.log('[amm-deploy] Factory initialized:', initTxid);
+
+  return {
+    factoryId: INDEXED.FACTORY_PROXY,
+    beaconId: INDEXED.BEACON,
+    poolLogicId: INDEXED.POOL_LOGIC,
+  };
+}

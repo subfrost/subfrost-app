@@ -83,27 +83,21 @@
  * - Fee: 141 sats, ~1.08 sat/vB
  *
  * ============================================================================
- * ALKANE TRANSFER BUG FIX (2026-03-03)
+ * ALKANE TRANSFER — SDK PATH (replaces 650 LOC of manual PSBT construction)
  * ============================================================================
  *
- * **THE BUG:**
- * When sending alkanes (e.g., 0.1 DIESEL), UniSat showed "Spending 2 Inscriptions,
- * 21 Runes, 10 Alkanes" — the transaction would have spent ALL user's assets!
+ * Alkane sends now route through `alkanesExecuteTyped` (lib/alkanes/execute.ts),
+ * the same path used by every other mutation hook in this app and by the
+ * tier-1 integration test (`__tests__/tier1/send-alkane.test.ts`).
  *
- * **ROOT CAUSE:**
- * `buildAlkaneTransferPsbt()` was including ALL dust UTXOs (≤1000 sats) as inputs,
- * assuming they all contained the target alkane. But dust UTXOs can contain any
- * asset type: inscriptions, runes, or different alkanes.
+ * Inscription/rune protection is delegated to the SDK via `ordinalsStrategy`:
+ *   - `'preserve'` (default — driven by the WalletSettings toggle): SDK splits
+ *     inscribed/rune-bearing UTXOs into two outputs so the asset stays intact.
+ *   - `'burn'`: SDK is allowed to spend inscribed UTXOs as fee inputs.
  *
- * **THE FIX (in lib/alkanes/buildAlkaneTransferPsbt.ts):**
- * 1. Query `alkanes_protorunesbyaddress` to get alkane-specific outpoints
- * 2. Filter to find UTXOs containing the TARGET alkane ID only
- * 3. Only include those specific UTXOs as inputs
- *
- * **VERIFICATION:**
- * After fix, sending 0.1 DIESEL should only show spending alkanes (not inscriptions/runes).
- *
- * **Source:** User screenshot showing UniSat spending all assets when only sending DIESEL
+ * Historical context: a previous ad-hoc implementation (deleted) bundled ALL
+ * dust UTXOs as inputs and shipped a "collateral warning" UI to ask users for
+ * consent — both responsibilities now live in the SDK.
  */
 
 import { useState, useEffect, useRef, useMemo, forwardRef } from 'react';
@@ -111,6 +105,7 @@ import { X, Send, AlertCircle, CheckCircle, Loader2, ChevronDown, Coins, Externa
 import { useWallet } from '@/context/WalletContext';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { useTransactionConfirm } from '@/context/TransactionConfirmContext';
+import { useNotification } from '@/context/NotificationContext';
 import { useEnrichedWalletData } from '@/hooks/useEnrichedWalletData';
 import { useSandshrewProvider } from '@/hooks/useSandshrewProvider';
 import TokenIcon from '@/app/components/TokenIcon';
@@ -120,10 +115,9 @@ import { useTranslation } from '@/hooks/useTranslation';
 import { computeSendFee, estimateSelectionFee, DUST_THRESHOLD } from '@alkanes/ts-sdk';
 import * as bitcoin from 'bitcoinjs-lib';
 import * as ecc from '@bitcoinerlab/secp256k1';
-import { injectRedeemScripts } from '@/lib/psbt-patching';
-import { buildAlkaneTransferPsbt } from '@/lib/alkanes/buildAlkaneTransferPsbt';
-import { buildTransferProtostone } from '@/lib/alkanes/builders';
-import { getBitcoinNetwork } from '@/lib/alkanes/helpers';
+import { useBtcSendMutation, BtcSendStaleUtxosError } from '@/hooks/useBtcSendMutation';
+import { useAlkaneSendMutation } from '@/hooks/useAlkaneSendMutation';
+import { getHeight as rpcGetHeight, getAddressUtxos as rpcGetAddressUtxos } from '@/lib/alkanes/rpc';
 
 bitcoin.initEccLib(ecc);
 
@@ -237,7 +231,7 @@ function addressToSymbolic(address: string): string {
 }
 
 export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }: SendModalProps) {
-  const { address: taprootAddress, paymentAddress, network, walletType, account, signTaprootPsbt, signSegwitPsbt } = useWallet() as any;
+  const { address: taprootAddress, paymentAddress, network, walletType, account, signTaprootPsbt, signSegwitPsbt, browserWallet, txContext } = useWallet() as any;
   // Address strategy:
   // - BTC sends: Use UTXOs from BOTH SegWit and Taproot addresses (excluding those with alkanes/inscriptions/runes).
   //   Change goes to SegWit if available, otherwise Taproot.
@@ -247,15 +241,135 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
   // "insufficient funds" errors when most BTC was on Taproot address. Now we aggregate UTXOs
   // from both addresses while still protecting special UTXOs (inscriptions, alkanes, runes).
   const btcChangeAddress = paymentAddress || taprootAddress; // Prefer SegWit for change
-  const allBtcAddresses = [paymentAddress, taprootAddress].filter(Boolean) as string[];
+  // BTC sends source UTXOs ONLY from the segwit "payment" address on
+  // dual-address browser wallets (Xverse / OYL / Leather). Taproot is
+  // reserved for alkanes — picking a taproot UTXO for a BTC fee risks
+  // burning alkanes that share the dust output. Single-address wallets
+  // (UniSat / OKX) and keystore use whichever address they have.
+  const isDualAddressBrowser =
+    walletType === 'browser' && !!paymentAddress && !!taprootAddress && paymentAddress !== taprootAddress;
+  const btcFromAddresses = isDualAddressBrowser
+    ? [paymentAddress as string]
+    : ([paymentAddress, taprootAddress].filter(Boolean) as string[]);
   const alkaneSendAddress = taprootAddress;
   // Legacy alias for compatibility with existing code paths (alkane transfers)
   const btcSendAddress = btcChangeAddress;
   const { provider, isInitialized } = useAlkanesSDK();
   const alkaneProvider = useSandshrewProvider();
   const { requestConfirmation } = useTransactionConfirm();
+  const { showError } = useNotification();
   const { t } = useTranslation();
-  const { utxos, balances, refresh } = useEnrichedWalletData();
+  const { balances, refresh } = useEnrichedWalletData();
+  const btcSendMutation = useBtcSendMutation();
+  const alkaneSendMutation = useAlkaneSendMutation();
+
+  // Translate raw broadcast/signing errors into user-readable toast messages.
+  // Mirrors SwapShell.humanizeError for consistent error UX across the app.
+  const humanizeError = (raw: string): string => {
+    if (!raw) return t('send.failedBroadcast');
+    if (raw.includes('User rejected') || raw.includes('User denied') || raw.includes('user rejected') || raw.includes('cancelled') || raw.includes('Transaction rejected')) {
+      return t('errors.userCancelled');
+    }
+    if (raw.includes('Insufficient alkanes')) {
+      const match = raw.match(/need (\d+) of ([\d:]+), have (\d+)/);
+      if (match) {
+        const [, needed, tokenId, available] = match;
+        return t('errors.insufficientBalance', {
+          tokenId,
+          needed: (Number(needed) / 1e8).toFixed(4),
+          available: (Number(available) / 1e8).toFixed(4),
+        });
+      }
+    }
+    if (raw.includes('Insufficient funds') || raw.includes('insufficient funds')) {
+      const fundsMatch = raw.match(/need (\d+) sats/);
+      const needed = fundsMatch ? (Number(fundsMatch[1]) / 1e8).toFixed(6) : null;
+      return needed
+        ? t('errors.insufficientBtcWithAmount', { needed })
+        : t('errors.insufficientBtcGeneric');
+    }
+    if (raw.includes('dust') || raw.includes('dust limit')) {
+      return t('errors.dustAmount');
+    }
+    if (raw.includes('timeout') || raw.includes('Timeout')) {
+      return t('errors.requestTimeout');
+    }
+    return raw;
+  };
+
+  // Track txids the user broadcast in this session via the SDK's
+  // PendingTxStore (auto-populated by broadcast_transaction inside
+  // alkanes-web-sys — single source of truth). Unconfirmed UTXOs
+  // whose txid is in this set are treated as available for the next
+  // send — the SDK's selector also accepts them, this overlay just
+  // mirrors that decision into the wallet UI's pre-flight check.
+  //
+  // Without this, "send back-to-back" UX is broken: tx 1's change
+  // UTXO is mempool-only until ~10min confirmation, and the
+  // confirmed-alkane-carriers don't have enough sats for tx 2.
+  const [ourPendingTxids, setOurPendingTxids] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    if (!isOpen || typeof window === 'undefined') return;
+    if (!provider) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        // Try SDK-side list first (auto-populated). Falls back to
+        // IndexedDB store if the SDK method isn't available (older
+        // SDK build).
+        let hexes: string[] = [];
+        const sdkList = (provider as any).pendingTxStoreList;
+        if (typeof sdkList === 'function') {
+          hexes = (await sdkList.call(provider)) || [];
+        } else {
+          const { pendingTxStore } = await import('@/lib/alkanes/pendingTxStore');
+          hexes = await pendingTxStore.list();
+        }
+        const { Transaction } = await import('bitcoinjs-lib');
+        const ids = new Set(hexes.map((h) => Transaction.fromHex(h).getId()));
+        if (!cancelled) setOurPendingTxids(ids);
+      } catch (e) {
+        console.warn('[SendModal] pending-tx-store load failed:', e);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [isOpen, provider]);
+
+  // Fetch UTXOs via esplora when modal opens.
+  const [esploraUtxos, setEsploraUtxos] = useState<any[]>([]);
+  useEffect(() => {
+    if (!isOpen) return;
+    const addresses = [account?.taproot?.address, account?.nativeSegwit?.address].filter(Boolean) as string[];
+    if (addresses.length === 0) return;
+    const isRegtest = network === 'regtest' || network === 'regtest-local' || network === 'subfrost-regtest' || network === 'qubitcoin-regtest';
+
+    (async () => {
+    // SDK-mediated reads — see lib/alkanes/rpc.ts for the canonical layer.
+    // No raw fetch / metashrew_view calls in app code.
+    const [heightResult, utxoResults] = await Promise.all([
+      rpcGetHeight(network || 'mainnet').catch(() => 0),
+      Promise.all(addresses.map(async (addr) => {
+        try {
+          const utxos = await rpcGetAddressUtxos(network || 'mainnet', addr);
+          return utxos.map((u) => ({ ...u, _addr: addr }));
+        } catch { return []; }
+      })),
+    ]);
+
+    const currentHeight = heightResult;
+    setEsploraUtxos(utxoResults.flat().map((u: any) => {
+      const height = u.status?.block_height || 0;
+      const confirmations = currentHeight > 0 && height > 0 ? currentHeight - height + 1 : 0;
+      return {
+        txid: u.txid, vout: u.vout, value: u.value, address: u._addr,
+        status: { confirmed: u.status?.confirmed ?? true, block_height: height },
+        _immature: isRegtest && confirmations > 0 && confirmations < 100,
+      };
+    }).filter((u: any) => !u._immature));
+    })();
+  }, [isOpen, account, network]);
+
+  const utxos = { p2wpkh: [] as any[], p2tr: esploraUtxos, all: esploraUtxos };
   const { selection: feeSelection, setSelection: setFeeSelection, custom: customFeeRate, setCustom: setCustomFeeRate, feeRate, presets } = useFeeRate({ storageKey: 'subfrost-send-fee-rate' });
 
   const [recipientAddress, setRecipientAddress] = useState('');
@@ -274,21 +388,6 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
   // SEND TRANSACTION because small amounts (1000 sats) always have >2% fee ratio.
   // If user already clicked "PROCEED ANYWAY", we bypass the check on retry.
   const [feeWarningAcknowledged, setFeeWarningAcknowledged] = useState(false);
-  // JOURNAL (2026-03-03): Collateral asset warning for alkane transfers.
-  // If the UTXOs containing the target alkane ALSO contain inscriptions/runes,
-  // those assets will be transferred to the recipient (not returned to sender).
-  // JOURNAL (2026-03-03): Added unverifiedInscriptionRunes for mainnet where
-  // ord_outputs RPC returns "JSON API disabled" - we can't verify what's on UTXOs.
-  const [collateralWarning, setCollateralWarning] = useState<{
-    hasInscriptions: boolean;
-    hasRunes: boolean;
-    otherAlkanesCount: number;
-    utxoCount: number;
-    unverifiedInscriptionRunes?: boolean;
-  } | null>(null);
-  const [showCollateralWarning, setShowCollateralWarning] = useState(false);
-  const [collateralAcknowledged, setCollateralAcknowledged] = useState(false);
-  const [pendingPsbtBase64, setPendingPsbtBase64] = useState<string | null>(null);
   const [estimatedFee, setEstimatedFee] = useState(0);
   const [estimatedFeeRate, setEstimatedFeeRate] = useState(0);
   const [focusedField, setFocusedField] = useState<string | null>(null);
@@ -341,34 +440,34 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
 
   const frozenUtxos = getFrozenUtxos();
 
-  // Filter available UTXOs for BTC sends:
-  // - Only confirmed UTXOs (pending cannot be reliably spent)
-  // - From either SegWit or Taproot address (aggregate both for full balance)
-  // - Exclude frozen, inscriptions, runes, alkanes (protect special UTXOs)
+  // BTC-send UTXO candidates: confirmed, on a btcFromAddresses entry, not
+  // frozen. inscriptions/runes/alkanes filter is conditional — for
+  // dual-address browser the segwit payment address by design doesn't
+  // hold those (Xverse / OYL / Leather route ordinals to taproot). For
+  // keystore / single-address browser the address may share alkanes with
+  // BTC, so the filter stays.
   const availableUtxos = utxos.all.filter((utxo) => {
-    // Only include confirmed UTXOs - pending UTXOs cannot be reliably spent
-    if (!utxo.status.confirmed) return false;
-    // Include UTXOs from either SegWit or Taproot address
-    if (!allBtcAddresses.includes(utxo.address)) return false;
+    // Allow unconfirmed UTXOs ONLY if they originate from a tx the
+    // user broadcast in this session. The SDK's PendingTxStore
+    // tracks those — see `ourPendingTxids` above. This overlays
+    // optimistic pending state on top of the confirmed UTXO set so
+    // back-to-back sends don't get blocked by indexer lag.
+    if (!utxo.status.confirmed && !ourPendingTxids.has(utxo.txid)) return false;
+    if (!btcFromAddresses.includes(utxo.address)) return false;
 
     const utxoKey = `${utxo.txid}:${utxo.vout}`;
     if (frozenUtxos.has(utxoKey)) return showFrozenUtxos;
-    if (utxo.inscriptions && utxo.inscriptions.length > 0) return false;
-    if (utxo.runes && Object.keys(utxo.runes).length > 0) return false;
-    if (utxo.alkanes && Object.keys(utxo.alkanes).length > 0) return false;
+
+    if (!isDualAddressBrowser) {
+      if (utxo.inscriptions && utxo.inscriptions.length > 0) return false;
+      if (utxo.runes && Object.keys(utxo.runes).length > 0) return false;
+      if (utxo.alkanes && Object.keys(utxo.alkanes).length > 0) return false;
+    }
     return true;
   });
 
-  // Debug: Log UTXO distribution
-  console.log('[SendModal] BTC addresses:', allBtcAddresses);
-  console.log('[SendModal] Total UTXOs:', utxos.all.length);
-  console.log('[SendModal] UTXOs by address:', {
-    segwit: utxos.all.filter(u => u.address === paymentAddress).length,
-    taproot: utxos.all.filter(u => u.address === taprootAddress).length,
-    other: utxos.all.filter(u => !allBtcAddresses.includes(u.address)).length,
-  });
-  console.log('[SendModal] Available UTXOs (both addresses, clean):', availableUtxos.length);
-  console.log('[SendModal] Total value available:', (availableUtxos.reduce((sum, u) => sum + u.value, 0) / 1e8).toFixed(8), 'BTC');
+  // UTXO distribution logged only in dev when data actually changes
+
 
   const totalSelectedValue = Array.from(selectedUtxos)
     .map((key) => {
@@ -396,11 +495,6 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
       setIsProcessing(false);
       setFeeWarningAcknowledged(false);
       setShowFeeWarning(false);
-      // Reset collateral warning state
-      setCollateralWarning(null);
-      setShowCollateralWarning(false);
-      setCollateralAcknowledged(false);
-      setPendingPsbtBase64(null);
     }
   }, [isOpen]);
 
@@ -550,7 +644,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
 
       for (const utxo of sorted) {
         const potentialFee = estimateFee(selected.size + 1);
-        const needed = amountSats + potentialFee;
+        const needed = amountSats + 546 + potentialFee; // +546 for alkane safety output
 
         selected.add(`${utxo.txid}:${utxo.vout}`);
         total += utxo.value;
@@ -565,9 +659,10 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
         }
       }
 
-      // Compute accurate fee accounting for dust threshold on change output
-      const feeResult = computeSendFee({ inputCount: selected.size, sendAmount: amountSats, totalInputValue: total, feeRate: feeRateNum });
-      const required = amountSats + feeResult.fee;
+      // Compute accurate fee. +546 for the alkane safety output (always present).
+      const SAFETY_SATS = 546;
+      const feeResult = computeSendFee({ inputCount: selected.size, sendAmount: amountSats + SAFETY_SATS, totalInputValue: total, feeRate: feeRateNum });
+      const required = amountSats + SAFETY_SATS + feeResult.fee;
 
       if (total < required) {
         // Check if we have enough total balance
@@ -614,19 +709,15 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
 
     const estimatedFeeSats = feeResult.fee;
 
-    // Safety checks:
-    // 1. Fee is more than 2% of amount
-    // 2. Fee is more than 0.01 BTC
-    // 3. Fee rate is more than 1000 sat/vbyte
-    // 4. Using more than 100 UTXOs
-    const feePercentage = (estimatedFeeSats / amountSats) * 100;
-    const feeTooHigh = estimatedFeeSats > 0.01 * 100000000; // 0.01 BTC
-    const feeRateTooHigh = feeRateNum > 1000;
-    const tooManyInputs = numInputs > 100;
-    const feePercentageTooHigh = feePercentage > 2;
+    // Safety checks: warn only on genuinely irrational fees.
+    // (A fee/amount % check is not useful — for small sends the minimum-size tx
+    // always produces a high ratio, so it would warn on every legitimate dust send.)
+    const feeTooHigh = estimatedFeeSats > 0.01 * 100000000; // > 0.01 BTC absolute
+    const feeRateTooHigh = feeRateNum > 1000;               // > 1000 sat/vB
+    const tooManyInputs = numInputs > 100;                   // bloated tx
 
     // Skip fee warning if user already acknowledged it (prevents looping on retry)
-    if (!feeWarningAcknowledged && (feeTooHigh || feeRateTooHigh || tooManyInputs || feePercentageTooHigh)) {
+    if (!feeWarningAcknowledged && (feeTooHigh || feeRateTooHigh || tooManyInputs)) {
       setShowFeeWarning(true);
       setFeeWarningCountdown(3);
     } else {
@@ -643,251 +734,23 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
     handleBroadcast();
   };
 
-  // JOURNAL (2026-03-03): Handler for proceeding with collateral warning acknowledgment
-  // This is called when user confirms they want to proceed despite inscriptions/runes
-  // being on the same UTXOs as their alkanes.
-  const proceedWithCollateralWarning = () => {
-    console.log('[SendModal] User acknowledged collateral warning, proceeding...');
-    setShowCollateralWarning(false);
-    setCollateralAcknowledged(true);
-    // Re-trigger the alkane send flow - it will now skip the warning
-    handleBroadcast();
-  };
-
-  const cancelCollateralWarning = () => {
-    console.log('[SendModal] User cancelled due to collateral warning');
-    setShowCollateralWarning(false);
-    setCollateralWarning(null);
-    setPendingPsbtBase64(null);
-    setStep('input');
-  };
-
   const handleBroadcast = async () => {
     setError('');
 
-    try {
-      const amountSats = Math.floor(parseFloat(amount) * 100000000);
+    const amountSats = Math.floor(parseFloat(amount) * 100000000);
 
-      // For browser wallets, build and sign PSBT manually
-      if (walletType === 'browser') {
-        console.log('[SendModal] Browser wallet - building PSBT...');
-        console.log('[SendModal] Recipient:', recipientAddress);
-        console.log('[SendModal] Amount:', amount, 'BTC (', amountSats, 'sats)');
-        console.log('[SendModal] Fee rate:', feeRate, 'sat/vB');
-        console.log('[SendModal] From addresses:', allBtcAddresses);
-
-        // Fetch fresh UTXOs from ALL addresses to verify selected UTXOs still exist
-        // Use the esplora REST API proxy, not JSON-RPC (which returns 0 results on mainnet)
-        console.log('[SendModal] Fetching fresh UTXOs from esplora for all addresses...');
-        const freshUtxos: Array<{ txid: string; vout: number; value: number; status: { confirmed: boolean } }> = [];
-
-        for (const addr of allBtcAddresses) {
-          const freshUtxosResponse = await fetch(`/api/esplora/address/${addr}/utxo?network=${network}`);
-          if (!freshUtxosResponse.ok) {
-            console.error(`[SendModal] Failed to fetch UTXOs for ${addr}: ${freshUtxosResponse.status}`);
-            continue;
-          }
-          const addrUtxos = await freshUtxosResponse.json();
-          const mappedUtxos = (Array.isArray(addrUtxos) ? addrUtxos : []).map((u: any) => ({
-            txid: u.txid,
-            vout: u.vout,
-            value: u.value,
-            status: u.status || { confirmed: true },
-          }));
-          freshUtxos.push(...mappedUtxos);
-        }
-
-        console.log('[SendModal] Fresh UTXOs fetched:', freshUtxos.length);
-
-        // Verify selected UTXOs still exist in fresh data
-        const freshUtxoKeys = new Set(freshUtxos.map(u => `${u.txid}:${u.vout}`));
-        const missingUtxos = Array.from(selectedUtxos).filter(key => !freshUtxoKeys.has(key));
-
-        if (missingUtxos.length > 0) {
-          console.error('[SendModal] Selected UTXOs no longer exist:', missingUtxos);
-          console.log('[SendModal] Refreshing wallet data and returning to input step...');
-          // Invalidate cache and reset to input step so user must re-select UTXOs
-          // NOTE: We do NOT reset feeWarningAcknowledged here - if user already acknowledged
-          // the high fee, we preserve that for the retry so they don't see the warning again
-          await refresh();
-          setSelectedUtxos(new Set());
-          setShowFeeWarning(false);
-          setStep('input');
-          setError(t('send.utxosStale'));
-          return; // Exit early - don't throw, just reset state
-        }
-
-        // Determine Bitcoin network
-        const btcNetwork = getBitcoinNetwork(network);
-
-        // Create PSBT
-        const psbt = new bitcoin.Psbt({ network: btcNetwork });
-
-        // Add inputs from selected UTXOs (now verified to exist in fresh data)
-        // JOURNAL (2026-03-01): Must add proper signing metadata for each input type:
-        // - Taproot (P2TR): requires tapInternalKey for wallet to identify signing key
-        // - SegWit (P2WPKH): witnessUtxo is sufficient, but bip32Derivation helps
-        // Without tapInternalKey, OYL fails with "Can not sign for input #N with the key..."
-        let totalInputValue = 0;
-        const tapInternalKeyHex = account?.taproot?.pubKeyXOnly;
-        // Use pure Uint8Array — wallets reject Buffer with "Expected Uint8Array" error
-        const tapInternalKey = tapInternalKeyHex ? new Uint8Array(Buffer.from(tapInternalKeyHex, 'hex')) : undefined;
-
-        for (const utxoKey of Array.from(selectedUtxos)) {
-          const [txid, voutStr] = utxoKey.split(':');
-          const vout = parseInt(voutStr);
-
-          // Find the UTXO in our cached data to get its address
-          const cachedUtxo = availableUtxos.find(u => u.txid === txid && u.vout === vout);
-          const utxoAddress = cachedUtxo?.address;
-
-          // Use fresh UTXO data for value
-          const freshUtxo = freshUtxos.find(u => u.txid === txid && u.vout === vout);
-          if (!freshUtxo) {
-            throw new Error(`UTXO not found in fresh data: ${utxoKey}`);
-          }
-
-          // Fetch transaction hex for witness UTXO via local API proxy (avoids CORS)
-          const txHexUrl = `/api/esplora/tx/${txid}/hex?network=${network}`;
-          console.log('[SendModal] Fetching tx hex from:', txHexUrl);
-
-          const txHexResponse = await fetch(txHexUrl);
-          if (!txHexResponse.ok) {
-            throw new Error(`Failed to fetch transaction ${txid}: ${txHexResponse.statusText}`);
-          }
-          const txHex = await txHexResponse.text();
-          const tx = bitcoin.Transaction.fromHex(txHex);
-
-          // Determine if this is a Taproot input based on the UTXO's address
-          const isTaprootInput = utxoAddress && (
-            utxoAddress.startsWith('bc1p') ||
-            utxoAddress.startsWith('tb1p') ||
-            utxoAddress.startsWith('bcrt1p')
-          );
-
-          const inputData: any = {
-            hash: txid,
-            index: vout,
-            witnessUtxo: {
-              script: tx.outs[vout].script,
-              value: BigInt(freshUtxo.value),
-            },
-          };
-
-          // Add tapInternalKey for Taproot inputs so wallet knows which key to use
-          if (isTaprootInput && tapInternalKey) {
-            inputData.tapInternalKey = tapInternalKey;
-            console.log(`[SendModal] Input ${psbt.txInputs.length}: Taproot from ${utxoAddress}`);
-          } else {
-            console.log(`[SendModal] Input ${psbt.txInputs.length}: SegWit from ${utxoAddress}`);
-          }
-
-          psbt.addInput(inputData);
-          totalInputValue += freshUtxo.value;
-        }
-
-        // Add recipient output
-        psbt.addOutput({
-          address: normalizedRecipientAddress,
-          value: BigInt(amountSats),
-        });
-
-        // Compute fee and change, accounting for dust threshold
-        const txFeeResult = computeSendFee({ inputCount: psbt.txInputs.length, sendAmount: amountSats, totalInputValue, feeRate });
-
-        if (txFeeResult.numOutputs === 2 && txFeeResult.change > 0) {
-          psbt.addOutput({
-            address: btcChangeAddress,
-            value: BigInt(txFeeResult.change),
-          });
-        }
-
-        // Convert PSBT to base64 for signing
-        let psbtBase64 = psbt.toBase64();
-        console.log('[SendModal] PSBT created, signing with browser wallet...');
-
-        // Inject redeemScript for P2SH-P2WPKH wallets (see lib/psbt-patching.ts)
-        if (account?.nativeSegwit?.pubkey && paymentAddress) {
-          const psbtForPatch = bitcoin.Psbt.fromBase64(psbtBase64, { network: btcNetwork });
-          const patched = injectRedeemScripts(psbtForPatch, {
-            paymentAddress: paymentAddress,
-            pubkeyHex: account.nativeSegwit.pubkey,
-            network: btcNetwork,
-          });
-          if (patched > 0) {
-            console.log('[SendModal] BTC send: patched', patched, 'P2SH inputs with redeemScript');
-          }
-          psbtBase64 = psbtForPatch.toBase64();
-        }
-
-        // Browser wallets sign all input types in a single call.
-        // Use signTaprootPsbt which has the Xverse direct-call bypass.
-        const signedPsbtBase64 = await signTaprootPsbt(psbtBase64);
-
-        // Show broadcasting spinner now that signing is complete
-        setStep('broadcasting');
-
-        // Finalize and extract transaction
-        // JOURNAL (2026-03-03): UniSat with autoFinalized: true returns already-finalized PSBTs.
-        // Calling finalizeAllInputs() on a finalized PSBT throws an error.
-        // We try to extract directly first; if that fails, try finalizing.
-        const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtBase64, { network: btcNetwork });
-        let txObj;
-        try {
-          // Try extracting directly (works if already finalized)
-          txObj = signedPsbt.extractTransaction();
-          console.log('[SendModal] PSBT was already finalized by wallet');
-        } catch (extractError: any) {
-          // If extraction fails, try finalizing first
-          console.log('[SendModal] PSBT not finalized yet, finalizing...', extractError.message);
-          try {
-            signedPsbt.finalizeAllInputs();
-            txObj = signedPsbt.extractTransaction();
-          } catch (finalizeError: any) {
-            console.error('[SendModal] Failed to finalize PSBT:', finalizeError);
-            throw new Error(`Failed to finalize transaction: ${finalizeError.message}`);
-          }
-        }
-        const txHex = txObj.toHex();
-        const computedTxid = txObj.getId();
-
-        // Log actual vsize and effective fee rate for verification
-        const actualVsize = txObj.virtualSize();
-        const actualFee = totalInputValue - amountSats - (txFeeResult.numOutputs === 2 ? txFeeResult.change : 0);
-        console.log(`[SendModal] Actual vsize: ${actualVsize}, fee: ${actualFee} sats, effective rate: ${(actualFee / actualVsize).toFixed(2)} sat/vB`);
-        console.log('[SendModal] Broadcasting...');
-
-        // Broadcast using provider
-        if (!alkaneProvider) {
-          throw new Error(t('send.providerNotInitialized'));
-        }
-
-        const broadcastTxid = await alkaneProvider.broadcastTransaction(txHex);
-        console.log('[SendModal] Transaction broadcast successful, txid:', broadcastTxid);
-
-        setTxid(broadcastTxid || computedTxid);
-        setStep('success');
-        onSuccess?.(broadcastTxid || computedTxid);
-
-        setTimeout(() => {
-          refresh();
-        }, 1000);
-
+    // Keystore wallets show an in-app confirmation modal (browser wallets
+    // surface their own popup at sign time, so we don't double-prompt).
+    if (walletType === 'keystore') {
+      if (!provider || !isInitialized) {
+        setError(t('send.providerNotInitialized'));
+        return;
+      }
+      if (!provider.walletIsLoaded()) {
+        setError(t('send.walletNotLoaded'));
         return;
       }
 
-      // For keystore wallets, use WASM provider
-      if (!provider || !isInitialized) {
-        throw new Error(t('send.providerNotInitialized'));
-      }
-
-      // Check if wallet is loaded in provider
-      if (!provider.walletIsLoaded()) {
-        throw new Error(t('send.walletNotLoaded'));
-      }
-
-      // Request user confirmation before broadcasting
-      console.log('[SendModal] Keystore wallet - requesting user confirmation...');
       const approved = await requestConfirmation({
         type: 'send',
         title: t('send.confirmSend'),
@@ -896,62 +759,61 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
         recipient: recipientAddress,
         feeRate: feeRate,
       });
-
       if (!approved) {
-        console.log('[SendModal] User rejected transaction');
         setError(t('send.transactionRejected'));
         return;
       }
-      console.log('[SendModal] User approved transaction');
-
-      setStep('broadcasting');
-
-      console.log('[SendModal] Sending via WASM provider...');
-      console.log('[SendModal] Recipient:', recipientAddress);
-      console.log('[SendModal] Amount:', amount, 'BTC (', amountSats, 'sats)');
-      console.log('[SendModal] Fee rate:', feeRate, 'sat/vB');
-      console.log('[SendModal] From address:', btcSendAddress);
-
-      // Use WASM provider's walletSend method
-      const sendParams = {
-        address: normalizedRecipientAddress,
-        amount: amountSats,
-        fee_rate: feeRate,
-        from: [btcSendAddress],
-        lock_alkanes: true,
-        auto_confirm: true,
-      };
-
-      const result = await provider.walletSend(JSON.stringify(sendParams));
-
-      console.log('[SendModal] Transaction broadcast result:', result);
-
-      // Extract txid from result
-      const txidResult = typeof result === 'string' ? result : result?.txid || result?.tx_id;
-      if (!txidResult) {
-        throw new Error(t('send.noTxidReturned'));
-      }
-
-      setTxid(txidResult);
-      setStep('success');
-      onSuccess?.(txidResult);
-
-      // Refresh wallet data
-      setTimeout(() => {
-        refresh();
-      }, 1000);
-    } catch (err: any) {
-      console.error('[SendModal] Transaction failed:', err);
-
-      let errorMessage = err.message || t('send.failedBroadcast');
-
-      setError(errorMessage);
-      // Go back to input step to allow re-selection of UTXOs
-      // This prevents looping between confirm and error states
-      setSelectedUtxos(new Set());
-      setShowFeeWarning(false);
-      setStep('input');
     }
+
+    setStep('broadcasting');
+
+    btcSendMutation.mutate(
+      {
+        recipientAddress: normalizedRecipientAddress,
+        amountSats,
+        feeRate,
+        selectedUtxoKeys: Array.from(selectedUtxos),
+        fromAddresses: btcFromAddresses,
+      },
+      {
+        onSuccess: (result) => {
+          const finalTxid = result.transactionId || '';
+          setTxid(finalTxid);
+          setStep('success');
+          onSuccess?.(finalTxid);
+          // Explicit refresh in addition to the mutation's queryClient
+          // invalidation — useEnrichedWalletData has its own polling cycle
+          // and benefits from an immediate nudge after a send.
+          setTimeout(() => {
+            refresh();
+          }, 1000);
+        },
+        onError: (err: any) => {
+          console.error('[SendModal] BTC send failed:', err);
+
+          // Selected UTXOs disappeared between auto-select and broadcast
+          // (likely spent by another session). Reset UI for re-selection.
+          if (err instanceof BtcSendStaleUtxosError) {
+            refresh();
+            setSelectedUtxos(new Set());
+            setShowFeeWarning(false);
+            setStep('input');
+            setError(t('send.utxosStale'));
+            return;
+          }
+
+          const rawMessage = err?.message || String(err) || t('send.failedBroadcast');
+          const friendlyMessage = humanizeError(rawMessage);
+          showError(friendlyMessage);
+          setError(friendlyMessage);
+          // Go back to input step so user can re-select UTXOs and retry
+          // without bouncing between confirm and error states.
+          setSelectedUtxos(new Set());
+          setShowFeeWarning(false);
+          setStep('input');
+        },
+      },
+    );
   };
 
   /**
@@ -964,34 +826,19 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
     setIsProcessing(true);
 
     try {
-      if (!alkaneProvider) {
-        throw new Error(t('send.providerNotInitialized'));
-      }
-
-      if (!selectedAlkaneId) {
-        throw new Error(t('send.noAlkaneSelected'));
-      }
+      if (!selectedAlkaneId) throw new Error(t('send.noAlkaneSelected'));
 
       const selectedAlkane = balances.alkanes.find(a => a.alkaneId === selectedAlkaneId);
-      if (!selectedAlkane) {
-        throw new Error(t('send.alkaneNotFoundInBalances'));
-      }
+      if (!selectedAlkane) throw new Error(t('send.alkaneNotFoundInBalances'));
 
-      // Validate recipient address (should be Taproot for alkane receives)
-      if (!validateAddress(recipientAddress)) {
-        throw new Error(t('send.invalidAddress'));
-      }
+      if (!validateAddress(recipientAddress)) throw new Error(t('send.invalidAddress'));
 
-      // Convert amount to base units (respecting decimals)
       const decimals = selectedAlkane.decimals || 8;
       const amountFloat = parseFloat(amount);
-      if (isNaN(amountFloat) || amountFloat <= 0) {
-        throw new Error(t('send.invalidAmount'));
-      }
+      if (isNaN(amountFloat) || amountFloat <= 0) throw new Error(t('send.invalidAmount'));
 
       const amountBaseUnits = BigInt(Math.floor(amountFloat * Math.pow(10, decimals)));
       const balanceBaseUnits = BigInt(selectedAlkane.balance);
-
       if (amountBaseUnits > balanceBaseUnits) {
         throw new Error(t('send.insufficientBalanceDetailed', {
           have: selectedAlkane.balance,
@@ -999,25 +846,8 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
         }));
       }
 
-      console.log('[SendModal] ========== ALKANE TRANSFER START ==========');
-      console.log('[SendModal] Alkane ID:', selectedAlkaneId);
-      console.log('[SendModal] Alkane symbol:', selectedAlkane.symbol);
-      console.log('[SendModal] Alkane decimals:', decimals);
-      console.log('[SendModal] Amount (display):', amount);
-      console.log('[SendModal] Amount (base units):', amountBaseUnits.toString());
-      console.log('[SendModal] Balance (base units):', balanceBaseUnits.toString());
-      console.log('[SendModal] Recipient:', recipientAddress);
-      console.log('[SendModal] Fee rate:', feeRate, 'sat/vB');
-      console.log('[SendModal] Network:', network);
-      console.log('[SendModal] Wallet type:', walletType);
-      console.log('[SendModal] Taproot address (alkaneSendAddress):', alkaneSendAddress);
-      console.log('[SendModal] Payment address (btcSendAddress):', btcSendAddress);
-      console.log('[SendModal] Account taproot pubkey:', account?.taproot?.pubKeyXOnly?.slice(0, 16) + '...');
-      console.log('[SendModal] Account segwit pubkey:', account?.nativeSegwit?.pubkey?.slice(0, 16) + '...');
-
-      // For keystore wallets, request user confirmation before signing
+      // Keystore confirmation modal — browser wallets surface their own popup at sign time.
       if (walletType === 'keystore') {
-        console.log('[SendModal] Keystore wallet - requesting user confirmation...');
         const approved = await requestConfirmation({
           type: 'send',
           title: t('send.confirmAlkaneSend'),
@@ -1026,165 +856,33 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
           recipient: recipientAddress,
           feeRate: feeRate,
         });
-
         if (!approved) {
-          console.log('[SendModal] User rejected transaction');
           setError(t('send.transactionRejected'));
           return;
         }
-        console.log('[SendModal] User approved transaction');
       }
 
-      // Determine Bitcoin network for PSBT operations
-      const btcNetwork = getBitcoinNetwork(network);
+      const result = await alkaneSendMutation.mutateAsync({
+        alkaneId: selectedAlkaneId,
+        amountBaseUnits: amountBaseUnits.toString(),
+        recipientAddress: normalizedRecipientAddress,
+        feeRate,
+      });
 
-      // Determine wallet mode
-      const hasBothAddresses = !!btcSendAddress && !!alkaneSendAddress && btcSendAddress !== alkaneSendAddress;
-      const isSingleAddressMode = !hasBothAddresses;
-      const primaryAddress = alkaneSendAddress || btcSendAddress;
-      const primaryAddressType = detectAddressType(primaryAddress);
-
-      console.log('[SendModal] Wallet mode:', isSingleAddressMode
-        ? `Single-address (${primaryAddressType.type})`
-        : `Dual-address (taproot: ${alkaneSendAddress}, payment: ${btcSendAddress})`);
-
-      // Build PSBT in pure JS (bypasses WASM/metashrew entirely)
-      console.log('[SendModal] Calling buildAlkaneTransferPsbt...');
-      let rawPsbtBase64: string;
-      let estimatedFee: number;
-      try {
-        const result = await buildAlkaneTransferPsbt({
-          alkaneId: selectedAlkaneId,
-          amount: amountBaseUnits,
-          senderTaprootAddress: alkaneSendAddress,
-          senderPaymentAddress: hasBothAddresses ? btcSendAddress : undefined,
-          recipientAddress: normalizedRecipientAddress,
-          tapInternalKeyHex: account?.taproot?.pubKeyXOnly,
-          paymentPubkeyHex: account?.nativeSegwit?.pubkey,
-          feeRate,
-          network: btcNetwork,
-          networkName: network,
-        });
-        rawPsbtBase64 = result.psbtBase64;
-        estimatedFee = result.estimatedFee;
-        console.log('[SendModal] buildAlkaneTransferPsbt SUCCESS');
-        console.log('[SendModal] Estimated fee:', estimatedFee, 'sats');
-        console.log('[SendModal] PSBT base64 length:', rawPsbtBase64.length);
-
-        // JOURNAL (2026-03-03): Check for collateral assets on the selected UTXOs.
-        // JOURNAL (2026-03-14): Collateral warning is gated on the "Ignore Ordinals/Runes"
-        // setting in WalletSettings. Currently hardcoded to ON (ord backend not yet available),
-        // meaning we treat all UTXOs as spendable and skip the warning. When ord detection
-        // becomes available and the toggle is made functional, set ignoreOrdinals=false to
-        // activate this warning for verified inscriptions/runes.
-        const ignoreOrdinals = true;  // TODO: Read from WalletSettings context when toggle is functional
-        const ignoreRunes = true;     // TODO: Read from WalletSettings context when toggle is functional
-
-        const needsWarning = !ignoreOrdinals && !ignoreRunes && result.collateralWarning && (
-          result.collateralWarning.hasInscriptions ||
-          result.collateralWarning.hasRunes ||
-          result.collateralWarning.unverifiedInscriptionRunes
-        );
-        if (needsWarning && result.collateralWarning) {
-          console.warn('[SendModal] COLLATERAL WARNING: UTXOs may contain inscriptions/runes!');
-          console.warn('[SendModal] collateralWarning:', result.collateralWarning);
-
-          // If user hasn't acknowledged the collateral warning, show it and stop
-          if (!collateralAcknowledged) {
-            setCollateralWarning(result.collateralWarning);
-            setShowCollateralWarning(true);
-            setPendingPsbtBase64(rawPsbtBase64);
-            setIsProcessing(false);
-            return; // Stop here and wait for user acknowledgment
-          }
-        }
-      } catch (psbtError: any) {
-        console.error('[SendModal] buildAlkaneTransferPsbt FAILED:', psbtError);
-        console.error('[SendModal] Error message:', psbtError.message);
-        console.error('[SendModal] Error stack:', psbtError.stack);
-        throw psbtError;
-      }
-
-      // Inject redeemScripts for P2SH-P2WPKH wallets (Xverse) if needed
-      let psbtBase64 = rawPsbtBase64;
-      if (btcSendAddress && account?.nativeSegwit?.pubkey &&
-          (btcSendAddress.startsWith('3') || btcSendAddress.startsWith('2'))) {
-        const psbtObj = bitcoin.Psbt.fromBase64(psbtBase64, { network: btcNetwork });
-        const patched = injectRedeemScripts(psbtObj, {
-          paymentAddress: btcSendAddress,
-          pubkeyHex: account.nativeSegwit.pubkey,
-          network: btcNetwork,
-        });
-        if (patched > 0) {
-          console.log('[SendModal] Injected redeemScript into', patched, 'P2SH inputs');
-        }
-        psbtBase64 = psbtObj.toBase64();
-      }
-
-      const isBrowserWallet = walletType === 'browser';
-
-      // Sign the PSBT
-      let signedPsbtBase64: string;
-      if (isBrowserWallet) {
-        console.log('[SendModal] Browser wallet: signing all inputs in single call...');
-        signedPsbtBase64 = await signTaprootPsbt(psbtBase64);
-      } else if (isSingleAddressMode) {
-        console.log(`[SendModal] Signing PSBT with ${primaryAddressType.signingMethod} key (single-address mode)...`);
-        if (primaryAddressType.signingMethod === 'taproot') {
-          signedPsbtBase64 = await signTaprootPsbt(psbtBase64);
-        } else {
-          signedPsbtBase64 = await signSegwitPsbt(psbtBase64);
-        }
-      } else {
-        console.log('[SendModal] Keystore: signing with both keys...');
-        signedPsbtBase64 = await signSegwitPsbt(psbtBase64);
-        signedPsbtBase64 = await signTaprootPsbt(signedPsbtBase64);
-      }
-
-      // Show broadcasting spinner now that signing is complete
-      setStep('broadcasting');
-
-      // Parse the signed PSBT, finalize, and extract the raw transaction
-      // JOURNAL (2026-03-03): UniSat with autoFinalized: true returns already-finalized PSBTs.
-      // Try to extract directly first; if that fails, try finalizing.
-      const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtBase64, { network: btcNetwork });
-      let tx;
-      try {
-        tx = signedPsbt.extractTransaction();
-        console.log('[SendModal] Alkane PSBT was already finalized by wallet');
-      } catch (extractError: any) {
-        console.log('[SendModal] Alkane PSBT not finalized yet, finalizing...', extractError.message);
-        try {
-          signedPsbt.finalizeAllInputs();
-          tx = signedPsbt.extractTransaction();
-        } catch (finalizeError: any) {
-          console.error('[SendModal] Failed to finalize alkane PSBT:', finalizeError);
-          throw new Error(`Failed to finalize transaction: ${finalizeError.message}`);
-        }
-      }
-      const txHex = tx.toHex();
-      const computedTxid = tx.getId();
-
-      console.log('[SendModal] Transaction ID:', computedTxid);
-
-      // Broadcast the transaction
-      console.log('[SendModal] Broadcasting transaction...');
-      const broadcastTxid = await alkaneProvider.broadcastTransaction(txHex);
-      console.log('[SendModal] Transaction broadcast successful, txid:', broadcastTxid);
-
-      setTxid(broadcastTxid || computedTxid);
+      // Browser wallets show the broadcasting spinner once signing completes.
+      // Keystore goes straight to success since the SDK handled it internally.
       setStep('success');
-      onSuccess?.(broadcastTxid || computedTxid);
-
-      setTimeout(() => {
-        refresh();
-      }, 1000);
-
+      const finalTxid = result.transactionId || '';
+      setTxid(finalTxid);
+      onSuccess?.(finalTxid);
+      setTimeout(() => { refresh(); }, 1000);
     } catch (err: any) {
       console.error('[SendModal] Alkane transfer failed:', err);
 
-      let errorMessage = err.message || t('send.failedSendAlkanes');
-      setError(errorMessage);
+      const rawMessage = err?.message || String(err) || t('send.failedSendAlkanes');
+      const friendlyMessage = humanizeError(rawMessage);
+      showError(friendlyMessage);
+      setError(friendlyMessage);
       setStep('input');
     } finally {
       setIsProcessing(false);
@@ -1277,9 +975,6 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
               // Reset fee warning acknowledgment when amount changes
               // so user sees warning again for new fee ratio
               setFeeWarningAcknowledged(false);
-              // Reset collateral warning acknowledgment when amount changes
-              // because different UTXOs might be selected
-              setCollateralAcknowledged(false);
               // Clear any previous error when user starts typing
               if (error) setError('');
             }}
@@ -1314,8 +1009,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
                     }
                   }}
                   placeholder="0"
-                  style={{ outline: 'none', border: 'none' }}
-                  className={`h-7 w-16 rounded-lg bg-[color:var(--sf-input-bg)] px-2 text-base font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[200ms] ${focusedField === 'fee' ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
+                  className="sf-pill-input"
                 />
               </div>
             ) : (
@@ -1578,8 +1272,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
                     }
                   }}
                   placeholder="0"
-                  style={{ outline: 'none', border: 'none' }}
-                  className={`h-7 w-16 rounded-lg bg-[color:var(--sf-input-bg)] px-2 text-base font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[200ms] ${focusedField === 'fee' ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
+                  className="sf-pill-input"
                 />
               </div>
             ) : (
@@ -1761,8 +1454,8 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
   );
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 px-4 backdrop-blur-sm">
-      <div data-testid="send-modal" className="flex max-h-[90vh] w-full max-w-md flex-col overflow-hidden rounded-3xl bg-[color:var(--sf-glass-bg)] shadow-[0_24px_96px_rgba(0,0,0,0.4)] backdrop-blur-xl">
+    <div className="sf-popup-overlay p-4" onClick={onClose}>
+      <div data-testid="send-modal" className="sf-popup w-full max-w-md max-h-[90vh]" onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div className="bg-[color:var(--sf-panel-bg)] px-6 py-5 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
           <div className="flex items-center justify-between">
@@ -1817,72 +1510,10 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
           )}
           {sendMode === 'alkanes' && (
             <>
-              {/* JOURNAL (2026-03-03): Collateral warning for alkane transfers when UTXOs
-                  also contain inscriptions/runes. These assets WILL be transferred to
-                  the recipient (they don't have protostone pointer logic).
-                  JOURNAL (2026-03-03): Also handles mainnet case where ord_outputs RPC is disabled
-                  and we can't verify what assets are on the UTXOs. */}
-              {showCollateralWarning && collateralWarning && (
-                <div className="space-y-4">
-                  <div className="rounded-xl bg-[color:var(--sf-info-red-bg)] border-2 border-[color:var(--sf-info-red-border)] p-4 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
-                    <div className="flex items-center gap-2 mb-3">
-                      <AlertCircle size={24} className="text-amber-400" />
-                      <span className="font-bold text-amber-400 uppercase tracking-wide text-lg">
-                        {t('send.collateralWarning', { defaultValue: 'CONFIRM TRANSFER' })}
-                      </span>
-                    </div>
-                    <div className="space-y-2 text-sm text-[color:var(--sf-text-secondary)]">
-                      <p className="font-medium">
-                        {t('send.collateralDescription', {
-                          defaultValue: 'The selected UTXOs contain other assets bundled alongside your alkane tokens.'
-                        })}
-                      </p>
-                      {collateralWarning.hasInscriptions && (
-                        <p className="text-amber-400">
-                          {t('send.collateralInscriptions', { defaultValue: 'Inscriptions (ordinals) on these UTXOs will be transferred to the recipient.' })}
-                        </p>
-                      )}
-                      {collateralWarning.hasRunes && (
-                        <p className="text-amber-400">
-                          {t('send.collateralRunes', { defaultValue: 'Runes on these UTXOs will be transferred to the recipient.' })}
-                        </p>
-                      )}
-                      {/* Other alkanes are always safe due to protostone pointer */}
-                      {collateralWarning.otherAlkanesCount > 0 && (
-                        <p className="text-[color:var(--sf-muted)]">
-                          {t('send.collateralOtherAlkanes', { count: collateralWarning.otherAlkanesCount, defaultValue: `${collateralWarning.otherAlkanesCount} other alkane token(s) on these UTXOs will be returned to you via the protostone pointer.` })}
-                        </p>
-                      )}
-                      <p className="mt-3 p-2 bg-black/20 rounded-lg text-[color:var(--sf-muted)]">
-                        {t('send.collateralNote', { defaultValue: 'You can enable "Ignore Ordinals" and "Ignore Runes" in Wallet Settings to skip this warning and treat all UTXOs as spendable.' })}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex gap-3">
-                    <button
-                      onClick={cancelCollateralWarning}
-                      className="flex-1 px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:bg-[color:var(--sf-surface)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)] font-bold uppercase tracking-wide"
-                    >
-                      {t('send.cancel', { defaultValue: 'CANCEL' })}
-                    </button>
-                    <button
-                      onClick={proceedWithCollateralWarning}
-                      className="flex-1 px-4 py-3 rounded-xl bg-[color:var(--sf-info-red-bg)] border border-[color:var(--sf-info-red-border)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-info-red-title)] font-bold uppercase tracking-wide"
-                    >
-                      {t('send.proceedAnyway', { defaultValue: 'I UNDERSTAND, PROCEED' })}
-                    </button>
-                  </div>
-                </div>
-              )}
-              {!showCollateralWarning && (
-                <>
-                  {step === 'input' && renderAlkanesInput()}
-                  {step === 'confirm' && renderConfirm()}
-                  {step === 'broadcasting' && renderBroadcasting()}
-                  {step === 'success' && renderSuccess()}
-                </>
-              )}
+              {step === 'input' && renderAlkanesInput()}
+              {step === 'confirm' && renderConfirm()}
+              {step === 'broadcasting' && renderBroadcasting()}
+              {step === 'success' && renderSuccess()}
             </>
           )}
         </div>
@@ -2010,7 +1641,7 @@ function SendMinerFeeButton({ selection, setSelection, presets }: { selection: F
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className={`inline-flex items-center gap-1.5 rounded-lg bg-[color:var(--sf-input-bg)] px-3 py-1.5 text-xs font-semibold text-[color:var(--sf-text)] transition-all duration-[200ms] focus:outline-none ${isOpen ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
+        className={`sf-dropdown-trigger ${isOpen ? 'sf-dropdown-trigger--open' : ''}`}
       >
         <span>{feeDisplayMap[selection] || selection}</span>
         <ChevronDown size={12} className={`transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${isOpen ? 'rotate-180' : ''}`} />

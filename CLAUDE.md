@@ -3,11 +3,365 @@
 > This file provides context for Claude Code (and other LLM instances) working on this codebase.
 > It is the single source of truth for architecture, debugging, and operational knowledge.
 
+---
+
+## Pre-Work
+
+### Rule -1 — Follow Existing Patterns (HIGHEST PRIORITY)
+Before writing ANY new code, SEARCH the codebase for how the same thing is already done. This is not optional — it is the single most important rule. Violations of this rule have cost more debugging time than all other issues combined.
+
+**The process (mandatory, every time):**
+1. Before writing a fetch call → `grep -r "getRpcUrl\|alkanes_protorunesbyaddress\|alkanes_simulate" hooks/ lib/ app/` to find the established pattern
+2. Before writing a balance query → find how `getAlkaneBalance` in boot.ts or `useEnrichedWalletData` works
+3. Before writing a contract call → find how the E2E tests call the same contract
+4. Before adding an import → check if the module is already used elsewhere and how
+5. Before hardcoding a URL, opcode, or constant → search for where it's defined in `getConfig`, `constants/`, or `alkanes.toml`
+
+**Why this exists:** LLMs default to writing code from first principles. This produces code that works in isolation but breaks in context — wrong RPC methods (`dataApiGetAlkanesByAddress` instead of `alkanes_protorunesbyaddress`), hardcoded URLs instead of `getRpcUrl()`, wrong opcode numbers from WIT files instead of `alkanes.toml`, raw `fetch('http://localhost:18888')` instead of the config-driven pattern. Every one of these has happened in this codebase and required the user to catch it.
+
+**The codebase IS the documentation.** If 10 hooks use `getRpcUrl(network)`, the 11th must too. If boot.ts uses `alkanes_protorunesbyaddress` for balance queries, the UI must too. If E2E tests use `[50]` as a deploy init arg and it works, don't change it to `[21]` without understanding why `[50]` was chosen.
+
+### Rule 0 — Verify Before Asserting Impossibility
+NEVER declare something "impossible" based on code comments alone. Check git history first (`git log --all --grep="keyword"`), then run the code. A deployment bug is not an architectural limitation. Never add environment-specific workarounds — if an SDK method fails, debug WHY and fix the root cause.
+
+### Rule 0a — Self-Audit All Work Before Reporting Complete
+NEVER report work as complete without a structured self-audit. After implementing changes, verify each assumption against source code — not against your own comments or memory:
+
+1. **Opcode args**: For every contract call, re-read the Rust source and confirm each argument position matches. The runtime strips target+opcode; remaining inputs become the function args in order.
+2. **Hardcoded values**: Any hardcoded number (prices, amounts, slot IDs, byte offsets) must be verified against the live state or computed dynamically. Devnet pool reserves vary per boot — never assume specific values.
+3. **Type propagation**: Trace `routeSource`, `poolId`, or any new field end-to-end: hook → component → mutation → protostone. Verify structural type compatibility across file boundaries.
+4. **Binary parsing**: For every LE byte parse, verify byte offsets against the contract's response layout. u128 = 16 bytes (not 8). u32 = 4 bytes (not 16).
+5. **Address handling**: Confirm hook destructures `txContext` from `useWallet()` and passes it to `alkanesExecuteTyped` (no inline `paymentAddress || taproot` ternaries; no symbolic `'p2tr:0'`/`'p2wpkh:0'`). Confirm router/factory receives tokens via `incomingAlkanes` (two-protostone or SDK auto-edict).
+6. **Run tsc + tests**: `npx tsc --noEmit` and run all affected vitest suites. Do not report success until both pass.
+
+This rule exists because LLM-generated code frequently has correct structure but wrong constants, reversed argument order, or off-by-one byte offsets. The audit catches these before they reach the user.
+
+### Rule 0b — Never Remove Functionality to "Fix" a Problem
+When a feature depends on data you don't have (auth tokens, state from prior steps, etc.), the fix is to OBTAIN that data — not to delete the code that uses it. Removing functionality to make code compile or tests pass is the most dangerous class of LLM error because it silently regresses capabilities.
+
+**Before deleting any code, ask:** "Am I removing this because it's wrong, or because I can't figure out how to make it work?" If the answer is the latter, investigate harder. Read how the existing E2E tests solve the same problem. The answer is almost always in the test suite.
+
+**Applies to:** Boot seeding steps, auth token flows, contract interactions, wallet signing paths, PSBT patching. All of these have been regressed at least once by premature deletion.
+
+---
+
+## Alkane UTXO Model (CRITICAL — Understand Before Touching Any Token Code)
+
+### Alkane Tokens ARE Bitcoin UTXOs
+
+Alkane tokens (DIESEL, frBTC, LP, FIRE, dxBTC, etc.) are encoded as **protorunes** on Bitcoin UTXOs. Each token balance lives inside a normal Bitcoin UTXO with dust value (~546-600 sats). There is no separate token ledger — the Bitcoin UTXO set IS the token ledger.
+
+**Fundamental consequence:** Any transaction that spends a UTXO for BTC fees **permanently destroys** the alkane tokens it carries. There is no Bitcoin-level protection. The protorune data is in the witness script, and spending the UTXO removes it from the UTXO set forever.
+
+### How Tokens Get Destroyed Silently
+
+When the SDK builds a PSBT, it selects UTXOs from `from_addresses` to fund BTC fees. Without `ordinals_strategy: 'preserve'`, it picks ANY UTXO with sufficient BTC — including dust UTXOs carrying alkane tokens. The SDK has no way to distinguish "this 546-sat UTXO carries 5 billion DIESEL" from "this 546-sat UTXO is empty dust" at the BTC level.
+
+**In boot.ts specifically:** After Phase 2 mints DIESEL and wraps frBTC, the remaining tokens sit in change UTXOs at the deployer's addresses. The 50+ `deployWasm()` calls in Phases 3-8 each need ~100,000 sats for WASM envelopes. The SDK picks UTXOs from `[segwit, taproot]` to fund these — and silently spends the alkane change UTXOs as fee inputs, destroying all DIESEL and frBTC balances by Phase 9.
+
+**Symptoms:** `getAlkaneBalance()` returns 0 for all tokens. `Insufficient alkanes: need X of Y, have 0` on every operation that requires tokens. But `alkanes_simulate` (which reads the state trie, not the UTXO set) still shows correct pool reserves — making it seem like tokens exist when they don't.
+
+**Fix pattern:** Re-mint / re-wrap tokens immediately before the operations that need them. Do not assume alkane balances survive across sequences of unrelated transactions. In boot.ts, Phase 10a re-mints DIESEL and re-wraps frBTC specifically for CLOB/vault/FIRE seeding.
+
+### Where This Matters in the Codebase
+
+| File | Risk | Protection |
+|------|------|-----------|
+| `lib/devnet/boot.ts` — `deployWasm()` | Consumes alkane UTXOs as fee inputs | Phase 10a re-mints tokens after all deploys |
+| `lib/devnet/boot.ts` — `executeCall()` | Same risk for any non-deploy call | Document risk, re-mint if needed |
+| `hooks/useAlkaneSendMutation.ts` | Inscription on alkane UTXO is silently spent | SDK auto-applies `'preserve'` for browser → `build_split_psbt` with alkane-aware routing |
+| `hooks/useSwapMutation.ts` | Swap PSBT picks wrong UTXOs | SDK handles via `alkanesExecuteTyped` with `txContext.feeSourceAddresses` |
+| Any frontend mutation hook | Browser wallet PSBT construction | `patchInputsOnly` for witnessUtxo scripts |
+| WASM `select_utxos` | Pending mempool tx UTXO picked again → double-spend | `get_address_txs_mempool` filter strips outpoints already spent in our own mempool txs |
+
+### Diagnostic: "Insufficient alkanes: have 0"
+
+When you see this error, the tokens are NOT in the wallet's UTXOs even though they may appear to exist in contract state. Check:
+
+1. **Were deploy transactions run between the mint and the spend?** Each deploy can consume alkane UTXOs.
+2. **Is `ordinals_strategy` set?** Without it, any UTXO is fair game for fee inputs.
+3. **Are you querying the right address?** Alkane change goes to `alkanes_change_address` (taproot), BTC change goes to `change_address` (segwit). Check both.
+4. **Has the indexer caught up?** `alkanes_protorunesbyaddress` depends on the address index, which lags behind after rapid block mining. `alkanes_simulate` reads state directly and is always current.
+
+---
+
+## Source-of-Truth Tiering (CRITICAL — Read Before Touching Any Read-Path)
+
+All rules below were laid down by the protocol owner on 2026-05-04 after a
+recurring "pool not found" / DIESEL-undercount class of bug traced to reading
+state-of-record off of espo (a tertiary aggregator) instead of metashrew (the
+primary indexer). Espo is allowed to lag, drop entries, or 502 — and when it
+does, the app silently shows wrong data. **It is never the source of truth on
+mainnet.**
+
+### Rule SoT-1 — Balances read from outpoints, not from address-keyed views
+
+For mainnet wallet balances (BTC and alkanes), the canonical path is:
+
+1. `esplora_address::utxo` → list confirmed UTXOs
+2. Filter to dust (≤1000 sats) → these carry alkanes
+3. **Promise.all** `alkanes_protorunesbyoutpoint` for each dust outpoint
+4. Aggregate per `(block, tx)` to produce the per-token total
+
+This is what `queries/account.ts:fetchAlkaneBalancesViaProtobuf` already does.
+Do **NOT** add a code path that reads balances from any of the following:
+
+| Source | Why it's wrong |
+|---|---|
+| `alkanes_protorunesbyaddress` (address-keyed view) | Reports phantom balances on previously-spent outpoints — confirmed 2026-05-03 (showed 1800 DIESEL when wallet held 58). |
+| `espo /get-alkanes-by-address` | Same staleness class + indexer lag on freshly-confirmed UTXOs. |
+| `dataApiGetAlkanesByAddress` (SDK shortcut) | Same upstream problem; bypassed for this reason. |
+
+Per-outpoint queries in parallel are more reliable than any address-keyed
+aggregation.
+
+### Rule SoT-2 — Pool reserves read directly from metashrew (`alkanes_simulate`)
+
+For pool state (reserves, fees, K), the canonical path is `alkanes_simulate`
+on the pool's `GetReserves` (opcode 97) or `PoolDetails` (opcode 999) opcode.
+Simulate reads the metashrew state trie directly — always current, no
+intermediate cache.
+
+Do **NOT** read pool reserves from:
+
+| Source | Why it's wrong |
+|---|---|
+| `mainnet.subfrost.io/.../get-all-pools-details` | Aggregator cache; flaps to `total: 0` during indexer hiccups. Verified outage 2026-05-04. |
+| `api.alkanode.com/rpc ammdata.get_pools` for swap quotes | Third-party rate-limited; staleness window unclear. OK as a *list of pool IDs* (Rule SoT-3) but not for live reserves on the swap path. |
+| Espo on any non-devnet network | Espo is the in-browser devnet indexer; never the mainnet source of truth. |
+
+If a hook uses pool reserves to compute a quote, slippage floor, or invariant
+check, those reserves MUST come from metashrew via simulate.
+
+### Rule SoT-3 — Pool **discovery** is allowed via espo / alkanode
+
+Listing the complete set of pools (without their state) is realistic to do
+through aggregators. Two acceptable paths:
+
+- **Devnet**: in-browser espo via the fetch interceptor (`get_pools`).
+- **Mainnet**: `api.alkanode.com/rpc ammdata.get_pools` is acceptable as a
+  pool-ID enumerator. After getting the list, individual pool reserves come
+  from simulate (Rule SoT-2).
+
+Pool discovery being slightly stale is fine (a missed pool just won't show
+in the picker for a few minutes); pool RESERVES being stale is not (silently
+wrong quotes / failed swaps).
+
+### Rule SoT-4 — Unconfirmed-state tracking is corrected, not reverted
+
+Balance flicker during pending mempool tx is acceptable; the answer is to
+**fix the unconfirmed-state tracking**, not to revert to a simpler model
+that ignores mempool. If a balance briefly shows the wrong number while a
+swap mines, that's a UX gap to close — not a reason to remove the
+mempool-pending logic.
+
+When in doubt: **the balance display should be eventually correct**, and
+intermediate states are tolerable as long as they self-heal once the next
+block lands or the mempool tx is replaced.
+
+### Cheat sheet for read-path decisions
+
+| Question | Source |
+|---|---|
+| What's the wallet's BTC balance? | `esplora_address::utxo` → sum non-dust |
+| What's the wallet's DIESEL/frBTC/etc balance? | esplora UTXOs → per-outpoint protorune fan-out |
+| What pools exist? | espo (devnet) / alkanode `ammdata.get_pools` (mainnet) |
+| What are pool X's reserves right now? | `alkanes_simulate` opcode 97 or 999 |
+| Did this swap quote slip? | simulate against current reserves |
+| What's the canonical block height? | `metashrew_height` |
+
+---
+
+## Devnet Architecture (CRITICAL — Read Before Touching Devnet Code)
+
+All rules below were established 2026-03-31 after 16+ hours debugging. Each one prevented a bug from being re-introduced. Test enforcement exists for all of them.
+
+### ⚠️⚠️⚠️ Address Derivation — Two CoinType Systems ⚠️⚠️⚠️
+
+**THIS HAS COST MULTIPLE FULL-DAY DEBUGGING SESSIONS. READ THIS BEFORE TOUCHING ANY DERIVATION CODE.**
+
+The Alkanes SDK has **two separate derivation systems** that use **different coinTypes**:
+
+| System | Used by | coinType | Paths | Where |
+|--------|---------|----------|-------|-------|
+| **WASM provider** (`walletLoadMnemonic`) | boot.ts `alkanesExecuteFull`, all on-chain txs | **1** (regtest) | `m/84'/1'/0'/0/0`, `m/86'/1'/0'/0/0` | WASM binary internals |
+| **JS SDK** (`createWalletFromMnemonic`) | WalletContext, UI address display | **0** (hardcoded) | `m/84'/0'/0'/0/0`, `m/86'/0'/0'/0/0` | `@alkanes/ts-sdk/src/wallet` |
+
+**Same mnemonic, different coinType = completely different addresses.**
+
+**boot.ts MUST use coinType=1** because `alkanesExecuteFull` resolves `from_addresses` against the WASM provider's internal keystore (coinType=1). Using coinType=0 addresses causes `"Address not found in keystore"` errors on every transaction.
+
+**WalletContext uses coinType=0** because `createWalletFromMnemonic` hardcodes it. The UI displays coinType=0 addresses.
+
+**Consequence:** Boot-seeded LP/activity shows under coinType=1 addresses, not the connected wallet's coinType=0 addresses. Global trades/orderbook are unaffected (no address filter).
+
+**DO NOT change boot.ts to coinType=0** — causes `"Address not found in keystore"` on every transaction.
+
+**Files involved:**
+- `lib/devnet/boot.ts` — coinType=1 (MUST match WASM provider)
+- `context/WalletContext.tsx` — coinType=0 (MUST match JS SDK `createWalletFromMnemonic`)
+- `@alkanes/ts-sdk` WASM — coinType=1 for regtest (immutable without WASM rebuild)
+- `@alkanes/ts-sdk` JS — coinType=0 always (immutable without SDK source change)
+
+### Address Handling — pass `txContext` from `useWallet()`
+Every mutation hook destructures `txContext` from `useWallet()` and forwards it to `alkanesExecuteTyped`. The wrapper unpacks it into `from_addresses` / `change_address` / `alkanes_change_address` / `protect_taproot` / `ordinals_strategy`, and for browser wallets auto-applies `'preserve'` ord-strategy + UniSat clean BTC UTXOs (via `getCleanBtcUtxosForWallet(browserWalletId)` from the capability registry) as `payment_utxos`. Per-call overrides win (`params.X ?? txContext.X`) — used by atomic flows.
+
+**Why centralized:** Symbolic addresses (`p2tr:0`, `p2wpkh:0`) resolve to the SDK provider's *internal* wallet, not the user's. On mainnet this lost real tokens (tx `985436b5...`); on devnet the WASM provider loads the boot mnemonic which derives different addresses than `WalletContext` even from the same seed. The previous fix was a 28-hook duplicated `paymentAddress || taproot` ternary chain. `txContext` collapses that into one computed object on `WalletContext` so a new hook physically can't forget the fallback.
+
+**Use `isBrowserWallet` ONLY for:** signing logic (`signTaprootPsbt` vs `signSegwitPsbt`), `patchInputsOnly`, and confirmation flows.
+
+**Test enforcement:** `hooks/__tests__/mutations/address-handling.test.ts` asserts every mutation hook destructures `txContext`, passes it into `alkanesExecuteTyped`, and guards on `!txContext` for unconnected wallets.
+
+**After fixing address bugs:** Hard reset the devnet. Old state has tokens at the wrong derivation addresses and cannot be recovered. Stale state also inflates balance displays (espo aggregates across old + new outpoints) which causes users to attempt swaps larger than their actual spendable balance.
+
+**"Insufficient alkanes" errors:** Almost always caused by stale devnet state, NOT SDK bugs. The SDK correctly aggregates alkane balances across multiple outpoints (verified 2026-03-31 via vitest E2E). If you see this error: hard reset the devnet first, then retry. Only investigate further if the error persists on a fresh instance.
+
+### Data Layer — Espo Serves ALL Data Queries
+ALL data queries on devnet (pool discovery, balance queries, token lists) go through the **espo tertiary indexer** via REST endpoints:
+- `/get-all-token-pairs` → espo `get_pools`
+- `/get-all-pools-details` → espo `get_pools`
+- `/get-alkanes-by-address` → espo `get_alkanes_by_address`
+
+The devnet fetch interceptor routes these to espo's `metashrew_view` calls. The file `public/wasm/quspo.wasm` IS the espo WASM (renamed for compatibility).
+
+**NEVER:** Skip REST methods on devnet, add raw `alkanes_simulate` fallbacks, or add `isDevnet` guards to data fetching code. If pool data is missing, check: (1) espo loaded in boot.ts, (2) pool created during boot, (3) fetch interceptor active.
+
+### Orderbook Binary Format (Carbine CLOB)
+GetOrderbookDepth (opcode 24) returns:
+```
+u32 numBids (4 bytes LE)  ← NOT u128
+[u128 price, u128 amount] × numBids
+u32 numAsks (4 bytes LE)  ← NOT u128
+[u128 price, u128 amount] × numAsks
+```
+- Prices are **raw u128** in 1e8 units — divide by 1e8 for display
+- Ask prices are **already un-inverted** by the contract (lib.rs:760: `let real_price = u128::MAX - token_id`). The parser receives real prices for both sides — do NOT un-invert in the parser. ~~(old claim: "parser MUST un-invert" — this was wrong; double-inversion produces garbage)~~
+- Bid prices are real (no transformation needed)
+- Empty padding slots (amount=0) must be filtered; price=0 is a valid real order
+- Source: `subfrost-alkanes/alkanes/carbine-controller/src/lib.rs:730-774`
+- See full Carbine CLOB section at bottom of this file for deployment, pair ordering, and verification scripts
+
+### PSBT Patching — Input-Only
+`patchPsbtForBrowserWallet()` was removed from all mutation hooks (2026-02-20). Only input-level patching is used: `patchInputsOnly()` for witnessUtxo scripts and redeemScript injection (P2SH-P2WPKH for Xverse). Output patching is never needed because all hooks pass actual addresses via `txContext`.
+
+### SDK-Mediated Network Reads — `lib/alkanes/rpc.ts`
+
+**No raw `fetch(rpc, { method: metashrew_* / alkanes_* / esplora_* })` calls in app code.** Every JSON-RPC read goes through the wrapper layer in `lib/alkanes/rpc.ts`. The pattern was originally introduced in commit `c62d2621 feat(rpc): phase 1 — additive lib/alkanes/rpc.ts thin-fetch layer` and resurrected on `release-patch` (2026-05-04).
+
+Available helpers (canonical surface):
+- `alkanesSimulate(network, params)` — contract view calls (replaces raw `alkanes_simulate`).
+- `getProtorunesByAddress(network, address)` — alkane balances + UTXOs for an address.
+- `getProtorunesByOutpoint(network, txid, vout)` — single-outpoint balance fan-out.
+- `getAddressUtxos(network, address)` — `esplora_address::utxo` (with error-sentinel guard).
+- `getAddressMempoolTxs(network, address)` — `esplora_address::txs:mempool`.
+- `getEsploraTx(network, txid)` — single transaction by id.
+- `getHeight(network)` — `metashrew_height` hedged with `esplora_blocks::tip-height`.
+- `broadcastTransaction(network, txHex)` — `esplora_tx::broadcast`.
+- `metashrewView(network, viewFn, hex, blockTag)` — generic raw-view passthrough for protobuf payloads (`simulate`, `protorunesbyaddress`).
+- `getAlkaneInfo(network, alkaneId)` / `getAlkaneInfoBatch(network, ids[])` — `/api/token-details`.
+- `getBitcoinPrice()` — `/api/btc-price` proxy.
+
+**Migrated (release-patch, 2026-05-04):** `queries/account.ts`, `queries/height.ts`, `queries/market.ts` (BTC price + token names), `hooks/useSwapMutation.ts`, `hooks/useAddLiquidityMutation.ts`, `hooks/useRemoveLiquidityMutation.ts` (already via `alkanesExecuteTyped`), `hooks/useWrapMutation.ts` / `hooks/useUnwrapMutation.ts` (already via `alkanesExecuteTyped`), `hooks/useAlkaneSendMutation.ts` / `hooks/useBtcSendMutation.ts` (already via `alkanesExecuteTyped`), `hooks/useRouterQuote.ts`, `hooks/useTokenToBtcSwap.ts`, `hooks/useTxConfirmed.ts`, `hooks/usePendingTransactions.ts`, `app/wallet/components/SendModal.tsx`, `lib/fujin/rpc.ts` (`simulateContract` now routes through `rpc.metashrewView`; accepts either network name or legacy URL string), `lib/alkanes/execute.ts` (proactive `waitForIndexer` for all mutations).
+
+**TODO — not yet migrated** (still contain raw `fetch(rpc, { method: ... })` calls; safe to use but should be ported when those features are next touched):
+- `hooks/useOrderbook.ts`, `hooks/useUserOrders.ts`, `hooks/useLimitOrderMutation.ts` — Carbine CLOB
+- `hooks/useFujinMarkets.ts`, `app/futures/components/FujinDifficultyPanel.tsx` — Fujin futures
+- `hooks/useNormalPool.ts`, `hooks/useDxBtcVault.ts`, `hooks/useVxGauge.ts`, `app/vaults/components/{GaugeVault,VaultDetail}.tsx` — vaults / gauge
+- `hooks/useBridge.ts` — cross-chain bridge
+- `hooks/fire/useFireUserPositions.ts` — FIRE staking
+- `lib/alkanes/poolState.ts`, `lib/alkanes/curated-pools.ts`, `lib/fire/simulate.ts`, `lib/pools/candle-fetcher.ts`, `lib/luaScripts.ts` — keep using `simulateContract` from `lib/fujin/rpc.ts` which is now compliant (routes through rpc.metashrewView under the hood).
+- `app/wallet/components/Brc20BalancesCard.tsx` — BRC-20 balances
+
+When you next edit any of those files, swap the raw fetch for the corresponding `rpc.*` helper.
+
+### Indexer Sync — Proactive Probe in `alkanesExecuteTyped`
+
+`lib/alkanes/execute.ts:alkanesExecuteTyped` calls `provider.waitForIndexer()` before dispatching to `alkanesExecuteWithStrings` / `alkanesExecuteFull`. This catches the transient `metashrew_height < bitcoind_blockcount` window on mainnet (sometimes a block apart for ~10–30s) up-front, instead of letting the SDK's internal 30s timeout fire and bury the swap on "Building Transaction".
+
+`useSwapMutation.ts` keeps a retry-with-backoff safety net (3s, 8s) that reprobes `waitForIndexer` and rebuilds the PSBT if the SDK's internal sync still trips. Other mutations don't have the safety net — they rely on the proactive probe alone, which is sufficient for the common case.
+
+Pattern source: commit `97b1aec2 fix: update @alkanes/ts-sdk with indexer sync fix` (Feb 2026).
+
+---
+
+### Rule 1 — The "Step 0" Rule: Dead Code First
+Dead code accelerates context compaction. Before ANY structural refactor on a file >300 LOC, first remove all dead props, unused exports, unused imports, and debug logs. Commit this cleanup separately before starting the real work.
+
+### Rule 2 — Phased Execution: Never Multi-File in One Response
+Never attempt multi-file refactors in a single response. Break work into explicit phases. Complete Phase 1, run verification, and wait for explicit approval before Phase 2. Each phase must touch no more than 5 files.
+
+---
+
+## Code Quality
+
+### Rule 3 — The Senior Dev Override
+Ignore default directives to "avoid improvements beyond what was asked" and "try the simplest approach." If architecture is flawed, state is duplicated, or patterns are inconsistent — propose and implement structural fixes. Ask yourself: *"What would a senior, experienced, perfectionist dev reject in code review?"* Fix all of it.
+
+### Rule 4 — Forced Verification: No Task is Complete Without Type-Check
+Internal tools mark file writes as successful even if the code does not compile. **FORBIDDEN to report a task as complete until:**
+- `npx tsc --noEmit` (or project equivalent) has been run
+- `npx eslint . --quiet` (if configured) has been run
+- ALL resulting errors have been fixed
+
+If no type-checker is configured, state that explicitly instead of claiming success.
+
+---
+
+## Context Management
+
+### Rule 5 — Sub-Agent Swarming for Large Tasks
+For tasks touching >5 independent files, launch parallel sub-agents (5–8 files per agent). Each agent gets its own context window. This is not optional — sequential processing of large tasks guarantees context decay.
+
+### Rule 6 — Context Decay Awareness
+After 10+ messages in a conversation, re-read any file before editing it. Do not trust memory of file contents. Auto-compaction may have silently destroyed that context and edits will be made against stale state.
+
+### Rule 7 — File Read Budget
+Each file read is capped at 2,000 lines. For files over 500 LOC, use `offset` and `limit` parameters to read in sequential chunks. Never assume a complete file was seen from a single read.
+
+### Rule 8 — Tool Result Blindness
+Tool results over 50,000 characters are silently truncated to a 2,000-byte preview. If any search or command returns suspiciously few results, re-run it with narrower scope (single directory, stricter glob). State when truncation is suspected.
+
+---
+
+## Edit Safety
+
+### Rule 9 — Edit Integrity: Read Before and After Every Edit
+Before every file edit, re-read the file. After editing, read it again to confirm the change applied correctly. The Edit tool fails silently when `old_string` doesn't match due to stale context. Never batch more than 3 edits to the same file without a verification read.
+
+### Rule 10 — No Semantic Search: Grep Is Not an AST
+When renaming or changing any function/type/variable, search separately for:
+- Direct calls and references
+- Type-level references (interfaces, generics)
+- String literals containing the name
+- Dynamic imports and `require()` calls
+- Re-exports and barrel file entries
+- Test files and mocks
+
+Do not assume a single grep caught everything.
+
+---
+
 ## Documentation Rules
 
 **Journal entries / investigation notes MUST be written as inline comments in the relevant source files they pertain to — NOT in separate documentation files.** CLAUDE.md is for architectural reference and historical issues only. When documenting a fix or finding, put the notes directly in the file header comment of the hook, component, or utility that was affected. Never create standalone docs/ files for investigation notes.
 
-**Rolling insight log:** Maintain a persistent rolling log of insights, gotchas, and debugging patterns in `MEMORY.md` (auto-memory) to create psychic continuity across LLM sessions. When you discover a non-obvious behavior (SDK quirks, wallet-specific bugs, Buffer vs Uint8Array issues, etc.), record it immediately in MEMORY.md and as a JOURNAL comment in the relevant source file. Future sessions should consult these notes before attempting fixes.
+**Rolling insight log:** Record non-obvious behaviors (SDK quirks, wallet-specific bugs, etc.) as JOURNAL comments in the relevant source files. The wiki at `/Users/misha/divergent/` provides cross-session knowledge persistence.
+
+## Core Principles
+
+Before adding queries, changing data flow, or debugging performance — read [docs/CORE_PRINCIPLES.md](docs/CORE_PRINCIPLES.md). These 6 rules are derived from root causes found in this codebase. Violate only deliberately with a clear reason. When reviewing code that touches data fetching or caching, verify it doesn't violate these principles.
+
+## Data Architecture
+
+See [docs/DATA_ARCHITECTURE.md](docs/DATA_ARCHITECTURE.md) for complete endpoint reference: balance streams, swap flow, UTXO selection, pool data, wallet session, HeightPoller, RPC proxy routing, and optimization history.
+
+---
+
+## UI Design System
+
+Glass morphism + top highlight. Use `.sf-*` CSS classes from `app/globals.css`, never raw Tailwind borders. See [docs/UI_DESIGN_SYSTEM.md](docs/UI_DESIGN_SYSTEM.md) for full class reference and rules.
+
+---
 
 ## Critical Safety Rules
 
@@ -45,13 +399,15 @@ Pool Instances [2:N]  ────via beacon────▶  Pool Logic [4:65496
                                            (Beacon Proxy Template [4:781000])
 ```
 
-### Retired/Broken Deployment (pre-2026-01-28)
+### Retired/Broken Deployment on regtest (pre-2026-01-28)
 
-The original deployment used different slots with INCOMPLETE WASM binaries:
+The original **regtest** deployment used different slots with INCOMPLETE WASM binaries:
 - Factory Proxy [4:65522] → Factory Logic [4:65524] (MISSING opcodes 0, 1, 2)
 - Beacon [4:65523] → Pool Logic [4:65520] (MISSING opcodes 3, 4)
 - These slots still exist on-chain but are NON-FUNCTIONAL for pool creation/swaps.
-- DO NOT use `4:65522` as the factory ID for regtest.
+- DO NOT use `4:65522` as the factory ID **for regtest** — use `4:65498`.
+
+**Note:** On **mainnet** the AMM factory ID is still `4:65522` (`ALKANE_FACTORY_ID` in `getConfig.ts:55`) and is fully functional — that deployment was built from a complete WASM. The regtest 65522 issue is regtest-only. Don't conflate the two when reading code or test fixtures (`MAINNET_FACTORY_ID = '4:65522'` in tests is correct).
 
 ### Complete Slot Map (regtest)
 
@@ -118,259 +474,92 @@ Source: `oyl-amm/alkanes/pool/src/lib.rs` + `oyl-amm/alkanes/alkanes-runtime-poo
 | 99 | GetName | Get pool name (returns String). |
 | 999 | PoolDetails | Get comprehensive pool details (returns Vec<u8>). |
 
-**Key Insight:** The factory has router methods (11, 12, 13, 14, 29) that call pools internally, AND pools have direct methods (1, 2, 3). The frontend calls the **factory router for swaps** (opcode 13) because the deployed pool logic [4:65496] is missing Swap opcode 3. Pools are called directly for add liquidity (opcode 1) and remove liquidity (opcode 2), which DO work on the deployed pool.
+**Key Insight:** The frontend calls the **factory router for ALL AMM operations** — swap (opcode 13), addLiquidity (opcode 11), and burn/removeLiquidity (opcode 12). Factory routes provide Uniswap-style slippage params (`amount_a_min`, `amount_b_min`) and a deadline; pool-direct calls (opcodes 1/2/3) skip these checks and expose users to MEV / reserve drift. Pool opcodes are kept here for reference only — do **not** call them directly from the frontend.
 
 ### frBTC Signer Address
 
-The frBTC contract [32:0] has a signer address derived from opcode 103 (GET_SIGNER). This is a P2TR address that must receive BTC for wraps to succeed. The CLI fetches it dynamically; the frontend hardcodes it in `useWrapMutation.ts` and `useWrapSwapMutation.ts`.
+The frBTC contract [32:0] has a signer address derived from opcode 103 (GET_SIGNER). This is a P2TR address that must receive BTC for wraps to succeed.
 
-**Current regtest signer:** `bcrt1p466wtm6hn2llrm02ckx6z03tsygjjyfefdaz6sekczvcr7z00vtsc5gvgz`
+The frontend resolves it **dynamically** via `getSignerAddressDynamic(network)` in `lib/alkanes/helpers.ts` — no per-network hardcoding to maintain. The static map in `lib/alkanes/constants.ts` is `@deprecated` and kept only as a fallback for offline / boot-time paths.
 
-If the frBTC contract is redeployed, update this address in both files.
-
----
-
-## The Two-Protostone Pattern
-
-For operations needing tokens as `incomingAlkanes`:
-
-```
-p0: Edict protostone - transfers tokens to p1
-p1: Cellpack protostone - calls contract, receives tokens as incomingAlkanes
-```
-
-The CLI's `--inputs` flag auto-generates p0. The frontend manually constructs both protostones.
-
-### How It Works in Detail
-
-1. **p0 (edict protostone):** Contains one or more edicts. Each edict transfers a specific alkane token amount to a target protostone index (p1). The `pointer` field on p0 points to the next protostone. p0 has NO cellpack — it is purely a transfer vehicle.
-
-2. **p1 (cellpack protostone):** Contains the actual contract call (cellpack). When the runtime processes p1, any alkanes transferred to it by p0 become `incomingAlkanes` in the called contract's execution context. The contract then reads these to know what tokens it received.
-
-### When You Need Two Protostones
-
-- **AddLiquidity (pool opcode 1):** Two edicts in p0 (token0 + token1) → p1 calls pool
-- **CreateNewPool (factory opcode 1):** Two edicts in p0 (token0 + token1) → p1 calls factory
-- **Swap (factory opcode 13):** One edict in p0 (input token) → p1 calls factory
-- **RemoveLiquidity (pool opcode 2):** One edict in p0 (LP token) → p1 calls pool
-- **Wrap BTC:** BTC output at v0 + protostone at v1 (different pattern — BTC, not alkanes)
-
-### Common Mistake
-
-If the edict in p0 has the wrong pointer (e.g., `v0` instead of `v1`), the tokens go to output 0 instead of to the cellpack protostone. The contract receives zero `incomingAlkanes` and fails with "expected N alkane inputs" or "input amount cannot be zero".
+If you ever need to verify the resolved address: `alkanes-cli -p subfrost-regtest wrap-btc --amount 1000 --fee-rate 1` and check which P2TR receives BTC at output 0.
 
 ---
 
-## AMM Deployment Procedure
+## Protostone Patterns
 
-### Prerequisites
+> **TL;DR:** most AMM ops are **single-protostone** — multi-protostone is only for chained atomic flows (wrap+swap, swap+unwrap) and the legacy `CreateNewPool` builder.
 
-- **AMM Source Code:** `https://github.com/Oyl-Wallet/oyl-amm` (clone to local)
-- **Standard Contract WASMs:** Found in `alkanes-rs-dev/prod_wasms/` (beacon proxy, upgradeable, upgradeable beacon)
-- **CLI binary:** `alkanes-rs-dev/target/release/alkanes-cli`
-- **Profile:** `subfrost-regtest`
-- **Wallet:** `~/.alkanes/wallet.json` (passphrase: `testtesttest`)
-- **Deployer address:** `bcrt1p0mrr2pfespj94knxwhccgsue38rgmc9yg6rcclj2e4g948t73vssj2j648`
-- **LLVM with wasm32 support:** Required for building AMM WASMs (Apple clang does NOT work)
+### Single-protostone (default for AMM ops)
 
-### Building AMM WASMs from Source
+For factory router calls (swap opcode 13, AddLiquidity opcode 11, Burn opcode 12) the protostone is just one cellpack:
 
-The `prod_wasms/` directories in various repos may contain STALE/INCOMPLETE builds. Always build from source:
-
-```bash
-# Clone the AMM source
-cd ~/Documents/GitHub
-git clone https://github.com/Oyl-Wallet/oyl-amm.git
-
-# Build with Homebrew LLVM (Apple clang cannot target wasm32)
-cd oyl-amm
-CC_wasm32_unknown_unknown=/usr/local/opt/llvm/bin/clang \
-AR_wasm32_unknown_unknown=/usr/local/opt/llvm/bin/llvm-ar \
-cargo build --release -p factory --target wasm32-unknown-unknown
-
-CC_wasm32_unknown_unknown=/usr/local/opt/llvm/bin/clang \
-AR_wasm32_unknown_unknown=/usr/local/opt/llvm/bin/llvm-ar \
-cargo build --release -p pool --target wasm32-unknown-unknown
+```
+[factoryBlock,factoryTx,opcode,...args]:v0:v0
 ```
 
-Output WASMs: `oyl-amm/target/wasm32-unknown-unknown/release/factory.wasm` and `pool.wasm`.
+Input alkanes from `inputRequirements` **auto-allocate** to the first protostone with matching `protocol_tag` — the SDK constructs an auto-edict for them. The cellpack's `token_a` / `token_b` arguments tell the factory how to treat the incoming tokens. **Do not also construct manual edicts** — that creates double-edicts and breaks the call.
 
-**CRITICAL:** The `secp256k1-sys` crate requires a clang that supports `--target=wasm32-unknown-unknown`. Apple's system clang does NOT. You must use Homebrew LLVM (`brew install llvm`) and pass the `CC_wasm32_unknown_unknown` and `AR_wasm32_unknown_unknown` env vars.
+### Multi-protostone (chained, for atomic flows)
 
-### Deployment Order (6 steps + initialization)
+When tokens need to land at a non-first protostone (atomic chain):
 
-Each step requires waiting ~90 seconds between deployments due to RPC rate limiting (20 req/min on `regtest.subfrost.io`). Use `--mine` to auto-mine blocks.
-
-```bash
-CLI="alkanes-rs-dev/target/release/alkanes-cli"
-PROFILE="-p subfrost-regtest --wallet-file ~/.alkanes/wallet.json --passphrase testtesttest"
-OYL_AMM="oyl-amm/target/wasm32-unknown-unknown/release"
-STD_WASMS="alkanes-rs-dev/prod_wasms"
-
-# Step 1: Beacon Proxy Template → [4:781000]
-$CLI $PROFILE alkanes execute "[3,781000,36863]:v0:v0" \
-  --envelope $STD_WASMS/alkanes_std_beacon_proxy.wasm \
-  --from p2tr:0 --fee-rate 1 --mine -y
-
-# Step 2: Factory Logic → [4:65500]
-$CLI $PROFILE alkanes execute "[3,65500,50]:v0:v0" \
-  --envelope $OYL_AMM/factory.wasm \
-  --from p2tr:0 --fee-rate 1 --mine -y
-
-# Step 3: Pool Logic → [4:65496]
-$CLI $PROFILE alkanes execute "[3,65496,50]:v0:v0" \
-  --envelope $OYL_AMM/pool.wasm \
-  --from p2tr:0 --fee-rate 1 --mine -y
-
-# Step 4: Factory Proxy (upgradeable) → [4:65498]
-# Init: 0x7fff=32767, impl=4:65500 (factory logic), auth_units=1
-$CLI $PROFILE alkanes execute "[3,65498,32767,4,65500,1]:v0:v0" \
-  --envelope $STD_WASMS/alkanes_std_upgradeable.wasm \
-  --from p2tr:0 --fee-rate 1 --mine -y
-
-# Step 5: Upgradeable Beacon → [4:65499]
-# Init: 0x7fff=32767, impl=4:65496 (pool logic), auth_units=1
-$CLI $PROFILE alkanes execute "[3,65499,32767,4,65496,1]:v0:v0" \
-  --envelope $STD_WASMS/alkanes_std_upgradeable_beacon.wasm \
-  --from p2tr:0 --fee-rate 1 --mine -y
-
-# Step 6: Discover auth tokens
-$CLI $PROFILE protorunes by-address <deployer-address>
-# Look for [2:N] with Balance: 1 — these are auth tokens for the factory proxy and beacon
-
-# Step 7: Initialize Factory
-# Call factory proxy opcode 0, args: beacon_proxy_template=781000, beacon_id=4:65499
-# Send factory auth token [2:AUTH] as input
-$CLI $PROFILE alkanes execute "[4,65498,0,781000,4,65499]:v0:v0" \
-  --inputs 2:AUTH_TOKEN_ID:1 \
-  --from p2tr:0 --fee-rate 1 --mine --trace -y
+```
+p0: edict / wrap call - transfers or produces tokens, pointer=p1
+p1: cellpack - receives tokens as incomingAlkanes, runs the next call
 ```
 
-### Verification
+Used by:
+- **Atomic wrap+swap:** p0 wraps BTC → frBTC, `CallResponse::forward(incoming_alkanes)` passes through to p1 (`useAtomicWrapSwapMutation`).
+- **Atomic wrap+addLiquidity:** Same forward pattern (`useAtomicWrapAddLiquidityMutation`).
+- **Atomic swap+unwrap:** p1 swap routes incoming alkanes via pointer=p2 to the unwrap cellpack (`useSwapUnwrapMutation` — currently deprecated in favour of `useTokenToBtcSwap`'s two-tx flow, but the builder still illustrates the pattern).
+- **CreateNewPool (factory opcode 1):** kept as two-protostone with explicit edicts — historical, could be simplified to single-protostone the same way opcode 11 was. Functionally fine as-is.
 
-```bash
-# Factory should return 0 pools (data = 16 zero bytes) with no error
-curl -s https://regtest.subfrost.io/v4/subfrost \
-  -H 'Content-Type: application/json' \
-  -d '{"jsonrpc":"2.0","method":"alkanes_simulate","params":[{
-    "target":"4:65498","inputs":["3"],"alkanes":[],
-    "transaction":"0x","block":"0x","height":"1500","txindex":0,"vout":0
-  }],"id":1}'
-# Expected: {"execution":{"data":"0x00000000000000000000000000000000","error":null},"status":0}
+### Manual edicts — when and how
 
-# Test opcode 1 is recognized (will fail with balance error, NOT "Unrecognized opcode")
-curl -s https://regtest.subfrost.io/v4/subfrost \
-  -H 'Content-Type: application/json' \
-  -d '{"jsonrpc":"2.0","method":"alkanes_simulate","params":[{
-    "target":"4:65498","inputs":["1","2","0","32","0","1000","1000"],"alkanes":[],
-    "transaction":"0x","block":"0x","height":"1500","txindex":0,"vout":0
-  }],"id":1}'
-# Expected error: "balance underflow" (NOT "Unrecognized opcode")
-```
+Edicts are only mandatory when **input alkanes need to land at a non-first protostone** (e.g. p2 in a 3-protostone chain). For single-protostone calls the auto-edict from `inputRequirements` is enough; the cellpack params identify the tokens.
 
-### After Deployment: Update App Config
+If you ever construct an edict by hand and its `pointer` is wrong (e.g. `v0` instead of `v1`), the tokens land at output 0 instead of the cellpack protostone — the contract sees zero `incomingAlkanes` and fails with "expected N alkane inputs" or "input amount cannot be zero".
 
-In `utils/getConfig.ts`, change the regtest `ALKANE_FACTORY_ID` to the new factory proxy slot:
-```typescript
-ALKANE_FACTORY_ID: '4:65498',  // was '4:65522'
-```
+### Wrap BTC
+
+Different pattern — BTC output at v0 + protostone at v1, not an alkane edict.
 
 ---
 
-## Diagnosing AMM Contract Issues
+## AMM Deployment, Diagnosing & Rate Limiting
 
-### How to Check if a Contract Slot is Occupied
-
-```bash
-curl -s https://regtest.subfrost.io/v4/subfrost \
-  -H 'Content-Type: application/json' \
-  -d '{"jsonrpc":"2.0","method":"alkanes_simulate","params":[{
-    "target":"4:SLOT_NUMBER","inputs":["99"],"alkanes":[],
-    "transaction":"0x","block":"0x","height":"CURRENT_HEIGHT","txindex":0,"vout":0
-  }],"id":1}'
-```
-- `"unexpected end of file"` → Slot is EMPTY (no WASM deployed)
-- `"Unrecognized opcode"` → WASM exists but doesn't implement opcode 99
-- Actual data returned → WASM exists and opcode 99 works
-
-### How to Check Which Opcodes a Contract Supports
-
-Iterate opcodes 0-50 via `alkanes_simulate`:
-- `"Unrecognized opcode"` → Opcode NOT implemented in the WASM
-- Any other error (e.g., "failed to fill whole buffer", "expected N alkane inputs") → Opcode IS implemented but needs proper inputs
-- `status: 0` with data → Opcode works fully
-
-### How to Check Beacon → Implementation Mapping
-
-```bash
-# Query beacon's implementation pointer (opcode 0x7ffd = 32765)
-curl -s https://regtest.subfrost.io/v4/subfrost \
-  -H 'Content-Type: application/json' \
-  -d '{"jsonrpc":"2.0","method":"alkanes_simulate","params":[{
-    "target":"4:BEACON_SLOT","inputs":["32765"],"alkanes":[],
-    "transaction":"0x","block":"0x","height":"CURRENT_HEIGHT","txindex":0,"vout":0
-  }],"id":1}'
-# Returns data containing the implementation AlkaneId
-```
-
-### The "Unrecognized opcode" Trap
-
-If the factory returns "Unrecognized opcode" for opcodes that SHOULD exist (0, 1, 2), the deployed WASM binary is an **incomplete build**. This was the root cause of the Jan 2026 AMM failure:
-
-- The `prod_wasms/factory.wasm` shipped in multiple repos (alkanes-rs-dev, ts-sdk, subfrost-app) was compiled WITHOUT the write opcodes.
-- It only contained read-only opcodes: 3 (GetAllPools), 4 (GetNumPools), 50 (Forward).
-- The SOLUTION was to build from the `oyl-amm` source repo, which has the complete factory implementation.
-
-**Lesson:** Never trust `prod_wasms/` blindly. Always verify opcodes via `alkanes_simulate` after deployment.
-
----
-
-## Rate Limiting and Deployment Failures
-
-### regtest.subfrost.io Rate Limits
-
-The RPC endpoint enforces **20 requests/minute** per IP. Each CLI deployment command makes 20-40+ RPC calls (UTXO fetch, broadcast, mine, sync check). This means:
-- Deployments will frequently hit rate limits
-- The CLI retries automatically (up to 60 attempts with 2s delay)
-- Wait **90 seconds** between deployments to be safe
-- Large WASM deployments (>200K) may fail with "error decoding response body" — retry without `--trace` flag
-
-### Common Deployment Errors
-
-| Error | Cause | Fix |
-|-------|-------|-----|
-| `Rate limit exceeded (20 req/min)` | Too many RPC calls | Wait 60-90s between deployments |
-| `error decoding response body` | Response too large (trace + large WASM) | Retry without `--trace` flag |
-| `wasm unreachable instruction executed` | Test-compiled WASM deployed on-chain | Build from oyl-amm source, not from test harness hex |
-| `Extcall failed: Unrecognized opcode` | Factory WASM missing write opcodes | Rebuild from oyl-amm source |
-| `balance underflow` | Simulation lacks token inputs | Expected in dry simulation; real tx needs actual token UTXOs |
-
-### Test WASMs vs Production WASMs
-
-The `subfrost-consensus` repo contains hex-encoded AMM WASMs in test files (e.g., `alkanes_std_amm_factory_build.rs`). These are compiled for the **test harness** and crash with `unreachable` when deployed on-chain. They use different host function imports. NEVER extract and deploy these.
+See [docs/AMM_DEPLOYMENT.md](docs/AMM_DEPLOYMENT.md) for full deployment procedure, diagnostics, and rate limiting reference.
 
 ---
 
 ## UTXO and Token Discovery
 
-### Alkane Balance Fetching via OYL Alkanode API
+### Alkane Balance Fetching
 
-Alkane token balances are fetched via the OYL Alkanode REST API (`https://oyl.alkanode.com`):
-- **Endpoint:** `POST /get-alkanes-by-address` with body `{ address: string }`
-- **Response:** `{ statusCode: number, data: AlkaneBalance[] }` where each entry has `name`, `symbol`, `balance`, `alkaneId: { block, tx }`, price data, etc.
-- **Config:** `OYL_ALKANODE_URL` in `utils/getConfig.ts` (overridable via `NEXT_PUBLIC_OYL_ALKANODE_URL` env var)
-- **Helper:** `fetchAlkaneBalances()` in `utils/getConfig.ts`
+Three independent data streams (see `queries/account.ts`):
+- **BTC balance:** `btcBalanceFastQueryOptions` — UniSat `getBitcoinUtxos()` (instant) or esplora fallback
+- **Alkane balances:** `alkaneBalanceQueryOptions` — SDK `dataApiGetAlkanesByAddress()` on mainnet, `fetchAlkaneBalancesViaProtobuf()` on local networks
+- **Enriched BTC (disabled on mainnet):** `enrichedWalletQueryOptions` — lua `balances.lua`, only on devnet
 
-This replaced the old `alkanes_protorunesbyaddress` RPC method which returned `0x` (empty) on regtest.
+All use `staleTime: Infinity` on mainnet — refetch only on HeightPoller block change.
 
-### SDK UTXO Selection Limitation
+### SDK UTXO Selection
 
-The `@alkanes/ts-sdk` UTXO selection does NOT automatically find alkane token UTXOs. The frontend must:
-1. Discover alkane UTXOs manually (via esplora address UTXO endpoint)
-2. Inject them into the PSBT inputs before signing
-3. Handle change outputs for excess alkane amounts
+For swap/wrap: SDK uses `payment_utxos` from UniSat `getBitcoinUtxos()` (clean UTXOs only) + espo `get_address_outpoints` for alkane UTXOs. For add liquidity: `discoverAlkaneUtxos()` and `injectAlkaneInputs()` in `hooks/useAddLiquidityMutation.ts`.
 
-See `discoverAlkaneUtxos()` and `injectAlkaneInputs()` in `hooks/useAddLiquidityMutation.ts`.
+### Live per-pool state (slippage-critical surfaces)
+
+`usePoolStateLive(poolId, { enabled })` reads espo's `/get-pool-details` REST endpoint, which serves a per-block snapshot written by the indexer on every block. Unlike the bulk `/get-all-pools-details` aggregate (cached for the markets list, ~30s drift) this endpoint reflects what the contract sees on the latest indexed block — same freshness as `alkanes_simulate` against state trie but with structured JSON instead of raw protobuf.
+
+**Refresh model:** `staleTime: Infinity`, no `refetchInterval`. Espo writes a fresh snapshot per block, so polling between blocks would always return identical data. HeightPoller's existing `invalidateQueries` predicate covers `pool-live-state` keys, so the query auto-refetches when the metashrew height advances. `refetchOnWindowFocus: true` picks up missed blocks if the user was away. `enabled` is gated on `amount > 0` for all surfaces — no background traffic while the form is idle.
+
+**Where it's wired:**
+- **Swap quote** (`useSwapQuotes`): `liveDirect` reserves enter the queryKey, so the quote re-renders automatically each block. `minAmountOut` is applied to the visible quote at submit — no recomputation against newer reserves (price-moved-too-far must revert, Uniswap-style).
+- **Add Liquidity paired** (`SwapShell`): `useEffect` on `addLpLiveState.data` recomputes the displayed paired amount when reserves shift, so the user sees current ratio without retyping. Mutation uses the desired amounts the user saw + slippage applied to those.
+- **Remove Liquidity min0/min1** (`SwapShell.handleRemoveLiquidity`): `await removeLpLiveState.refetch()` immediately before the confirm modal, so the min amounts shown to the user reflect current reserves+supply. After approval, nothing recomputes.
+
+**`/api/pools/cached`:** simplified to passthrough + `Cache-Control: s-maxage=30, stale-while-revalidate=300`. Removed the in-process Map (fresh / lastGood) — useless on serverless cold starts and not invalidated by HeightPoller. CDN edge cache handles bursts now.
 
 ---
 
@@ -393,8 +582,8 @@ See `discoverAlkaneUtxos()` and `injectAlkaneInputs()` in `hooks/useAddLiquidity
 **Fix:** Use CreateNewPool (opcode 1) first, or check pool exists with opcode 2.
 
 ### "expected 2 alkane inputs"
-**Cause:** Pool's AddLiquidity (opcode 1) received fewer than 2 token types in `incomingAlkanes`.
-**Fix:** Ensure p0 has TWO edicts (one per token) both pointing to p1. Both tokens must be different alkane IDs.
+**Cause:** Factory.AddLiquidity (opcode 11) received fewer than 2 token types in `incomingAlkanes`. Either UTXO selection only picked up one of the two tokens, or `inputRequirements` was wrong.
+**Fix:** Verify both tokens are in `inputRequirements` (`block:tx:amount,block:tx:amount`). Both must be different alkane IDs.
 
 ### "Extcall failed: Unrecognized opcode"
 **Cause:** The factory proxy delegates to a logic contract that doesn't implement the called opcode. The WASM is an incomplete build.
@@ -404,26 +593,20 @@ See `discoverAlkaneUtxos()` and `injectAlkaneInputs()` in `hooks/useAddLiquidity
 **Cause:** The contract is trying to transfer tokens it doesn't hold. This is EXPECTED in simulations. In real transactions, ensure the contract receives tokens via `incomingAlkanes` (two-protostone pattern).
 
 ### frBTC wrap sends BTC but never mints frBTC
-**Cause:** Stale hardcoded signer address. The frBTC contract only mints when BTC arrives at the address derived from its GET_SIGNER opcode (103). A wrong address means BTC goes to an unrelated output and the contract sees zero incoming BTC.
-**Fix:** Update `SIGNER_ADDRESSES` in `useWrapMutation.ts` and `useWrapSwapMutation.ts`. Get the correct address by running: `alkanes-cli -p subfrost-regtest wrap-btc --amount 1000 --fee-rate 1` and checking which address receives BTC at output 0.
+**Cause:** BTC didn't reach the address from GET_SIGNER (opcode 103). Either `getSignerAddressDynamic()` failed (network down, fallback to deprecated static map with stale value) or the wrap output didn't bind to that signer address.
+**Fix:** Verify `getSignerAddressDynamic(network)` returns the live signer; check the tx output bound to that exact address. The deprecated static map in `lib/alkanes/constants.ts` should not be the source of truth — see "frBTC Signer Address" above.
 
-### "insufficient output" / swap quote wildly inflated on regtest
-**Cause:** Espo `ammdata.get_pools` (`api.alkanode.com/rpc`) returns **mainnet** pool data. Mainnet and regtest share genesis token IDs (`2:0` DIESEL, `32:0` frBTC), so the frontend uses mainnet reserves for regtest swap quotes. Mainnet pool `2:77087` has DIESEL reserve ~347B and frBTC reserve ~10.7M, while regtest pool `2:6` has DIESEL ~35.7B and frBTC ~2.17B — completely different ratios. The resulting `amount_out_min` is ~191x too large for regtest, causing the factory to revert.
-**Fix:** Skip Espo on regtest in `useAlkanesTokenPairs.ts` and `usePools.ts`. The RPC simulation fallback (factory opcode 3 + pool opcode 999) queries actual regtest on-chain reserves.
+### "insufficient output" / swap quote inflated on regtest
+**Cause:** Espo returns mainnet pool data for regtest (shared genesis token IDs).
+**Fix:** Skip Espo on regtest — RPC simulation fallback queries actual on-chain reserves.
 
 ### "EXPIRED deadline" on regtest
-**Cause:** Regtest blocks are mined manually, so a deadline of current_block + 3 can easily expire before the swap tx is mined.
-**Fix:** On regtest, all mutation hooks override `deadlineBlocks` to 1000 regardless of user setting.
+**Cause:** Regtest blocks are mined manually, so a deadline of current_block + 3 can easily expire before the tx is mined.
+**Fix:** `useSwapMutation` and `useRemoveLiquidityMutation` override `deadlineBlocks` to 1000 on `isRegtest` networks. `useAddLiquidityMutation` uses the user's value — if you hit EXPIRED on add, raise the deadline in TransactionSettingsModal.
 
 ### ⚠️ Tokens/BTC sent to wrong addresses (browser wallet)
-**Cause:** Mutation hook used symbolic addresses (`p2tr:0`, `p2wpkh:0`) for browser wallet outputs. These resolve to SDK's DUMMY wallet, NOT user's wallet.
-**Fix:** Use conditional logic to pass ACTUAL addresses for browser wallets:
-```typescript
-const toAddresses = isBrowserWallet ? [taprootAddress] : ['p2tr:0'];
-const changeAddr = isBrowserWallet ? segwitAddress : 'p2wpkh:0';
-const alkanesChangeAddr = isBrowserWallet ? taprootAddress : 'p2tr:0';
-```
-**See:** `useSwapMutation.ts` header comment for full documentation. This bug caused **actual token loss** — see Historical Issues section "2026-03-01: Browser Wallet Output Address Bug".
+**Cause:** Symbolic addresses (`p2tr:0`) resolve to SDK's dummy wallet, not user's.
+**Fix:** See "Address Handling — pass `txContext` from `useWallet()`" section above.
 
 ---
 
@@ -436,30 +619,7 @@ The app has optional backend services for caching and persistence:
 - **Memorystore (Redis 7.0):** `subfrost-cache` at `10.11.193.4:6379`
 - **VPC Connector:** `subfrost-connector` (10.8.0.0/28) — connects Cloud Run to private services
 
-### Database/Cache Usage
-```typescript
-import { prisma, cache, redis } from '@/lib/db';
-
-// Prisma for PostgreSQL
-const user = await prisma.user.findUnique({ where: { taprootAddress } });
-
-// Redis cache with TTL
-const data = await cache.getOrSet('key', () => fetchData(), 300);
-```
-
-### Key Files
-- `lib/db/prisma.ts` — Prisma singleton client
-- `lib/db/redis.ts` — ioredis client with cache helpers
-- `prisma/schema.prisma` — Database schema
-- `app/api/health/route.ts` — Health check endpoint
-- `app/api/example/route.ts` — Usage examples for new developers
-- `docs/BACKEND_SETUP.md` — Full infrastructure documentation
-
-### Local Development
-```bash
-docker-compose up -d  # Start PostgreSQL + Redis
-pnpm db:push          # Apply schema
-```
+See [docs/BACKEND_SETUP.md](docs/BACKEND_SETUP.md) for usage examples and local setup.
 
 ---
 
@@ -471,11 +631,14 @@ pnpm db:push          # Apply schema
 | SDK WASM alias config | `next.config.mjs` (lines 7-21) |
 | Local WASM files | `lib/oyl/alkanes/` |
 | Factory/Pool opcode constants | `constants/index.ts` |
-| Add Liquidity | `hooks/useAddLiquidityMutation.ts` |
-| Swap | `hooks/useSwapMutation.ts` |
-| Remove Liquidity | `hooks/useRemoveLiquidityMutation.ts` |
+| Add Liquidity / Create New Pool (factory opcode 11 / 1, branched on `findPoolId`) | `hooks/useAddLiquidityMutation.ts` |
+| Swap (factory opcode 13 exact-in / 14 exact-out, branched on `direction`) | `hooks/useSwapMutation.ts` |
+| Remove Liquidity (factory opcode 12) | `hooks/useRemoveLiquidityMutation.ts` |
 | Wrap/Unwrap | `hooks/useWrapMutation.ts`, `hooks/useUnwrapMutation.ts` |
-| Pool data fetching | `hooks/usePools.ts`, `hooks/useDynamicPools.ts` |
+| Plain BTC send (UniSat native / browser manual PSBT / keystore via alkanesExecuteTyped) | `hooks/useBtcSendMutation.ts` |
+| Plain alkane transfer | `hooks/useAlkaneSendMutation.ts` |
+| Atomic wrap+addLiquidity / wrap+createPool (single tx BTC + Token X → LP) | `hooks/useAtomicWrapAddLiquidityMutation.ts` |
+| Pool data fetching | `hooks/usePools.ts` (markets list), `hooks/usePoolStateLive.ts` (per-pool live) |
 | SDK context | `context/AlkanesSDKContext.tsx` |
 | Calldata builder tests | `hooks/__tests__/mutations/calldata.test.ts` |
 
@@ -484,15 +647,16 @@ pnpm db:push          # Apply schema
 | Repo | Purpose | Notes |
 |------|---------|-------|
 | `oyl-amm` (github.com/Oyl-Wallet/oyl-amm) | AMM factory + pool source code | Build WASMs from here |
-| `alkanes-rs` (github.com/kungfuflex/alkanes-rs) | Core alkanes runtime, standard contracts | Only has `main` branch. No CLI. |
-| `alkanes-rs-dev` (local) | CLI binary, prod_wasms, deploy scripts | **Note:** prod_wasms may be stale |
+| `alkanes-rs` (github.com/kungfuflex/alkanes-rs) | Core alkanes runtime, CLI, WASM SDK | Branches: `main`, `develop`. Fork: `Misha-btc/alkanes-rs` branch `feat/sdk-perf-and-coinselect` |
 | `subfrost-consensus` | Indexer, test harness, hex-encoded test WASMs | Test WASMs are NOT deployable on-chain |
 
 ---
 
 ## Regtest Infrastructure
 
-### Service URLs
+For **regtest-local** (Docker) specifics — WASM UTXO discovery, coinType derivation, transaction patterns, contract IDs, known bugs — see [docs/REGTEST_LOCAL_ALMANAC.md](docs/REGTEST_LOCAL_ALMANAC.md).
+
+### Service URLs (subfrost-regtest, remote)
 - **RPC endpoint:** `https://regtest.subfrost.io/v4/subfrost`
 - **Mining:** Use `bitcoind_generatetoaddress` RPC method
 
@@ -516,6 +680,12 @@ alkanes-cli -p subfrost-regtest \
 - **CLI deployer (p2tr:0):** `bcrt1p0mrr2pfespj94knxwhccgsue38rgmc9yg6rcclj2e4g948t73vssj2j648`
 - **App user (taproot):** `bcrt1pqjwdlfg4lht3jwl0p5u58yn8fc2ksqx5v44g6ekcru5szdm2u32qum3gpe`
 - **App user (segwit):** `bcrt1qvjucyzgwjjkmgl5wg3fdeacgthmh29nv4pk82x`
+
+---
+
+## Devnet Testing & QA
+
+See [docs/DEVNET_TESTING.md](docs/DEVNET_TESTING.md) for full testing methodology, boot phases, vitest rules, browser-safe parsing, and opcode mapping reference.
 
 ---
 
@@ -555,811 +725,87 @@ alkanes-cli -p subfrost-regtest bitcoind generatetoaddress 1 [self:p2tr:0]
 
 ---
 
-## Historical Issues Resolved
+## Browser Wallet Safety Rules (from production incidents)
 
-### 2026-03-16: tapInternalKey Patching Regression — "No taproot scripts signed" Error
+### tapInternalKey Patching — DO NOT REMOVE
 
-**⚠️⚠️⚠️ CRITICAL: DO NOT REMOVE tapInternalKey PATCHING FROM WalletContext.tsx ⚠️⚠️⚠️**
+**⚠️ CRITICAL: `patchTapInternalKeys()` in `WalletContext.tsx` → `signTaprootPsbt()` is MANDATORY.**
 
-**Symptom:** Xverse/UniSat/OKX browser wallet signing fails with:
-- Xverse: "No taproot scripts signed" or "User rejected request to sign a psbt"
-- UniSat: Infinite loading spinner (silently skips unmatched inputs)
-- OKX: Similar silent failure
+The SDK creates PSBTs with a dummy wallet's `tapInternalKey`. Browser wallets (Xverse, UniSat, OKX) refuse to sign when the key doesn't match their own. SDK adapters cannot fix this — they don't have access to the user's public key.
 
-**Root cause commit:** `43ea0ed1` ("refactor(wallet): delegate all browser wallet signing to ts-sdk adapters")
-
-This commit removed the critical `patchTapInternalKeys()` call from `signTaprootPsbt()` in `WalletContext.tsx`, assuming the SDK adapters would handle it. **They cannot** — the SDK adapters don't have access to the user's public key.
-
-**What the SDK does wrong:**
-```
-SDK creates PSBT with: tapInternalKey = DUMMY_WALLET_KEY (from walletCreate())
-User's wallet has:     publicKey = USER_REAL_KEY
-Wallet checks:         DUMMY_KEY ≠ USER_KEY → REFUSES TO SIGN
-```
-
-**What the frontend MUST do:**
 ```typescript
-// In signTaprootPsbt(), BEFORE calling any wallet-specific signing:
+// MUST run BEFORE any wallet-specific signing:
 const taprootPubKey = browserWalletAddresses?.taproot?.publicKey || browserWallet?.publicKey;
 if (taprootPubKey) {
   const xOnlyHex = taprootPubKey.length === 66 ? taprootPubKey.slice(2) : taprootPubKey;
-  patchTapInternalKeys(psbt, xOnlyHex);  // CRITICAL: Replace dummy key with user's key
+  patchTapInternalKeys(psbt, xOnlyHex);
 }
+// Then use psbt.toHex() (NOT the original psbtBase64) for signing
 ```
 
-**Why SDK adapters can't do this:**
-1. SDK adapters only receive the PSBT hex — they have no access to `browserWalletAddresses`
-2. The user's public key is stored in React state, not passed to the adapter
-3. The dummy key in the PSBT doesn't match any connected account
+**DO NOT:** remove the import, remove the patching call, assume SDK adapters handle it, or use the original `psbtBase64` after patching.
 
-**Files that MUST have this patching:**
-- `context/WalletContext.tsx` - `signTaprootPsbt()` function (line ~1653)
-- The patching MUST happen BEFORE any wallet-specific signing (Xverse, UniSat, OKX, OYL)
+### Browser Wallet Address Rules
 
-**Additional bug found:** After patching the PSBT, the code was converting from the ORIGINAL `psbtBase64` instead of using the patched `psbt.toHex()`:
-```typescript
-// BUG (loses all patches):
-const psbtHex = Buffer.from(psbtBase64, 'base64').toString('hex');
+See "Address Handling — pass `txContext` from `useWallet()`" above. This rule was established after **actual token loss on mainnet** (tx `985436b5...`).
 
-// FIX (uses patched PSBT):
-const patchedPsbtHex = psbt.toHex();
-```
+`WalletContext` computes `txContext` per `walletType`:
+- **keystore** (BIP86 taproot-only): all four address fields = taproot; `protectTaproot=false`; `'burn'` ord-strategy (skips per-UTXO ord lookup, perf win — keystore is wallet-internal, never receives inscriptions).
+- **browser dual-address** (Xverse / Leather / OYL): `feeSourceAddresses=[segwit, taproot]`, BTC change → segwit, alkane change → taproot, `protectTaproot=true`, `'preserve'` (split-tx with alkane-aware routing).
+- **browser single-address** (UniSat / OKX): one address for everything, `protectTaproot=false`, `'preserve'`.
 
-**Verification checklist:**
-- [ ] `patchTapInternalKeys` is imported from `@/lib/wallet/browserWalletSigning`
-- [ ] `patchTapInternalKeys(psbt, xOnlyHex)` is called BEFORE wallet-specific signing
-- [ ] SDK adapter path uses `psbt.toHex()` not `Buffer.from(psbtBase64, 'base64').toString('hex')`
+Hooks just pass `txContext` — `alkanesExecuteTyped` wrapper auto-applies the wallet-type-specific ord-strategy + UniSat clean payment_utxos for browser. Per-call overrides at the call site still win (`params.X ?? txContext.X`).
 
-**DO NOT:**
-- Remove or comment out `patchTapInternalKeys` import
-- Remove or comment out the patching code block
-- Assume SDK adapters will handle this — THEY CANNOT
-- Pass the original `psbtBase64` to wallets after patching
+### Wallet-Specific Quirks
+
+| Wallet | Signing | Connection | Gotchas |
+|--------|---------|------------|---------|
+| **OYL** | Use SDK adapter (`walletAdapter.signPsbt`), NOT direct `window.oyl` | No `connect()` method — use `getAddresses()`. Auto-reconnect on "connected first" error | `isConnected()` returns FALSE even when working — don't gate on it. Shows 1 popup PER INPUT (not a bug) |
+| **UniSat** | Direct bypass: `window.unisat.signPsbt(hex, {autoFinalized: true, toSignInputs})` | Try `getAccounts()` first, then `requestAccounts()` with 10s timeout | Must include `address` in each `toSignInputs` entry. Use `autoFinalized: true` for taproot. Single-address wallet |
+| **Xverse** | Direct bypass (existing code) | Standard | Batches all signatures into single popup |
+| **OKX** | SDK adapter | 10s timeout on `connect()` | Single-address wallet |
+
+### Alkane Transfer UTXO Safety
+
+Dust UTXOs can carry inscriptions, runes, AND alkanes simultaneously. All alkane operations (transfer / swap / wrap / addLiquidity / etc.) route through `alkanesExecuteTyped` and inherit two layers of protection:
+
+- **Browser → `'preserve'`** (auto-applied): SDK runs alkane-aware `build_split_psbt`. When an inscribed UTXO also carries an alkane, the split routes the alkane to a clean output via protostone OP_RETURN, atomically broadcast alongside the main tx. Both inscription and alkane survive.
+- **Keystore → `'burn'`** (auto-applied): wallet-internal, never receives inscriptions, ord lookup skipped.
+- **Mempool-spent filter** (`select_utxos`): outpoints already spent in our own mempool transactions are stripped from the candidate set via `address/{addr}/txs/mempool` before coin selection. Indexers (espo / metashrew / protorunesbyaddress) only see confirmed state — without this, a quick double-submit picks the same UTXO twice and broadcasts a mempool conflict.
+
+**DUST_VALUE = 600 sats** (not 546) to avoid node dust rejection.
+
+### PSBT Construction Checklist (BTC sends)
+
+1. Fetch UTXOs via `/api/esplora/address/{addr}/utxo?network={network}` (NOT `esplora_address::utxo` RPC)
+2. Aggregate UTXOs from BOTH segwit and taproot addresses
+3. Taproot inputs (bc1p/tb1p/bcrt1p): add `tapInternalKey`
+4. P2SH inputs: inject `redeemScript` via `injectRedeemScripts()`
+5. Outputs: actual addresses for browser wallets, never symbolic
+6. Smart finalization: try `extractTransaction()` first, fallback to `finalizeAllInputs()`
+
+Key files: `app/wallet/components/SendModal.tsx`, `lib/wallet/browserWalletSigning.ts`
+
+### Protorune Auto-Allocation (no manual edicts needed)
+
+All input alkanes automatically go to the FIRST protostone with matching `protocol_tag`. The SDK's auto-edict from `inputRequirements` handles token delivery. **Do NOT also construct manual edict protostones** — this creates double-edicts that shift protostone indices and break the call.
 
 ---
 
-### 2026-01-28: AMM Factory Deployment — Incomplete WASM Binaries
+## Key Lessons from Past Incidents
 
-**Symptom:** Factory proxy [4:65522] returned "Extcall failed: Unrecognized opcode" for CreateNewPool (opcode 1). No pools could be created. LP tokens could never be minted through the UI.
-
-**Investigation timeline:**
-1. Discovered factory logic [4:65524] only implemented opcodes 3 (GetAllPools) and 4 (GetNumPools). Opcodes 0, 1, 2 all returned "Unrecognized opcode".
-2. Pool logic [4:65520] was also incomplete — missing opcodes 3 (Swap) and 4 (SimulateSwap).
-3. The `prod_wasms/factory.wasm` (261K) in alkanes-rs-dev, ts-sdk, and subfrost-app were all the SAME incomplete binary.
-4. Extracted test WASMs from subfrost-consensus hex — these had all opcodes but crashed on-chain with "wasm unreachable instruction" (test harness WASMs use different host function imports).
-5. Cloned `https://github.com/Oyl-Wallet/oyl-amm` and built from source using Homebrew LLVM (Apple clang cannot compile secp256k1 for wasm32).
-6. Freshly built factory.wasm (236K) and pool.wasm (256K) had ALL opcodes.
-7. Deployed complete stack to new slots: factory logic [4:65500], pool logic [4:65496], factory proxy [4:65498], beacon [4:65499].
-8. Factory initialized, pool created, LP token minted successfully.
-
-**Root cause:** The `prod_wasms/` binaries were compiled from an older or partial build that excluded write operations. The source repo (oyl-amm) has the complete code.
-
-**Lessons:**
-- NEVER trust pre-built WASMs in `prod_wasms/` directories. Always verify opcodes via `alkanes_simulate` after deployment.
-- Always build from the oyl-amm source repo for AMM contracts.
-- Apple clang does NOT support wasm32 target. Use `brew install llvm` and set `CC_wasm32_unknown_unknown=/usr/local/opt/llvm/bin/clang`.
-- Test WASMs from subfrost-consensus are NOT on-chain compatible.
-- Rate limiting (20 req/min) makes sequential deployments painful. Wait 90s between each step.
-- The `--trace` flag can cause "error decoding response body" for large WASMs. Omit it for deployments.
-
-### 2026-01-28: Swap Opcode Missing from Deployed Pool — Factory Router Fix
-
-**Symptom:** DIESEL → frBTC swaps would broadcast and confirm on Bitcoin, but no actual swap occurred. The user's DIESEL was not debited and no frBTC was received. Pool reserves remained unchanged.
-
-**Investigation timeline:**
-1. Traced swap transaction on-chain — it confirmed but `alkanes_protorunesbyoutpoint` returned empty for all outputs.
-2. Simulated pool [2:6] opcode 3 (Swap) → returned "Extcall failed: ALKANES: revert: Error: Unrecognized opcode".
-3. Systematically tested all pool opcodes. Results:
-   - Opcode 1 (AddLiquidity): WORKS
-   - Opcode 2 (RemoveLiquidity): WORKS
-   - Opcode 3 (Swap): "Unrecognized opcode" — **BROKEN**
-   - Opcode 4 (SimulateSwap): "Unrecognized opcode" — **BROKEN**
-   - Opcodes 97, 98, 999 (read-only): All work
-4. Ran `strings` on `prod_wasms/pool.wasm` — opcode 3 EXISTS in the binary but the **deployed** version at [4:65496] doesn't have it. The deployed WASM is an older build.
-5. Discovered factory contract [4:65498] has router opcodes 13 (SwapExactTokensForTokens) and 14 (SwapTokensForExactTokens) that route swaps internally through pools.
-6. Verified factory opcode 13 via `alkanes_simulate`: 10,000,000 DIESEL → 950,148 frBTC — **SUCCESS**.
-7. Updated all swap mutation hooks to route through factory opcode 13 instead of pool opcode 3.
-
-**Root cause:** The pool logic WASM deployed at [4:65496] is an older build missing Swap (opcode 3) and SimulateSwap (opcode 4). The factory contract at [4:65498] has working router opcodes (13, 14) that execute swaps by calling into pools internally via a different code path.
-
-**Files changed:**
-- `hooks/useSwapMutation.ts` — Changed `buildSwapProtostone` from `[pool,3,minOut,deadline]` to `[factory,13,pathLen,...path,amountIn,minOut,deadline]`
-- `hooks/useWrapSwapMutation.ts` — Updated p1 (swap step) from pool opcode 3 to factory opcode 13
-- `hooks/useSwapUnwrapMutation.ts` — Updated p1 (swap step) from pool opcode 3 to factory opcode 13
-- `hooks/useSwapQuotes.ts` — Updated comments; poolId field kept for reference/validation
-- `hooks/__tests__/mutations/calldata.test.ts` — Updated factory ID to `4:65498` and opcode to `13`
-- `app/swap/SwapShell.tsx` — Updated comments
-
-**Factory opcode 13 calldata format (verified working):**
-```
-cellpack: [factory_block, factory_tx, 13, path_len, sell_block, sell_tx, buy_block, buy_tx, amount_in, amount_out_min, deadline]
-alkanes: [{id: {block: sell_block, tx: sell_tx}, value: amount_in}]
-```
-
-**Lessons:**
-- The deployed pool WASM can be incomplete even when `prod_wasms/pool.wasm` has the correct opcodes. Always verify deployed contracts via `alkanes_simulate`.
-- Factory router opcodes (13, 14) are a viable alternative when pool direct opcodes are missing. The factory internally delegates to the pool using a different extcall path.
-- When swap transactions confirm but produce no state changes, check if the target opcode exists by simulating it directly.
-
-### 2026-01-28: frBTC Wrap Not Minting
-- BTC was sent but frBTC never minted to the user's wallet
-- Root cause: hardcoded signer address in `useWrapMutation.ts` was stale (`bcrt1p5lush...` instead of `bcrt1p466w...`)
-- The frBTC contract [32:0] only mints when BTC arrives at its signer address (derived from opcode 103 GET_SIGNER)
-- Also fixed output ordering to match CLI: signer at output 0 (v0), user at output 1 (v1)
-- Protostone changed from `[32,0,77]:v0:v0` to `[32,0,77]:v1:v1`, inputRequirements from `B:<sats>` to `B:<sats>:v0`
-- Same stale address was present in `useWrapSwapMutation.ts` and was fixed there too
-- **Lesson:** When wrap transactions silently fail (BTC sent, no tokens minted), check the signer address first. Run the CLI wrap-btc command to see the correct address.
-
-### 2026-02-01: BTC→DIESEL Swap — Three Bugs in Sequence
-
-**Symptom:** BTC→DIESEL swaps via the UI would broadcast and confirm, but the swap never executed. frBTC was minted to an output but never consumed by the factory. Pool reserves unchanged.
-
-**Investigation:** Traced transaction `cd3cc73c79b9aa70e7d70aa571ab2adf256bf0d9d5d2ffbc7d18ec8700314943` through on-chain data, decoded OP_RETURN protostones, and simulated factory execution.
-
-**Bug 1: Double-edict shifting protostone indices**
-- The swap mutation hooks (useSwapMutation, useSwapUnwrapMutation) manually constructed an edict protostone (p0) to transfer tokens to the cellpack protostone (p1).
-- The SDK's `alkanesExecuteWithStrings` ALSO auto-generates an edict from `inputRequirements`, inserting it at position 0 and shifting all protostone references via `adjust_protostone_references`.
-- Result: two edict protostones (SDK auto-edict at p0, manual edict at p1), the cellpack shifted to p2, but edict targets pointed to wrong indices. The factory received zero `incomingAlkanes`.
-- **Fix:** Removed manual edict protostones. The SDK's auto-edict from `inputRequirements` is sufficient.
-
-**Bug 2: Stale UTXO — wrap tx not confirmed before swap**
-- The BTC→Token two-step flow (wrap BTC→frBTC, then swap frBTC→Token) triggered the swap immediately after broadcasting the wrap tx without waiting for confirmation.
-- The swap tx referenced the frBTC UTXO from the wrap, but since the wrap wasn't mined yet, the UTXO didn't exist in the indexer's view.
-- **Fix:** Added esplora polling loop in SwapShell.tsx that mines a block and waits for the wrap tx to appear as confirmed before initiating the swap.
-
-**Bug 3: Espo returning mainnet reserves for regtest swap quotes (root cause of 191x inflation)**
-- `useAlkanesTokenPairs` fetches pool data with Espo (`api.alkanode.com/rpc`) as priority 1. Espo returns **mainnet** pool data.
-- Mainnet pool `2:77087` has the same token IDs as regtest (`2:0` DIESEL, `32:0` frBTC) but completely different reserves: DIESEL ~347B/frBTC ~10.7M (mainnet) vs DIESEL ~35.7B/frBTC ~2.17B (regtest).
-- With mainnet reserves, the swap quote calculated `amount_out_min = 297,373,476,140` for 99.9M frBTC input. The regtest factory correctly computed ~1.56B DIESEL output and reverted with "insufficient output" because 1.56B < 297B.
-- **Fix:** Skip Espo on regtest networks in both `useAlkanesTokenPairs.ts` and `usePools.ts`. The RPC simulation fallback queries actual regtest on-chain reserves via factory opcode 3 (GetAllPools) + pool opcode 999 (PoolDetails).
-
-**Additional fix: Regtest deadline override**
-- The failed tx also had deadline=1691 at block 1689 (only +2 blocks). Since regtest blocks are mined manually, tight deadlines easily expire.
-- All mutation hooks (useSwapMutation, useSwapUnwrapMutation, useWrapSwapMutation, useRemoveLiquidityMutation) now use `deadlineBlocks=1000` on regtest, making deadline expiration impossible.
-
-**Key architectural insight — Protorune auto-allocation:**
-- All input alkanes automatically go to the FIRST protostone with matching `protocol_tag` (see `protorune/src/lib.rs:903-913`). No explicit edict is needed for single-cellpack transactions.
-- The SDK's auto-edict generation only triggers when `alkanes_excess` is non-empty (wallet has more of a token than needed). It splits: needed amount to the cellpack protostone, excess to change output.
-- For exact-match amounts, no auto-edict is generated — the protorune runtime handles allocation automatically.
-
-**Files changed:**
-- `hooks/useSwapMutation.ts` — Removed manual edict, added regtest deadline override
-- `hooks/useSwapUnwrapMutation.ts` — Removed manual edict, added regtest deadline override
-- `hooks/useWrapSwapMutation.ts` — Added regtest deadline override
-- `hooks/useRemoveLiquidityMutation.ts` — Added regtest deadline override
-- `hooks/useAlkanesTokenPairs.ts` — Added RPC simulation fallback with opcode 999 parsing, skip Espo on regtest
-- `hooks/usePools.ts` — Added RPC simulation fallback, skip Espo on regtest
-- `app/swap/SwapShell.tsx` — Two-step BTC→Token flow with esplora polling between wrap and swap
-
-**Lessons:**
-- Genesis alkane IDs (2:0, 32:0) are identical across mainnet and regtest. Any data source that returns mainnet data will silently poison regtest quotes with wrong reserves.
-- Always verify which data source is actually being used by checking browser console logs (`[useAlkanesTokenPairs] Espo returned N pools` vs `RPC simulation returned N pools`).
-- When swap quotes seem unreasonable, compare the quote's reserves against `alkanes_simulate` opcode 97 (GetReserves) on the actual pool.
-- The SDK's auto-edict from `inputRequirements` handles token delivery — do NOT also construct manual edict protostones.
-
-### 2026-01-18: WASM Alias Bug
-- `next.config.mjs` aliases `@alkanes/ts-sdk/wasm` to `lib/oyl/alkanes/`
-- Old WASM in lib/oyl caused "Insufficient alkanes" errors
-- **Solution:** Always sync lib/oyl after updating SDK
-
-### 2026-01-14: Token Loss Incident
-- AddLiquidity (opcode 11) created new pools instead of adding to existing
-- Caused by missing pool existence check
-- **Lesson:** Always verify pool exists before AddLiquidity
-
-### 2026-01-12: Genesis Alkanes Missing
-- `--features regtest` flag missing in metashrew build
-- Genesis contracts (DIESEL, frBTC) not deployed
-- **Lesson:** Check docker-entrypoint.sh in metashrew-regtest image
-
-### 2026-02-20: OYL Wallet "Invalid PSBT hex" Error — RESOLVED
-
-**Symptom:** Wrap transactions fail with "Invalid PSBT hex" error from OYL wallet when the user has many UTXOs (155 in reported case). The SDK creates a PSBT with 28 inputs. OYL wallet popup may appear twice (double signature request).
-
-**Resolution (2026-03-01):** The issue was related to connection state, not PSBT format. Adding auto-reconnection logic resolved the problem. When OYL's session expires mid-operation, we now:
-1. Detect the "connected first" error
-2. Call `getAddresses()` to re-establish connection
-3. Retry the signing operation
-
-**Key insight:** OYL's `isConnected()` returning `false` does NOT indicate signing will fail. The SDK adapter handles the PSBT format correctly. Multiple signature popups are OYL's expected UX (one per input).
-
-**Files fixed:**
-- `context/WalletContext.tsx:1720-1784` — Auto-reconnection logic for OYL
-- Comprehensive debugging logs added to trace exact signing flow
-
-**Verified working:** Transaction `0b2455ceef9c0f1fb8c09d37b08f667a656cac5e09e4d0cf01ddccc7b59aef43`
-
-### 2026-03-01: Browser Wallet Output Address Bug — TOKEN LOSS
-
-**⚠️⚠️⚠️ CRITICAL: This bug caused actual token loss on mainnet ⚠️⚠️⚠️**
-
-**Lost transaction:** `985436b5c5c850bd121cd4862f32413f467145b121d34c006417724d71588db9`
-
-**Symptom:** After a swap transaction, user's UI showed $2 worth of BTC but no DIESEL or frBTC, despite sending 0.3 DIESEL for a swap. Transaction confirmed on-chain but tokens went to wrong addresses.
-
-**Root cause:** All mutation hooks were using symbolic addresses (`p2tr:0`, `p2wpkh:0`) for `toAddresses`, `changeAddress`, and `alkanesChangeAddress` parameters in the SDK's `alkanesExecuteTyped()` call. For browser wallets, these symbolic addresses resolve to the SDK's DUMMY WALLET addresses — NOT the user's actual addresses.
-
-```typescript
-// THE BUG (DO NOT USE)
-await provider.alkanesExecuteTyped({
-  toAddresses: ['p2tr:0'],           // ❌ Resolves to dummy wallet!
-  changeAddress: 'p2wpkh:0',         // ❌ Resolves to dummy wallet!
-  alkanesChangeAddress: 'p2tr:0',    // ❌ Resolves to dummy wallet!
-});
-```
-
-**Evidence from lost transaction:**
-- User's taproot: `bc1p8gunhdgy085s6xz5tg0uuwwv5k2yndcn23qat79m0ee8e0rfcs6q3hdm5n`
-- User's segwit: `bc1q0mkku72jtxzdnh5s9086mkdxy234wkqltqextr`
-- Actual output 0: `bc1ppl8797s9zc55xlzg3pm8s2ufgqrdp363gsw3gccy7j2g6n057kqqjkv7pt` (SDK DUMMY!)
-- Actual output 1: `bc1qsc9eesuu5w2elkm5lm75h4ma5u7gt0gz4z6825` (SDK DUMMY!)
-
-The tokens went to addresses the user doesn't control. **Tokens are NOT recoverable.**
-
-**The fix (MANDATORY for all browser wallet transactions):**
-
-```typescript
-const isBrowserWallet = walletType === 'browser';
-
-// Output addresses: where tokens should go
-const toAddresses = isBrowserWallet
-  ? [taprootAddress]          // ✅ ACTUAL address string
-  : ['p2tr:0'];               // OK for keystore (mnemonic loaded)
-
-// Change addresses: where BTC/alkane change should go
-const changeAddr = isBrowserWallet
-  ? (segwitAddress || taprootAddress)
-  : 'p2wpkh:0';
-
-const alkanesChangeAddr = isBrowserWallet
-  ? taprootAddress
-  : 'p2tr:0';
-
-await provider.alkanesExecuteTyped({
-  toAddresses,
-  changeAddress: changeAddr,
-  alkanesChangeAddress: alkanesChangeAddr,
-  // ...
-});
-```
-
-**Files fixed (2026-03-01):**
-- `hooks/useSwapMutation.ts`
-- `hooks/useSwapUnwrapMutation.ts`
-- `hooks/useRemoveLiquidityMutation.ts`
-- `hooks/useAddLiquidityMutation.ts`
-- `hooks/useWrapSwapMutation.ts`
-- `hooks/useUnwrapMutation.ts`
-
-**Why keystore wallets work with symbolic addresses:**
-- Keystore wallets load a real mnemonic via `provider.loadWallet()`
-- Symbolic addresses (`p2tr:0`) resolve to derived addresses from that mnemonic
-- Browser wallets DON'T load a mnemonic — we only have address strings from the extension
-- The SDK's dummy wallet (created via `walletCreate()`) is used for PSBT construction
-- All symbolic addresses resolve to THIS dummy wallet, not the user's wallet
-
-**Verification checklist for any new mutation hook:**
-1. Check if `walletType === 'browser'`
-2. If browser wallet, ALL address parameters MUST be actual address strings
-3. Check console logs during transaction — should show real bc1p/bc1q addresses
-4. After broadcast, verify on mempool.space that outputs go to user's addresses
-
-**Lessons:**
-- NEVER use symbolic addresses (`p2tr:0`, `p2wpkh:0`) for browser wallet output addresses
-- This is NOT a PSBT patching problem — the SDK needs correct addresses at call time
-- Always test with browser wallets, not just keystore, when working on mutations
-- Verify transaction outputs on-chain before considering a fix complete
-
-### 2026-03-01: OYL Wallet Connection and Signing Behavior — VERIFIED WORKING
-
-**Confirmed working transaction:** `0b2455ceef9c0f1fb8c09d37b08f667a656cac5e09e4d0cf01ddccc7b59aef43`
-
-**Key insights about OYL wallet behavior:**
-
-1. **isConnected() returns FALSE even when working**
-   - OYL's `isConnected()` tracks persistent site approval, NOT session readiness
-   - Signing works even when `isConnected()` returns `false`
-   - DO NOT gate signing operations on `isConnected()` — it will block valid users
-
-2. **OYL has NO connect() method**
-   - Unlike other wallets, OYL doesn't expose `window.oyl.connect()`
-   - Connection is established implicitly via `getAddresses()`
-   - Available methods: `disconnect, isConnected, getNetwork, switchNetwork, getAddresses, getBalance, signMessage, signPsbt, signPsbts, pushPsbt`
-
-3. **Multiple signature popups are EXPECTED**
-   - OYL shows one confirmation popup PER INPUT in the PSBT
-   - If a swap spends 3 UTXOs (e.g., 1 segwit + 2 taproot), user sees 3 popups
-   - This is OYL's UX design, NOT a bug in our code
-   - Other wallets like Xverse batch all signatures into a single popup
-
-4. **Auto-reconnection on "connected first" error**
-   - If signing fails with "Site origin must be connected first", we automatically:
-     1. Call `getAddresses()` to re-establish connection
-     2. Retry the signing operation
-   - This handles session expiration between operations
-
-5. **SDK adapter path is correct**
-   - Use `walletAdapter.signPsbt()` (from SDK), NOT direct `window.oyl` calls
-   - The SDK adapter handles format conversion and validation correctly
-   - Direct `window.oyl.signPsbt()` calls were tried and failed with validation errors
-
-**Files with OYL-specific code:**
-- `context/WalletContext.tsx:1665-1787` — OYL debugging logs and auto-reconnection
-- `hooks/useSwapMutation.ts:578-604` — Browser wallet signing with debug logs
-
-**Single-address wallet support (UniSat, OKX):**
-- These wallets only provide one address type at a time (user-configurable)
-- Code now handles this: `primaryAddress = taprootAddress || segwitAddress`
-- Prefer taproot for alkane operations, fall back to segwit if unavailable
-- Changed from requiring BOTH addresses to requiring AT LEAST ONE
+- **tapInternalKey**: SDK adapters can't patch it — frontend `patchTapInternalKeys()` is mandatory before signing
+- **Symbolic addresses**: NEVER use `p2tr:0`/`p2wpkh:0` for browser wallets — tokens go to SDK dummy wallet
+- **Wallet session**: `ensureWalletSession()` in `lib/wallet/browserWalletSigning.ts` must run before all mutations
+- **Factory router for ALL AMM ops**: opcode 13 (swap exact-in), 14 (swap exact-out — when user types into the buy field), 11 (addLiquidity into existing pool), 12 (burn/removeLiquidity), 1 (CreateNewPool when no pool exists yet — `useAddLiquidityMutation` and `useAtomicWrapAddLiquidityMutation` both branch on `findPoolId`). Never call pool-direct (opcodes 1/2/3 on the pool contract) — factory routes give Uniswap-style slippage protection (`amount_a_min`, `amount_b_min`) and a deadline.
+- **Atomic flows are hooks, not inline**: BTC→Token swap is `useAtomicWrapSwapMutation`; BTC+X→LP is `useAtomicWrapAddLiquidityMutation` (branches AddLiquidity ↔ CreateNewPool atomically with the wrap); Token→BTC is `useTokenToBtcSwap`. Plain BTC send is `useBtcSendMutation` (UniSat → `unisat.sendBitcoin` native, others → manual PSBT, keystore → `alkanesExecuteTyped` + v1 safety output). Plain alkane transfer is `useAlkaneSendMutation`.
+- **Mempool-spent filter** in WASM `select_utxos`: SDK fetches `address/{addr}/txs/mempool`, builds a set of pending-spent outpoints, removes them from the candidate UTXO set before coin selection. Closes the «second swap reuses the same alkane UTXO that's still in mempool» double-spend window.
+- **WASM sync**: Always copy `lib/oyl/alkanes/` after SDK rebuild
+- **DUST_VALUE = 600 sats** (not 546) for relay compatibility
+- **frBTC signer is dynamic**: `getSignerAddressDynamic(network)` from `lib/alkanes/helpers.ts`, not the deprecated static map in `lib/alkanes/constants.ts`
 
 ---
 
-## Browser Wallet Integration Checklist
+## Carbine CLOB
 
-When implementing or modifying any transaction hook that supports browser wallets:
-
-### Pre-implementation
-1. Read this section and the "Browser Wallet Output Address Bug" documentation above
-2. Understand the difference between `walletType === 'browser'` and `walletType === 'keystore'`
-
-### Implementation requirements
-```typescript
-const { walletType, account, browserWallet } = useWallet();
-const isBrowserWallet = walletType === 'browser';
-
-// 1. Support single-address wallets (UniSat, OKX)
-const taprootAddress = account?.taproot?.address;
-const segwitAddress = account?.nativeSegwit?.address;
-const primaryAddress = taprootAddress || segwitAddress;
-
-// 2. NEVER use symbolic addresses for browser wallets
-const toAddresses = isBrowserWallet
-  ? [primaryAddress]      // ✅ Actual address
-  : ['p2tr:0'];           // OK for keystore
-
-const changeAddr = isBrowserWallet
-  ? (segwitAddress || taprootAddress)
-  : 'p2wpkh:0';
-
-const alkanesChangeAddr = isBrowserWallet
-  ? primaryAddress
-  : 'p2tr:0';
-
-// 3. Pass actual addresses to SDK
-await provider.alkanesExecuteTyped({
-  toAddresses,
-  changeAddress: changeAddr,
-  alkanesChangeAddress: alkanesChangeAddr,
-  // ...
-});
-
-// 4. Single signing call for browser wallets
-if (isBrowserWallet) {
-  signedPsbt = await signTaprootPsbt(psbtBase64); // Signs ALL inputs
-} else {
-  signedPsbt = await signSegwitPsbt(psbtBase64);
-  signedPsbt = await signTaprootPsbt(signedPsbt);
-}
-```
-
-### Testing checklist
-- [ ] Test with OYL wallet (multi-address, multiple signature popups expected)
-- [ ] Test with UniSat wallet (single-address mode)
-- [ ] Test with OKX wallet (single-address mode)
-- [ ] Verify console logs show actual bc1p/bc1q addresses, NOT symbolic p2tr:0
-- [ ] After broadcast, verify on mempool.space that outputs go to user's addresses
-- [ ] If swap involves multiple UTXOs, confirm all signature popups complete successfully
-
----
-
-## Send Modal (BTC Transfer) — Critical Implementation Notes
-
-### 2026-03-01: Send Modal Complete Overhaul — VERIFIED WORKING
-
-**Verified transaction:** `d450245756a5e24b28756889ad60ea91c04195671edad7c65453ed04c7427cad` (OYL mainnet)
-
-The Send Modal (`app/wallet/components/SendModal.tsx`) handles BTC and Alkane token transfers. Several critical bugs were fixed:
-
-### Bug 1: UTXO Fetch Returning 0 Results on Mainnet
-
-**Symptom:** "Some selected UTXOs are no longer available" error even with valid UTXOs
-
-**Root cause:** The code used JSON-RPC method `esplora_address::utxo` which returns empty on mainnet:
-```typescript
-// ❌ BROKEN - returns 0 results on mainnet
-fetch('/api/rpc', {
-  method: 'POST',
-  body: JSON.stringify({ method: 'esplora_address::utxo', params: [addr] })
-});
-```
-
-**Fix:** Use the esplora REST API proxy:
-```typescript
-// ✅ WORKS on all networks
-fetch(`/api/esplora/address/${addr}/utxo?network=${network}`);
-```
-
-### Bug 2: Taproot Inputs Missing tapInternalKey
-
-**Symptom:** "Can not sign for input #N with the key 037e48..." error from OYL
-
-**Root cause:** Taproot inputs require `tapInternalKey` in the PSBT for wallets to identify the signing key. Without it, wallets don't know which key corresponds to the P2TR output.
-
-**Fix:** Add tapInternalKey for Taproot inputs:
-```typescript
-const tapInternalKey = account?.taproot?.pubKeyXOnly
-  ? Buffer.from(account.taproot.pubKeyXOnly, 'hex')
-  : undefined;
-
-// Detect Taproot by address prefix
-const isTaprootInput = utxoAddress?.startsWith('bc1p') ||
-                       utxoAddress?.startsWith('tb1p') ||
-                       utxoAddress?.startsWith('bcrt1p');
-
-const inputData: any = {
-  hash: txid,
-  index: vout,
-  witnessUtxo: { script, value },
-};
-
-if (isTaprootInput && tapInternalKey) {
-  inputData.tapInternalKey = tapInternalKey;
-}
-
-psbt.addInput(inputData);
-```
-
-### Bug 3: Fee Warning Loop on Small Amounts
-
-**Symptom:** Modal loops between confirm and fee warning, never allowing send
-
-**Root cause:** Small amounts (e.g., 1000 sats) always trigger >2% fee ratio warning. When `handleBroadcast()` failed and returned to input, clicking "Send" triggered the warning again.
-
-**Fix:** Track acknowledgment with `feeWarningAcknowledged` state:
-```typescript
-const [feeWarningAcknowledged, setFeeWarningAcknowledged] = useState(false);
-
-// In checkFeeAndBroadcast:
-if (!feeWarningAcknowledged && (feeTooHigh || feePercentageTooHigh)) {
-  setShowFeeWarning(true);
-} else {
-  handleBroadcast(); // Skip warning if already acknowledged
-}
-
-// In proceedWithHighFee:
-setFeeWarningAcknowledged(true);
-handleBroadcast();
-
-// Reset when amount changes:
-onChange={(e) => {
-  setAmount(e.target.value);
-  setFeeWarningAcknowledged(false);
-}}
-```
-
-### Bug 4: Insufficient Funds Despite Having Balance
-
-**Symptom:** "Available: 0.00009712 BTC" but wallet shows 0.00221835 BTC
-
-**Root cause:** Send Modal only used SegWit UTXOs. Most balance was on Taproot address.
-
-**Fix:** Aggregate UTXOs from both addresses:
-```typescript
-const allBtcAddresses = [paymentAddress, taprootAddress].filter(Boolean);
-
-const availableUtxos = utxos.all.filter((utxo) => {
-  if (!utxo.status.confirmed) return false;
-  if (!allBtcAddresses.includes(utxo.address)) return false; // Include BOTH
-  // Exclude special UTXOs...
-  return true;
-});
-```
-
-### PSBT Construction Checklist for BTC Sends
-
-When building PSBTs for browser wallet BTC sends:
-
-1. **Fetch fresh UTXOs** via `/api/esplora/address/{addr}/utxo?network={network}`
-2. **For each input:**
-   - Add `witnessUtxo` with script from the spent output
-   - If Taproot (bc1p/tb1p/bcrt1p): Add `tapInternalKey`
-   - If P2SH (starts with '3' or '2'): Inject `redeemScript` via `injectRedeemScripts()`
-3. **For outputs:** Use actual addresses, never symbolic refs for browser wallets
-4. **Sign:** Use `signTaprootPsbt()` which handles all input types for browser wallets
-
-### Files Changed
-- `app/wallet/components/SendModal.tsx` — Main component with all fixes
-- `app/api/esplora/[...path]/route.ts` — REST proxy for UTXO fetching
-
----
-
-### 2026-03-02: Unisat/OKX Wallet Infinite Connection Loop — FIXED
-
-**Symptom:** When attempting to connect Unisat wallet, the UI shows "Connecting to Unisat..." spinner indefinitely. The connection never completes and the user cannot interact with the app.
-
-**Root cause:** The `requestAccounts()` call (Unisat) and `connect()` call (OKX) had **no timeout protection**. When the wallet extension doesn't respond (popup dismissed, extension crashed, etc.), the promise hangs forever.
-
-**Fix:** Added 10-second timeouts and smarter connection logic:
-
-1. **For Unisat:** Try `getAccounts()` first to check existing connection before `requestAccounts()`:
-```typescript
-// Try existing connection first (no popup needed)
-const existingAccounts = await unisatProvider.getAccounts();
-if (existingAccounts?.length > 0) {
-  accounts = existingAccounts; // Already connected!
-} else {
-  // Need to request (shows popup) - with 10s timeout
-  accounts = await Promise.race([
-    unisatProvider.requestAccounts(),
-    new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('Unisat connection timed out after 10s.')), 10000)
-    ),
-  ]);
-}
-```
-
-2. **For OKX:** Added 10-second timeout to `connect()` call
-
-**Files changed:**
-- `context/WalletContext.tsx` — Unisat: added getAccounts() check + 10s timeout + debug logging
-- `context/WalletContext.tsx` — OKX: added 10s timeout + debug logging
-
-**Key insight:** Wallets should respond within seconds. A 10s timeout catches broken states quickly. Also, checking `getAccounts()` first avoids unnecessary popups for already-connected wallets.
-
----
-
-### 2026-03-03: Alkane Transfer Spending All User Assets — CRITICAL BUG FIX (PHASE 1 & 2)
-
-**Symptom:** When sending alkanes (e.g., 0.1 DIESEL), UniSat wallet showed "Spending 2 Inscriptions, 21 Runes, 10 Alkanes" — the transaction would have spent ALL of the user's ordinals, runes, and alkanes!
-
-**Root cause:** `buildAlkaneTransferPsbt()` in `lib/alkanes/buildAlkaneTransferPsbt.ts` was including ALL dust UTXOs (≤1000 sats) as inputs, assuming they all contained the target alkane. But dust UTXOs can contain ANY asset type:
-- Inscriptions (ordinals)
-- Runes
-- Different alkanes (DIESEL, frBTC, LP tokens, etc.)
-
-**PHASE 1 FIX — Query alkane indexer for target alkane UTXOs:**
-```typescript
-// Query alkane indexer for UTXOs containing the target alkane
-const alkaneOutpoints = await fetchAlkaneOutpoints(senderTaprootAddress, networkName);
-
-// Filter to UTXOs containing the target alkane
-const targetAlkaneId = `${block}:${tx}`;
-const matchingOutpoints = alkaneOutpoints.filter(outpoint =>
-  outpoint.alkanes.some(a => `${a.block}:${a.tx}` === targetAlkaneId)
-);
-```
-
-**PHASE 2 FIX — Smart UTXO selection with collateral warning:**
-
-The Phase 1 fix correctly identified UTXOs containing the target alkane, but those same UTXOs may ALSO contain inscriptions, runes, or other alkanes bundled on them. Phase 2 adds:
-
-1. **`fetchOrdOutputs()` function** — Queries `ord_outputs` RPC to detect inscriptions and runes on UTXOs
-2. **Smart UTXO selection** — Prioritizes "clean" UTXOs (only target alkane, no inscriptions/runes):
-   - Priority 1: UTXOs with ONLY the target alkane (score 0)
-   - Priority 2: UTXOs with target alkane + other alkanes but no inscriptions/runes (score 1+)
-   - Priority 3: UTXOs with inscriptions/runes (score 100+, last resort)
-3. **Greedy selection** — Picks fewest UTXOs needed to cover the amount
-4. **Collateral warning UI** — If selected UTXOs contain inscriptions/runes, shows a prominent warning:
-   - Inscriptions and runes WILL be transferred to the recipient (cannot be recovered)
-   - Other alkanes are safe (protostone pointer returns them to sender)
-   - User must explicitly acknowledge before proceeding
-
-**Files changed:**
-- `lib/alkanes/buildAlkaneTransferPsbt.ts`:
-  - Added `fetchOrdOutputs()` function to detect inscriptions/runes
-  - Added `CollateralWarning` interface to return type
-  - Implemented smart UTXO selection with cleanliness scoring
-  - Added greedy selection to minimize UTXOs spent
-- `app/wallet/components/SendModal.tsx`:
-  - Added collateral warning state (`showCollateralWarning`, `collateralWarning`, etc.)
-  - Added `proceedWithCollateralWarning()` and `cancelCollateralWarning()` handlers
-  - Added prominent UI warning with "CANCEL" and "I UNDERSTAND, PROCEED" buttons
-
-**Browser console logging (for debugging):**
-```
-[fetchOrdOutputs] txid...:0 has inscriptions=true, runes=false
-[buildAlkaneTransferPsbt] Enriched outpoints: 2
-  491df6ec...:0 - 4503151 units [COLLATERAL: inscriptions, 3 other alkane(s)]
-  0b2455ce...:0 - 1887500000 units [CLEAN]
-[buildAlkaneTransferPsbt] Selected 1 of 2 UTXOs
-```
-
-**Understanding multi-asset UTXOs:**
-A single Bitcoin UTXO (especially dust UTXOs ≤546 sats) can contain MULTIPLE metaprotocol assets simultaneously:
-- Ordinal inscriptions (NFTs)
-- Runes tokens
-- Alkane tokens (multiple types on same UTXO)
-
-When spending such a UTXO, ALL assets on it are spent. For alkanes, the protostone's `pointer` field directs unedicted alkanes back to the sender. However, inscriptions and runes do NOT have this mechanism — they go wherever the UTXO output goes.
-
-**⚠️ CRITICAL LESSONS:**
-1. NEVER select dust UTXOs blindly for alkane operations
-2. Query BOTH `alkanes_protorunesbyaddress` (for alkane balances) AND `ord_outputs` (for inscriptions/runes)
-3. Prefer UTXOs that contain ONLY the target asset when possible
-4. If collateral assets exist, WARN the user before proceeding
-5. Inscriptions and runes on spent UTXOs are IRRECOVERABLE if transferred to wrong address
-
-**PHASE 3 FIX (2026-03-03) — Mainnet `ord_outputs` RPC Disabled:**
-
-The `ord_outputs` RPC that detects inscriptions/runes is **disabled on mainnet** (returns "JSON API disabled"). This means on mainnet we CANNOT verify what inscriptions/runes exist on UTXOs.
-
-**Solution:** Added `unverifiedInscriptionRunes` flag to `CollateralWarning`:
-- When `ord_outputs` RPC fails/returns disabled, set `unverifiedInscriptionRunes: true`
-- This triggers a different warning in SendModal: "Unable to verify inscription/rune status on mainnet"
-- User is warned that UTXOs MAY contain inscriptions/runes that will be sent to recipient
-- This ensures users are ALWAYS warned on mainnet, even without inscription/rune detection
-
-**Key changes:**
-- `fetchOrdOutputs()` now returns `{ data: Map, rpcFailed: boolean }`
-- `CollateralWarning` interface now includes `unverifiedInscriptionRunes: boolean`
-- SendModal shows different warning text for unverified vs verified collateral
-- Warning condition: `hasInscriptions || hasRunes || unverifiedInscriptionRunes`
-
-**Verified on mainnet:**
-```bash
-curl -s https://mainnet.subfrost.io/v4/subfrost \
-  -d '{"jsonrpc":"2.0","method":"ord_outputs","params":["bc1p..."],"id":1}'
-# Returns: {"jsonrpc":"2.0","result":"JSON API disabled","id":1}
-```
-
-**⚠️ MAINNET LIMITATION:** Users should verify their UTXOs don't contain inscriptions/runes using external tools (ordinals.com, mempool.space) before proceeding with alkane transfers. The app will always show a warning on mainnet due to this limitation.
-
----
-
-### 2026-03-03: UniSat BTC Send Signing Error — "Cannot read properties of null (reading '0')"
-
-**Symptom:** When sending BTC with UniSat wallet, signing fails with error: `"unisat signing failed: Cannot read properties of null (reading '0')"`
-
-**Root cause:** The SDK adapter path (`walletAdapter.signPsbt()` → `ConnectedWallet.signPsbt()` → `window.unisat.signPsbt()`) was causing issues. Somewhere in the SDK or UniSat's internal code, when processing the PSBT response, code was trying to access `result[0]` on a null value.
-
-**Fix:** Added direct UniSat signing bypass in `WalletContext.tsx`, similar to the existing Xverse bypass:
-
-```typescript
-const unisat = (window as any).unisat;
-if (unisat && browserWallet?.info?.id === 'unisat') {
-  console.log('[WalletContext] UniSat: signing PSBT directly (bypassing SDK adapter)');
-
-  const patchedPsbtHex = psbt.toHex();
-  const toSignInputs = psbt.data.inputs.map((_, index) => ({ index }));
-
-  let signedHex: string | null;
-  try {
-    signedHex = await unisat.signPsbt(patchedPsbtHex, {
-      autoFinalized: false,
-      toSignInputs,
-    });
-  } catch (unisatError: any) {
-    throw new Error(`UniSat signing failed: ${unisatError?.message || unisatError}`);
-  }
-
-  if (!signedHex) {
-    throw new Error('UniSat signing was cancelled or returned empty result');
-  }
-
-  const signedBuffer = Buffer.from(signedHex, 'hex');
-  return signedBuffer.toString('base64');
-}
-```
-
-**Files changed:**
-- `context/WalletContext.tsx` — Added direct UniSat signing bypass (lines 1721-1773)
-
-**Why direct calls work better:**
-- Xverse and UniSat both have direct call bypasses now
-- The SDK adapter path involves multiple layers of abstraction that can fail silently
-- Direct calls give us explicit control over error handling and null checking
-- OYL wallet still uses the SDK adapter (direct calls were tried but failed with validation errors)
-
-### 2026-03-03: Alkane Transfer Dust Output Broadcast Failure — FIXED
-
-**Symptom:** Alkane transfers fail to broadcast with error: `"dust, tx with dust output must be 0-fee"` (JSON-RPC code -26)
-
-**Root cause:** The alkane transfer PSBT creates dust outputs at 546 sats for sender change (v0) and recipient (v1). Some Bitcoin nodes reject outputs below their configured dust threshold. While the P2TR theoretical dust threshold is ~330 sats, mining pools and relay nodes may use higher values.
-
-**Fix:** Increased `DUST_VALUE` from 546 to 600 sats in `lib/alkanes/buildAlkaneTransferPsbt.ts`
-
-```typescript
-// Before
-const DUST_VALUE = 546;
-
-// After
-const DUST_VALUE = 600;
-```
-
-**Why 600 sats:**
-- P2TR theoretical minimum: ~330 sats (100.5 vbytes × 3.3 sat/vB)
-- P2WPKH standard: 294 sats
-- P2PKH legacy: 546 sats
-- 600 sats provides margin for nodes with higher dust relay fees (e.g., 5 sat/vB)
-
-**Files changed:**
-- `lib/alkanes/buildAlkaneTransferPsbt.ts` — Increased DUST_VALUE from 546 to 600
-
-### 2026-03-03: UniSat BTC Send — Complete Signing Flow Fix
-
-**Verified transaction:** `81b3d4d2c04e163c0ba791963b7569eaa2196814b4d3a5afa8d62719d0a3df69`
-
-**Symptom sequence encountered:**
-1. "Cannot read properties of null (reading '0')" — SDK adapter path failure
-2. "no address or public key in toSignInput" — Missing address field
-3. No popup appearing — API method mismatch
-4. "No tapleaf script signature provided" — Finalization issue
-
-**Root causes and fixes:**
-
-**Issue 1: SDK adapter null error**
-- The SDK's `walletAdapter.signPsbt()` path returns null in some cases
-- UniSat's internal code tries to access `result[0]` on null
-- **Fix:** Direct `window.unisat` signing bypass (similar to Xverse)
-
-**Issue 2: Missing address in toSignInputs**
-- UniSat requires `address` (or `publicKey`) in each `toSignInputs` entry
-- SDK adapter was not providing this
-- **Fix:** Build toSignInputs with explicit address:
-```typescript
-const toSignInputs = psbt.data.inputs.map((_, index) => ({
-  index,
-  address: unisatAddress,  // Required field
-}));
-```
-
-**Issue 3: signPsbt vs signPsbts**
-- UniSat exposes BOTH `signPsbt` (singular) and `signPsbts` (plural)
-- The SDK uses `signPsbts` (array format)
-- Check which method exists and use accordingly:
-```typescript
-const hasSignPsbts = typeof unisat.signPsbts === 'function';
-const hasSignPsbt = typeof unisat.signPsbt === 'function';
-
-if (hasSignPsbts) {
-  const signedHexArray = await unisat.signPsbts([psbtHex], { ... });
-  signedHex = signedHexArray?.[0];
-} else if (hasSignPsbt) {
-  signedHex = await unisat.signPsbt(psbtHex, { ... });
-}
-```
-
-**Issue 4: Taproot finalization failure**
-- With `autoFinalized: false`, UniSat returns signed but not finalized PSBT
-- Our `finalizeAllInputs()` fails with "No tapleaf script signature provided"
-- **Fix:** Use `autoFinalized: true` for UniSat:
-```typescript
-await unisat.signPsbts([psbtHex], {
-  autoFinalized: true,  // Let UniSat handle taproot finalization
-  toSignInputs,
-});
-```
-
-**Issue 5: Double finalization error**
-- With `autoFinalized: true`, the PSBT is already finalized
-- Calling `finalizeAllInputs()` again throws an error
-- **Fix:** Smart extraction that handles both cases:
-```typescript
-let tx;
-try {
-  tx = psbt.extractTransaction();  // Works if already finalized
-} catch {
-  psbt.finalizeAllInputs();         // Fallback if not finalized
-  tx = psbt.extractTransaction();
-}
-```
-
-**Files changed:**
-- `context/WalletContext.tsx` — Added direct UniSat signing bypass with proper toSignInputs
-- `app/wallet/components/SendModal.tsx` — Added smart PSBT finalization handling
-- `lib/wallet/browserWalletSigning.ts` — Created unified wallet signing utilities (new file)
-
-**UniSat API Reference:**
-| Method | Input | Output | Notes |
-|--------|-------|--------|-------|
-| `signPsbt(hex, opts)` | PSBT hex string | Signed hex | Single PSBT |
-| `signPsbts(hexs[], opts)` | Array of PSBT hex | Array of signed hex | Batch signing |
-| Options | `{ autoFinalized: boolean, toSignInputs: [{index, address}] }` | | |
-
-**Critical insights:**
-- UniSat is a SINGLE-ADDRESS wallet — all inputs use the same address
-- Always use `autoFinalized: true` for taproot inputs
-- The SDK prefers `signPsbts` (plural) but both work
-- Add 60-second timeout to detect stuck popups
-- Always include `address` in each toSignInputs entry
+See [docs/CARBINE_CLOB.md](docs/CARBINE_CLOB.md) for full Carbine CLOB reference: contract IDs, opcodes, binary format, pair ordering, deployment, verification scripts, and test inventory.

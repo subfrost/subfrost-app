@@ -27,6 +27,9 @@
  * instead of symbolic addresses. For keystore wallets, symbolic addresses work correctly since
  * the actual user's mnemonic is loaded into the provider.
  *
+ * On devnet, symbolic addresses do NOT work — useActualAddresses ensures actual addresses
+ * are used regardless of wallet type.
+ *
  * Transaction ce185f7... showed both outputs going to bcrt1pvu3q2... (dummy wallet taproot
  * address from 'p2tr:0') instead of the signer and user addresses.
  *
@@ -76,13 +79,18 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useWallet } from '@/context/WalletContext';
 import { useTransactionConfirm } from '@/context/TransactionConfirmContext';
+import { useIndexerSync } from '@/context/IndexerSyncContext';
 import { useSandshrewProvider } from './useSandshrewProvider';
+import { useWalletUtxoCache, useSyncStatus } from './useWalletUtxoCache';
+import { waitForIndexerSync } from '@/lib/alkanes/waitForIndexerSync';
 import { getConfig } from '@/utils/getConfig';
+import { buildPlanFromTx } from '@/lib/alkanes/planBuilder';
 import * as bitcoin from 'bitcoinjs-lib';
 import * as ecc from '@bitcoinerlab/secp256k1';
-import { patchPsbtForBrowserWallet } from '@/lib/psbt-patching';
-import { getBitcoinNetwork, getSignerAddress, extractPsbtBase64 } from '@/lib/alkanes/helpers';
+import { getBitcoinNetwork, getSignerAddressDynamic, extractPsbtBase64 } from '@/lib/alkanes/helpers';
 import { buildWrapProtostone } from '@/lib/alkanes/builders';
+import { useFrbtcPremium } from '@/hooks/useFrbtcPremium';
+import { FRBTC_WRAP_FEE_PER_1000 } from '@/constants/alkanes';
 
 bitcoin.initEccLib(ecc);
 
@@ -92,15 +100,39 @@ export type WrapTransactionBaseData = {
 };
 
 export function useWrapMutation() {
-  const { account, network, isConnected, signTaprootPsbt, signSegwitPsbt, walletType } = useWallet();
+  const { account, network, isConnected, signTaprootPsbt, walletType, browserWallet, txContext } = useWallet();
   const provider = useSandshrewProvider();
   const queryClient = useQueryClient();
   const { requestConfirmation } = useTransactionConfirm();
+  const indexerSync = useIndexerSync();
   const { FRBTC_ALKANE_ID } = getConfig(network);
+  const { data: premiumData } = useFrbtcPremium();
+  // Pre-warmed UTXO cache + sync gate. Same perf-fix pattern as the
+  // other alkane mutation hooks — feeds clean BTC payment_utxos and
+  // refuses submission while metashrew is behind bitcoind.
+  const utxoCache = useWalletUtxoCache();
+  const syncStatus = useSyncStatus();
 
   return useMutation({
     mutationFn: async (wrapData: WrapTransactionBaseData) => {
       if (!isConnected) throw new Error('Wallet not connected');
+      const isLocal = ['devnet', 'regtest-local', 'qubitcoin-regtest'].includes(network ?? '');
+      if (!isLocal && syncStatus.metashrewHeight > 0 && !syncStatus.inSync) {
+        indexerSync.start('Preparing wrap');
+        try {
+          await waitForIndexerSync({
+            network: network ?? 'mainnet',
+            onProgress: (p) => indexerSync.update(p),
+          });
+        } finally {
+          indexerSync.finish();
+        }
+      }
+      // Ensure browser wallet session is active before building PSBT
+      if (walletType === 'browser') {
+        const { ensureWalletSession } = await import('@/lib/wallet/browserWalletSigning');
+        await ensureWalletSession();
+      }
       if (!provider) throw new Error('Provider not available');
 
       // Check if WASM provider wallet is loaded for signing
@@ -108,8 +140,12 @@ export function useWrapMutation() {
         throw new Error('Provider wallet not loaded. Please reconnect your wallet.');
       }
 
-      const wrapAmountSats = Math.floor(parseFloat(wrapData.amount) * 100000000);
-      console.log('[WRAP] Starting wrap:', wrapAmountSats, 'sats');
+      const amountStr = String(wrapData.amount).replace(/,/g, '').trim();
+      const wrapAmountSats = Math.floor(parseFloat(amountStr) * 100000000);
+      if (isNaN(wrapAmountSats) || wrapAmountSats <= 0) {
+        throw new Error(`Invalid wrap amount: "${wrapData.amount}" (parsed: ${wrapAmountSats})`);
+      }
+      console.log('[WRAP] Starting wrap:', wrapAmountSats, 'sats (from:', amountStr, ')');
 
       // Build protostone: [32,0,77]:v1:v1
       // pointer=v1 sends minted frBTC to output 1 (user)
@@ -122,53 +158,47 @@ export function useWrapMutation() {
       // B:amount:v0 tells the SDK to set output 0's value to the wrap amount
       const inputRequirements = `B:${wrapAmountSats}:v0`;
 
-      // Get user's addresses
+      // Get user's addresses (still needed for PSBT diagnostics + wallet-specific patching paths)
+      // Recipient = whichever address the wallet exposes. Investigation
+      // 2026-05-06 (subfrost-alkanes/alkanes/fr-btc/src/lib.rs) confirmed
+      // wrap mints the frBTC alkane to whatever output the protostone
+      // pointer addresses, with no script-type check on the user side.
+      // Single-address segwit-only wallets (UniSat/OKX in Native SegWit
+      // mode) get their frBTC at their bc1q address; the FROST signer
+      // copies that scriptPubKey verbatim from tx.output[pointer].
+      if (!txContext) throw new Error('Wallet not connected');
       const userTaprootAddress = account?.taproot?.address;
       const userSegwitAddress = account?.nativeSegwit?.address;
-      if (!userTaprootAddress) throw new Error('No taproot address available');
+      const userRecipientAddress = userTaprootAddress || userSegwitAddress;
+      if (!userRecipientAddress) {
+        throw new Error('No wallet address available — please reconnect');
+      }
 
       // Get bitcoin network for PSBT parsing
       const btcNetwork = getBitcoinNetwork(network);
 
-      // Get the signer address for this network
-      const signerAddress = getSignerAddress(network);
+      // Always query signer dynamically — applies BIP341 taproot tweak to the
+      // internal key from opcode 103. The hardcoded fallback in constants.ts
+      // is a safety net only (already tweaked).
+      const signerAddress = await getSignerAddressDynamic(network);
 
       const isBrowserWallet = walletType === 'browser';
 
-      // For browser wallets, use actual addresses for UTXO discovery (passed as
-      // opaque strings to esplora — no Address parsing, no LegacyAddressTooLong).
-      // For keystore wallets, symbolic addresses resolve correctly via loaded mnemonic.
-      const fromAddresses = isBrowserWallet
-        ? [userSegwitAddress, userTaprootAddress].filter(Boolean) as string[]
-        : ['p2wpkh:0', 'p2tr:0'];
-
-      // toAddresses: [signer (actual), user (actual/symbolic)]
+      // toAddresses: [signer, user]
       // Matches CLI wrap_btc.rs output ordering:
       //   Output 0 (v0): signer (receives BTC via B:amount:v0)
       //   Output 1 (v1): user (receives minted frBTC via pointer=v1)
-      // JOURNAL ENTRY (2026-02-20): Use actual signer address directly (working version from commit 2fac01f3).
-      // The PSBT patching approach was over-engineered and caused signing issues.
-      // JOURNAL ENTRY (2026-02-20): For browser wallets, 'p2tr:0' resolves to the SDK dummy wallet address,
-      // not the user's address. Must use actual userTaprootAddress for browser wallets.
-      //
-      // **BUG (2026-02-20): Despite passing correct addresses here, transaction outputs BOTH go to user**
-      // Expected: [bcrt1p466wtm... (signer), bcrt1pvu3q2v... (user)]
-      // Actual result: [bcrt1pvu3q2v... (user), bcrt1pvu3q2v... (user)]
-      // Verified via 15+ tests on regtest. PR #251 fix at execute.rs:1348 did not resolve.
-      // Diagnostic logs confirm correct addresses here. Bug is downstream in SDK execution.
-      // See provider.rs:654 (WASM) and execute.rs:1278 (Rust) for diagnostic logging.
-      const toAddresses = isBrowserWallet
-        ? [signerAddress, userTaprootAddress]
-        : [signerAddress, 'p2tr:0'];
+      // userRecipientAddress is whatever address the wallet exposes —
+      // taproot if available, otherwise segwit. Either is fine because
+      // the contract copies the scriptPubKey verbatim into Payment.output.
+      const toAddresses = [signerAddress, userRecipientAddress];
 
       console.log('[WRAP] ============ alkanesExecuteTyped CALL ============');
       console.log('[WRAP] DIAGNOSTIC: signerAddress =', signerAddress);
       console.log('[WRAP] DIAGNOSTIC: userTaprootAddress =', userTaprootAddress);
       console.log('[WRAP] DIAGNOSTIC: isBrowserWallet =', isBrowserWallet);
       console.log('[WRAP] to_addresses:', JSON.stringify(toAddresses));
-      console.log('[WRAP] to_addresses[0] (should be signer):', toAddresses[0]);
-      console.log('[WRAP] to_addresses[1] (should be user):', toAddresses[1]);
-      console.log('[WRAP] from_addresses:', fromAddresses);
+      console.log('[WRAP] from_addresses:', txContext.feeSourceAddresses);
       console.log('[WRAP] input_requirements:', inputRequirements);
       console.log('[WRAP] protostone:', protostone);
       console.log('[WRAP] fee_rate:', wrapData.feeRate);
@@ -176,22 +206,20 @@ export function useWrapMutation() {
       console.log('[WRAP] ===================================================');
 
       try {
+        // ordinals_strategy + paymentUtxos auto-applied by alkanesExecuteTyped
+        // from txContext.walletType. Browser → 'preserve' + UniSat-clean-utxos
+        // (when capability available); keystore → 'burn'. See lib/alkanes/execute.ts.
         const result = await provider.alkanesExecuteTyped({
+          txContext,
           toAddresses,
           inputRequirements,
           protostones: protostone,
           feeRate: wrapData.feeRate,
-          fromAddresses,
-          // For browser wallets, use actual addresses instead of symbolic to prevent
-          // SDK from resolving to dummy wallet addresses.
-          // CRITICAL (2026-02-23): Fall back to taproot when no segwit address
-          // (UniSat taproot-only). Previously fell back to 'p2wpkh:0' which resolves
-          // to the dummy wallet — BTC change permanently lost.
-          changeAddress: isBrowserWallet ? (userSegwitAddress || userTaprootAddress) : 'p2wpkh:0',
-          alkanesChangeAddress: isBrowserWallet ? userTaprootAddress : 'p2tr:0',
-          autoConfirm: false,
-          traceEnabled: true, // DIAGNOSTIC: Enable to trace address resolution flow
+          autoConfirm: walletType === 'keystore',
+          traceEnabled: walletType !== 'keystore',
           mineEnabled: false,
+          // Pre-warmed clean BTC UTXOs — skips the WASM coinselect fanout.
+          cachedUtxos: utxoCache.utxos,
         });
 
         console.log('[WRAP] Execute result:', result);
@@ -367,25 +395,56 @@ export function useWrapMutation() {
             logInputDetails(tempPsbt, 'AFTER PATCHING');
           }
 
-          // For keystore wallets, request user confirmation before signing
-          // Browser wallets have their own confirmation UI from the wallet extension
+          // For keystore wallets, request user confirmation before signing.
+          // The plan visualizes the actual built PSBT — the BTC payment
+          // input(s), the dust output to the frBTC signer (which mints
+          // frBTC back to us), and the change. The frBTC receive amount
+          // is exact (1:1 minus wrapFee) so we mark it as not uncertain.
           if (walletType === 'keystore') {
-            console.log('[WRAP] Keystore wallet - requesting user confirmation...');
+            const wrapFee = premiumData?.wrapFeePerThousand ?? FRBTC_WRAP_FEE_PER_1000;
+            const amountSats = Math.round(parseFloat(wrapData.amount) * 1e8);
+            const receiveAfterFee = Math.floor((amountSats * (1000 - wrapFee)) / 1000);
+            const ourAddresses = [
+              account?.taproot?.address,
+              account?.nativeSegwit?.address,
+            ].filter((a): a is string => !!a);
+            const plan = buildPlanFromTx({
+              psbtBase64,
+              cache: utxoCache,
+              ourAddresses,
+              network: btcNetwork,
+              feeRateSatVb: wrapData.feeRate,
+              label: 'Wrap BTC → frBTC',
+              summary: `Locks ${wrapData.amount} BTC with the frBTC reserve and mints ${(receiveAfterFee / 1e8).toFixed(8)} frBTC back to your wallet.`,
+            });
+            // Find the change/return output (last output paying us) and
+            // attach the predicted frBTC receive amount.
+            const ourReturnIdx = plan.outputs.findIndex((o) => o.isOurs);
+            if (ourReturnIdx >= 0) {
+              plan.outputs[ourReturnIdx].alkanes = [
+                {
+                  alkaneId: '32:0',
+                  symbol: 'frBTC',
+                  amount: BigInt(receiveAfterFee),
+                  // Wrap is 1:1 minus a fixed-rate fee — no slippage curve.
+                  uncertain: false,
+                },
+              ];
+            }
             const approved = await requestConfirmation({
               type: 'wrap',
               title: 'Confirm Wrap',
               fromAmount: wrapData.amount,
               fromSymbol: 'BTC',
-              toAmount: wrapData.amount,
+              toAmount: (receiveAfterFee / 1e8).toFixed(8),
               toSymbol: 'frBTC',
               feeRate: wrapData.feeRate,
+              plan: [plan],
             });
 
             if (!approved) {
-              console.log('[WRAP] User rejected transaction');
               throw new Error('Transaction rejected by user');
             }
-            console.log('[WRAP] User approved transaction');
           }
 
           // Sign the PSBT with both SegWit and Taproot keys
@@ -402,15 +461,9 @@ export function useWrapMutation() {
           const inputCount = tempPsbtForCheck.data.inputs.length;
           console.log(`[WRAP] PSBT has ${inputCount} inputs, ${tempPsbtForCheck.txOutputs.length} outputs`);
 
-          let signedPsbtBase64: string;
-          if (walletType === 'browser') {
-            // Browser wallets (OYL, Xverse, Unisat, etc.) sign all inputs in one call
-            signedPsbtBase64 = await signTaprootPsbt(psbtBase64);
-          } else {
-            // Keystore wallets need both signing steps (BIP84 for segwit, BIP86 for taproot)
-            signedPsbtBase64 = await signSegwitPsbt(psbtBase64);
-            signedPsbtBase64 = await signTaprootPsbt(signedPsbtBase64);
-          }
+          // Single signing path. Browser wallets sign all input types via the wallet
+          // adapter; keystore is taproot-only (BIP86) — `signSegwitPsbt` throws.
+          const signedPsbtBase64 = await signTaprootPsbt(psbtBase64);
 
           // Parse the signed PSBT, finalize, and extract the raw transaction
           // JOURNAL ENTRY (2026-02-20): OYL wallet may return a fully finalized PSBT
@@ -491,7 +544,7 @@ export function useWrapMutation() {
               try {
                 const addr = bitcoin.address.fromOutputScript(output.script, btcNetwork);
                 const label = addr === signerAddress ? 'SIGNER (BTC)' :
-                             addr === userTaprootAddress ? 'USER (frBTC)' : 'OTHER';
+                             addr === userRecipientAddress ? 'USER (frBTC)' : 'OTHER';
                 console.log(`  [${idx}] ${label}: ${output.value} sats -> ${addr}`);
               } catch {
                 console.log(`  [${idx}] Unknown: ${output.value} sats`);
@@ -528,15 +581,21 @@ export function useWrapMutation() {
     onSuccess: (data) => {
       console.log('[WRAP] Success! txid:', data.transactionId, 'amount:', data.wrapAmountSats, 'sats');
 
-      // Invalidate balance queries
-      queryClient.invalidateQueries({ queryKey: ['sellable-currencies'] });
-      queryClient.invalidateQueries({ queryKey: ['btc-balance'] });
+      // ⚠️ (2026-03-26): MUST use refetchQueries, not invalidateQueries.
+      // invalidateQueries marks as stale but won't re-execute queryFn if
+      // data is within staleTime (30s on non-devnet). refetchQueries forces
+      // immediate execution. The 'alkane-balances' key was also missing
+      // from the original list — without it, frBTC never showed after wrap.
+      queryClient.refetchQueries({ queryKey: ['alkane-balances'] });
+      queryClient.refetchQueries({ queryKey: ['sellable-currencies'] });
+      queryClient.refetchQueries({ queryKey: ['btc-balance'] });
+      queryClient.refetchQueries({ queryKey: ['enriched-wallet'] });
       queryClient.invalidateQueries({ queryKey: ['frbtc-premium'] });
       queryClient.invalidateQueries({ queryKey: ['dynamic-pools'] });
       queryClient.invalidateQueries({ queryKey: ['poolFee'] });
       queryClient.invalidateQueries({ queryKey: ['ammTxHistory'] });
 
-      console.log('[WRAP] Balance queries invalidated');
+      console.log('[WRAP] Balance queries refetched');
     },
   });
 }

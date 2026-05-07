@@ -85,15 +85,33 @@ describe('Wallet detection (isWalletInstalled)', () => {
     expect(isWalletInstalled(unisatWallet)).toBe(true);
   });
 
-  it('detects OKX via window.okxwallet', async () => {
-    const { isWalletInstalled, BROWSER_WALLETS } = await import('../../constants/wallets');
-    const okxWallet = BROWSER_WALLETS.find(w => w.id === 'okx')!;
+  it('OKX is in BROWSER_WALLETS but disabled in the connect modal UI', async () => {
+    // OKX was originally removed in commit 5d8bc5f3
+    // (`fix: prevent spending inscription UTXOs as swap fees`).
+    // Reason: OKX is single-address (taproot only) and exposes no
+    // `getBitcoinUtxos` API for clean-UTXO selection. Without that, swaps
+    // and wraps fall back to lua-fetched UTXOs which have no ordinal
+    // protection — exposing inscription/rune UTXOs to be spent as fees.
+    //
+    // It has been re-added to BROWSER_WALLETS so it shows in the connect
+    // modal as "COMING SOON" (visual only, no click handler). The modal
+    // gates connection on ENABLED_WALLET_IDS in ConnectWalletModal.tsx,
+    // which intentionally OMITS 'okx'. Before promoting OKX to enabled,
+    // add a clean-UTXO source (capability registry entry) so single-address
+    // selection won't sweep collateral assets.
+    const { BROWSER_WALLETS } = await import('../../constants/wallets');
+    const okxWallet = BROWSER_WALLETS.find(w => w.id === 'okx');
     expect(okxWallet).toBeDefined();
 
-    expect(isWalletInstalled(okxWallet)).toBe(false);
-
-    (globalThis.window as any).okxwallet = { bitcoin: { connect: vi.fn() } };
-    expect(isWalletInstalled(okxWallet)).toBe(true);
+    const fs = require('fs');
+    const path = require('path');
+    const modalSrc = fs.readFileSync(
+      path.resolve(__dirname, '../../app/components/ConnectWalletModal.tsx'),
+      'utf-8'
+    );
+    const enabledMatch = modalSrc.match(/ENABLED_WALLET_IDS\s*=\s*new Set\(\[([^\]]*)\]\)/);
+    expect(enabledMatch).toBeTruthy();
+    expect(enabledMatch![1]).not.toContain("'okx'");
   });
 });
 

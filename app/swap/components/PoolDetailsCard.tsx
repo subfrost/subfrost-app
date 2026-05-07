@@ -10,6 +10,8 @@ type Props = {
   chartTokenId?: string;
   /** When true, the user has selected a BTC/frBTC wrap pair — show wrap info instead of "select a market". */
   isWrapPair?: boolean;
+  /** Render without the outer sf-card wrapper so this can be embedded inside another sf-card panel. */
+  bare?: boolean;
 };
 
 const ALKANODE_RPC_URL = 'https://api.alkanode.com/rpc';
@@ -60,7 +62,7 @@ function buildIframeUrl(symbol: string, quote: 'usd' | 'btc'): string {
   const params = new URLSearchParams({
     symbol,
     timeframe: '1d',
-    type: 'mcap',
+    type: 'price',
     pool: 'all',
     quote,
     metaprotocol: 'alkanes',
@@ -80,7 +82,7 @@ function getQuoteForPool(pool: PoolSummary): 'usd' | 'btc' {
   return 'usd';
 }
 
-export default function PoolDetailsCard({ pool, chartTokenId, isWrapPair }: Props) {
+export default function PoolDetailsCard({ pool, chartTokenId, isWrapPair, bare }: Props) {
   const { t } = useTranslation();
 
   // Use chartTokenId if provided and valid, otherwise fall back to token0
@@ -97,7 +99,7 @@ export default function PoolDetailsCard({ pool, chartTokenId, isWrapPair }: Prop
   const iframeUrl = symbol ? buildIframeUrl(symbol, quote) : null;
 
   return (
-    <div className="h-full rounded-2xl bg-[color:var(--sf-glass-bg)] backdrop-blur-md shadow-[0_4px_20px_rgba(0,0,0,0.2)] border-t border-[color:var(--sf-top-highlight)] overflow-hidden">
+    <div className={`${bare ? '' : 'sf-card '}h-full overflow-hidden`}>
       {pool ? (
         <div className="relative h-full min-h-[460px]">
           {isSymbolLoading && (
@@ -138,7 +140,7 @@ export default function PoolDetailsCard({ pool, chartTokenId, isWrapPair }: Prop
           ) : null}
         </div>
       ) : (
-        <div className="flex flex-col items-center justify-center py-12 text-center">
+        <div className="flex flex-col items-center justify-center h-full min-h-[460px] py-12 text-center">
           {isWrapPair ? (
             <>
               <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 256 256" className="text-[color:var(--sf-text)]/20 mb-3">
@@ -168,14 +170,14 @@ export default function PoolDetailsCard({ pool, chartTokenId, isWrapPair }: Prop
                 BTC Wrapping &amp; Unwrapping is backed 1:1 with our reserve.
               </p>
               <p className="text-sm text-[color:var(--sf-text)]/50 mt-1">
-                See proof here:{' '}
+                Read docs here:{' '}
                 <a
-                  href="https://subfrost.io/"
+                  href="https://docs.subfrost.io/"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-[color:var(--sf-primary)] hover:underline"
                 >
-                  subfrost.io
+                  docs.subfrost.io
                 </a>
               </p>
             </>

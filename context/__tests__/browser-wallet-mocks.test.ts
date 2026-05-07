@@ -242,12 +242,14 @@ describe('Signing delegation to ts-sdk adapter', () => {
       expect(body).toContain("Buffer.from(signedHex, 'hex')");
     });
 
-    it('handles browser wallet case before keystore fallback', () => {
-      // Browser wallet check should come first
+    it('handles browser wallet case before throwing for keystore', () => {
+      // Browser wallet check first, keystore explicitly throws (no BIP84
+      // fallback — keystore is taproot-only, signSegwitPsbt is unreachable
+      // from production callers; the guard surfaces accidental misuse).
       const adapterCheckIdx = body.indexOf("walletAdapter && walletType === 'browser'");
-      const keystoreCheckIdx = body.indexOf("if (!wallet)");
+      const keystoreThrowIdx = body.indexOf("walletType === 'keystore'");
       expect(adapterCheckIdx).toBeGreaterThan(-1);
-      expect(keystoreCheckIdx).toBeGreaterThan(adapterCheckIdx);
+      expect(keystoreThrowIdx).toBeGreaterThan(adapterCheckIdx);
     });
   });
 
@@ -382,9 +384,10 @@ describe('Address handling in wallet context', () => {
 
   it('supports single-address wallets (UniSat/OKX provide only one address type)', () => {
     // When a wallet provides only one address, the other should be empty
-    // The address detection falls back to format detection
-    expect(source).toContain("isTaproot = primaryAddress.startsWith('bc1p')");
-    expect(source).toContain("isNativeSegwit = primaryAddress.startsWith('bc1q')");
+    // The address detection falls back to format detection via resolvedAddress
+    // (resolvedAddress is primaryAddress converted to regtest on devnet)
+    expect(source).toContain("isTaproot = resolvedAddress.startsWith('bc1p')");
+    expect(source).toContain("isNativeSegwit = resolvedAddress.startsWith('bc1q')");
 
     // Empty address entries for unavailable type
     expect(source).toContain("address: '', pubkey: '', hdPath: ''");
@@ -411,11 +414,13 @@ describe('Address handling in wallet context', () => {
     expect(source).toContain("changeAddress: 'nativeSegwit'");
   });
 
-  it('pubKeyXOnly strips the 02/03 prefix from compressed pubkey', () => {
-    // For browser wallets with explicit taproot pubkey
-    expect(source).toContain("taprootAddr!.publicKey.slice(2)");
-    // For keystore wallets
-    expect(source).toContain("taprootInfo.publicKey.slice(2)");
+  it('pubKeyXOnly is derived via toXOnlyPubKeyHex helper', () => {
+    // Earlier the context did `publicKey.slice(2)` inline. That hard-codes
+    // the assumption that the input is always 02/03-prefixed; the helper
+    // (lib/wallet/pubkeyHelpers.ts) handles 32-byte x-only inputs and
+    // 33-byte compressed inputs uniformly.
+    expect(source).toMatch(/pubKeyXOnly:\s*toXOnlyPubKeyHex\(/);
+    expect(source).toContain('toXOnlyPubKeyHex(taprootAddr!.publicKey)');
   });
 });
 

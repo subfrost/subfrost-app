@@ -1,6 +1,6 @@
 'use client';
 
-import type { StakerDistribution } from '@/hooks/fire/useFireMockData';
+import type { StakerDistribution } from '@/hooks/fire/fireTypes';
 import { useTranslation } from '@/hooks/useTranslation';
 
 interface StakerPieChartProps {
@@ -8,7 +8,10 @@ interface StakerPieChartProps {
   size?: number;
 }
 
-const COLORS = ['#f97316', '#fb923c', '#fdba74', '#fed7aa', '#ffedd5', '#4b5563'];
+const COLORS = [
+  '#f97316', '#fb923c', '#fdba74', '#fbbf24', '#fed7aa',
+  '#fde68a', '#fef3c7', '#d97706', '#b45309', '#92400e',
+];
 
 export default function StakerPieChart({ data, size = 140 }: StakerPieChartProps) {
   const { t } = useTranslation();
@@ -66,7 +69,7 @@ export default function StakerPieChart({ data, size = 140 }: StakerPieChartProps
               style={{ backgroundColor: COLORS[i % COLORS.length] }}
             />
             <span className="text-[10px] sm:text-xs text-[color:var(--sf-muted)] whitespace-nowrap">
-              {staker.address} <span className="font-semibold text-[color:var(--sf-text)]/70">{staker.percentage}%</span>
+              {staker.address} <span className="font-semibold text-[color:var(--sf-text)]/70">{staker.percentage.toFixed(2)}%</span>
             </span>
           </div>
         ))}

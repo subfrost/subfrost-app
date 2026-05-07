@@ -1,10 +1,12 @@
 'use client';
 
-import { useState, useImperativeHandle, forwardRef } from 'react';
+import { useState, useRef, useEffect, useImperativeHandle, forwardRef, useCallback } from 'react';
 import { useWallet } from '@/context/WalletContext';
 import { useTransactionHistory } from '@/hooks/useTransactionHistory';
-import { RefreshCw, Zap } from 'lucide-react';
+import { usePendingTxs } from '@/hooks/usePendingTxs';
+import { RefreshCw, Zap, Loader2 } from 'lucide-react';
 import { useTranslation } from '@/hooks/useTranslation';
+import SpeedUpModal from './SpeedUpModal';
 
 export interface TransactionHistoryHandle {
   refresh: () => Promise<void>;
@@ -15,29 +17,58 @@ const TransactionHistory = forwardRef<TransactionHistoryHandle>(function Transac
   const { account } = useWallet() as any;
   const { t } = useTranslation();
 
-  // Get transaction history for both addresses
-  const p2wpkhAddress = account?.nativeSegwit?.address;
-  const p2trAddress = account?.taproot?.address;
+  const addresses = [
+    account?.nativeSegwit?.address,
+    account?.taproot?.address,
+  ].filter(Boolean) as string[];
 
-  const { transactions: p2wpkhTxs, loading: p2wpkhLoading, error: p2wpkhError, refresh: refreshP2wpkh } = useTransactionHistory(p2wpkhAddress);
-  const { transactions: p2trTxs, loading: p2trLoading, error: p2trError, refresh: refreshP2tr } = useTransactionHistory(p2trAddress);
+  const {
+    transactions,
+    loading,
+    error,
+    hasMore,
+    loadMore,
+    isLoadingMore,
+    refresh,
+  } = useTransactionHistory(addresses);
+
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Merge and dedupe transactions by txid, sort by block time (newest first)
-  const transactions = [...p2wpkhTxs, ...p2trTxs]
-    .filter((tx, idx, arr) => arr.findIndex(t => t.txid === tx.txid) === idx)
-    .sort((a, b) => (b.blockTime || 0) - (a.blockTime || 0));
+  // Speed-up modal state. We index pending tx hexes by txid so a
+  // click on the "Speed Up" button can hand the right hex to the
+  // modal without re-querying.
+  const { pendingTxs } = usePendingTxs();
+  const pendingHexByTxid = new Map(pendingTxs.map((p) => [p.txid, p.hex]));
+  const [speedUpFor, setSpeedUpFor] = useState<{
+    txid: string;
+    hex: string;
+    fee?: number;
+    vsize?: number;
+  } | null>(null);
 
-  const loading = p2wpkhLoading || p2trLoading;
-  const error = p2wpkhError || p2trError;
+  // Infinite scroll — load next page when scrolled near bottom
+  const handleScroll = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el || !hasMore || isLoadingMore) return;
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 60) {
+      loadMore();
+    }
+  }, [hasMore, isLoadingMore, loadMore]);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.addEventListener('scroll', handleScroll, { passive: true });
+    return () => el.removeEventListener('scroll', handleScroll);
+  }, [handleScroll]);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
     try {
       await Promise.all([
-        refreshP2wpkh(),
-        refreshP2tr(),
-        new Promise(resolve => setTimeout(resolve, 500)) // minimum 500ms spin
+        refresh(),
+        new Promise(resolve => setTimeout(resolve, 500))
       ]);
     } finally {
       setIsRefreshing(false);
@@ -72,51 +103,83 @@ const TransactionHistory = forwardRef<TransactionHistoryHandle>(function Transac
 
   return (
     <div>
-      {/* Transactions List */}
-      <div className="space-y-2 max-h-[232px] overflow-y-auto pr-1">
+      <div ref={scrollRef} className="space-y-2 max-h-[308px] lg:max-h-[752px] overflow-y-auto pr-1 no-scrollbar">
         {transactions.length > 0 ? (
-          transactions.map((tx) => (
-            <a
-              key={tx.txid}
-              href={`https://espo.sh/tx/${tx.txid}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="block rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none cursor-pointer p-3"
-            >
-              {/* Transaction Header */}
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-[color:var(--sf-text)]">
-                    {tx.txid.slice(0, 8)}...{tx.txid.slice(-8)}
-                  </span>
-                  {tx.hasProtostones && (
-                    <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded bg-purple-500/20 text-purple-400">
-                      <Zap size={12} />
-                      {t('txHistory.alkanes')}
+          <>
+            {transactions.map((tx) => (
+              <a
+                key={tx.txid}
+                href={`https://espo.sh/tx/${tx.txid}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none cursor-pointer p-3"
+              >
+                {/* Transaction Header */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-[color:var(--sf-text)]">
+                      {tx.txid.slice(0, 8)}...{tx.txid.slice(-8)}
                     </span>
-                  )}
+                    {tx.hasProtostones && (
+                      <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded bg-purple-500/20 text-purple-400">
+                        <Zap size={12} />
+                        {t('txHistory.alkanes')}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {!tx.confirmed && pendingHexByTxid.has(tx.txid) && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          // Don't navigate to explorer when bumping.
+                          e.preventDefault();
+                          e.stopPropagation();
+                          const hex = pendingHexByTxid.get(tx.txid);
+                          if (hex) {
+                            setSpeedUpFor({
+                              txid: tx.txid,
+                              hex,
+                              fee: tx.fee,
+                              vsize: (tx as { vsize?: number }).vsize,
+                            });
+                          }
+                        }}
+                        className="flex items-center gap-1 px-2 py-1 rounded text-xs font-bold uppercase tracking-wide bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 transition-all"
+                        title="Replace this tx with a higher fee (RBF)"
+                      >
+                        <Zap size={11} />
+                        Speed Up
+                      </button>
+                    )}
+                    <span
+                      className={`px-3 py-1 rounded-full text-xs font-bold ${
+                        tx.confirmed
+                          ? 'bg-[color:var(--sf-info-green-bg)] border border-[color:var(--sf-info-green-border)] text-[color:var(--sf-info-green-title)]'
+                          : 'bg-yellow-500/20 text-yellow-600 dark:text-yellow-400'
+                      }`}
+                    >
+                      {tx.confirmed ? t('txHistory.confirmed') : t('txHistory.pending')}
+                    </span>
+                  </div>
                 </div>
-                <span
-                  className={`px-3 py-1 rounded-full text-xs font-bold ${
-                    tx.confirmed
-                      ? 'bg-[color:var(--sf-info-green-bg)] border border-[color:var(--sf-info-green-border)] text-[color:var(--sf-info-green-title)]'
-                      : 'bg-yellow-500/20 text-yellow-600 dark:text-yellow-400'
-                  }`}
-                >
-                  {tx.confirmed ? t('txHistory.confirmed') : t('txHistory.pending')}
-                </span>
+                <div className="text-xs text-[color:var(--sf-text)]/60 mt-2">
+                  {[
+                    tx.blockTime ? formatDate(tx.blockTime) : (!tx.confirmed ? t('txHistory.pending') : null),
+                    tx.blockHeight ? `${t('txHistory.block')} ${tx.blockHeight}` : null,
+                    tx.fee ? `${t('txHistory.fee')} ${tx.fee.toLocaleString()} ${t('txHistory.sats')}` : null,
+                  ].filter(Boolean).join(' • ')}
+                </div>
+              </a>
+            ))}
+            {/* Loading more indicator */}
+            {isLoadingMore && (
+              <div className="flex items-center justify-center py-3">
+                <Loader2 className="animate-spin text-[color:var(--sf-text)]/40 mr-2" size={16} />
+                <span className="text-xs text-[color:var(--sf-text)]/40">{t('txHistory.loading')}</span>
               </div>
-              <div className="text-xs text-[color:var(--sf-text)]/60 mt-2">
-                {tx.blockTime ? formatDate(tx.blockTime) : t('txHistory.pending')}
-                {tx.blockHeight && (
-                  <span className="ml-2">• {t('txHistory.block')} {tx.blockHeight}</span>
-                )}
-                {tx.fee && (
-                  <span className="ml-2">• {t('txHistory.fee')} {tx.fee.toLocaleString()} {t('txHistory.sats')}</span>
-                )}
-              </div>
-            </a>
-          ))
+            )}
+          </>
         ) : (
           <div className="text-center py-12 text-[color:var(--sf-text)]/60">
             <div className="mb-2">{t('txHistory.noTransactions')}</div>
@@ -126,6 +189,16 @@ const TransactionHistory = forwardRef<TransactionHistoryHandle>(function Transac
           </div>
         )}
       </div>
+      {speedUpFor && (
+        <SpeedUpModal
+          open={!!speedUpFor}
+          onClose={() => setSpeedUpFor(null)}
+          txid={speedUpFor.txid}
+          txHex={speedUpFor.hex}
+          currentFeeSats={speedUpFor.fee}
+          vsize={speedUpFor.vsize}
+        />
+      )}
     </div>
   );
 });

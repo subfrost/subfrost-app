@@ -3,6 +3,12 @@ import BigNumber from 'bignumber.js';
 import { useWallet } from '@/context/WalletContext';
 import { useSandshrewProvider } from '@/hooks/useSandshrewProvider';
 import { VAULT_OPCODES } from '@/constants';
+import { patchInputsOnly } from '@/lib/psbt-patching';
+import { extractPsbtBase64, getBitcoinNetwork } from '@/lib/alkanes/helpers';
+import * as bitcoin from 'bitcoinjs-lib';
+import * as ecc from '@bitcoinerlab/secp256k1';
+
+bitcoin.initEccLib(ecc);
 
 export type VaultWithdrawData = {
   vaultContractId: string; // e.g., "2:123" for vault contract
@@ -16,7 +22,7 @@ export type VaultWithdrawData = {
  * Format: [vault_block,vault_tx,opcode]:pointer:refund
  * Note: No amount parameter needed, it's determined by incoming vault units
  */
-function buildVaultWithdrawProtostone(params: {
+export function buildVaultWithdrawProtostone(params: {
   vaultContractId: string;
   pointer?: string;
   refund?: string;
@@ -38,7 +44,7 @@ function buildVaultWithdrawProtostone(params: {
  * Build input requirements string for vault withdrawal
  * Format: "block:tx:amount" for the vault units being burned
  */
-function buildVaultWithdrawInputRequirements(params: {
+export function buildVaultWithdrawInputRequirements(params: {
   vaultUnitId: string;
   amount: string;
 }): string {
@@ -51,8 +57,9 @@ function buildVaultWithdrawInputRequirements(params: {
  * Uses opcode 2 (Redeem) to burn vault units and receive tokens back
  */
 export function useVaultWithdraw() {
-  const { isConnected } = useWallet();
+  const { isConnected, walletType, account, signTaprootPsbt, network, txContext } = useWallet();
   const provider = useSandshrewProvider();
+  const isBrowserWallet = walletType === 'browser';
 
   return useMutation({
     mutationFn: async (withdrawData: VaultWithdrawData) => {
@@ -63,6 +70,7 @@ export function useVaultWithdraw() {
       if (!provider.walletIsLoaded()) {
         throw new Error('Wallet not loaded in provider');
       }
+      if (!txContext) throw new Error('Wallet not connected');
 
       // Build protostone for vault withdrawal
       const protostone = buildVaultWithdrawProtostone({
@@ -75,26 +83,53 @@ export function useVaultWithdraw() {
         amount: new BigNumber(withdrawData.amount).toFixed(0),
       });
 
-      // Execute using alkanesExecuteTyped (handles address defaults automatically)
+      // Withdrawn tokens are P2TR alkanes — receive at the alkanes change address.
+      const toAddresses = [txContext.alkanesChangeAddress];
+
       const result = await provider.alkanesExecuteTyped({
+        txContext,
         inputRequirements,
         protostones: protostone,
         feeRate: withdrawData.feeRate,
-        autoConfirm: true,
-        changeAddress: 'p2tr:0',
-        alkanesChangeAddress: 'p2tr:0',
+        autoConfirm: !isBrowserWallet,
+        toAddresses,
       });
 
-      // Parse result
-      const txId = result?.txid || result?.reveal_txid;
+      // Auto-completed by SDK (keystore wallets with autoConfirm=true)
+      if (result?.txid || result?.reveal_txid) {
+        const txId = result.txid || result.reveal_txid;
+        return { success: true, transactionId: txId };
+      }
 
-      return {
-        success: true,
-        transactionId: txId,
-      } as {
-        success: boolean;
-        transactionId?: string;
-      };
+      // Need manual signing (browser wallets)
+      if (result?.readyToSign) {
+        const btcNetwork = getBitcoinNetwork(network || 'mainnet');
+        const psbtBase64 = extractPsbtBase64(result.readyToSign.psbt);
+
+        let finalPsbtBase64 = psbtBase64;
+        if (isBrowserWallet) {
+          const patched = patchInputsOnly({
+            psbtBase64,
+            taprootAddress: account?.taproot?.address || '',
+            segwitAddress: account?.nativeSegwit?.address,
+            paymentPubkeyHex: account?.nativeSegwit?.pubkey,
+            network: btcNetwork,
+          });
+          finalPsbtBase64 = patched.psbtBase64;
+        }
+
+        // Single signing path. Browser wallets sign all input types via the wallet
+        // adapter; keystore is taproot-only (BIP86) — `signSegwitPsbt` throws.
+        const signedPsbtBase64 = await signTaprootPsbt(finalPsbtBase64);
+
+        const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtBase64, { network: btcNetwork });
+        signedPsbt.finalizeAllInputs();
+        const txHex = signedPsbt.extractTransaction().toHex();
+        const txId = await provider.broadcastTransaction(txHex);
+        return { success: true, transactionId: txId };
+      }
+
+      throw new Error('Unexpected SDK response — no txid or readyToSign in result');
     },
   });
 }

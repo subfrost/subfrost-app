@@ -17,12 +17,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
-    // Ignore build artifacts and external dependencies
-    ".subfrost-build/**",
-    ".external-build/**",
+    // Ignore vendored & generated artifacts
     "prod_wasms/**",
-    "scripts/**",
-    "e2e/**",
   ]),
   {
     plugins: {

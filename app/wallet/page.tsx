@@ -7,9 +7,10 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Wallet, Activity, Settings, BarChart2, Send, QrCode, Copy, Check, RefreshCw } from 'lucide-react';
 import { useTranslation } from '@/hooks/useTranslation';
 import AddressAvatar from '@/app/components/AddressAvatar';
+import AccountSwitcher from '@/app/components/AccountSwitcher';
+import PageContent from '@/app/components/PageContent';
 import BitcoinBalanceCard from './components/BitcoinBalanceCard';
 import AlkanesBalancesCard from './components/AlkanesBalancesCard';
-import BalancesPanel from './components/BalancesPanel';
 import UTXOManagement from './components/UTXOManagement';
 import TransactionHistory, { type TransactionHistoryHandle } from './components/TransactionHistory';
 import WalletSettings from './components/WalletSettings';
@@ -21,16 +22,16 @@ import { useNotification } from '@/context/NotificationContext';
 type TabView = 'balances' | 'utxos' | 'transactions' | 'settings';
 
 export default function WalletDashboardPage() {
-  const { connected, isConnected, address, paymentAddress, network } = useWallet() as any;
+  const { connected, isConnected, address, paymentAddress, network, browserWallet, walletType } = useWallet() as any;
   const { t } = useTranslation();
   const router = useRouter();
   const searchParams = useSearchParams();
   const tabParam = searchParams.get('tab') as TabView | null;
-  const [activeTab, setActiveTab] = useState<TabView>(tabParam && ['balances', 'utxos', 'transactions', 'settings'].includes(tabParam) ? tabParam : 'balances');
+  const [activeTab, setActiveTab] = useState<TabView>(tabParam && ['utxos', 'transactions', 'settings'].includes(tabParam) ? tabParam : 'transactions');
 
   // Update activeTab when URL changes
   useEffect(() => {
-    if (tabParam && ['balances', 'utxos', 'transactions', 'settings'].includes(tabParam)) {
+    if (tabParam && ['utxos', 'transactions', 'settings'].includes(tabParam)) {
       setActiveTab(tabParam);
     }
   }, [tabParam]);
@@ -40,7 +41,11 @@ export default function WalletDashboardPage() {
   const [copiedAddress, setCopiedAddress] = useState<'segwit' | 'taproot' | null>(null);
   const [showComingSoon, setShowComingSoon] = useState(false);
   const [txRefreshing, setTxRefreshing] = useState(false);
-  const { showNotification } = useNotification();
+  const { showNotification, notifications } = useNotification();
+  // Active notification count for History tab badge.
+  // NOTE: includes confirmed txs still in their 60s auto-close window.
+  // Acceptable: the toast is still visible, badge reflects "active tx activity".
+  const pendingCount = notifications.length;
   const txHistoryRef = useRef<TransactionHistoryHandle>(null);
 
   const handleUtxoClick = useCallback(() => {
@@ -58,29 +63,35 @@ export default function WalletDashboardPage() {
     }
   };
 
+  const { isInitializing } = useWallet() as any;
   const walletConnected = typeof connected === 'boolean' ? connected : isConnected;
 
-  // Redirect if not connected
-  if (!walletConnected) {
-    router.push('/');
-    return null;
-  }
+  // Redirect if not connected — but wait for wallet restore from localStorage first.
+  // Without this guard, refreshing the page would redirect to '/' before the
+  // cached browser wallet addresses are restored from localStorage.
+  useEffect(() => {
+    if (!isInitializing && !walletConnected) router.push('/');
+  }, [isInitializing, walletConnected, router]);
+
+  if (isInitializing || !walletConnected) return null;
 
   // Settings tab is rendered separately for responsive control
   const tabs = [
-    { id: 'balances' as TabView, label: 'Other Balances', shortLabel: 'Other Balances', mobileLabel: 'Others', icon: Wallet, disabled: false },
     { id: 'transactions' as TabView, label: t('walletDash.transactionHistory'), shortLabel: t('walletDash.history'), icon: Activity, disabled: false },
     { id: 'utxos' as TabView, label: t('walletDash.utxos'), shortLabel: t('walletDash.utxos'), mobileLabel: 'UTXOs', icon: BarChart2, disabled: true },
   ];
 
   return (
-    <div className="mx-auto w-full max-w-6xl px-2 sm:px-4 lg:px-0 text-[color:var(--sf-text)]">
+    <PageContent className="text-[color:var(--sf-text)]">
       <div className="flex w-full flex-col gap-6">
         {/* Page Header */}
         <div className="flex w-full flex-col gap-2">
           <div className="flex w-full items-center justify-between gap-4">
-            <h1 className="text-xl sm:text-3xl font-bold text-[color:var(--sf-text)]">
+            <h1 className="flex items-center gap-2 text-xl sm:text-3xl font-bold text-[color:var(--sf-text)]">
               {t('walletDash.title')}
+              {walletType === 'browser' && browserWallet?.info?.icon && (
+                <img src={browserWallet.info.icon} alt="" className="h-[1em] w-[1em] rounded-sm" />
+              )}
             </h1>
             <div className="flex shrink-0 items-center gap-2">
               <button
@@ -105,7 +116,9 @@ export default function WalletDashboardPage() {
             {paymentAddress && (
               <div className="flex items-center gap-3">
                 <AddressAvatar address={paymentAddress} size={24} className="shrink-0" />
-                <span className="text-xs sm:text-sm text-[color:var(--sf-text)]/60 whitespace-nowrap">{t('walletDash.nativeSegwit')}</span>
+                <span className="text-xs sm:text-sm text-[color:var(--sf-text)]/60 whitespace-nowrap">
+                  {t('walletDash.nativeSegwit')}
+                </span>
                 <span className="text-xs sm:text-sm text-[color:var(--sf-text)]/80 truncate">{paymentAddress}</span>
                 <button
                   onClick={() => copyToClipboard(paymentAddress, 'segwit')}
@@ -122,8 +135,10 @@ export default function WalletDashboardPage() {
             )}
             {address && (
               <div className="flex items-center gap-3">
-                <AddressAvatar address={address} size={24} className="shrink-0" />
-                <span className="text-xs sm:text-sm text-[color:var(--sf-text)]/60 whitespace-nowrap">{t('walletDash.taproot')}</span>
+                <AccountSwitcher size={24} className="shrink-0" />
+                <span className="text-xs sm:text-sm text-[color:var(--sf-text)]/60 whitespace-nowrap">
+                  {t('walletDash.taproot')}
+                </span>
                 <span className="text-xs sm:text-sm text-[color:var(--sf-text)]/80 truncate">{address}</span>
                 <button
                   onClick={() => copyToClipboard(address, 'taproot')}
@@ -141,21 +156,23 @@ export default function WalletDashboardPage() {
           </div>
         </div>
 
-        {/* Grid: Alkanes Balances (left) | Bitcoin Balance + Tabbed Panel (right) */}
+        {/* Two columns on lg: [BTC → Alkanes] | [Tabbed Panel]. */}
+        {/* Left column is its own flex stack so BTC sits flush above Alkanes */}
+        {/* regardless of the tabs panel's height on the right. */}
         {/* On mobile (stacked): Bitcoin Balance → Alkanes → Tabbed Panel via order classes */}
         <div className="flex flex-col lg:grid lg:grid-cols-2 gap-6 flex-1 min-h-0">
-          {/* Bitcoin Balance - right column on lg, first on mobile */}
-          <div className="order-1 lg:order-none lg:col-start-2 lg:row-start-1">
-            <BitcoinBalanceCard />
-          </div>
-
-          {/* Alkanes Balances - left column on lg, second on mobile */}
-          <div className="order-2 lg:order-none lg:col-start-1 lg:row-start-1 lg:row-span-2 min-h-0">
-            <AlkanesBalancesCard onSendAlkane={(alkane) => { setSendAlkane(alkane); setShowSendModal(true); }} />
+          {/* Left column on lg: BTC stacked above Alkanes with no row-gap */}
+          <div className="contents lg:flex lg:flex-col lg:gap-6 lg:col-start-1 lg:row-start-1 min-h-0">
+            <div className="order-1 lg:order-none">
+              <BitcoinBalanceCard />
+            </div>
+            <div className="order-2 lg:order-none min-h-0">
+              <AlkanesBalancesCard onSendAlkane={(alkane) => { setSendAlkane(alkane); setShowSendModal(true); }} />
+            </div>
           </div>
 
           {/* Tabbed Panel - right column on lg, third on mobile */}
-          <div className="order-3 lg:order-none lg:col-start-2 lg:row-start-2 min-h-0">
+          <div className="order-3 lg:order-none lg:col-start-2 lg:row-start-1 min-h-0">
             <div className="rounded-2xl bg-[color:var(--sf-glass-bg)] p-3 sm:p-4 lg:p-4 shadow-[0_4px_20px_rgba(0,0,0,0.2)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)]">
               {/* Tab Navigation — compact on lg+ since panel is half-width */}
               <div className="border-b border-[color:var(--sf-outline)] mb-4 relative">
@@ -182,6 +199,11 @@ export default function WalletDashboardPage() {
                             </>
                           ) : (
                             <span className="whitespace-nowrap">{tab.shortLabel}</span>
+                          )}
+                          {tab.id === 'transactions' && pendingCount > 0 && (
+                            <span className="ml-1 px-1.5 py-0.5 text-[9px] font-bold rounded-full bg-[color:var(--sf-primary)]/20 text-[color:var(--sf-primary)]">
+                              {pendingCount}
+                            </span>
                           )}
                         </button>
                         {tab.disabled && showComingSoon && (
@@ -223,16 +245,19 @@ export default function WalletDashboardPage() {
 
               {/* Tab Content */}
               <div className="animate-fadeIn">
-                {activeTab === 'balances' && <BalancesPanel />}
+                {/* BalancesPanel removed — BRC20/Runes/Ordinals not supported yet */}
                 {activeTab === 'utxos' && <UTXOManagement />}
                 {activeTab === 'transactions' && <TransactionHistory ref={txHistoryRef} />}
-                {activeTab === 'settings' && <WalletSettings />}
+                {activeTab === 'settings' && (
+                  <>
+                    <WalletSettings />
+                    <RegtestControls />
+                  </>
+                )}
               </div>
-
-              {/* Regtest Controls */}
-              <RegtestControls />
             </div>
           </div>
+
         </div>
       </div>
 
@@ -247,6 +272,6 @@ export default function WalletDashboardPage() {
         isOpen={showReceiveModal}
         onClose={() => setShowReceiveModal(false)}
       />
-    </div>
+    </PageContent>
   );
 }

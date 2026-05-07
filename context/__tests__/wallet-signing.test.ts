@@ -151,23 +151,14 @@ describe('WalletContext signing architecture (source verification)', () => {
   // ---- Keystore signing uses correct derivation paths ----
 
   it('signTaprootPsbt uses BIP86 derivation path for keystore wallets', () => {
-    // BIP86 path: m/86'/coinType/0'/0/0
-    expect(signTaprootBody).toContain("m/86'/${coinType}'/0'/0/0");
+    // BIP86 path: m/86'/coinType/0'/0/N — N is `taprootAddressIndex` to
+    // support multiple taproot accounts derived from the same mnemonic.
+    expect(signTaprootBody).toMatch(/m\/86'\/\$\{coinType\}'\/0'\/0\/\$\{taprootAddressIndex\}/);
     expect(signTaprootBody).toContain('taprootPath');
-  });
-
-  it('signSegwitPsbt uses BIP84 derivation path for keystore wallets', () => {
-    // BIP84 path: m/84'/coinType/0'/0/0
-    expect(signSegwitBody).toContain("m/84'/${coinType}'/0'/0/0");
-    expect(signSegwitBody).toContain('segwitPath');
   });
 
   it('signTaprootPsbt uses coinType 0 for mainnet and 1 for testnet/regtest', () => {
     expect(signTaprootBody).toContain("network === 'mainnet' ? 0 : 1");
-  });
-
-  it('signSegwitPsbt uses coinType 0 for mainnet and 1 for testnet/regtest', () => {
-    expect(signSegwitBody).toContain("network === 'mainnet' ? 0 : 1");
   });
 
   // ---- Keystore signing requires mnemonic from sessionStorage ----
@@ -175,11 +166,6 @@ describe('WalletContext signing architecture (source verification)', () => {
   it('signTaprootPsbt reads mnemonic from sessionStorage for keystore', () => {
     expect(signTaprootBody).toContain('sessionStorage.getItem');
     expect(signTaprootBody).toContain('SESSION_MNEMONIC');
-  });
-
-  it('signSegwitPsbt reads mnemonic from sessionStorage for keystore', () => {
-    expect(signSegwitBody).toContain('sessionStorage.getItem');
-    expect(signSegwitBody).toContain('SESSION_MNEMONIC');
   });
 
   // ---- Keystore signing throws if wallet not connected or mnemonic missing ----
@@ -192,8 +178,15 @@ describe('WalletContext signing architecture (source verification)', () => {
     expect(signTaprootBody).toContain('Wallet session expired');
   });
 
-  it('signSegwitPsbt throws if wallet not connected (keystore path)', () => {
-    expect(signSegwitBody).toContain("throw new Error('Wallet not connected')");
+  it('signSegwitPsbt rejects keystore wallets with an informative message', () => {
+    // Keystore is BIP86 taproot-only — there's no segwit derivation path
+    // available. The guard must throw before any signing logic runs so that
+    // mutation hooks calling signSegwitPsbt against a keystore see a clear
+    // error pointing them at signTaprootPsbt.
+    expect(signSegwitBody).toContain("walletType === 'keystore'");
+    expect(signSegwitBody).toMatch(
+      /keystore is taproot-only|Use signTaprootPsbt instead/i,
+    );
   });
 
   // ---- Taproot-specific: x-only pubkey and tweak ----
@@ -233,9 +226,26 @@ describe('Old wallet-specific signing branches are REMOVED', () => {
     expect(signTaprootBody).not.toContain("request('signPsbt'");
   });
 
-  it('signTaprootPsbt does NOT contain UniSat autoFinalized:true (handled by adapter)', () => {
-    expect(signTaprootBody).not.toContain('autoFinalized: true');
-    expect(signTaprootBody).not.toContain('autoFinalized:true');
+  it('signTaprootPsbt routes UniSat through signWithUnisat (autoFinalized:true helper)', () => {
+    // PRIOR ASSERTION (now inverted): the test used to assert that
+    // signTaprootPsbt did NOT contain `autoFinalized: true` because UniSat was
+    // expected to be handled by the SDK adapter's `auto_finalized: false` path.
+    //
+    // That assumption was WRONG on mainnet — UniSat's `autoFinalized: false`
+    // mode produces taproot PSBTs bitcoinjs-lib's finalizer can't reconcile,
+    // throwing "Cannot finalize taproot input #0. No tapleaf script signature
+    // provided." (See PR #77 / commit fix(unisat): route signing through
+    // signWithUnisat (autoFinalized:true).) UniSat now has an explicit branch
+    // in signTaprootPsbt that calls `signWithUnisat`, which passes
+    // `autoFinalized: true` so UniSat returns a fully finalized PSBT.
+    //
+    // The branch handles taproot inputs correctly. Verified mainnet via tx
+    // 90f857372f1adf752547d4abace02adc772053f225cf7161cc98b855d8f49bae.
+    expect(signTaprootBody).toContain('signWithUnisat');
+    // The OYL/Xverse/UniSat branches all sit ABOVE the generic adapter
+    // fallback. Verify the dispatch order is preserved.
+    expect(signTaprootBody.indexOf("detectedWallet === 'unisat'"))
+      .toBeLessThan(signTaprootBody.indexOf('walletAdapter.signPsbt(patchedPsbtHex'));
   });
 
   it('signTaprootPsbt does NOT contain OYL reconnection logic (handled by adapter)', () => {
@@ -419,16 +429,6 @@ describe('Keystore signing path validation', () => {
     expect(body).toContain("import('bip39')");
   });
 
-  it('signSegwitPsbt uses dynamic imports for bitcoinjs-lib, bip32, bip39, tiny-secp256k1', () => {
-    const src = readWalletContextSource();
-    const body = extractCallbackBody(src, 'signSegwitPsbt');
-
-    expect(body).toContain("import('bitcoinjs-lib')");
-    expect(body).toContain("import('tiny-secp256k1')");
-    expect(body).toContain("import('bip32')");
-    expect(body).toContain("import('bip39')");
-  });
-
   it('signTaprootPsbt initializes ECC library before signing', () => {
     const src = readWalletContextSource();
     const body = extractCallbackBody(src, 'signTaprootPsbt');
@@ -465,27 +465,11 @@ describe('Keystore signing path validation', () => {
     expect(body).toContain('Could not sign input');
   });
 
-  it('signSegwitPsbt signs all inputs in a loop (skips failures)', () => {
-    const src = readWalletContextSource();
-    const body = extractCallbackBody(src, 'signSegwitPsbt');
-
-    expect(body).toContain('psbt.inputCount');
-    expect(body).toContain('psbt.signInput(i');
-    expect(body).toContain('Could not sign input');
-  });
-
   it('signTaprootPsbt returns base64 after signing (keystore path)', () => {
     const src = readWalletContextSource();
     const body = extractCallbackBody(src, 'signTaprootPsbt');
 
     // After the signing loop, returns psbt.toBase64()
-    expect(body).toContain('return psbt.toBase64()');
-  });
-
-  it('signSegwitPsbt returns base64 after signing (keystore path)', () => {
-    const src = readWalletContextSource();
-    const body = extractCallbackBody(src, 'signSegwitPsbt');
-
     expect(body).toContain('return psbt.toBase64()');
   });
 });

@@ -7,9 +7,11 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { useWallet } from '@/context/WalletContext';
-import { getConfig } from '@/utils/getConfig';
+import { getConfig, getRpcUrl } from '@/utils/getConfig';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { KNOWN_TOKENS } from '@/lib/alkanes-client';
+import { simulateContract, extractField3Data, parseU128LE } from '@/lib/fujin/rpc';
+import { fetchCuratedPoolsListItems } from '@/lib/alkanes/curated-pools';
 import { queryKeys } from '@/queries/keys';
 
 export type UsePoolsParams = {
@@ -40,6 +42,31 @@ export type PoolsListItem = {
 // ============================================================================
 // Helpers
 // ============================================================================
+
+/**
+ * Standard AMM swap fee (0.3%)
+ * Used for APR calculation when backend doesn't provide poolApr.
+ */
+const DEFAULT_SWAP_FEE_RATE = 0.003;
+
+/**
+ * Calculate APR from 24h volume and TVL.
+ * Formula: (vol24h × feeRate × 365 / tvl) × 100
+ *
+ * Returns 0 if TVL is too small to avoid division by zero or absurd values.
+ */
+function calculateApr(vol24hUsd: number, tvlUsd: number, feeRate: number = DEFAULT_SWAP_FEE_RATE): number {
+  // Require minimum $5 TVL (matches MIN_TVL_USD display filter) to avoid division by near-zero
+  if (!tvlUsd || tvlUsd < 5) return 0;
+  if (!vol24hUsd || vol24hUsd <= 0) return 0;
+
+  const dailyFees = vol24hUsd * feeRate;
+  const annualizedFees = dailyFees * 365;
+  const apr = (annualizedFees / tvlUsd) * 100;
+
+  // Cap at 10000% APR to filter out noise from low-liquidity pools
+  return Math.min(apr, 10000);
+}
 
 /**
  * Build icon URL for a token
@@ -165,10 +192,12 @@ async function fetchPoolsFromDataApi(
     new Promise<never>((_, reject) => setTimeout(() => reject(new Error('dataApiGetAllPoolsDetails timeout (30s)')), 30000)),
   ]);
   const parsed = typeof result === 'string' ? JSON.parse(result) : result;
-  // SDK may return raw API response wrapped in { data: ... } or already unwrapped
-  const pools = parsed?.pools || parsed?.data?.pools || [];
-
-  console.log('[usePools] dataApiGetAllPoolsDetails returned', pools.length, 'pools');
+  // SDK may return raw API response wrapped in { data: ... } or already unwrapped.
+  // On devnet, espo (served from public/wasm/quspo.wasm for compatibility) transform returns { statusCode, data: [pools] } where data is
+  // the pool array directly (not data.pools).
+  const pools = parsed?.pools
+    || parsed?.data?.pools
+    || (Array.isArray(parsed?.data) ? parsed.data : []);
 
   if (pools.length === 0) {
     throw new Error('dataApiGetAllPoolsDetails returned 0 pools (API may be down)');
@@ -209,18 +238,23 @@ async function fetchPoolsFromDataApi(
     const token0Name = getTokenName(token0Id, token0NameFromPool, tokenMetaMap);
     const token1Name = getTokenName(token1Id, token1NameFromPool, tokenMetaMap);
 
+    const tvlUsd = p.poolTvlInUsd ?? p.tvl ?? 0;
+    const vol24hUsd = p.poolVolume1dInUsd ?? p.volume1d ?? 0;
+    // Use backend APR if provided, otherwise calculate from volume/TVL
+    const apr = p.poolApr ?? p.apr ?? calculateApr(vol24hUsd, tvlUsd);
+
     items.push({
       id: poolId,
       pairLabel: `${token0Name} / ${token1Name} LP`,
       token0: { id: token0Id, symbol: token0Symbol, name: token0Name, iconUrl: getTokenIconUrl(token0Id, network) },
       token1: { id: token1Id, symbol: token1Symbol, name: token1Name, iconUrl: getTokenIconUrl(token1Id, network) },
-      tvlUsd: p.poolTvlInUsd ?? 0,
+      tvlUsd,
       token0TvlUsd: p.token0TvlInUsd ?? 0,
       token1TvlUsd: p.token1TvlInUsd ?? 0,
-      vol24hUsd: p.poolVolume1dInUsd ?? 0,
-      vol7dUsd: p.poolVolume7dInUsd ?? 0,
-      vol30dUsd: p.poolVolume30dInUsd ?? 0,
-      apr: p.poolApr ?? 0,
+      vol24hUsd,
+      vol7dUsd: p.poolVolume7dInUsd ?? p.volume7d ?? 0,
+      vol30dUsd: p.poolVolume30dInUsd ?? p.volume30d ?? 0,
+      apr,
       token0Amount: p.token0Amount || p.reserve0 || p.token0?.token0Amount || '0',
       token1Amount: p.token1Amount || p.reserve1 || p.token1?.token1Amount || '0',
       lpTotalSupply: p.tokenSupply || undefined,
@@ -231,28 +265,32 @@ async function fetchPoolsFromDataApi(
 }
 
 // ============================================================================
-// Token pairs REST fallback (direct fetch, bypasses WASM SDK deserialization)
-// The SDK's dataApiGetAllTokenPairs discards the response during WASM parsing,
-// so we call the REST endpoint directly via fetch.
+// Pool details REST fallback (direct fetch to OYL Alkanode, bypasses WASM SDK)
+// The SDK WASM's dataApiGetAllPoolsDetails deserializes into a Rust struct that
+// drops poolVolume30dInUsd. This direct REST call preserves ALL API fields
+// including 30D volume. Falls back here when the SDK primary path fails
+// (e.g., mainnet.subfrost.io returns 500 "btc/usd price unavailable").
 // ============================================================================
 
-async function fetchPoolsFromTokenPairsRest(
+async function fetchPoolsFromPoolsDetailsRest(
   factoryId: string,
   network: string,
   tokenMetaMap?: Map<string, { name: string; symbol: string }>,
 ): Promise<PoolsListItem[]> {
   const [factoryBlock, factoryTx] = factoryId.split(':');
-  const proxyUrl = `/api/rpc/${encodeURIComponent(network)}/get-all-token-pairs`;
-  const resp = await fetch(proxyUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ factoryId: { block: factoryBlock, tx: factoryTx } }),
-  });
-  if (!resp.ok) throw new Error(`get-all-token-pairs HTTP ${resp.status}`);
+  // Route through app API proxy — never call external URLs directly from hooks
+  // Use server-side cached endpoint (30s TTL) to avoid hitting RPC every page load
+  const resp = await Promise.race([
+    fetch(`/api/pools/cached?network=${network}`),
+    new Promise<never>((_, reject) => setTimeout(() => reject(new Error('cached pools timeout (10s)')), 10000)),
+  ]);
+  if (!resp.ok) throw new Error(`cached pools HTTP ${resp.status}`);
   const json = await resp.json();
-  const pools: any[] = json?.data?.pools || (Array.isArray(json?.data) ? json.data : null) || json?.pools || [];
+  const pools: any[] = json?.data?.pools || json?.pools || [];
 
-  console.log('[usePools] get-all-token-pairs REST returned', pools.length, 'pools');
+  if (pools.length === 0) {
+    throw new Error('get-all-pools-details REST returned 0 pools');
+  }
 
   const items: PoolsListItem[] = [];
 
@@ -290,18 +328,105 @@ async function fetchPoolsFromTokenPairsRest(
     const token0Name = getTokenName(token0Id, t0Name, tokenMetaMap);
     const token1Name = getTokenName(token1Id, t1Name, tokenMetaMap);
 
+    const tvlUsd = p.poolTvlInUsd ?? p.tvl ?? 0;
+    const vol24hUsd = p.poolVolume1dInUsd ?? p.volume1d ?? 0;
+    const apr = p.poolApr ?? p.apr ?? calculateApr(vol24hUsd, tvlUsd);
+
     items.push({
       id: poolId,
       pairLabel: `${token0Name} / ${token1Name} LP`,
       token0: { id: token0Id, symbol: token0Symbol, name: token0Name, iconUrl: getTokenIconUrl(token0Id, network) },
       token1: { id: token1Id, symbol: token1Symbol, name: token1Name, iconUrl: getTokenIconUrl(token1Id, network) },
-      tvlUsd: p.poolTvlInUsd ?? 0,
+      tvlUsd,
       token0TvlUsd: p.token0TvlInUsd ?? 0,
       token1TvlUsd: p.token1TvlInUsd ?? 0,
-      vol24hUsd: p.poolVolume1dInUsd ?? 0,
-      vol7dUsd: p.poolVolume7dInUsd ?? 0,
-      vol30dUsd: p.poolVolume30dInUsd ?? 0,
-      apr: p.poolApr ?? 0,
+      vol24hUsd,
+      vol7dUsd: p.poolVolume7dInUsd ?? p.volume7d ?? 0,
+      vol30dUsd: p.poolVolume30dInUsd ?? p.volume30d ?? 0,
+      apr,
+      token0Amount: p.token0Amount || p.reserve0 || p.token0?.token0Amount || '0',
+      token1Amount: p.token1Amount || p.reserve1 || p.token1?.token1Amount || '0',
+      lpTotalSupply: p.tokenSupply || undefined,
+    });
+  }
+
+  return items;
+}
+
+// ============================================================================
+// Token pairs REST fallback (direct fetch, bypasses WASM SDK deserialization)
+// The SDK's dataApiGetAllTokenPairs discards the response during WASM parsing,
+// so we call the REST endpoint directly via fetch.
+// ============================================================================
+
+async function fetchPoolsFromTokenPairsRest(
+  factoryId: string,
+  network: string,
+  tokenMetaMap?: Map<string, { name: string; symbol: string }>,
+): Promise<PoolsListItem[]> {
+  const [factoryBlock, factoryTx] = factoryId.split(':');
+  const proxyUrl = `${getRpcUrl(network)}/get-all-token-pairs`;
+  const resp = await fetch(proxyUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ factoryId: { block: factoryBlock, tx: factoryTx } }),
+  });
+  if (!resp.ok) throw new Error(`get-all-token-pairs HTTP ${resp.status}`);
+  const json = await resp.json();
+  const pools: any[] = json?.data?.pools || (Array.isArray(json?.data) ? json.data : null) || json?.pools || [];
+
+  const items: PoolsListItem[] = [];
+
+  for (const p of pools) {
+    const poolId = p.poolId
+      ? `${p.poolId.block}:${p.poolId.tx}`
+      : '';
+    const token0Id = p.token0
+      ? `${p.token0.alkaneId?.block ?? p.token0.block}:${p.token0.alkaneId?.tx ?? p.token0.tx}`
+      : '';
+    const token1Id = p.token1
+      ? `${p.token1.alkaneId?.block ?? p.token1.block}:${p.token1.alkaneId?.tx ?? p.token1.tx}`
+      : '';
+
+    if (!poolId || !token0Id || !token1Id) continue;
+
+    let token0NameFromPool = '';
+    let token1NameFromPool = '';
+    if (p.poolName) {
+      const match = p.poolName.match(/^(.+?)\s*\/\s*(.+?)(?:\s*LP)?$/);
+      if (match) {
+        token0NameFromPool = match[1].trim().replace('SUBFROST BTC', 'frBTC');
+        token1NameFromPool = match[2].trim().replace('SUBFROST BTC', 'frBTC');
+      }
+    }
+
+    const t0Name = token0NameFromPool || p.token0?.name || p.token0?.symbol || '';
+    const t1Name = token1NameFromPool || p.token1?.name || p.token1?.symbol || '';
+
+    const token0Symbol = getTokenSymbol(token0Id, t0Name, tokenMetaMap);
+    const token1Symbol = getTokenSymbol(token1Id, t1Name, tokenMetaMap);
+
+    if (!token0Symbol || token0Symbol === 'UNK' || !token1Symbol || token1Symbol === 'UNK') continue;
+
+    const token0Name = getTokenName(token0Id, t0Name, tokenMetaMap);
+    const token1Name = getTokenName(token1Id, t1Name, tokenMetaMap);
+
+    const tvlUsd = p.poolTvlInUsd ?? p.tvl ?? 0;
+    const vol24hUsd = p.poolVolume1dInUsd ?? p.volume1d ?? 0;
+    const apr = p.poolApr ?? p.apr ?? calculateApr(vol24hUsd, tvlUsd);
+
+    items.push({
+      id: poolId,
+      pairLabel: `${token0Name} / ${token1Name} LP`,
+      token0: { id: token0Id, symbol: token0Symbol, name: token0Name, iconUrl: getTokenIconUrl(token0Id, network) },
+      token1: { id: token1Id, symbol: token1Symbol, name: token1Name, iconUrl: getTokenIconUrl(token1Id, network) },
+      tvlUsd,
+      token0TvlUsd: p.token0TvlInUsd ?? 0,
+      token1TvlUsd: p.token1TvlInUsd ?? 0,
+      vol24hUsd,
+      vol7dUsd: p.poolVolume7dInUsd ?? p.volume7d ?? 0,
+      vol30dUsd: p.poolVolume30dInUsd ?? p.volume30d ?? 0,
+      apr,
       token0Amount: p.token0Amount || p.reserve0 || p.token0?.token0Amount || '0',
       token1Amount: p.token1Amount || p.reserve1 || p.token1?.token1Amount || '0',
       lpTotalSupply: p.tokenSupply || undefined,
@@ -328,8 +453,6 @@ async function fetchPoolsFromTokenPairsApi(
   const parsed = typeof result === 'string' ? JSON.parse(result) : result;
   // API returns { data: [...] } with pool objects
   const pools = parsed?.pools || parsed?.data?.pools || (Array.isArray(parsed?.data) ? parsed.data : []) || (Array.isArray(parsed) ? parsed : []);
-
-  console.log('[usePools] dataApiGetAllTokenPairs returned', pools.length, 'pools');
 
   if (pools.length === 0) {
     throw new Error('dataApiGetAllTokenPairs returned 0 pools');
@@ -370,24 +493,131 @@ async function fetchPoolsFromTokenPairsApi(
     const token0Name = getTokenName(token0Id, token0NameFromPool, tokenMetaMap);
     const token1Name = getTokenName(token1Id, token1NameFromPool, tokenMetaMap);
 
+    const tvlUsd = p.poolTvlInUsd ?? p.tvl ?? 0;
+    const vol24hUsd = p.poolVolume1dInUsd ?? p.volume1d ?? 0;
+    const apr = p.poolApr ?? p.apr ?? calculateApr(vol24hUsd, tvlUsd);
+
     // get-all-token-pairs provides TVL and volume data
     items.push({
       id: poolId,
       pairLabel: `${token0Name} / ${token1Name} LP`,
       token0: { id: token0Id, symbol: token0Symbol, name: token0Name, iconUrl: getTokenIconUrl(token0Id, network) },
       token1: { id: token1Id, symbol: token1Symbol, name: token1Name, iconUrl: getTokenIconUrl(token1Id, network) },
-      tvlUsd: p.poolTvlInUsd ?? 0,
+      tvlUsd,
       token0TvlUsd: p.token0TvlInUsd ?? 0,
       token1TvlUsd: p.token1TvlInUsd ?? 0,
-      vol24hUsd: p.poolVolume1dInUsd ?? 0,
-      vol7dUsd: p.poolVolume7dInUsd ?? 0,
-      vol30dUsd: p.poolVolume30dInUsd ?? 0,
-      apr: p.poolApr ?? 0,
+      vol24hUsd,
+      vol7dUsd: p.poolVolume7dInUsd ?? p.volume7d ?? 0,
+      vol30dUsd: p.poolVolume30dInUsd ?? p.volume30d ?? 0,
+      apr,
       // Get reserve amounts from the token objects or top-level
       token0Amount: p.reserve0 || p.token0?.token0Amount || '0',
       token1Amount: p.reserve1 || p.token1?.token1Amount || '0',
       lpTotalSupply: p.tokenSupply || undefined,
     });
+  }
+
+  return items;
+}
+
+// ============================================================================
+// Direct metashrew_view simulate fallback (regtest-local)
+// ============================================================================
+
+async function fetchPoolsFromDirectSimulate(
+  factoryId: string,
+  network: string,
+): Promise<PoolsListItem[]> {
+  const rpcUrl = network === 'qubitcoin-regtest'
+    ? `${typeof window !== 'undefined' ? window.location.origin : ''}/api/rpc/qubitcoin-regtest`
+    : 'http://localhost:18888';
+
+  // Factory opcode 3: GetAllPools — returns list of pool AlkaneIds
+  const allPoolsHex = await simulateContract(rpcUrl, factoryId, 3);
+  const allPoolsData = extractField3Data(allPoolsHex, 32);
+  if (!allPoolsData) {
+    return [];
+  }
+
+  // First u128 = pool count, then pairs of u128 (block, tx)
+  const numPools = Number(parseU128LE(allPoolsData, 0));
+  const pools: { block: number; tx: number }[] = [];
+  for (let i = 0; i < numPools; i++) {
+    const offset = 32 + i * 64; // skip count (32 hex chars), each pool = 64 hex chars
+    if (offset + 64 > allPoolsData.length) break;
+    const block = Number(parseU128LE(allPoolsData, offset));
+    const tx = Number(parseU128LE(allPoolsData, offset + 32));
+    pools.push({ block, tx });
+  }
+  const items: PoolsListItem[] = [];
+  for (const pool of pools) {
+    const poolId = `${pool.block}:${pool.tx}`;
+    try {
+      // Pool opcode 999: PoolDetails
+      const detailsHex = await simulateContract(rpcUrl, poolId, 999);
+      const detailsData = extractField3Data(detailsHex, 32);
+
+      // Pool opcode 99: GetName
+      const nameHex = await simulateContract(rpcUrl, poolId, 99);
+      const nameData = extractField3Data(nameHex, 1);
+      let poolName = '';
+      if (nameData) {
+        for (let i = 0; i < nameData.length; i += 2) {
+          const byte = parseInt(nameData.slice(i, i + 2), 16);
+          if (byte === 0) break;
+          poolName += String.fromCharCode(byte);
+        }
+      }
+
+      // Pool opcode 97: GetReserves
+      const reservesHex = await simulateContract(rpcUrl, poolId, 97);
+      const reservesData = extractField3Data(reservesHex, 32);
+
+      let token0Id = '', token1Id = '', token0Symbol = '', token1Symbol = '';
+      let token0Amount: string | undefined, token1Amount: string | undefined;
+
+      // Parse pool name "TOKEN0 / TOKEN1 LP" → symbols
+      const nameMatch = poolName.match(/^(.+?)\s*\/\s*(.+?)(?:\s*LP)?$/);
+      if (nameMatch) {
+        token0Symbol = nameMatch[1].trim();
+        token1Symbol = nameMatch[2].trim();
+      }
+
+      // Parse details for token IDs (PoolDetails format: various u128 fields)
+      if (detailsData && detailsData.length >= 128) {
+        const t0Block = Number(parseU128LE(detailsData, 0));
+        const t0Tx = Number(parseU128LE(detailsData, 32));
+        const t1Block = Number(parseU128LE(detailsData, 64));
+        const t1Tx = Number(parseU128LE(detailsData, 96));
+        token0Id = `${t0Block}:${t0Tx}`;
+        token1Id = `${t1Block}:${t1Tx}`;
+      }
+
+      // Parse reserves
+      if (reservesData && reservesData.length >= 64) {
+        token0Amount = parseU128LE(reservesData, 0).toString();
+        token1Amount = parseU128LE(reservesData, 32).toString();
+      }
+
+      // Resolve known token symbols
+      if (token0Id && (!token0Symbol || /^\d+$/.test(token0Symbol))) {
+        token0Symbol = KNOWN_TOKENS[token0Id]?.symbol || token0Symbol || token0Id;
+      }
+      if (token1Id && (!token1Symbol || /^\d+$/.test(token1Symbol))) {
+        token1Symbol = KNOWN_TOKENS[token1Id]?.symbol || token1Symbol || token1Id;
+      }
+
+      items.push({
+        id: poolId,
+        pairLabel: `${token0Symbol}/${token1Symbol}`,
+        token0: { id: token0Id, symbol: token0Symbol, name: token0Symbol },
+        token1: { id: token1Id, symbol: token1Symbol, name: token1Symbol },
+        token0Amount,
+        token1Amount,
+      });
+    } catch (e) {
+      console.warn('[usePools] Direct simulate: failed to query pool', poolId, e);
+    }
   }
 
   return items;
@@ -409,8 +639,6 @@ async function fetchPoolsFromSDKFallback(
   ]);
   const parsed = typeof rpcResult === 'string' ? JSON.parse(rpcResult) : rpcResult;
   const rpcPools = parsed?.pools || [];
-
-  console.log('[usePools] SDK fallback returned', rpcPools.length, 'pools');
 
   const items: PoolsListItem[] = [];
 
@@ -478,53 +706,133 @@ export function usePools(params: UsePoolsParams = {}) {
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10000),
     enabled: !!network && !!ALKANE_FACTORY_ID && !!provider,
     queryFn: async () => {
-      console.log('[usePools] Fetching pools for factory:', ALKANE_FACTORY_ID);
-
       if (!provider) {
         throw new Error('SDK provider not available');
       }
 
-      // Fetch token metadata in parallel with pool data (espo-backed)
-      const tokenMetaPromise = fetchTokenMetadata(network);
+      // Fetch token metadata in parallel with pool data (espo-backed).
+      // Swallow errors here — tokenMeta is enrichment, not required for first paint.
+      const tokenMetaPromise: Promise<Map<string, { name: string; symbol: string }>> =
+        fetchTokenMetadata(network).catch(() => new Map());
 
       let items: PoolsListItem[] = [];
       let tokenMetaMap: Map<string, { name: string; symbol: string }> = new Map();
 
-      // Primary: Data API (single call with pre-calculated TVL/volume/APR)
+      // regtest-local: skip REST/SDK fallbacks (all return 503 or hang 30s).
+      // Go directly to metashrew_view simulate which is the only working path.
+      if (network === 'regtest-local' || network === 'qubitcoin-regtest') {
+        try { tokenMetaMap = await tokenMetaPromise; } catch { /* ignore */ }
+        try {
+          items = await fetchPoolsFromDirectSimulate(ALKANE_FACTORY_ID, network);
+        } catch (e) {
+          console.warn('[usePools] regtest-local: Direct simulate failed:', e);
+        }
+        return { items, total: items.length };
+      }
+
+      // Mainnet (and signet/testnet) primary: prefetch curated pool IDs
+      // directly from on-chain via metashrew. Espo + SDK fallbacks have been
+      // returning empty for extended periods (verified 2026-05-03), so we
+      // anchor the swap/LP UI on a known good list of pool IDs and fetch
+      // their live reserves with a single fan-out of opcode-999 calls.
+      // The remaining espo / SDK fallbacks below run *additively* — any
+      // extra pools they surface get layered on top of the curated set.
+      if (network === 'mainnet' || network === 'signet' || network === 'testnet') {
+        try {
+          const rpcUrl = getRpcUrl(network);
+          const curated = await fetchCuratedPoolsListItems(rpcUrl);
+          if (curated.length > 0) {
+            items = curated;
+          }
+        } catch (e) {
+          console.warn('[usePools] curated pool prefetch failed:', e);
+        }
+      }
+
+      // Merge fallback pool entries onto the curated set instead of replacing
+      // it. The original code overwrote `items = await fallback(...)` whenever
+      // a fallback returned anything non-empty, which silently nuked the
+      // curated DIESEL/MIST/Bee/DUST entries when /api/pools/cached returned
+      // a 2-pool partial list (the espo proxy serves stale partial data
+      // before it's fully populated). Symptom: BTC→Token swap picker only
+      // surfaced frBTC/bUSD/FIRE despite the curated path having succeeded.
+      const mergeItems = (extra: PoolsListItem[]) => {
+        const seen = new Set(items.map((p) => p.id));
+        for (const p of extra) {
+          if (!seen.has(p.id)) {
+            items.push(p);
+            seen.add(p.id);
+          }
+        }
+      };
+
+      // Primary: Direct REST call to get-all-pools-details (preserves ALL API fields
+      // including poolApr, poolVolume30dInUsd, etc. which the SDK WASM deserializer drops).
+      // On devnet, the fetch interceptor routes these REST calls through quspo.
+      // Pool fetch runs in parallel with tokenMeta — don't block trending on slow tokenMeta.
+      // Race tokenMeta against a 250ms budget: if it's already cached, use it for symbol
+      // enrichment in the parse loop; otherwise the second pass below handles missing names.
       try {
-        tokenMetaMap = await tokenMetaPromise;
-        console.log('[usePools] Token metadata loaded:', tokenMetaMap.size, 'tokens');
-        items = await fetchPoolsFromDataApi(provider, ALKANE_FACTORY_ID, network, tokenMetaMap);
+        const fetched = await fetchPoolsFromPoolsDetailsRest(ALKANE_FACTORY_ID, network, undefined);
+        mergeItems(fetched);
+        const TOKEN_META_BUDGET_MS = 250;
+        tokenMetaMap = await Promise.race([
+          tokenMetaPromise,
+          new Promise<Map<string, { name: string; symbol: string }>>(
+            resolve => setTimeout(() => resolve(new Map()), TOKEN_META_BUDGET_MS),
+          ),
+        ]);
       } catch (e) {
-        console.warn('[usePools] dataApiGetAllPoolsDetails failed, falling back to dataApiGetAllTokenPairs:', e);
-        // Ensure token metadata is resolved even if pool fetch failed
+        console.warn('[usePools] get-all-pools-details REST failed, falling back to SDK WASM:', e);
         try { tokenMetaMap = await tokenMetaPromise; } catch { /* ignore */ }
       }
 
-      // Fallback 1: get-all-token-pairs REST (single call, bypasses WASM SDK)
+      // Fallback 1: SDK WASM dataApiGetAllPoolsDetails (may drop some fields like poolApr)
       if (items.length === 0) {
         try {
-          items = await fetchPoolsFromTokenPairsRest(ALKANE_FACTORY_ID, network, tokenMetaMap);
+          mergeItems(await fetchPoolsFromDataApi(provider, ALKANE_FACTORY_ID, network, tokenMetaMap));
+        } catch (e) {
+          console.warn('[usePools] dataApiGetAllPoolsDetails failed:', e);
+        }
+      }
+
+      // Fallback 2: get-all-token-pairs REST
+      if (items.length === 0) {
+        try {
+          mergeItems(await fetchPoolsFromTokenPairsRest(ALKANE_FACTORY_ID, network, tokenMetaMap));
         } catch (e) {
           console.warn('[usePools] get-all-token-pairs REST failed:', e);
         }
       }
 
-      // Fallback 1b: dataApiGetAllTokenPairs (no TVL/volume but faster than RPC)
+      // Fallback 2b: dataApiGetAllTokenPairs
       if (items.length === 0) {
         try {
-          items = await fetchPoolsFromTokenPairsApi(provider, ALKANE_FACTORY_ID, network, tokenMetaMap);
+          mergeItems(await fetchPoolsFromTokenPairsApi(provider, ALKANE_FACTORY_ID, network, tokenMetaMap));
         } catch (e) {
           console.warn('[usePools] dataApiGetAllTokenPairs also failed, falling back to RPC:', e);
         }
       }
 
-      // Fallback 2: N+1 RPC simulation calls (no TVL/volume data)
+      // Fallback 3: N+1 RPC simulation calls (no TVL/volume data)
       if (items.length === 0) {
         try {
-          items = await fetchPoolsFromSDKFallback(provider, ALKANE_FACTORY_ID, network, tokenMetaMap);
+          mergeItems(await fetchPoolsFromSDKFallback(provider, ALKANE_FACTORY_ID, network, tokenMetaMap));
         } catch (e) {
           console.warn('[usePools] SDK fallback also failed:', e);
+        }
+      }
+
+      // Fallback 4: direct metashrew_view simulate (factory opcode 3 + per-pool
+      // 999). Pure on-chain — no espo / no SDK dependency. Use this when every
+      // upstream path (REST + SDK) has failed; loses TVL/volume data but
+      // ensures the LP / swap forms can still match pools by token id.
+      if (items.length === 0) {
+        try {
+          mergeItems(await fetchPoolsFromDirectSimulate(ALKANE_FACTORY_ID, network));
+          console.warn('[usePools] used direct simulate fallback — TVL/volume fields missing');
+        } catch (e) {
+          console.warn('[usePools] direct simulate fallback also failed:', e);
         }
       }
 
@@ -549,7 +857,6 @@ export function usePools(params: UsePoolsParams = {}) {
         }
       }
       if (missingIds.size > 0) {
-        console.log('[usePools] Fetching metadata for', missingIds.size, 'tokens with numeric names:', [...missingIds]);
         await fetchMissingTokenMetadata([...missingIds], network, tokenMetaMap);
         // Re-apply proper names from the updated metadata map
         // Use name as fallback for symbol (and vice versa) when one is empty
@@ -582,13 +889,18 @@ export function usePools(params: UsePoolsParams = {}) {
       const beforeCount = items.length;
       items = items.filter(p => !isBlacklistedPool(p));
       if (items.length < beforeCount) {
-        console.log(`[usePools] Filtered out ${beforeCount - items.length} blacklisted pool(s)`);
       }
 
-      // Remove dust/dead pools with negligible TVL (skip on regtest where pricing is unavailable)
-      if (!network?.includes('regtest')) {
+      // Remove dust/dead pools with negligible TVL (skip on regtest/devnet where pricing is unavailable).
+      //
+      // Pools whose `tvlUsd` is `undefined` (vs zero) are kept — undefined
+      // means "no TVL data was attached to this entry", which happens on
+      // the curated/on-chain fallback paths where reserves come from
+      // opcode-999 directly and pricing isn't joined yet. Filtering those
+      // out would silently nuke the curated set whenever espo is empty.
+      if (!network?.includes('regtest') && network !== 'devnet') {
         const MIN_TVL_USD = 5;
-        items = items.filter(p => (p.tvlUsd ?? 0) >= MIN_TVL_USD);
+        items = items.filter(p => p.tvlUsd === undefined || p.tvlUsd >= MIN_TVL_USD);
       }
 
       return applyFiltersAndPagination(items, params);

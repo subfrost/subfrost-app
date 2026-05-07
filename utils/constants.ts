@@ -6,7 +6,8 @@ import * as bitcoin from 'bitcoinjs-lib';
 // - regtest-local: Local Docker regtest environment (localhost:18888)
 // - subfrost-regtest: Hosted Subfrost regtest at regtest.subfrost.io
 // - oylnet: Legacy local development network
-export type Network = 'mainnet' | 'testnet' | 'signet' | 'oylnet' | 'regtest' | 'regtest-local' | 'subfrost-regtest';
+// - devnet: In-browser devnet (full protocol simulation)
+export type Network = 'mainnet' | 'testnet' | 'signet' | 'oylnet' | 'regtest' | 'regtest-local' | 'qubitcoin-regtest' | 'subfrost-regtest' | 'devnet';
 
 // NetworkMap maps to bitcoin.networks.Network objects using bitcoinjs-lib directly
 export const NetworkMap: Partial<Record<Network, bitcoin.networks.Network>> = {
@@ -16,7 +17,9 @@ export const NetworkMap: Partial<Record<Network, bitcoin.networks.Network>> = {
   oylnet: bitcoin.networks.regtest,
   regtest: bitcoin.networks.regtest,
   'regtest-local': bitcoin.networks.regtest,
+  'qubitcoin-regtest': bitcoin.networks.regtest,
   'subfrost-regtest': bitcoin.networks.regtest,
+  devnet: bitcoin.networks.regtest,
 };
 
 // Human-readable network names for UI
@@ -27,7 +30,9 @@ export const NetworkNames: Record<Network, string> = {
   oylnet: 'Local Dev',
   regtest: 'Local Regtest',
   'regtest-local': 'Local Docker',
+  'qubitcoin-regtest': 'Qubitcoin Regtest',
   'subfrost-regtest': 'Subfrost Regtest',
+  devnet: 'In-Browser Devnet',
 };
 
 // Sandshrew URL map (legacy, used by some components)
@@ -37,5 +42,6 @@ export const SandshrewUrlMap: Partial<Record<Network, string>> = {
   signet: 'https://signet.sandshrew.io/v4/wrlckwrld',
   oylnet: 'https://ladder-chain-sieve.sandshrew.io/v4/wrlckwrld',
   'regtest-local': 'http://localhost:18888',
+  'qubitcoin-regtest': 'https://meta.lake.direct',
   'subfrost-regtest': 'https://regtest.subfrost.io/v4/subfrost',
 };

@@ -11,7 +11,7 @@ import { useFeeRate } from "@/hooks/useFeeRate";
 import type { FeeSelection } from "@/hooks/useFeeRate";
 import { useGlobalStore } from "@/stores/global";
 import type { SlippageSelection } from "@/stores/global";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Settings } from "lucide-react";
 import { useTranslation } from '@/hooks/useTranslation';
 import { useDemoGate } from '@/hooks/useDemoGate';
 
@@ -19,13 +19,10 @@ import { useDemoGate } from '@/hooks/useDemoGate';
 const ALL_VAULT_TOKENS: Array<{ id: string; symbol: string }> = [
   { id: 'btc', symbol: 'BTC' },
   { id: '32:0', symbol: 'frBTC' },
-  { id: 'usd', symbol: 'bUSD' },
-  { id: 'frUSD', symbol: 'frUSD' },
-  { id: 'ordi', symbol: 'ORDI' },
 ];
 
 // Get the corresponding vault for an input token
-const getVaultForInputToken = (tokenId: string): VaultConfig | null => {
+export const getVaultForInputToken = (tokenId: string): VaultConfig | null => {
   const tokenToVaultMap: Record<string, string> = {
     'btc': 'dx-btc',       // BTC -> dxBTC
     '32:0': 'dx-btc',      // frBTC -> dxBTC (prioritize dxBTC over yvfrBTC)
@@ -43,18 +40,18 @@ const getVaultForInputToken = (tokenId: string): VaultConfig | null => {
 
 // Get the initial input token for a vault (first supported token)
 // Check if a vault uses BTC-like decimals (8 decimals)
-const isBtcBasedVault = (vault: VaultConfig): boolean => {
+export const isBtcBasedVault = (vault: VaultConfig): boolean => {
   return vault.outputAsset === 'dxBTC' || vault.outputAsset === 'yvfrBTC';
 };
 
 // Format amount with appropriate decimals based on vault type
-const formatVaultAmount = (amount: string, vault: VaultConfig): string => {
+export const formatVaultAmount = (amount: string, vault: VaultConfig): string => {
   const decimals = isBtcBasedVault(vault) ? 8 : 2;
   if (!amount || isNaN(parseFloat(amount))) return (0).toFixed(decimals);
   return parseFloat(amount).toFixed(decimals);
 };
 
-const getInitialInputTokenForVault = (vault: VaultConfig): { id: string; symbol: string } => {
+export const getInitialInputTokenForVault = (vault: VaultConfig): { id: string; symbol: string } => {
   // Map of output asset to default input token
   const defaultInputMap: Record<string, { id: string; symbol: string }> = {
     'dxBTC': { id: 'btc', symbol: 'BTC' },
@@ -70,6 +67,7 @@ const getInitialInputTokenForVault = (vault: VaultConfig): { id: string; symbol:
 type Props = {
   mode: 'deposit' | 'withdraw';
   onModeChange: (mode: 'deposit' | 'withdraw') => void;
+  hideTabs?: boolean;
   vault: VaultConfig;
   onVaultChange: (vault: VaultConfig) => void;
   userBalance: string;
@@ -91,6 +89,7 @@ export default function VaultDepositInterface({
   vaultUnits = [],
   selectedUnitId = '',
   onUnitSelect = () => {},
+  hideTabs = false,
 }: Props) {
   const [amount, setAmount] = useState("");
   const [selectedInputToken, setSelectedInputToken] = useState<{ id: string; symbol: string }>(
@@ -174,37 +173,39 @@ export default function VaultDepositInterface({
   };
 
   return (
-    <div className="rounded-2xl bg-[color:var(--sf-glass-bg)] p-6 shadow-[0_4px_20px_rgba(0,0,0,0.2)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)]">
+    <div className="sf-card !overflow-visible p-6">
       {/* Tabs */}
-      <div className="flex gap-4 mb-6">
-        <button
-          onClick={() => onModeChange('deposit')}
-          className={`pb-3 px-1 text-sm font-semibold transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
-            mode === 'deposit'
-              ? 'text-[color:var(--sf-primary)] border-b-2 border-[color:var(--sf-primary)]'
-              : 'text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]'
-          }`}
-        >
-          {t('vaultDeposit.deposit')}
-        </button>
-        <button
-          onClick={() => onModeChange('withdraw')}
-          className={`pb-3 px-1 text-sm font-semibold transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
-            mode === 'withdraw'
-              ? 'text-[color:var(--sf-primary)] border-b-2 border-[color:var(--sf-primary)]'
-              : 'text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]'
-          }`}
-        >
-          {t('vaultDeposit.withdraw')}
-        </button>
-      </div>
+      {!hideTabs && (
+        <div className="flex gap-4 mb-6">
+          <button
+            onClick={() => onModeChange('deposit')}
+            className={`pb-3 px-1 text-sm font-semibold transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
+              mode === 'deposit'
+                ? 'text-[color:var(--sf-primary)] border-b-2 border-[color:var(--sf-primary)]'
+                : 'text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]'
+            }`}
+          >
+            {t('vaultDeposit.deposit')}
+          </button>
+          <button
+            onClick={() => onModeChange('withdraw')}
+            className={`pb-3 px-1 text-sm font-semibold transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
+              mode === 'withdraw'
+                ? 'text-[color:var(--sf-primary)] border-b-2 border-[color:var(--sf-primary)]'
+                : 'text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]'
+            }`}
+          >
+            {t('vaultDeposit.withdraw')}
+          </button>
+        </div>
+      )}
 
       {mode === 'deposit' ? (
         /* Deposit Mode: Swap-like UI */
         <div className="relative flex flex-col gap-3">
           {/* From Wallet Panel */}
           <div
-            className={`relative z-30 rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 backdrop-blur-md transition-shadow duration-[200ms] cursor-text ${inputFocused ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]'}`}
+            className="sf-input group relative z-30 p-4 cursor-text"
             onClick={() => inputRef.current?.focus()}
           >
             {/* Token Selector - floating top-right */}
@@ -229,42 +230,29 @@ export default function VaultDepositInterface({
 
               {/* Token Selector Dropdown */}
               {showTokenSelector && (
-                <div className="absolute right-0 mt-2 z-[100] w-56 rounded-xl border-2 border-[color:var(--sf-glass-border)] bg-[color:var(--sf-surface)] shadow-[0_8px_32px_rgba(0,0,0,0.2)] backdrop-blur-xl max-h-80 overflow-y-auto">
-                  {ALL_VAULT_TOKENS.map((token) => {
-                    const tokenVault = getVaultForInputToken(token.id);
-                    const isDxBtcToken = tokenVault?.id === 'dx-btc';
-                    return (
-                      <button
-                        key={token.id}
-                        type="button"
-                        onClick={() => isDxBtcToken ? handleInputTokenSelect(token) : undefined}
-                        className={`w-full px-4 py-3 text-left text-sm font-semibold transition-all duration-[200ms] first:rounded-t-xl last:rounded-b-xl ${
-                          !isDxBtcToken
-                            ? 'opacity-40 grayscale cursor-default'
-                            : selectedInputToken.id === token.id
-                              ? 'bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]'
-                              : 'text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/5'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2">
-                          <TokenIcon
-                            symbol={token.symbol}
-                            id={token.id}
-                            size="sm"
-                            network={network}
-                          />
-                          <div className="flex-1">
-                            <div className="font-semibold">{token.symbol}</div>
-                            {tokenVault && (
-                              <div className="text-[10px] text-[color:var(--sf-text)]/50">
-                                → {tokenVault.outputAsset}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </button>
-                    );
-                  })}
+                <div className="absolute right-0 mt-2 z-[100] w-44 rounded-lg bg-[color:var(--sf-surface)] shadow-[0_8px_32px_rgba(0,0,0,0.2)] overflow-hidden">
+                  {ALL_VAULT_TOKENS.map((token) => (
+                    <button
+                      key={token.id}
+                      type="button"
+                      onClick={() => handleInputTokenSelect(token)}
+                      className={`w-full px-3 py-2 text-left text-xs font-semibold transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none first:rounded-t-md last:rounded-b-md ${
+                        selectedInputToken.id === token.id
+                          ? 'bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]'
+                          : 'text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/5'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <TokenIcon
+                          symbol={token.symbol}
+                          id={token.id}
+                          size="sm"
+                          network={network}
+                        />
+                        <span className="font-semibold">{token.symbol}</span>
+                      </div>
+                    </button>
+                  ))}
                 </div>
               )}
             </div>
@@ -272,7 +260,7 @@ export default function VaultDepositInterface({
             {/* Main content area */}
             <div className="flex flex-col gap-1">
               {/* Label */}
-              <span className="text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70 pr-32">{t('vaultDeposit.fromWallet')}</span>
+              <span className="text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70 pr-32">Stake {selectedInputToken.symbol}{selectedInputToken.symbol === 'frBTC' ? ' Tokens' : ''}</span>
 
               {/* Input - full width */}
               <div className="pr-32">
@@ -292,7 +280,7 @@ export default function VaultDepositInterface({
                 <div className="text-xs font-medium text-[color:var(--sf-text)]/60">
                   {t('vaultDeposit.balance')} {userBalance}
                 </div>
-                <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                <div className={`flex items-center gap-1.5 transition-opacity duration-300 ${inputFocused ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`} onClick={(e) => e.stopPropagation()}>
                   <button
                     type="button"
                     onClick={() => setAmount((parseFloat(userBalance) * 0.25).toString())}
@@ -327,7 +315,7 @@ export default function VaultDepositInterface({
           </div>
 
           {/* To Vault Panel */}
-          <div className="relative z-10 rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 shadow-[0_2px_12px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]">
+          <div className="sf-panel relative z-10 p-4">
             {/* Token display - floating top-right */}
             <div className="absolute right-4 top-4 z-10">
               <div className="inline-flex items-center gap-2 rounded-xl bg-white/[0.03] px-3 py-2 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
@@ -361,15 +349,15 @@ export default function VaultDepositInterface({
           </div>
 
           {/* Transaction Settings - collapsible panel */}
-          <div className="relative z-[5] rounded-2xl bg-[color:var(--sf-panel-bg)] backdrop-blur-md shadow-[0_2px_12px_rgba(0,0,0,0.08)] overflow-visible">
+          <div className="sf-panel relative z-[5] overflow-visible">
             {/* Toggle button */}
             <button
               type="button"
               onClick={() => setDetailsOpen(!detailsOpen)}
-              className="flex items-center justify-between w-full p-4 text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60"
+              className="sf-collapsible-trigger"
             >
               <span>{t('vaultDeposit.transactionDetails')}</span>
-              <ChevronDown
+              <Settings
                 size={14}
                 className={`transition-transform duration-300 ${detailsOpen ? 'rotate-180' : ''}`}
               />
@@ -415,8 +403,7 @@ export default function VaultDepositInterface({
                         }
                       }}
                       placeholder="3"
-                      style={{ outline: 'none', border: 'none' }}
-                      className={`h-7 w-16 rounded-lg bg-[color:var(--sf-input-bg)] px-2 text-base font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[200ms] ${focusedField === 'deadline' ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
+                      className="sf-pill-input"
                     />
                   </div>
                 </div>
@@ -494,8 +481,7 @@ export default function VaultDepositInterface({
                           }
                         }}
                         placeholder="0"
-                        style={{ outline: 'none', border: 'none' }}
-                        className={`h-7 w-16 rounded-lg bg-[color:var(--sf-input-bg)] px-2 text-base font-semibold text-[color:var(--sf-text)] text-center !outline-none !ring-0 focus:!outline-none focus:!ring-0 focus-visible:!outline-none focus-visible:!ring-0 transition-all duration-[200ms] ${focusedField === 'fee' ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
+                        className="sf-pill-input"
                       />
                     </div>
                   ) : (
@@ -654,7 +640,7 @@ function MinerFeeButton({ selection, setSelection, presets }: MinerFeeButtonProp
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className={`inline-flex items-center gap-1.5 rounded-lg bg-[color:var(--sf-input-bg)] px-3 py-1.5 text-xs font-semibold text-[color:var(--sf-text)] transition-all duration-[200ms] focus:outline-none ${isOpen ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
+        className={`sf-dropdown-trigger ${isOpen ? 'sf-dropdown-trigger--open' : ''}`}
       >
         <span>{getDisplayText()}</span>
         <ChevronDown size={12} className={`transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${isOpen ? 'rotate-180' : ''}`} />
@@ -741,7 +727,7 @@ function SlippageButton({ selection, setSelection, setValue }: SlippageButtonPro
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className={`inline-flex items-center gap-1.5 rounded-lg bg-[color:var(--sf-input-bg)] px-3 py-1.5 text-xs font-semibold text-[color:var(--sf-text)] transition-all duration-[200ms] focus:outline-none ${isOpen ? 'shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]' : 'shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.12)]'}`}
+        className={`sf-dropdown-trigger ${isOpen ? 'sf-dropdown-trigger--open' : ''}`}
       >
         <span>{getDisplayText()}</span>
         <ChevronDown size={12} className={`transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${isOpen ? 'rotate-180' : ''}`} />

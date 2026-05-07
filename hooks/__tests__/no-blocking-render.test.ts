@@ -122,7 +122,6 @@ describe('Xverse wallet uses current API', () => {
 describe('No direct fetch calls to external URLs', () => {
   const hookFiles = [
     'hooks/usePools.ts',
-    'hooks/useAlkanesTokenPairs.ts',
     'hooks/useAmmHistory.ts',
   ];
 

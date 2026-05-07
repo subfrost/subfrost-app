@@ -3,6 +3,12 @@ import BigNumber from 'bignumber.js';
 import { useWallet } from '@/context/WalletContext';
 import { useSandshrewProvider } from '@/hooks/useSandshrewProvider';
 import { VAULT_OPCODES } from '@/constants';
+import { patchInputsOnly } from '@/lib/psbt-patching';
+import { extractPsbtBase64, getBitcoinNetwork } from '@/lib/alkanes/helpers';
+import * as bitcoin from 'bitcoinjs-lib';
+import * as ecc from '@bitcoinerlab/secp256k1';
+
+bitcoin.initEccLib(ecc);
 
 export type VaultDepositData = {
   vaultContractId: string; // e.g., "2:123" for vault contract
@@ -15,7 +21,7 @@ export type VaultDepositData = {
  * Build protostone string for vault deposit (Purchase) operation
  * Format: [vault_block,vault_tx,opcode,amount]:pointer:refund
  */
-function buildVaultDepositProtostone(params: {
+export function buildVaultDepositProtostone(params: {
   vaultContractId: string;
   amount: string;
   pointer?: string;
@@ -39,7 +45,7 @@ function buildVaultDepositProtostone(params: {
  * Build input requirements string for vault deposit
  * Format: "block:tx:amount" for the token being deposited
  */
-function buildVaultDepositInputRequirements(params: {
+export function buildVaultDepositInputRequirements(params: {
   tokenId: string;
   amount: string;
 }): string {
@@ -52,8 +58,9 @@ function buildVaultDepositInputRequirements(params: {
  * Uses opcode 1 (Purchase) to deposit tokens and receive vault units
  */
 export function useVaultDeposit() {
-  const { isConnected } = useWallet();
+  const { isConnected, walletType, account, signTaprootPsbt, network, txContext } = useWallet();
   const provider = useSandshrewProvider();
+  const isBrowserWallet = walletType === 'browser';
 
   return useMutation({
     mutationFn: async (depositData: VaultDepositData) => {
@@ -64,6 +71,7 @@ export function useVaultDeposit() {
       if (!provider.walletIsLoaded()) {
         throw new Error('Wallet not loaded in provider');
       }
+      if (!txContext) throw new Error('Wallet not connected');
 
       // Build protostone for vault deposit
       const protostone = buildVaultDepositProtostone({
@@ -77,26 +85,54 @@ export function useVaultDeposit() {
         amount: new BigNumber(depositData.amount).toFixed(0),
       });
 
-      // Execute using alkanesExecuteTyped (handles address defaults automatically)
+      // Vault units are P2TR alkanes — receive at the alkanes change address
+      // (taproot when available; falls back to the only address otherwise).
+      const toAddresses = [txContext.alkanesChangeAddress];
+
       const result = await provider.alkanesExecuteTyped({
+        txContext,
         inputRequirements,
         protostones: protostone,
         feeRate: depositData.feeRate,
-        autoConfirm: true,
-        changeAddress: 'p2tr:0',
-        alkanesChangeAddress: 'p2tr:0',
+        autoConfirm: !isBrowserWallet,
+        toAddresses,
       });
 
-      // Parse result
-      const txId = result?.txid || result?.reveal_txid;
+      // Auto-completed by SDK (keystore wallets with autoConfirm=true)
+      if (result?.txid || result?.reveal_txid) {
+        const txId = result.txid || result.reveal_txid;
+        return { success: true, transactionId: txId };
+      }
 
-      return {
-        success: true,
-        transactionId: txId,
-      } as {
-        success: boolean;
-        transactionId?: string;
-      };
+      // Need manual signing (browser wallets)
+      if (result?.readyToSign) {
+        const btcNetwork = getBitcoinNetwork(network || 'mainnet');
+        const psbtBase64 = extractPsbtBase64(result.readyToSign.psbt);
+
+        let finalPsbtBase64 = psbtBase64;
+        if (isBrowserWallet) {
+          const patched = patchInputsOnly({
+            psbtBase64,
+            taprootAddress: account?.taproot?.address || '',
+            segwitAddress: account?.nativeSegwit?.address,
+            paymentPubkeyHex: account?.nativeSegwit?.pubkey,
+            network: btcNetwork,
+          });
+          finalPsbtBase64 = patched.psbtBase64;
+        }
+
+        // Single signing path. Browser wallets sign all input types via the wallet
+        // adapter; keystore is taproot-only (BIP86) — `signSegwitPsbt` throws.
+        const signedPsbtBase64 = await signTaprootPsbt(finalPsbtBase64);
+
+        const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtBase64, { network: btcNetwork });
+        signedPsbt.finalizeAllInputs();
+        const txHex = signedPsbt.extractTransaction().toHex();
+        const txId = await provider.broadcastTransaction(txHex);
+        return { success: true, transactionId: txId };
+      }
+
+      throw new Error('Unexpected SDK response — no txid or readyToSign in result');
     },
   });
 }

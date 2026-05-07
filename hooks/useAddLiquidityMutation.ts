@@ -15,48 +15,44 @@
  * including the transaction that lost user tokens:
  * TX: 985436b5c5c850bd121cd4862f32413f467145b121d34c006417724d71588db9
  *
- * REQUIRED PATTERN:
+ * REQUIRED PATTERN (2026-04-30: now consolidated into `txContext`):
  * ```typescript
- * const toAddresses = isBrowserWallet ? [taprootAddress] : ['p2tr:0'];
- * const changeAddr = isBrowserWallet ? segwitAddress : 'p2wpkh:0';
- * const alkanesChangeAddr = isBrowserWallet ? taprootAddress : 'p2tr:0';
+ * const { txContext } = useWallet();
+ * if (!txContext) throw new Error('Wallet not connected');
+ * await provider.alkanesExecuteTyped({
+ *   txContext,                    // wrapper unpacks fee/change/protectTaproot/etc.
+ *   // ... toAddresses passed separately (operation-specific)
+ * });
  * ```
  * ============================================================================
  *
  * ## Architecture (2026-01-28)
  *
- * This hook calls the POOL contract directly (not the factory) for adding liquidity,
- * matching the pattern used by useSwapMutation and useRemoveLiquidityMutation.
+ * This hook routes ALL add-liquidity calls through the **factory router** for
+ * Uniswap-style slippage protection (`amount_a_min` / `amount_b_min`) and
+ * deadline enforcement. Pool-direct calls (opcode 1) are no longer used — they
+ * have no min checks and expose users to MEV / reserve drift.
  *
  * Flow:
  *   1. Check if pool exists via factory opcode 2 (FindPoolId)
- *   2. If pool EXISTS: Call pool directly with opcode 1 (AddLiquidity)
- *   3. If NO pool exists: Use factory opcode 1 (CreateNewPool) to create the pool
+ *   2. If pool EXISTS: factory.AddLiquidity (opcode 11) — single protostone
+ *   3. If NO pool exists: factory.CreateNewPool (opcode 1)
  *
- * ## Two-Protostone Pattern
+ * ## Single-Protostone Pattern
  *
- * Add liquidity requires TWO protostones (both edicts in p0):
- *   - p0: Two edicts transferring token0 AND token1 to p1
- *   - p1: Cellpack protostone calling pool with opcode 1 (AddLiquidity)
+ * Both branches use a single cellpack protostone. Input alkanes auto-allocate
+ * to the protostone; the cellpack identifies them via `token_a` / `token_b`
+ * params. No manual edicts needed — the factory finds matching tokens and
+ * refunds excess via the refund pointer.
  *
- * Both edicts are in the same protostone (p0), targeting p1 (the cellpack).
- * This pattern was proven working in CreateNewPool tx a29d0307 (block 1470).
- * The pool receives both tokens as `incomingAlkanes`.
- * Without the edicts, the pool receives zero tokens and fails with "expected 2 alkane inputs".
- *
- * ## Why Call Pool Directly (Not Factory)
- *
- * The factory's AddLiquidity (opcode 11) and the pool's AddLiquidity (opcode 1) are
- * different entry points. The pool contract has the actual liquidity logic. Calling the
- * pool directly is the same pattern used by swap (opcode 3) and remove (opcode 2).
- *
- * @see useSwapMutation.ts - Same two-protostone pattern calling pool directly
- * @see useRemoveLiquidityMutation.ts - Same two-protostone pattern calling pool directly
- * @see constants/index.ts - FACTORY_OPCODES documentation
+ * @see useSwapMutation.ts — single-protostone factory.swap (opcode 13)
+ * @see useRemoveLiquidityMutation.ts — single-protostone factory.Burn (opcode 12)
  */
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useWallet } from '@/context/WalletContext';
 import { useTransactionConfirm } from '@/context/TransactionConfirmContext';
+import { useIndexerSync } from '@/context/IndexerSyncContext';
+import { waitForIndexerSync } from '@/lib/alkanes/waitForIndexerSync';
 import { useSandshrewProvider } from '@/hooks/useSandshrewProvider';
 import { getConfig } from '@/utils/getConfig';
 import { getTokenSymbol } from '@/lib/alkanes-client';
@@ -67,8 +63,13 @@ import * as ecc from '@bitcoinerlab/secp256k1';
 // NOTE: Only patching INPUTS (witnessUtxo + redeemScript), NOT outputs
 // Output patching was removed - see useSwapMutation.ts for why
 import { patchInputsOnly } from '@/lib/psbt-patching';
-import { buildCreateNewPoolProtostone, buildAddLiquidityToPoolProtostone, buildAddLiquidityInputRequirements } from '@/lib/alkanes/builders';
+import { toXOnlyPubKeyHex, X_ONLY_HEX_LENGTH } from '@/lib/wallet/pubkeyHelpers';
+import { buildCreateNewPoolProtostone, buildFactoryAddLiquidityProtostones, buildAddLiquidityInputRequirements } from '@/lib/alkanes/builders';
+import { getAddressUtxos, getProtorunesByOutpoint } from '@/lib/alkanes/rpc';
+import { useWalletUtxoCache, useSyncStatus, type WalletUtxoCache } from '@/hooks/useWalletUtxoCache';
 import { getBitcoinNetwork, toAlks, extractPsbtBase64 } from '@/lib/alkanes/helpers';
+import { buildPlanFromTx } from '@/lib/alkanes/planBuilder';
+import { getFutureBlockHeight } from '@/utils/amm';
 import { encodeSimulateCalldata } from '@/utils/simulateCalldata';
 
 bitcoin.initEccLib(ecc);
@@ -82,10 +83,18 @@ export type AddLiquidityTransactionData = {
   token1Decimals?: number; // default 8
   token0Symbol?: string;   // for confirmation display
   token1Symbol?: string;   // for confirmation display
-  maxSlippage?: string;  // percent string, e.g. '0.5' (unused for now, minLP=0)
+  maxSlippage?: string;  // percent string, e.g. '0.5' — applied to amount_a_min / amount_b_min in factory opcode 11
   feeRate: number;       // sats/vB
-  deadlineBlocks?: number; // default 3
+  deadlineBlocks?: number; // default 5
   poolId?: { block: string | number; tx: string | number }; // Pool to add liquidity to
+  // Override hooks for atomic flows (e.g. wrap+addLiquidity in a single tx).
+  // When set, these bypass the normal protostone/inputRequirements/toAddresses
+  // construction and pass the caller-provided values directly to the SDK.
+  overrideProtostones?: string;
+  overrideInputRequirements?: string;
+  overrideToAddresses?: string[];
+  /** When true, route through SDK's split-tx CPFP chain (Tx A wrap + Tx B addLiquidity). */
+  splitTransactions?: boolean;
 };
 
 /**
@@ -93,7 +102,7 @@ export type AddLiquidityTransactionData = {
  * Uses SDK's alkanesSimulate to call the factory without a real transaction.
  * Returns the pool AlkaneId if found, or null if not.
  */
-async function findPoolId(
+export async function findPoolId(
   provider: any,
   factoryId: string,
   token0Id: string,
@@ -105,7 +114,7 @@ async function findPoolId(
   try {
     const context = JSON.stringify({
       alkanes: [],
-      calldata: encodeSimulateCalldata(factoryId, [2, t0Block, t0Tx, t1Block, t1Tx]), // opcode 2 = FindPoolId
+      calldata: encodeSimulateCalldata(factoryId, [2, t0Block, t0Tx, t1Block, t1Tx]),
       height: 1000000,
       txindex: 0,
       pointer: 0,
@@ -117,26 +126,55 @@ async function findPoolId(
 
     const result = await provider.alkanesSimulate(factoryId, context, 'latest');
 
-    // If there's an error containing "doesn't exist", pool doesn't exist
+    // The SDK returns different formats depending on the network/provider:
+    // - Structured: { status: 0, execution: { data: "0x...", error: null } }
+    // - Raw hex string: "0x0a221a20..." (protobuf-encoded, contains AlkaneId at known offset)
+    // Handle both.
+
+    // Case 1: Structured response (non-devnet)
     if (result?.execution?.error) {
       console.log('[AddLiquidity] Pool does not exist:', result.execution.error);
       return null;
     }
-    // status 0 = success, pool exists - parse pool ID from response data
     if (result?.status === 0 && result?.execution?.data) {
       const hexData = (result.execution.data as string).replace('0x', '');
-      if (hexData.length >= 32) {
-        // AlkaneId is 2 u128s (block, tx) in little-endian
-        const blockHex = hexData.substring(0, 32);
-        const txHex = hexData.substring(32, 64);
-        const block = Number(BigInt('0x' + blockHex.match(/../g)!.reverse().join('')));
-        const tx = Number(BigInt('0x' + txHex.match(/../g)!.reverse().join('')));
-        console.log('[AddLiquidity] Pool found:', `${block}:${tx}`);
+      if (hexData.length >= 64) {
+        const buf = Buffer.from(hexData, 'hex');
+        const block = Number(buf.readBigUInt64LE(0));
+        const tx = Number(buf.readBigUInt64LE(16));
+        console.log('[AddLiquidity] Pool found (structured):', `${block}:${tx}`);
         return { block, tx };
       }
-      console.log('[AddLiquidity] Pool exists (status 0) but could not parse ID');
-      return null;
     }
+
+    // Case 2: Raw hex/protobuf string (devnet SDK returns this)
+    // Format: protobuf envelope wrapping the execution result.
+    // The data field contains the AlkaneId (32 bytes).
+    // Protobuf structure: field 1 (outer) → field 3 (data) → 32 bytes of AlkaneId.
+    // Header is typically 0a XX 1a 20 where XX is outer length and 20 = 32 bytes.
+    if (typeof result === 'string') {
+      const hex = result.replace('0x', '');
+      const buf = Buffer.from(hex, 'hex');
+      // Find the 0x1a20 marker (field 3, 32 bytes) — the data field
+      for (let i = 0; i + 34 <= buf.length; i++) {
+        if (buf[i] === 0x1a && buf[i + 1] === 0x20) {
+          const dataStart = i + 2;
+          if (dataStart + 32 <= buf.length) {
+            // Browser-safe LE u128 parse (readBigUInt64LE not available in browser Buffer polyfill)
+            let block = 0;
+            for (let b = 0; b < 8; b++) block += buf[dataStart + b] * (256 ** b);
+            let tx = 0;
+            for (let b = 0; b < 8; b++) tx += buf[dataStart + 16 + b] * (256 ** b);
+            if (block > 0 && block < 100000 && tx >= 0 && tx < 100000) {
+              console.log('[AddLiquidity] Pool found (protobuf):', `${block}:${tx}`);
+              return { block, tx };
+            }
+          }
+        }
+      }
+      console.log('[AddLiquidity] Could not find pool ID in protobuf response');
+    }
+
     return null;
   } catch (error) {
     console.warn('[AddLiquidity] Pool existence check failed:', error);
@@ -153,26 +191,40 @@ async function findPoolId(
  */
 async function discoverAlkaneUtxos(
   taprootAddress: string,
-  rpcUrl: string = '/api/rpc',
+  network: string = 'mainnet',
+  prefetched?: WalletUtxoCache,
 ): Promise<{ txid: string; vout: number; value: number; alkanes: { block: number; tx: number; amount: number }[] }[]> {
+  // Cache-fast path: use the pre-warmed snapshot from
+  // useWalletUtxoCache. Mounted eagerly on connect so by click time
+  // we already have the answer in memory. No fanout, no waiting on
+  // the indexer for outpoints we already enumerated.
+  if (prefetched && prefetched.utxos.length > 0) {
+    const fromCache = prefetched.utxos
+      .filter((u) => u.address === taprootAddress && u.alkanes.length > 0)
+      .map((u) => ({
+        txid: u.txid,
+        vout: u.vout,
+        value: u.value,
+        alkanes: u.alkanes.map((a) => ({
+          block: a.block,
+          tx: a.tx,
+          amount: Number(a.amount),
+        })),
+      }));
+    console.log(
+      `[AddLiquidity] Discovered ${fromCache.length} alkane UTXOs from prefetched cache (no RPC fanout)`,
+    );
+    return fromCache;
+  }
+
   console.log('[AddLiquidity] Discovering alkane UTXOs at', taprootAddress);
 
-  // 1. Fetch all UTXOs at the taproot address
-  const utxoResp = await fetch(rpcUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      method: 'esplora_address::utxo',
-      params: [taprootAddress],
-      id: 1,
-    }),
-  });
-  const utxoData = await utxoResp.json();
-  const utxos = utxoData.result || [];
+  // 1. Fetch UTXOs via SDK-mediated rpc.ts (handles devnet localhost
+  //    interception, error-sentinel guards, and abort signals).
+  const utxos = await getAddressUtxos(network, taprootAddress, AbortSignal.timeout(15_000));
 
   // 2. Filter for dust UTXOs (<=1000 sats) - alkane tokens live on dust outputs
-  const dustUtxos = utxos.filter((u: any) => u.value <= 1000);
+  const dustUtxos = utxos.filter((u) => u.value <= 1000);
   console.log(`[AddLiquidity] Found ${utxos.length} UTXOs, ${dustUtxos.length} dust UTXOs to check`);
 
   if (dustUtxos.length === 0) {
@@ -181,25 +233,15 @@ async function discoverAlkaneUtxos(
   }
 
   // 3. Check each dust UTXO for alkane balances (in parallel)
-  const checks = dustUtxos.map(async (utxo: any) => {
+  const checks = dustUtxos.map(async (utxo) => {
     try {
-      const resp = await fetch(rpcUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          method: 'alkanes_protorunesbyoutpoint',
-          params: [utxo.txid, utxo.vout],
-          id: 1,
-        }),
-      });
-      const data = await resp.json();
-      const balances = data?.result?.balance_sheet?.cached?.balances || [];
+      const resp = await getProtorunesByOutpoint(network, utxo.txid, utxo.vout, AbortSignal.timeout(15_000));
+      const balances = resp?.balance_sheet?.cached?.balances || [];
       if (balances.length > 0) {
         return {
-          txid: utxo.txid as string,
-          vout: utxo.vout as number,
-          value: utxo.value as number,
+          txid: utxo.txid,
+          vout: utxo.vout,
+          value: utxo.value,
           alkanes: balances.map((b: any) => ({ block: Number(b.block), tx: Number(b.tx), amount: Number(b.amount) })),
         };
       }
@@ -247,8 +289,20 @@ function injectAlkaneInputs(
   );
 
   const taprootScript = bitcoin.address.toOutputScript(taprootAddress, btcNetwork);
-  // Use pure Uint8Array — wallets reject Buffer with "Expected Uint8Array" error
-  const tapInternalKey = tapInternalKeyHex ? new Uint8Array(Buffer.from(tapInternalKeyHex, 'hex')) : undefined;
+  // Defense-in-depth: WalletContext now hands us a properly-shaped x-only key
+  // via toXOnlyPubKeyHex, but if a future caller bypasses that path we still
+  // want to reject malformed input rather than emit an invalid PSBT.
+  // (bitcoinjs-lib's tapInternalKey validator rejects with "Expected Uint8Array".)
+  // Use pure Uint8Array — wallets reject node Buffer with that same error.
+  let tapInternalKey: Uint8Array | undefined;
+  if (tapInternalKeyHex) {
+    const cleanHex = toXOnlyPubKeyHex(tapInternalKeyHex);
+    if (cleanHex.length !== X_ONLY_HEX_LENGTH) {
+      console.warn(`[AddLiquidity] tapInternalKeyHex has unexpected length ${cleanHex.length}, skipping tapInternalKey injection`);
+    } else {
+      tapInternalKey = new Uint8Array(Buffer.from(cleanHex, 'hex'));
+    }
+  }
 
   let injectedCount = 0;
   for (const utxo of alkaneUtxos) {
@@ -285,40 +339,67 @@ function injectAlkaneInputs(
 }
 
 export function useAddLiquidityMutation() {
-  const { account, network, isConnected, signTaprootPsbt, signSegwitPsbt, walletType } = useWallet();
+  const { account, network, isConnected, signTaprootPsbt, walletType, browserWallet, txContext } = useWallet();
   const provider = useSandshrewProvider();
   const queryClient = useQueryClient();
   const { requestConfirmation } = useTransactionConfirm();
+  const indexerSync = useIndexerSync();
+  // Pre-warmed UTXO cache: read from this instead of fetching at click
+  // time. Eliminates the multi-second pause between Confirm and the
+  // wallet popup for wallets with many dust UTXOs.
+  const utxoCache = useWalletUtxoCache();
+  const syncStatus = useSyncStatus();
   const config = getConfig(network);
   const ALKANE_FACTORY_ID = config.ALKANE_FACTORY_ID;
   const defaultPoolId = 'DEFAULT_POOL_ID' in config ? (config as any).DEFAULT_POOL_ID as string : undefined;
 
   return useMutation({
     mutationFn: async (data: AddLiquidityTransactionData) => {
+      // Sync gate: alkane operations require metashrew to be caught
+      // up to bitcoind. Without this, simulated quotes use stale
+      // reserves and the SDK's pre-broadcast sync check errors with
+      // "Indexer sync timed out" mid-flight. Surface the wait up
+      // front so the UI can show a clear "indexer catching up" state.
+      // Skip the gate on local networks (devnet/regtest) — there the
+      // user controls block production via the control panel.
+      const isLocal = ['devnet', 'regtest-local', 'qubitcoin-regtest'].includes(network ?? '');
+      if (!isLocal && syncStatus.metashrewHeight > 0 && !syncStatus.inSync) {
+        indexerSync.start('Preparing add liquidity');
+        try {
+          await waitForIndexerSync({
+            network: network ?? 'mainnet',
+            onProgress: (p) => indexerSync.update(p),
+          });
+        } finally {
+          indexerSync.finish();
+        }
+      }
       console.log('[AddLiquidity] ═══════════════════════════════════════════');
       console.log('[AddLiquidity] Starting add liquidity transaction');
       console.log('[AddLiquidity] Input data:', JSON.stringify(data, null, 2));
 
       // Validation
       if (!isConnected) throw new Error('Wallet not connected');
+      // Ensure browser wallet session is active before building PSBT
+      if (walletType === 'browser') {
+        const { ensureWalletSession } = await import('@/lib/wallet/browserWalletSigning');
+        await ensureWalletSession();
+      }
       if (!provider) throw new Error('Provider not available');
       if (!provider.walletIsLoaded()) {
         throw new Error('Provider wallet not loaded. Please reconnect your wallet.');
       }
 
-      // Get addresses - use actual addresses instead of SDK descriptors
-      // This fixes the "Available: []" issue where SDK couldn't find alkane UTXOs
-      //
-      // JOURNAL ENTRY (2026-03-01): Support single-address wallets (UniSat, OKX)
-      // UniSat/OKX only provide one address type at a time (user-configurable).
-      // We need at least ONE address, but don't require both taproot AND segwit.
-      const taprootAddress = account?.taproot?.address;
-      const segwitAddress = account?.nativeSegwit?.address;
-      if (!taprootAddress && !segwitAddress) {
+      // Get addresses — use the consolidated `txContext` for fee/change addresses.
+      // See `WalletContext.TxContext` jsdoc for the wallet-type semantics this codifies.
+      if (!txContext) {
         throw new Error('No wallet address available. Please connect a wallet first.');
       }
-      // For alkane operations, prefer taproot if available (alkanes use P2TR)
-      const primaryAddress = taprootAddress || segwitAddress;
+      const taprootAddress = account?.taproot?.address;
+      const segwitAddress = account?.nativeSegwit?.address;
+      // For alkane operations, prefer taproot if available (alkanes use P2TR).
+      // Falls back to segwit on single-address segwit-only wallets.
+      const primaryAddress = (taprootAddress || segwitAddress)!;
       console.log('[AddLiquidity] Using addresses:', { taprootAddress, segwitAddress, primaryAddress });
 
       // Convert display amounts to alks
@@ -351,16 +432,33 @@ export function useAddLiquidityMutation() {
       let protostone: string;
 
       if (resolvedPoolId) {
-        // Pool exists: call pool directly with opcode 1 (AddLiquidity)
-        // Same pattern as useSwapMutation and useRemoveLiquidityMutation
-        protostone = buildAddLiquidityToPoolProtostone({
-          poolId: resolvedPoolId,
-          token0Id: data.token0Id,
-          token1Id: data.token1Id,
-          amount0: amount0Alks,
-          amount1: amount1Alks,
+        // Pool exists: call factory.AddLiquidity (opcode 11) with full Uniswap-style
+        // params for slippage protection. Pool opcode 1 has no min checks, so the
+        // user could lose value to MEV / reserve drift between quote and confirm.
+        const slippagePercent = data.maxSlippage ? parseFloat(data.maxSlippage) : 0.5;
+        const slippageFactor = (10000 - Math.floor(slippagePercent * 100)) / 10000;
+        const amount0Min = BigInt(Math.floor(Number(amount0Alks) * slippageFactor)).toString();
+        const amount1Min = BigInt(Math.floor(Number(amount1Alks) * slippageFactor)).toString();
+
+        // Block height — query the WASM provider directly (same pattern as
+        // useRemoveLiquidityMutation / useSwapMutation). Reading from
+        // localStorage was unreliable: stale "NaN" from a previous broken
+        // session would propagate into the cellpack and the SDK's
+        // cellpack-number parser fell back to its edict parser, surfacing as
+        // "Invalid edict format. Expected 'block:tx:amount:target' …".
+        const deadline = (await getFutureBlockHeight(data.deadlineBlocks || 5, provider as any)).toString();
+
+        protostone = buildFactoryAddLiquidityProtostones({
+          factoryId: ALKANE_FACTORY_ID,
+          tokenA: data.token0Id,
+          tokenB: data.token1Id,
+          amountADesired: amount0Alks,
+          amountBDesired: amount1Alks,
+          amountAMin: amount0Min,
+          amountBMin: amount1Min,
+          deadline,
         });
-        console.log('[AddLiquidity] Pool found at', `${resolvedPoolId.block}:${resolvedPoolId.tx}`, '- calling pool directly with opcode 1');
+        console.log('[AddLiquidity] Pool found at', `${resolvedPoolId.block}:${resolvedPoolId.tx}`, '- using factory opcode 11 with slippage', slippagePercent, '%');
       } else {
         // Pool doesn't exist: use factory opcode 1 (CreateNewPool)
         protostone = buildCreateNewPoolProtostone({
@@ -395,51 +493,42 @@ export function useAddLiquidityMutation() {
 
       const isBrowserWallet = walletType === 'browser';
 
-      // ============================================================================
-      // ⚠️ CRITICAL: Browser wallets need ACTUAL addresses, not symbolic ⚠️
-      // ============================================================================
-      // Symbolic addresses (p2tr:0, p2wpkh:0) resolve to the SDK's DUMMY wallet.
-      // Bug fixed: 2026-03-01 - see useSwapMutation.ts for full documentation.
-      // ============================================================================
-      const fromAddresses = isBrowserWallet
-        ? [segwitAddress, taprootAddress].filter(Boolean) as string[]
-        : ['p2wpkh:0', 'p2tr:0'];
-
-      // JOURNAL ENTRY (2026-03-01): For single-address wallets, use primaryAddress
-      // TypeScript can't infer from the early return that primaryAddress is defined, use assertion
-      const toAddresses = isBrowserWallet
-        ? [primaryAddress!]
-        : ['p2tr:0'];
-
-      const changeAddr = isBrowserWallet
-        ? (segwitAddress || taprootAddress)
-        : 'p2wpkh:0';
-
-      const alkanesChangeAddr = isBrowserWallet
-        ? primaryAddress
-        : 'p2tr:0';
-
-      console.log('[AddLiquidity] From addresses:', fromAddresses, '(browser:', isBrowserWallet, ')');
+      // Symbolic addresses (`p2tr:0`, `p2wpkh:0`) used to resolve to the SDK's
+      // dummy wallet — see useSwapMutation.ts header for the 2026-03-01 token-loss
+      // tx that motivated `txContext`. Always actual addresses now.
+      const toAddresses = [primaryAddress];
+      console.log('[AddLiquidity] From addresses:', txContext.feeSourceAddresses, '(browser:', isBrowserWallet, ')');
       console.log('[AddLiquidity] To addresses:', toAddresses);
-      console.log('[AddLiquidity] Change address:', changeAddr);
+      console.log('[AddLiquidity] Change address:', txContext.btcChangeAddress);
 
       try {
+
+        // Split-tx mode requires the SDK's `execute_full` path (which is the
+        // only one that branches into `execute_split`). The PSBT-return path
+        // (`autoConfirm: false`) is single-tx only and silently ignores the
+        // splitTransactions flag — exactly the symptom that broke
+        // useAtomicWrapAddLiquidityMutation on mainnet (combined wrap +
+        // addLiquidity fuel cost > MINIMUM_FUEL_CHANGE1, OOG without split).
+        //
+        // When the caller asked for split-tx, switch to autoConfirm=true so
+        // the SDK signs + broadcasts both Tx A and Tx B internally. Manual
+        // alkane UTXO injection / input patching below is skipped in that
+        // branch — for atomic wrap+addLiquidity the alkanes come from the
+        // wrap protostone so injection isn't needed anyway.
+        const wantsSplit = data.splitTransactions === true;
+        const useAutoConfirm = wantsSplit;
         const result = await provider.alkanesExecuteTyped({
-          inputRequirements,
-          protostones: protostone,
+          txContext,
+          // Atomic wrap+addLiquidity passes overrides (custom protostones, BTC input, signer output)
+          inputRequirements: data.overrideInputRequirements || inputRequirements,
+          protostones: data.overrideProtostones || protostone,
           feeRate: data.feeRate,
-          autoConfirm: false,
-          fromAddresses,
-          toAddresses,
-          changeAddress: changeAddr,
-          alkanesChangeAddress: alkanesChangeAddr,
-          // UTXO protection strategy for inscriptions:
-          // - 'split': Protects inscriptions by splitting UTXOs (default when detection works)
-          // - 'burn': Treats all UTXOs as spendable, ignoring inscriptions
-          // Currently 'burn' because the "Ignore Ordinals" setting is hardcoded enabled
-          // (ord backend still syncing). When inscription detection is available,
-          // this should conditionally use 'split' based on user's WalletSettings toggle.
-          ordinalsStrategy: 'burn',
+          autoConfirm: useAutoConfirm,
+          toAddresses: data.overrideToAddresses || toAddresses,
+          network,
+          // Opt-in: SDK splits wrap+addLiquidity into a CPFP chain so each
+          // tx fits under the per-tx fuel floor. See useAtomicWrapAddLiquidityMutation.
+          splitTransactions: wantsSplit,
         });
 
         console.log('[AddLiquidity] Called alkanesExecuteTyped (browser:', isBrowserWallet, ')');
@@ -466,7 +555,7 @@ export function useAddLiquidityMutation() {
           // so the PSBT is built WITHOUT alkane-bearing inputs. We manually discover
           // alkane UTXOs and inject them into the PSBT before signing.
           console.log('[AddLiquidity] Discovering alkane UTXOs for injection...');
-          const alkaneUtxos = await discoverAlkaneUtxos(taprootAddress!, '/api/rpc');
+          const alkaneUtxos = await discoverAlkaneUtxos(taprootAddress!, network || 'mainnet', utxoCache);
 
           if (alkaneUtxos.length > 0) {
             const tapInternalKeyHex = account?.taproot?.pubKeyXOnly;
@@ -518,39 +607,69 @@ export function useAddLiquidityMutation() {
             }
           }
 
-          // For keystore wallets, request user confirmation before signing
+          // For keystore wallets, request user confirmation before signing.
+          // `data.token0Amount` / `data.token1Amount` are already display
+          // values (see param doc on AddLiquidityTransactionData) — do NOT
+          // divide by 1e8. Same bug we fixed in useRemoveLiquidityMutation
+          // a few commits back.
           if (walletType === 'keystore') {
-            console.log('[AddLiquidity] Keystore wallet - requesting user confirmation...');
+            const ourAddresses = [
+              account?.taproot?.address,
+              account?.nativeSegwit?.address,
+            ].filter((a): a is string => !!a);
+            const t0Sym = getTokenSymbol(data.token0Id, data.token0Symbol);
+            const t1Sym = getTokenSymbol(data.token1Id, data.token1Symbol);
+            const plan = buildPlanFromTx({
+              psbtBase64,
+              cache: utxoCache,
+              ourAddresses,
+              network: btcNetwork,
+              feeRateSatVb: data.feeRate,
+              label: `Add Liquidity ${t0Sym} + ${t1Sym}`,
+              summary:
+                `Deposits ${data.token0Amount} ${t0Sym} and ${data.token1Amount} ${t1Sym} ` +
+                `to mint LP tokens (slippage tolerance ${data.maxSlippage ?? '0.5'}%).`,
+            });
+            // Predicted LP receive lands on the first cellpack-bound
+            // output paying us. We don't know the exact LP amount without
+            // calling the contract — mark uncertain.
+            const targetIdx = plan.outputs.findIndex(
+              (o) => o.isOurs && !o.isOpReturn,
+            );
+            if (targetIdx >= 0 && data.poolId) {
+              plan.outputs[targetIdx].alkanes = [
+                ...(plan.outputs[targetIdx].alkanes ?? []),
+                {
+                  alkaneId: `${data.poolId.block}:${data.poolId.tx}`,
+                  symbol: 'LP',
+                  amount: BigInt(0),
+                  uncertain: true,
+                },
+              ];
+            }
             const approved = await requestConfirmation({
               type: 'addLiquidity',
               title: 'Confirm Add Liquidity',
-              token0Amount: (parseFloat(data.token0Amount) / 1e8).toString(),
-              token0Symbol: getTokenSymbol(data.token0Id, data.token0Symbol),
+              token0Amount: data.token0Amount,
+              token0Symbol: t0Sym,
               token0Id: data.token0Id,
-              token1Amount: (parseFloat(data.token1Amount) / 1e8).toString(),
-              token1Symbol: getTokenSymbol(data.token1Id, data.token1Symbol),
+              token1Amount: data.token1Amount,
+              token1Symbol: t1Sym,
               token1Id: data.token1Id,
               feeRate: data.feeRate,
+              plan: [plan],
             });
 
             if (!approved) {
-              console.log('[AddLiquidity] User rejected transaction');
               throw new Error('Transaction rejected by user');
             }
-            console.log('[AddLiquidity] User approved transaction');
           }
 
-          // Sign PSBT — browser wallets sign all input types in a single call,
-          // so we must NOT call signPsbt twice (causes "inputType: sh without redeemScript").
-          let signedPsbtBase64: string;
-          if (isBrowserWallet) {
-            console.log('[AddLiquidity] Browser wallet: signing PSBT once (all input types)...');
-            signedPsbtBase64 = await signTaprootPsbt(psbtBase64);
-          } else {
-            console.log('[AddLiquidity] Keystore: signing PSBT with SegWit, then Taproot...');
-            signedPsbtBase64 = await signSegwitPsbt(psbtBase64);
-            signedPsbtBase64 = await signTaprootPsbt(signedPsbtBase64);
-          }
+          // Single signing path. Browser wallets handle all input types in one
+          // signPsbt call. Keystore is taproot-only (BIP86) and `signSegwitPsbt`
+          // throws — so the same `signTaprootPsbt` is correct for both.
+          console.log('[AddLiquidity] Signing PSBT…');
+          const signedPsbtBase64 = await signTaprootPsbt(psbtBase64);
 
           // Finalize and extract transaction
           const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtBase64, { network: btcNetwork });

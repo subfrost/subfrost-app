@@ -97,18 +97,29 @@ async function fetchPositionKeys(
 }
 
 async function fetchTokenInfoBatch(
-  provider: WebProvider,
+  _provider: WebProvider,
   tokenIds: string[],
+  network?: string,
 ): Promise<Record<string, { name: string; symbol: string; decimals: number }>> {
   if (tokenIds.length === 0) return {};
+
+  const rpcUrl = `/api/rpc/${network || 'mainnet'}/espo`;
 
   const results = await Promise.all(
     tokenIds.map(async (id) => {
       try {
-        const raw = await provider.espoGetAlkaneInfo(id);
-        const info = mapToObject(raw);
-        // Response may be wrapped in result or direct
-        const data = info?.result ?? info;
+        const resp = await fetch(rpcUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          signal: AbortSignal.timeout(5000),
+          body: JSON.stringify({
+            jsonrpc: '2.0', id: 1,
+            method: 'essentials.get_alkane_info',
+            params: { alkane: id },
+          }),
+        });
+        const json = await resp.json();
+        const data = json?.result;
         return {
           id,
           name: (data?.name || '').replace('SUBFROST BTC', 'frBTC'),
@@ -133,7 +144,7 @@ async function fetchTokenInfoBatch(
  * Returns a map: positionAlkaneId → PositionMeta
  */
 export function usePositionMetadata(alkanes: Array<{ alkaneId: string; name: string; symbol: string }> | undefined) {
-  const { provider, isInitialized } = useAlkanesSDK();
+  const { provider, isInitialized, network } = useAlkanesSDK();
 
   const positionIds = (alkanes || [])
     .filter((a) => isEnrichablePosition(a))
@@ -161,7 +172,7 @@ export function usePositionMetadata(alkanes: Array<{ alkaneId: string; name: str
       }
 
       // Step 2: Batch-fetch deposit token info
-      const tokenInfo = await fetchTokenInfoBatch(provider, Array.from(depositTokenIds));
+      const tokenInfo = await fetchTokenInfoBatch(provider, Array.from(depositTokenIds), network);
 
       // Step 3: Assemble metadata
       for (const [posId, keys] of positionKeyMap) {

@@ -8,6 +8,15 @@ interface LockTierSelectorProps {
   onSelect: (tierIndex: number) => void;
 }
 
+const LOCK_TIER_KEYS: Record<string, string> = {
+  'None': 'fire.lockNone',
+  '1 Week': 'fire.lock1Week',
+  '1 Month': 'fire.lock1Month',
+  '3 Months': 'fire.lock3Months',
+  '6 Months': 'fire.lock6Months',
+  '1 Year': 'fire.lock1Year',
+};
+
 export default function LockTierSelector({ selectedTier, onSelect }: LockTierSelectorProps) {
   const { t } = useTranslation();
 
@@ -20,15 +29,14 @@ export default function LockTierSelector({ selectedTier, onSelect }: LockTierSel
         {LOCK_TIERS.map((tier, index) => (
           <button
             key={tier.label}
+            type="button"
             onClick={() => onSelect(index)}
-            className={`rounded-xl px-2 sm:px-3 py-2 sm:py-2.5 text-center transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] border ${
-              selectedTier === index
-                ? 'border-orange-500/50 bg-orange-500/10 text-orange-400 shadow-[0_0_12px_rgba(249,115,22,0.15)]'
-                : 'border-[color:var(--sf-glass-border)] bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)]/60 hover:border-[color:var(--sf-outline)]'
+            className={`sf-tile inline-flex flex-col items-center justify-center px-2 sm:px-3 py-2 sm:py-2.5 text-center text-[color:var(--sf-percent-btn)] focus:outline-none ${
+              selectedTier === index ? '!bg-[color:var(--sf-primary)]/20' : ''
             }`}
           >
-            <div className="text-xs sm:text-sm font-bold">{tier.label}</div>
-            <div className={`text-[10px] sm:text-xs ${selectedTier === index ? 'text-orange-400/70' : 'opacity-50'}`}>
+            <div className="text-xs sm:text-sm font-bold">{t(LOCK_TIER_KEYS[tier.label] || tier.label)}</div>
+            <div className={`text-[10px] sm:text-xs font-bold ${selectedTier === index ? 'text-[color:var(--sf-percent-btn)]' : 'opacity-50'}`}>
               {tier.multiplier}x
             </div>
           </button>

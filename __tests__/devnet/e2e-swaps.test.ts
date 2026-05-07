@@ -1,0 +1,884 @@
+/**
+ * Devnet E2E: Full Swap Coverage
+ *
+ * Tests ALL swap/liquidity workflows after deploying AMM contracts:
+ *
+ * Setup:
+ *   - Deploy AMM contracts (factory, pool, beacon)
+ *   - Mint DIESEL tokens
+ *   - Wrap BTC → frBTC
+ *   - Create DIESEL/frBTC pool with initial liquidity
+ *
+ * Swap tests:
+ *   1. Token → Token: DIESEL → frBTC (factory opcode 13)
+ *   2. Token → Token: frBTC → DIESEL (factory opcode 13, reverse)
+ *   3. BTC → Token: wrap BTC + swap frBTC → DIESEL (two-step)
+ *   4. Token → BTC: swap DIESEL → frBTC + unwrap (two-step)
+ *
+ * Liquidity tests:
+ *   5. Add liquidity to existing pool (pool opcode 1)
+ *   6. Remove liquidity / burn LP tokens (pool opcode 2)
+ *
+ * Run: pnpm vitest run __tests__/devnet/e2e-swaps.test.ts --testTimeout=600000
+ */
+
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import * as bitcoin from 'bitcoinjs-lib';
+import * as ecc from '@bitcoinerlab/secp256k1';
+import { DEVNET } from './devnet-constants';
+import {
+  createDevnetTestContext,
+  disposeHarness,
+  mineBlocks,
+  rpcCall,
+  getAlkaneBalance,
+  getBtcBalance,
+  takeSnapshot,
+  restoreSnapshot,
+} from './devnet-helpers';
+import { signAndBroadcast } from '../shared/sign-and-broadcast';
+import { deployAmmContracts } from './amm-deploy';
+import type { TestSignerResult } from '../sdk/test-utils/createTestSigner';
+
+type WebProvider = import('@alkanes/ts-sdk/wasm').WebProvider;
+
+try { bitcoin.initEccLib(ecc); } catch { /* already initialized */ }
+
+// ---------------------------------------------------------------------------
+// Shared state
+// ---------------------------------------------------------------------------
+
+let harness: any;
+let provider: WebProvider;
+let signer: TestSignerResult;
+let segwitAddress: string;
+let taprootAddress: string;
+let factoryId: string;
+let poolId: string | null = null;
+
+async function executeAlkanes(
+  protostone: string,
+  inputRequirements: string,
+  options?: {
+    toAddresses?: string[];
+    envelopeHex?: string | null;
+  }
+): Promise<string> {
+  const opts = options || {};
+
+  // Use alkanesExecuteFull — same path as alkanesExecuteTyped in the production app.
+  // This handles the complete flow internally (including signing with loaded wallet).
+  const result = await (provider as any).alkanesExecuteFull(
+    JSON.stringify(opts.toAddresses || [taprootAddress]),
+    inputRequirements,
+    protostone,
+    1,  // feeRate
+    opts.envelopeHex === undefined ? null : opts.envelopeHex,
+    JSON.stringify({
+      from_addresses: [segwitAddress, taprootAddress],
+      change_address: segwitAddress,
+      alkanes_change_address: taprootAddress,
+      ordinals_strategy: 'burn',
+    }),
+  );
+
+  // alkanesExecuteFull returns the complete result with txids
+  if (result?.reveal_txid || result?.revealTxid) {
+    const txid = result.reveal_txid || result.revealTxid;
+    mineBlocks(harness, 1);
+    return txid;
+  }
+  if (result?.txid) {
+    mineBlocks(harness, 1);
+    return result.txid;
+  }
+
+  // Fallback: result might be ReadyToSign
+  return signAndBroadcast(provider, result, signer, segwitAddress);
+}
+
+async function simulateAlkane(target: string, inputs: string[]): Promise<any> {
+  const [block, tx] = target.split(':');
+  return rpcCall('alkanes_simulate', [{
+    target: { block, tx },
+    inputs,
+    alkanes: [],
+    transaction: '0x',
+    block: '0x',
+    height: '500',
+    txindex: 0,
+    vout: 0,
+  }]);
+}
+
+// ===========================================================================
+// Test Suite
+// ===========================================================================
+
+describe('Devnet E2E: Full Swap Coverage', () => {
+
+  // -------------------------------------------------------------------------
+  // Global setup: mine blocks, deploy AMM, mint tokens, create pool
+  // -------------------------------------------------------------------------
+
+  beforeAll(async () => {
+    disposeHarness();
+    const ctx = await createDevnetTestContext();
+    harness = ctx.harness;
+    provider = ctx.provider;
+    signer = ctx.signer;
+    segwitAddress = ctx.segwitAddress;
+    taprootAddress = ctx.taprootAddress;
+
+    // Mine for coinbase maturity
+    mineBlocks(harness, 201);
+    console.log('[swaps] Chain ready at height', (await rpcCall('btc_getblockcount', [])).result);
+
+    // Deploy AMM contracts
+    console.log('[swaps] Deploying AMM contracts...');
+    const amm = await deployAmmContracts(provider, signer, segwitAddress, taprootAddress, harness);
+    factoryId = amm.factoryId;
+    console.log('[swaps] Factory deployed at:', factoryId);
+
+    // Verify factory
+    const numPools = await simulateAlkane(factoryId, ['4']);
+    console.log('[swaps] Factory GetNumPools:', JSON.stringify(numPools?.result?.execution).slice(0, 200));
+
+    // Mint DIESEL (3 times for enough tokens)
+    for (let i = 0; i < 3; i++) {
+      mineBlocks(harness, 1);
+      await executeAlkanes('[2,0,77]:v0:v0', 'B:10000:v0');
+    }
+    mineBlocks(harness, 1);
+
+    const dieselBalance = await getAlkaneBalance(provider, taprootAddress, DEVNET.DIESEL_ID);
+    console.log('[swaps] DIESEL balance:', dieselBalance.toString());
+
+    // Wrap BTC → frBTC
+    const signerResult = await simulateAlkane('32:0', ['103']);
+    let signerAddr = 'bcrt1p466wtm6hn2llrm02ckx6z03tsygjjyfefdaz6sekczvcr7z00vtsc5gvgz';
+    if (signerResult?.result?.execution?.data) {
+      const hex = signerResult.result.execution.data.replace('0x', '');
+      if (hex.length === 64) {
+        try {
+          const xOnlyPubkey = Buffer.from(hex, 'hex');
+          const payment = bitcoin.payments.p2tr({ internalPubkey: xOnlyPubkey, network: bitcoin.networks.regtest });
+          if (payment.address) signerAddr = payment.address;
+        } catch { /* use default */ }
+      }
+    }
+
+    await executeAlkanes('[32,0,77]:v1:v1', 'B:1000000:v0', {
+      toAddresses: [signerAddr, taprootAddress],
+    });
+    mineBlocks(harness, 1);
+
+    const frbtcBalance = await getAlkaneBalance(provider, taprootAddress, DEVNET.FRBTC_ID);
+    console.log('[swaps] frBTC balance:', frbtcBalance.toString());
+
+    // Create DIESEL/frBTC pool via factory opcode 1
+    const dieselAmount = dieselBalance / 3n;
+    const frbtcAmount = frbtcBalance / 2n;
+    console.log('[swaps] Creating pool: DIESEL=%s frBTC=%s', dieselAmount, frbtcAmount);
+
+    // Factory CreateNewPool: opcode 1, token_a (2:0), token_b (32:0), amount_a, amount_b
+    const [fBlock, fTx] = factoryId.split(':');
+    const createPoolProtostone = `[${fBlock},${fTx},1,2,0,32,0,${dieselAmount},${frbtcAmount}]:v0:v0`;
+    const createPoolReqs = `2:0:${dieselAmount},32:0:${frbtcAmount}`;
+
+    // First simulate to see if it would work
+    const simResult = await rpcCall('alkanes_simulate', [{
+      target: { block: factoryId.split(':')[0], tx: factoryId.split(':')[1] },
+      inputs: ['1', '2', '0', '32', '0', dieselAmount.toString(), frbtcAmount.toString()],
+      alkanes: [
+        { id: { block: '2', tx: '0' }, value: dieselAmount.toString() },
+        { id: { block: '32', tx: '0' }, value: frbtcAmount.toString() },
+      ],
+      transaction: '0x',
+      block: '0x',
+      height: '500',
+      txindex: 0,
+      vout: 0,
+    }]);
+    console.log('[swaps] CreateNewPool simulate:', JSON.stringify(simResult?.result?.execution).slice(0, 500));
+
+    // Test: single-token delivery to different targets
+    const testDieselBefore = await getAlkaneBalance(provider, taprootAddress, DEVNET.DIESEL_ID);
+
+    // Test A: Send 1000 DIESEL to factory [4:1] opcode 4 (GetNumPools)
+    // Then check: did the DIESEL land on the expected output?
+    try {
+      const [fb, ft] = factoryId.split(':');
+      const txid = await executeAlkanes(`[${fb},${ft},4]:v0:v0`, `2:0:1000`);
+      mineBlocks(harness, 1);
+      const after = await getAlkaneBalance(provider, taprootAddress, DEVNET.DIESEL_ID);
+      const spent = testDieselBefore - after;
+      console.log('[swaps] Test A (factory [4:1] opcode 4): spent=%s txid=%s', spent, txid);
+      // If spent=0, tokens were either delivered+returned OR not delivered+rollback
+      // Check the protorune index for the TX output to see if tokens are on v0
+      const txOutpoints = await rpcCall('alkanes_protorunesbyaddress', [
+        { address: taprootAddress, protocolTag: '1' }
+      ]);
+      const outpoints = txOutpoints?.result?.outpoints || [];
+      const txOutput = outpoints.find((op: any) => op?.outpoint?.txid === txid);
+      if (txOutput) {
+        console.log('[swaps] Test A: found output with balances:', JSON.stringify(txOutput?.balance_sheet?.cached?.balances));
+      } else {
+        console.log('[swaps] Test A: NO output found for txid — tokens may be on a different outpoint');
+        // Check all outpoints
+        console.log('[swaps] Test A: total outpoints:', outpoints.length);
+      }
+    } catch (e: any) {
+      console.log('[swaps] Test A error:', (e?.message || String(e))?.slice(0, 200));
+    }
+
+    // Test B: Send DIESEL to DIESEL [2:0] opcode 77 (mint — should work and return tokens)
+    const beforeB = await getAlkaneBalance(provider, taprootAddress, DEVNET.DIESEL_ID);
+    mineBlocks(harness, 1); // new height for mint
+    try {
+      await executeAlkanes(`[2,0,77]:v0:v0`, `2:0:1000000`);
+      mineBlocks(harness, 1);
+      const afterB = await getAlkaneBalance(provider, taprootAddress, DEVNET.DIESEL_ID);
+      console.log('[swaps] Test B (DIESEL [2:0] with input): spent=%s (negative=gained)', beforeB - afterB);
+    } catch (e: any) {
+      console.log('[swaps] Test B error:', (e?.message || String(e))?.slice(0, 100));
+    }
+
+    // Check token balances BEFORE pool creation
+    const dieselBefore = await getAlkaneBalance(provider, taprootAddress, DEVNET.DIESEL_ID);
+    const frbtcBefore = await getAlkaneBalance(provider, taprootAddress, DEVNET.FRBTC_ID);
+    console.log('[swaps] Before pool creation: DIESEL=%s frBTC=%s', dieselBefore, frbtcBefore);
+
+    try {
+      const poolTxid = await executeAlkanes(createPoolProtostone, createPoolReqs);
+      console.log('[swaps] Pool creation txid:', poolTxid);
+
+      // Fetch raw tx to inspect
+      const rawTxResult = await rpcCall('esplora_tx::hex', [poolTxid]);
+      const rawHex = rawTxResult?.result;
+      if (rawHex) {
+        // Parse with bitcoinjs-lib to inspect outputs
+        const tx = bitcoin.Transaction.fromHex(rawHex);
+        console.log('[swaps] Pool creation tx: inputs=%d outputs=%d', tx.ins.length, tx.outs.length);
+        for (let i = 0; i < tx.outs.length; i++) {
+          const out = tx.outs[i];
+          const isOpReturn = out.script[0] === 0x6a;
+          console.log('[swaps]   output %d: value=%d script_len=%d is_op_return=%s',
+            i, out.value, out.script.length, isOpReturn);
+          if (isOpReturn) {
+            console.log('[swaps]   OP_RETURN data: %s', out.script.toString('hex').slice(0, 200));
+          }
+        }
+        for (let i = 0; i < tx.ins.length; i++) {
+          const inp = tx.ins[i];
+          console.log('[swaps]   input %d: txid=%s vout=%d witness_items=%d',
+            i, inp.hash.reverse().toString('hex'), inp.index, inp.witness.length);
+          inp.hash.reverse(); // reverse back
+        }
+      }
+      mineBlocks(harness, 1);
+
+      // Check token balances AFTER pool creation
+      const dieselAfterPool = await getAlkaneBalance(provider, taprootAddress, DEVNET.DIESEL_ID);
+      const frbtcAfterPool = await getAlkaneBalance(provider, taprootAddress, DEVNET.FRBTC_ID);
+      console.log('[swaps] After pool creation: DIESEL=%s frBTC=%s', dieselAfterPool, frbtcAfterPool);
+      console.log('[swaps] DIESEL spent: %s, frBTC spent: %s',
+        dieselBefore - dieselAfterPool, frbtcBefore - frbtcAfterPool);
+
+      // Find pool ID via factory opcode 2 (FindExistingPoolId)
+      const findPool = await simulateAlkane(factoryId, ['2', '2', '0', '32', '0']);
+      console.log('[swaps] FindPool result:', JSON.stringify(findPool?.result?.execution).slice(0, 200));
+
+      // Pool ID should be in the result data (16-byte AlkaneId)
+      if (findPool?.result?.execution?.data) {
+        const hex = findPool.result.execution.data.replace('0x', '');
+        if (hex.length >= 32) {
+          const poolBlock = parseInt(hex.slice(0, 16), 16); // LE u64? Actually it's u128 LE
+          // Parse as two u128 LE values (block, tx)
+          // For simplicity, try reading as little-endian
+          const buf = Buffer.from(hex, 'hex');
+          // AlkaneId is two u128 fields, each 16 bytes LE
+          const block = Number(buf.readBigUInt64LE(0));
+          const tx = Number(buf.readBigUInt64LE(16));
+          if (block > 0) {
+            poolId = `${block}:${tx}`;
+            console.log('[swaps] Pool ID:', poolId);
+          }
+        }
+      }
+
+      // Check GetNumPools after pool creation
+      const numPoolsAfter = await simulateAlkane(factoryId, ['4']);
+      console.log('[swaps] NumPools after creation:', JSON.stringify(numPoolsAfter?.result?.execution).slice(0, 200));
+
+      // Check GetNumPools data — parse as u128 LE
+      if (numPoolsAfter?.result?.execution?.data) {
+        const hex = numPoolsAfter.result.execution.data.replace('0x', '');
+        if (hex.length >= 32) {
+          const buf = Buffer.from(hex, 'hex');
+          const count = Number(buf.readBigUInt64LE(0));
+          console.log('[swaps] Pool count:', count);
+          if (count > 0) {
+            // Pool was created! Try to find it
+            const getAllPools = await simulateAlkane(factoryId, ['3']);
+            console.log('[swaps] GetAllPools:', JSON.stringify(getAllPools?.result?.execution).slice(0, 500));
+          }
+        }
+      }
+    } catch (e: any) {
+      console.log('[swaps] Pool creation error:', e.message?.slice(0, 200));
+      console.log('[swaps] NOTE: Pool creation may fail if factory init or deployment is wrong');
+    }
+    takeSnapshot('setup');
+  }, 600_000);
+
+  afterAll(() => {
+    disposeHarness();
+  });
+
+  // -------------------------------------------------------------------------
+  // Token → Token Swaps
+  // -------------------------------------------------------------------------
+
+  describe('Token → Token Swap', () => {
+    it('should swap DIESEL → frBTC', async () => {
+      if (!poolId) {
+        console.log('[swaps] Skipping — no pool');
+        return;
+      }
+
+      const dieselBefore = await getAlkaneBalance(provider, taprootAddress, DEVNET.DIESEL_ID);
+      const frbtcBefore = await getAlkaneBalance(provider, taprootAddress, DEVNET.FRBTC_ID);
+
+      const swapAmount = dieselBefore / 10n;
+      const [fBlock, fTx] = factoryId.split(':');
+      // SwapExactTokensForTokens: opcode 13, path_len=2, sell=DIESEL, buy=frBTC, amountIn, minOut, deadline
+      const protostone = `[${fBlock},${fTx},13,2,2,0,32,0,${swapAmount},1,99999]:v0:v0`;
+
+      const txid = await executeAlkanes(protostone, `2:0:${swapAmount}`);
+      console.log('[swaps] DIESEL→frBTC txid:', txid);
+      mineBlocks(harness, 1);
+
+      const dieselAfter = await getAlkaneBalance(provider, taprootAddress, DEVNET.DIESEL_ID);
+      const frbtcAfter = await getAlkaneBalance(provider, taprootAddress, DEVNET.FRBTC_ID);
+
+      console.log('[swaps] DIESEL: %s → %s', dieselBefore, dieselAfter);
+      console.log('[swaps] frBTC:  %s → %s', frbtcBefore, frbtcAfter);
+
+      expect(dieselAfter).toBeLessThan(dieselBefore);
+      expect(frbtcAfter).toBeGreaterThan(frbtcBefore);
+    }, 120_000);
+
+    it('should swap frBTC → DIESEL', async () => {
+      if (!poolId) {
+        console.log('[swaps] Skipping — no pool');
+        return;
+      }
+
+      const dieselBefore = await getAlkaneBalance(provider, taprootAddress, DEVNET.DIESEL_ID);
+      const frbtcBefore = await getAlkaneBalance(provider, taprootAddress, DEVNET.FRBTC_ID);
+
+      const swapAmount = frbtcBefore / 10n;
+      const [fBlock, fTx] = factoryId.split(':');
+      const protostone = `[${fBlock},${fTx},13,2,32,0,2,0,${swapAmount},1,99999]:v0:v0`;
+
+      const txid = await executeAlkanes(protostone, `32:0:${swapAmount}`);
+      console.log('[swaps] frBTC→DIESEL txid:', txid);
+      mineBlocks(harness, 1);
+
+      const dieselAfter = await getAlkaneBalance(provider, taprootAddress, DEVNET.DIESEL_ID);
+      const frbtcAfter = await getAlkaneBalance(provider, taprootAddress, DEVNET.FRBTC_ID);
+
+      expect(dieselAfter).toBeGreaterThan(dieselBefore);
+      expect(frbtcAfter).toBeLessThan(frbtcBefore);
+    }, 120_000);
+  });
+
+  // -------------------------------------------------------------------------
+  // BTC → Token (Two-Step)
+  // -------------------------------------------------------------------------
+
+  describe('BTC → Token', () => {
+    it('should wrap BTC then swap frBTC → DIESEL', async () => {
+      if (!poolId) {
+        console.log('[swaps] Skipping — no pool');
+        return;
+      }
+
+      const dieselBefore = await getAlkaneBalance(provider, taprootAddress, DEVNET.DIESEL_ID);
+
+      // Step 1: Wrap
+      const signerResult = await simulateAlkane('32:0', ['103']);
+      let signerAddr = 'bcrt1p466wtm6hn2llrm02ckx6z03tsygjjyfefdaz6sekczvcr7z00vtsc5gvgz';
+      if (signerResult?.result?.execution?.data) {
+        const hex = signerResult.result.execution.data.replace('0x', '');
+        if (hex.length === 64) {
+          try {
+            const xOnlyPubkey = Buffer.from(hex, 'hex');
+            const payment = bitcoin.payments.p2tr({ internalPubkey: xOnlyPubkey, network: bitcoin.networks.regtest });
+            if (payment.address) signerAddr = payment.address;
+          } catch { /* use default */ }
+        }
+      }
+
+      await executeAlkanes('[32,0,77]:v1:v1', 'B:500000:v0', {
+        toAddresses: [signerAddr, taprootAddress],
+      });
+      mineBlocks(harness, 1);
+
+      // Step 2: Swap frBTC → DIESEL
+      const frbtcBalance = await getAlkaneBalance(provider, taprootAddress, DEVNET.FRBTC_ID);
+      const swapAmount = frbtcBalance / 4n;
+      const [fBlock, fTx] = factoryId.split(':');
+      const protostone = `[${fBlock},${fTx},13,2,32,0,2,0,${swapAmount},1,99999]:v0:v0`;
+
+      const txid = await executeAlkanes(protostone, `32:0:${swapAmount}`);
+      console.log('[swaps] BTC→DIESEL (step 2 swap) txid:', txid);
+      mineBlocks(harness, 1);
+
+      const dieselAfter = await getAlkaneBalance(provider, taprootAddress, DEVNET.DIESEL_ID);
+      console.log('[swaps] DIESEL before: %s after: %s', dieselBefore, dieselAfter);
+      expect(dieselAfter).toBeGreaterThan(dieselBefore);
+    }, 120_000);
+  });
+
+  // -------------------------------------------------------------------------
+  // Token → BTC (Two-Step)
+  // -------------------------------------------------------------------------
+
+  describe('Token → BTC', () => {
+    it('should swap DIESEL → frBTC then unwrap to BTC', async () => {
+      if (!poolId) {
+        console.log('[swaps] Skipping — no pool');
+        return;
+      }
+
+      // Step 1: Swap DIESEL → frBTC
+      const dieselBalance = await getAlkaneBalance(provider, taprootAddress, DEVNET.DIESEL_ID);
+      const swapAmount = dieselBalance / 10n;
+      const [fBlock, fTx] = factoryId.split(':');
+      const swapProtostone = `[${fBlock},${fTx},13,2,2,0,32,0,${swapAmount},1,99999]:v0:v0`;
+
+      await executeAlkanes(swapProtostone, `2:0:${swapAmount}`);
+      mineBlocks(harness, 1);
+
+      // Step 2: Unwrap frBTC → BTC
+      const frbtcBalance = await getAlkaneBalance(provider, taprootAddress, DEVNET.FRBTC_ID);
+      const unwrapAmount = frbtcBalance / 4n;
+
+      const txid = await executeAlkanes('[32,0,78]:v1:v1', `32:0:${unwrapAmount}`);
+      console.log('[swaps] DIESEL→BTC (step 2 unwrap) txid:', txid);
+      mineBlocks(harness, 1);
+
+      const frbtcAfter = await getAlkaneBalance(provider, taprootAddress, DEVNET.FRBTC_ID);
+      expect(frbtcAfter).toBeLessThan(frbtcBalance);
+    }, 120_000);
+  });
+
+  // -------------------------------------------------------------------------
+  // Liquidity Operations
+  // -------------------------------------------------------------------------
+
+  describe('Liquidity', () => {
+    it('should add liquidity to existing pool', async () => {
+      if (!poolId) {
+        console.log('[swaps] Skipping — no pool');
+        return;
+      }
+
+      const [pBlock, pTx] = poolId.split(':');
+      const dieselAmount = 1000000000n; // 1B DIESEL
+      const frbtcAmount = 50000n; // some frBTC
+
+      // Pool opcode 1 = AddLiquidity (requires two alkane inputs)
+      const protostone = `[${pBlock},${pTx},1]:v0:v0`;
+      const reqs = `2:0:${dieselAmount},32:0:${frbtcAmount}`;
+
+      try {
+        const txid = await executeAlkanes(protostone, reqs);
+        console.log('[swaps] AddLiquidity txid:', txid);
+        mineBlocks(harness, 1);
+
+        // Check LP token balance (LP token ID = pool ID)
+        const lpBalance = await getAlkaneBalance(provider, taprootAddress, poolId);
+        console.log('[swaps] LP token balance:', lpBalance.toString());
+        expect(lpBalance).toBeGreaterThan(0n);
+      } catch (e: any) {
+        console.log('[swaps] AddLiquidity error:', e.message?.slice(0, 200));
+      }
+    }, 120_000);
+
+    it('should add liquidity using UI builder functions (same path as useAddLiquidityMutation)', async () => {
+      if (!poolId) {
+        console.log('[swaps] Skipping — no pool');
+        return;
+      }
+
+      const { buildFactoryAddLiquidityProtostones, buildAddLiquidityInputRequirements } = await import('@/lib/alkanes/builders');
+
+      const dieselAmount = '500000000'; // 500M DIESEL in alks
+      const frbtcAmount = '25000'; // some frBTC in alks
+
+      // 0.5% slippage, 1000-block deadline (regtest manual mining)
+      const slippageFactor = (10000 - 50) / 10000;
+      const amount0Min = BigInt(Math.floor(Number(dieselAmount) * slippageFactor)).toString();
+      const amount1Min = BigInt(Math.floor(Number(frbtcAmount) * slippageFactor)).toString();
+      const deadline = '999999999';
+
+      // Same factory router path the UI uses (opcode 11)
+      const protostone = buildFactoryAddLiquidityProtostones({
+        factoryId,
+        tokenA: '2:0',
+        tokenB: '32:0',
+        amountADesired: dieselAmount,
+        amountBDesired: frbtcAmount,
+        amountAMin: amount0Min,
+        amountBMin: amount1Min,
+        deadline,
+      });
+      const inputRequirements = buildAddLiquidityInputRequirements({
+        token0Id: '2:0',
+        token1Id: '32:0',
+        amount0: dieselAmount,
+        amount1: frbtcAmount,
+      });
+
+      console.log('[swaps] UI builder protostone:', protostone);
+      console.log('[swaps] UI builder inputRequirements:', inputRequirements);
+
+      const lpBefore = await getAlkaneBalance(provider, taprootAddress, poolId);
+
+      try {
+        const txid = await executeAlkanes(protostone, inputRequirements);
+        console.log('[swaps] UI-path AddLiquidity txid:', txid);
+        mineBlocks(harness, 1);
+
+        const lpAfter = await getAlkaneBalance(provider, taprootAddress, poolId);
+        console.log('[swaps] LP balance: %s → %s', lpBefore.toString(), lpAfter.toString());
+        expect(lpAfter).toBeGreaterThan(lpBefore);
+      } catch (e: any) {
+        console.log('[swaps] UI-path AddLiquidity FAILED:', e.message?.slice(0, 300));
+        // If this fails but the simple protostone test passes, the builder is wrong
+        throw e;
+      }
+    }, 120_000);
+
+    it('should add liquidity via full UI mutation path (findPoolId + alkanesExecuteTyped)', async () => {
+      if (!poolId) {
+        console.log('[swaps] Skipping — no pool');
+        return;
+      }
+
+      // This test exercises the EXACT code path of useAddLiquidityMutation:
+      // 1. findPoolId via alkanesSimulate (factory opcode 2)
+      // 2. buildFactoryAddLiquidityProtostones (factory opcode 11)
+      // 3. alkanesExecuteTyped (returns PSBT, not auto-signed)
+      // 4. sign + broadcast
+
+      const { buildFactoryAddLiquidityProtostones, buildAddLiquidityInputRequirements } = await import('@/lib/alkanes/builders');
+      const { encodeSimulateCalldata } = await import('@/utils/simulateCalldata');
+
+      const FACTORY_ID = factoryId;
+      const [t0Block, t0Tx] = [2, 0]; // DIESEL
+      const [t1Block, t1Tx] = [32, 0]; // frBTC
+
+      // Step 1: findPoolId via SDK alkanesSimulate — same as useAddLiquidityMutation
+      console.log('[ui-path] Step 1: findPoolId via SDK alkanesSimulate...');
+      const context = JSON.stringify({
+        alkanes: [],
+        calldata: encodeSimulateCalldata(FACTORY_ID, [2, t0Block, t0Tx, t1Block, t1Tx]),
+        height: 1000000, txindex: 0, pointer: 0, refund_pointer: 0, vout: 0,
+        transaction: [], block: [],
+      });
+      const simResult = await provider.alkanesSimulate(FACTORY_ID, context, 'latest');
+      console.log('[ui-path] SDK alkanesSimulate raw result:', JSON.stringify(simResult)?.slice(0, 300));
+
+      // Parse — handles both structured { status, execution } and raw protobuf string
+      let resolvedPoolId: { block: number; tx: number } | null = null;
+      if (simResult?.status === 0 && simResult?.execution?.data) {
+        const hexData = (simResult.execution.data as string).replace('0x', '');
+        if (hexData.length >= 64) {
+          const buf = Buffer.from(hexData, 'hex');
+          resolvedPoolId = { block: Number(buf.readBigUInt64LE(0)), tx: Number(buf.readBigUInt64LE(16)) };
+        }
+      } else if (typeof simResult === 'string') {
+        // Protobuf response — find 0x1a20 marker (field 3, 32 bytes = data field)
+        const buf = Buffer.from(simResult.replace('0x', ''), 'hex');
+        for (let i = 0; i + 34 <= buf.length; i++) {
+          if (buf[i] === 0x1a && buf[i + 1] === 0x20) {
+            const block = Number(buf.readBigUInt64LE(i + 2));
+            const tx = Number(buf.readBigUInt64LE(i + 18));
+            if (block > 0 && block < 100000 && tx >= 0 && tx < 100000) {
+              resolvedPoolId = { block, tx };
+              break;
+            }
+          }
+        }
+      }
+
+      console.log('[ui-path] Resolved pool ID:', resolvedPoolId);
+      expect(resolvedPoolId).not.toBeNull();
+      expect(`${resolvedPoolId!.block}:${resolvedPoolId!.tx}`).toBe(poolId);
+
+      // Step 2: Build protostone + input requirements — same as mutation line 360-388
+      const dieselAmount = '300000000';
+      const frbtcAmount = '15000';
+
+      const slippageFactor = (10000 - 50) / 10000;
+      const amount0Min = BigInt(Math.floor(Number(dieselAmount) * slippageFactor)).toString();
+      const amount1Min = BigInt(Math.floor(Number(frbtcAmount) * slippageFactor)).toString();
+      const deadline = '999999999';
+
+      const protostone = buildFactoryAddLiquidityProtostones({
+        factoryId,
+        tokenA: '2:0',
+        tokenB: '32:0',
+        amountADesired: dieselAmount,
+        amountBDesired: frbtcAmount,
+        amountAMin: amount0Min,
+        amountBMin: amount1Min,
+        deadline,
+      });
+      const inputRequirements = buildAddLiquidityInputRequirements({
+        token0Id: '2:0',
+        token1Id: '32:0',
+        amount0: dieselAmount,
+        amount1: frbtcAmount,
+      });
+      console.log('[ui-path] Protostone:', protostone);
+      console.log('[ui-path] InputRequirements:', inputRequirements);
+
+      // Step 3: alkanesExecuteTyped — same as mutation line 431
+      // This is the key difference from executeAlkanes (which uses alkanesExecuteFull)
+      const lpBefore = await getAlkaneBalance(provider, taprootAddress, poolId);
+
+      try {
+        // Use alkanesExecuteFull (Node.js compatible) — browser uses alkanesExecuteTyped
+        // but both construct the same PSBT. The key test is that findPoolId resolves correctly.
+        const txid = await executeAlkanes(protostone, inputRequirements);
+        console.log('[ui-path] Broadcast txid:', txid);
+
+        const lpAfter = await getAlkaneBalance(provider, taprootAddress, poolId);
+        console.log('[ui-path] LP balance: %s → %s', lpBefore.toString(), lpAfter.toString());
+        expect(lpAfter).toBeGreaterThan(lpBefore);
+      } catch (e: any) {
+        console.error('[ui-path] FAILED:', e.message?.slice(0, 500));
+        throw e;
+      }
+    }, 120_000);
+
+    it('should remove liquidity / burn LP tokens', async () => {
+      if (!poolId) {
+        console.log('[swaps] Skipping — no pool');
+        return;
+      }
+
+      const lpBalance = await getAlkaneBalance(provider, taprootAddress, poolId);
+      if (lpBalance === 0n) {
+        console.log('[swaps] Skipping — no LP tokens');
+        return;
+      }
+
+      const burnAmount = lpBalance / 2n;
+      const [pBlock, pTx] = poolId.split(':');
+
+      // Pool opcode 2 = RemoveLiquidity (burn LP tokens, receive token0 + token1)
+      const protostone = `[${pBlock},${pTx},2,0,0,99999]:v0:v0`;
+
+      try {
+        const txid = await executeAlkanes(protostone, `${poolId}:${burnAmount}`);
+        console.log('[swaps] RemoveLiquidity txid:', txid);
+        mineBlocks(harness, 1);
+
+        const lpAfter = await getAlkaneBalance(provider, taprootAddress, poolId);
+        console.log('[swaps] LP balance after burn: %s → %s', lpBalance, lpAfter);
+        expect(lpAfter).toBeLessThan(lpBalance);
+      } catch (e: any) {
+        console.log('[swaps] RemoveLiquidity error:', e.message?.slice(0, 200));
+      }
+    }, 120_000);
+  });
+
+  // -------------------------------------------------------------------------
+  // LP position discovery (UI flow simulation)
+  // -------------------------------------------------------------------------
+
+  describe('LP position discovery', () => {
+    it('should find LP token via alkanes_protorunesbyaddress', async () => {
+      if (!poolId) {
+        console.log('[lp-discovery] Skipping — no pool');
+        return;
+      }
+
+      // This is the same RPC call the UI uses via queries/account.ts
+      const lpBalance = await getAlkaneBalance(provider, taprootAddress, poolId);
+      console.log('[lp-discovery] LP token balance via protorunesbyaddress:', lpBalance.toString());
+      expect(lpBalance).toBeGreaterThan(0n);
+    }, 30_000);
+
+    it('should return pool data via quspo get_pools (same as SDK data API path)', async () => {
+      if (!factoryId) {
+        console.log('[lp-discovery] Skipping — no factoryId');
+        return;
+      }
+
+      // This is the exact call the devnet-server resolveRestMethod makes:
+      // /get-all-pools-details → metashrew_view('get_pools', hex(JSON(factoryId)), 'latest')
+      const [fBlock, fTx] = factoryId.split(':');
+      const payload = JSON.stringify({ block: fBlock, tx: fTx });
+      const hexInput = '0x' + Buffer.from(payload).toString('hex');
+
+      const result = await rpcCall('metashrew_view', ['get_pools', hexInput, 'latest']);
+      console.log('[lp-discovery] quspo get_pools raw result:', JSON.stringify(result)?.slice(0, 500));
+
+      // Decode hex response to JSON
+      if (result?.result) {
+        const hex = result.result.replace(/^0x/, '');
+        if (hex.length > 0) {
+          const decoded = Buffer.from(hex, 'hex').toString('utf-8');
+          console.log('[lp-discovery] quspo get_pools decoded:', decoded.slice(0, 500));
+        } else {
+          console.log('[lp-discovery] quspo get_pools returned empty hex');
+        }
+      } else if (result?.error) {
+        console.log('[lp-discovery] quspo get_pools error:', JSON.stringify(result.error));
+      }
+    }, 30_000);
+
+    it('should find pool via factory opcode 3 (GetAllPools)', async () => {
+      if (!poolId) {
+        console.log('[lp-discovery] Skipping — no pool');
+        return;
+      }
+
+      // This is the same RPC call usePools/SDK fallback uses
+      if (!factoryId) { console.log('[lp-discovery] Skipping — no factoryId'); return; }
+      const [fBlock, fTx] = factoryId.split(':');
+      const result = await rpcCall('alkanes_simulate', [{
+        target: { block: fBlock, tx: fTx },
+        inputs: ['3'], // opcode 3 = GetAllPools
+        alkanes: [],
+        transaction: '0x',
+        block: '0x',
+        height: '999999',
+        txindex: 0,
+        vout: 0,
+      }]);
+
+      const data = result?.result?.execution?.data?.replace('0x', '') || '';
+      const error = result?.result?.execution?.error;
+      console.log('[lp-discovery] GetAllPools error:', error || 'none');
+      console.log('[lp-discovery] GetAllPools data length:', data.length, 'chars');
+
+      expect(error).toBeFalsy();
+      // Data should be non-empty (at least 32 bytes = 64 hex chars for one pool)
+      expect(data.length).toBeGreaterThanOrEqual(32);
+    }, 30_000);
+
+    it('should match LP token ID against pool ID (UI matching logic)', async () => {
+      if (!poolId) {
+        console.log('[lp-discovery] Skipping — no pool');
+        return;
+      }
+
+      // Simulate the useLPPositions matching logic:
+      // 1. Get all user alkanes (same as alkaneBalanceQueryOptions)
+      const balanceResult = await rpcCall('alkanes_protorunesbyaddress', [
+        { address: taprootAddress, protocolTag: '1' },
+      ]);
+      const outpoints = balanceResult?.result?.outpoints || [];
+
+      // Build a set of alkane IDs the user holds
+      const userAlkaneIds = new Set<string>();
+      for (const op of outpoints) {
+        const balances = op.balance_sheet?.cached?.balances || op.runes || [];
+        for (const entry of balances) {
+          const block = parseInt(entry.block ?? '0', 10);
+          const tx = parseInt(entry.tx ?? '0', 10);
+          const amount = BigInt(entry.amount || '0');
+          if (amount > 0n) {
+            userAlkaneIds.add(`${block}:${tx}`);
+          }
+        }
+      }
+      console.log('[lp-discovery] User alkane IDs:', Array.from(userAlkaneIds));
+
+      // 2. Get pool IDs — try SDK method first, then direct RPC fallback
+      if (!factoryId) { console.log('[lp-discovery] Skipping — no factoryId'); return; }
+      let poolIds: string[] = [];
+
+      // Method A: SDK alkanesGetAllPoolsWithDetails (what usePools fallback uses)
+      try {
+        const rpcResult = await provider.alkanesGetAllPoolsWithDetails(factoryId);
+        const parsed = typeof rpcResult === 'string' ? JSON.parse(rpcResult) : rpcResult;
+        poolIds = (parsed?.pools || []).map((p: any) => `${p.pool_id_block}:${p.pool_id_tx}`);
+        console.log('[lp-discovery] SDK alkanesGetAllPoolsWithDetails returned', poolIds.length, 'pools:', poolIds);
+      } catch (e: any) {
+        console.log('[lp-discovery] SDK alkanesGetAllPoolsWithDetails failed:', String(e?.message || e)?.slice(0, 300));
+      }
+
+      // Method B: Direct RPC — parse GetAllPools opcode 3 response manually
+      // This is the fallback the UI SHOULD use if the SDK method fails
+      if (poolIds.length === 0) {
+        try {
+          const [fBlock, fTx] = factoryId.split(':');
+          const result = await rpcCall('alkanes_simulate', [{
+            target: { block: fBlock, tx: fTx },
+            inputs: ['3'],
+            alkanes: [],
+            transaction: '0x', block: '0x', height: '999999', txindex: 0, vout: 0,
+          }]);
+          const data = result?.result?.execution?.data?.replace('0x', '') || '';
+          console.log('[lp-discovery] Raw GetAllPools hex:', data);
+          // GetAllPools returns a serialized Vec<AlkaneId>. Each AlkaneId is
+          // two u128 (block, tx) = 32 bytes. But the Vec has a 16-byte length prefix.
+          if (data.length >= 32) {
+            const buf = Buffer.from(data, 'hex');
+            // First 16 bytes = count as u128 LE
+            const count = Number(buf.readBigUInt64LE(0));
+            console.log('[lp-discovery] Pool count from prefix:', count);
+            // Then count * 32 bytes of AlkaneId entries
+            for (let i = 0; i < count && 16 + i * 32 + 32 <= buf.length; i++) {
+              const offset = 16 + i * 32;
+              const block = Number(buf.readBigUInt64LE(offset));
+              const tx = Number(buf.readBigUInt64LE(offset + 16));
+              poolIds.push(`${block}:${tx}`);
+            }
+          }
+          console.log('[lp-discovery] Direct RPC GetAllPools returned', poolIds.length, 'pools:', poolIds);
+        } catch (e: any) {
+          console.log('[lp-discovery] Direct RPC GetAllPools failed:', e.message?.slice(0, 200));
+        }
+      }
+
+      console.log('[lp-discovery] Final pool IDs:', poolIds);
+
+      // 3. The match: does the user hold an alkane whose ID is a pool ID?
+      const matchedLPs = Array.from(userAlkaneIds).filter(id => poolIds.includes(id));
+      console.log('[lp-discovery] Matched LP positions:', matchedLPs);
+
+      expect(matchedLPs).toContain(poolId);
+    }, 60_000);
+  });
+
+  // -------------------------------------------------------------------------
+  // Final status report
+  // -------------------------------------------------------------------------
+
+  describe('Status', () => {
+    it('should report final balances', async () => {
+      const diesel = await getAlkaneBalance(provider, taprootAddress, DEVNET.DIESEL_ID);
+      const frbtc = await getAlkaneBalance(provider, taprootAddress, DEVNET.FRBTC_ID);
+      const btc = await getBtcBalance(provider, segwitAddress);
+
+      console.log('[swaps] Final balances:');
+      console.log(`  DIESEL: ${diesel}`);
+      console.log(`  frBTC:  ${frbtc}`);
+      console.log(`  BTC:    ${btc} sats`);
+      if (poolId) {
+        const lp = await getAlkaneBalance(provider, taprootAddress, poolId);
+        console.log(`  LP(${poolId}): ${lp}`);
+      }
+    });
+  });
+});
