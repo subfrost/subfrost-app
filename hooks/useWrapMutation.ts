@@ -159,10 +159,20 @@ export function useWrapMutation() {
       const inputRequirements = `B:${wrapAmountSats}:v0`;
 
       // Get user's addresses (still needed for PSBT diagnostics + wallet-specific patching paths)
+      // Recipient = whichever address the wallet exposes. Investigation
+      // 2026-05-06 (subfrost-alkanes/alkanes/fr-btc/src/lib.rs) confirmed
+      // wrap mints the frBTC alkane to whatever output the protostone
+      // pointer addresses, with no script-type check on the user side.
+      // Single-address segwit-only wallets (UniSat/OKX in Native SegWit
+      // mode) get their frBTC at their bc1q address; the FROST signer
+      // copies that scriptPubKey verbatim from tx.output[pointer].
+      if (!txContext) throw new Error('Wallet not connected');
       const userTaprootAddress = account?.taproot?.address;
       const userSegwitAddress = account?.nativeSegwit?.address;
-      if (!txContext) throw new Error('Wallet not connected');
-      if (!userTaprootAddress) throw new Error('No taproot address available');
+      const userRecipientAddress = userTaprootAddress || userSegwitAddress;
+      if (!userRecipientAddress) {
+        throw new Error('No wallet address available — please reconnect');
+      }
 
       // Get bitcoin network for PSBT parsing
       const btcNetwork = getBitcoinNetwork(network);
@@ -178,7 +188,10 @@ export function useWrapMutation() {
       // Matches CLI wrap_btc.rs output ordering:
       //   Output 0 (v0): signer (receives BTC via B:amount:v0)
       //   Output 1 (v1): user (receives minted frBTC via pointer=v1)
-      const toAddresses = [signerAddress, userTaprootAddress];
+      // userRecipientAddress is whatever address the wallet exposes —
+      // taproot if available, otherwise segwit. Either is fine because
+      // the contract copies the scriptPubKey verbatim into Payment.output.
+      const toAddresses = [signerAddress, userRecipientAddress];
 
       console.log('[WRAP] ============ alkanesExecuteTyped CALL ============');
       console.log('[WRAP] DIAGNOSTIC: signerAddress =', signerAddress);
@@ -531,7 +544,7 @@ export function useWrapMutation() {
               try {
                 const addr = bitcoin.address.fromOutputScript(output.script, btcNetwork);
                 const label = addr === signerAddress ? 'SIGNER (BTC)' :
-                             addr === userTaprootAddress ? 'USER (frBTC)' : 'OTHER';
+                             addr === userRecipientAddress ? 'USER (frBTC)' : 'OTHER';
                 console.log(`  [${idx}] ${label}: ${output.value} sats -> ${addr}`);
               } catch {
                 console.log(`  [${idx}] Unknown: ${output.value} sats`);
