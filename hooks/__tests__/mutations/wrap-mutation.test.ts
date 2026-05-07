@@ -159,14 +159,15 @@ describe('Wrap output ordering', () => {
     expect(src).toContain('receives minted frBTC via pointer=v1');
   });
 
-  it('should set toAddresses with signer first, user second', () => {
-    // Address-fallback chain consolidated into txContext (2026-04-30) — there
-    // is no longer a per-wallet-type ternary here; toAddresses is simply
-    // `[signerAddress, userTaprootAddress]` regardless of wallet type.
+  it('should set toAddresses with signer first, user-recipient second', () => {
+    // Address-fallback chain consolidated into txContext (2026-04-30); the
+    // per-call recipient is `userRecipientAddress = userTaprootAddress ||
+    // userSegwitAddress` (post-2026-05-06 relaxation — any address type
+    // is accepted, frBTC contract copies scriptPubKey verbatim).
     expect(src).toContain('signerAddress');
     const match = src.match(/toAddresses\s*=\s*\[(.*?)\]/);
     expect(match).toBeTruthy();
-    expect(match![1]).toMatch(/signerAddress.*userTaprootAddress/);
+    expect(match![1]).toMatch(/signerAddress.*userRecipientAddress/);
   });
 
   it('should use B:<sats>:v0 to assign BTC to signer output', () => {
@@ -204,15 +205,23 @@ describe('Browser wallet address handling in useWrapMutation', () => {
     expect(src).not.toMatch(/protectTaproot:\s*txContext\.shouldProtectTaproot/);
   });
 
-  it('should use actual userTaprootAddress in toAddresses (frBTC recipient)', () => {
+  it('should use actual user address in toAddresses (frBTC recipient)', () => {
+    // Post-relaxation: recipient is whichever address the wallet exposes,
+    // not hardcoded to taproot. Symbolic 'p2tr:0' is still forbidden.
     const match = src.match(/toAddresses\s*=\s*\[(.*?)\]/);
     expect(match).toBeTruthy();
-    expect(match![1]).toContain('userTaprootAddress');
+    expect(match![1]).toContain('userRecipientAddress');
     expect(match![1]).not.toContain("'p2tr:0'");
   });
 
-  it('should throw when taproot address is missing', () => {
-    expect(src).toContain("if (!userTaprootAddress) throw new Error('No taproot address available')");
+  it('falls back to segwit when taproot address is missing (post-relaxation)', () => {
+    // Investigation 2026-05-06: subfrost-alkanes/alkanes/fr-btc/src/lib.rs
+    // copies tx.output[pointer].script_pubkey verbatim into Payment.output —
+    // no script-type check. Wrap accepts any address the wallet exposes.
+    expect(src).toContain('userRecipientAddress = userTaprootAddress || userSegwitAddress');
+    expect(src).toContain("toAddresses = [signerAddress, userRecipientAddress]");
+    // The old hard throw is gone.
+    expect(src).not.toContain("if (!userTaprootAddress) throw new Error('No taproot address available')");
   });
 });
 

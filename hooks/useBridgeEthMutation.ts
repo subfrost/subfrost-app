@@ -130,7 +130,7 @@ export function useBridgeEthMutation() {
         if (isBrowserWallet) {
           const patched = patchInputsOnly({
             psbtBase64,
-            taprootAddress: account?.taproot?.address || '',
+            taprootAddress: account?.taproot?.address,
             segwitAddress: account?.nativeSegwit?.address,
             paymentPubkeyHex: account?.nativeSegwit?.pubkey,
             network: btcNetwork,

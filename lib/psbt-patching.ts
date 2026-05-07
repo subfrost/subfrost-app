@@ -130,8 +130,12 @@ function isP2SH(script: Buffer): boolean {
 // ---------------------------------------------------------------------------
 
 export interface OutputPatchConfig {
-  /** User's taproot address (bc1p...) — always required */
-  taprootAddress: string;
+  /**
+   * User's taproot address (bc1p...). Optional — single-address segwit-only
+   * wallets (UniSat/OKX in Native SegWit mode) lack a taproot. P2TR script
+   * patches are skipped when missing; segwit-only PSBTs work fine.
+   */
+  taprootAddress?: string;
   /** User's segwit/payment address (bc1q... or 3...) — optional */
   segwitAddress?: string;
   /** Bitcoin network for address→script conversion */
@@ -182,7 +186,9 @@ export function patchOutputs(
 
   // For browser wallets, sweep remaining outputs by type
   if (isBrowserWallet) {
-    const taprootScript = bitcoin.address.toOutputScript(taprootAddress, network);
+    const taprootScript = taprootAddress
+      ? bitcoin.address.toOutputScript(taprootAddress, network)
+      : null;
     const segwitScript = segwitAddress
       ? bitcoin.address.toOutputScript(segwitAddress, network)
       : null;
@@ -192,13 +198,19 @@ export function patchOutputs(
       const script = Buffer.from(outs[i].script);
       if (isOpReturn(script)) continue;
       if (isP2TR(script)) {
-        outs[i].script = taprootScript;
+        // Prefer the user's taproot. For segwit-only wallets without a
+        // taproot, fall back to segwit so the dummy P2TR script doesn't
+        // become a permanent loss (the dummy wallet's mnemonic is never
+        // stored).
+        const replacement = taprootScript ?? segwitScript;
+        if (replacement) outs[i].script = replacement;
       } else if (isP2WPKH(script)) {
         // Use segwit address if available, otherwise fall back to taproot.
         // Taproot-only wallets (UniSat) have no segwit address — without
         // this fallback, the dummy wallet's P2WPKH address is kept and
         // BTC change is permanently lost.
-        outs[i].script = segwitScript ?? taprootScript;
+        const replacement = segwitScript ?? taprootScript;
+        if (replacement) outs[i].script = replacement;
       }
     }
   }
@@ -234,7 +246,12 @@ export function patchInputWitnessScripts(
   config: OutputPatchConfig,
 ): number {
   const { taprootAddress, segwitAddress, network } = config;
-  const taprootScript = bitcoin.address.toOutputScript(taprootAddress, network);
+  // taprootAddress optional — segwit-only wallets (UniSat/OKX in Native
+  // SegWit mode) reach this function with `taprootAddress` undefined.
+  // P2TR-input patches are skipped when missing.
+  const taprootScript = taprootAddress
+    ? bitcoin.address.toOutputScript(taprootAddress, network)
+    : null;
 
   // Only use segwitScript for P2WPKH patching if the address is actually
   // a P2WPKH/P2SH address (not a taproot address). For single-address wallets
@@ -255,7 +272,7 @@ export function patchInputWitnessScripts(
     // If witnessUtxo exists, patch the script
     if (input.witnessUtxo) {
       const script = Buffer.from(input.witnessUtxo.script);
-      if (isP2TR(script)) {
+      if (isP2TR(script) && taprootScript) {
         input.witnessUtxo = { ...input.witnessUtxo, script: taprootScript };
         patched++;
       } else if (isP2WPKH(script) && segwitScript) {
@@ -282,7 +299,7 @@ export function patchInputWitnessScripts(
         const prevScript = Buffer.from(prevOut.script);
         // Reconstruct witnessUtxo with the user's script
         let newScript: Buffer | Uint8Array | null = null;
-        if (isP2TR(prevScript)) {
+        if (isP2TR(prevScript) && taprootScript) {
           newScript = taprootScript;
         } else if (isP2WPKH(prevScript) && segwitScript) {
           newScript = segwitScript;
@@ -463,8 +480,13 @@ export function patchPsbtForBrowserWallet(params: PatchPsbtParams): {
 export interface PatchInputsOnlyParams {
   psbtBase64: string;
   network: bitcoin.Network;
-  /** User's taproot address */
-  taprootAddress: string;
+  /**
+   * User's taproot address. Optional — single-address segwit-only
+   * wallets (UniSat/OKX in Native SegWit mode) reach this path with no
+   * taproot. P2TR-input patches no-op when missing; segwit witnessUtxo
+   * patches and Xverse redeemScript injection still happen.
+   */
+  taprootAddress?: string;
   /** User's segwit/payment address */
   segwitAddress?: string;
   /** Compressed public key hex for the payment address (for redeemScript) */
@@ -498,18 +520,13 @@ export function patchInputsOnly(params: PatchInputsOnlyParams): {
     paymentPubkeyHex,
   } = params;
 
-  if (!taprootAddress) {
-    // Without this guard the failure mode is `bitcoin.address.toOutputScript(undefined)`
-    // → "undefined has no matching Script" — useless to the user. Connect-time
-    // refusal in WalletContext should make this unreachable for UniSat/OKX, but
-    // we re-check here so any future regression surfaces a clear message instead
-    // of a cryptic bitcoinjs error. (See unisat-single-address-bugs.test.ts.)
-    throw new Error(
-      'patchInputsOnly: taprootAddress is required. The connected wallet ' +
-      'does not expose a taproot (P2TR) address — alkanes cannot be sent or ' +
-      'received from a non-taproot address. Switch your wallet extension ' +
-      'to Taproot mode and reconnect.'
-    );
+  // taprootAddress is now optional — non-taproot single-address wallets
+  // (UniSat/OKX in Native SegWit mode) reach this path with no taproot
+  // available. The witnessUtxo and redeemScript patching steps each
+  // gracefully no-op when their respective addresses are missing.
+  if (!taprootAddress && !segwitAddress) {
+    // Both missing — nothing to patch. Treat as a clean PSBT.
+    return { psbtBase64, inputsPatched: 0 };
   }
 
   const psbt = bitcoin.Psbt.fromBase64(psbtBase64, { network });
