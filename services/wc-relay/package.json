@@ -1,0 +1,32 @@
+{
+  "name": "@subfrost/wc-relay",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Encrypted WebSocket relay for the Subfrost mobile-as-signer protocol. Routes ChaCha20-Poly1305 ciphertext between subfrost-app (browser) and subfrost-mobile (Android) without ever decrypting it.",
+  "license": "MIT",
+  "main": "lib/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node lib/index.js",
+    "dev": "ts-node src/index.ts",
+    "smoke": "ts-node test/smoke.ts"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "ws": "^8.18.0",
+    "ioredis": "^5.4.1",
+    "pg": "^8.13.1",
+    "uuid": "^11.0.3",
+    "cors": "^2.8.5"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/ws": "^8.5.13",
+    "@types/cors": "^2.8.17",
+    "@types/node": "^22.10.0",
+    "@types/uuid": "^10.0.0",
+    "@types/pg": "^8.11.10",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.6.3"
+  }
+}
