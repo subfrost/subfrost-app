@@ -35,7 +35,7 @@ app.use(express.json({ limit: '64kb' }));
 
 // ── HTTP routes ───────────────────────────────────────────────────
 
-app.get('/healthz', async (_req, res) => {
+app.get('/v1/health', async (_req, res) => {
   try {
     const pong = await store.ping();
     res.json({ ok: pong === 'PONG' });
@@ -124,6 +124,31 @@ app.post('/v1/sessions/:topic/req', async (req, res) => {
     );
   }
   res.json({ ok: true });
+});
+
+/** Non-destructive list of every pending request for `topic`. Used by
+ *  the mobile foreground-service polling loop on devices without FCM
+ *  to discover request_ids without consuming them — caller then hits
+ *  `/v1/sessions/:topic/req/:rid` per row to take them.
+ *
+ *  Single-tenant per-topic auth is implicit: the topic UUID itself is
+ *  random + only known to the paired mobile + webapp, so a third
+ *  party can't enumerate by guessing topics.
+ */
+app.get('/v1/sessions/:topic/pending', async (req, res) => {
+  const topic = String(req.params.topic);
+  const session = await store.getSession(topic);
+  if (!session) return res.status(404).json({ error: 'unknown session' });
+  const items = await store.listPending(topic);
+  res.json({
+    pending: items.map((p) => ({
+      request_id: p.request_id,
+      ciphertext: p.ciphertext,
+      nonce:      p.nonce,
+      origin:     p.origin,
+      created_at: p.created_at,
+    })),
+  });
 });
 
 /** Mobile fetches the pending request once it has been woken. Server

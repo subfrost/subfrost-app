@@ -71,6 +71,34 @@ export class Store {
     return JSON.parse(raw) as PendingRequest;
   }
 
+  /** Non-destructive enumeration of every pending request envelope
+   *  for `topic`. Returned shape mirrors `takeRequest` per-row but
+   *  WITHOUT removing them — the caller still has to call
+   *  `takeRequest(topic, rid)` to consume each. Used by the
+   *  foreground-service polling loop on devices without FCM (e.g.
+   *  de-Googled / MicroG / pure F-Droid builds). */
+  async listPending(topic: string): Promise<PendingRequest[]> {
+    const pattern = `sf:wc:req:${topic}:*`;
+    const keys: string[] = [];
+    let cursor = '0';
+    do {
+      const [next, batch] = await this.redis.scan(
+        cursor, 'MATCH', pattern, 'COUNT', 200,
+      );
+      cursor = next;
+      keys.push(...batch);
+    } while (cursor !== '0');
+    if (keys.length === 0) return [];
+    const raws = await this.redis.mget(...keys);
+    const out: PendingRequest[] = [];
+    for (const raw of raws) {
+      if (!raw) continue;
+      try { out.push(JSON.parse(raw) as PendingRequest); } catch { /* skip */ }
+    }
+    out.sort((a, b) => b.created_at - a.created_at);
+    return out;
+  }
+
   /** Sliding 1-minute rate limit. Returns the new count; caller
    *  rejects above the per-origin ceiling. */
   async incrRate(origin: string): Promise<number> {
