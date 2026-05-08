@@ -15,10 +15,16 @@
  */
 
 import { x25519 } from '@noble/curves/ed25519';
-import { hkdf } from '@noble/hashes/hkdf';
-import { sha256 } from '@noble/hashes/sha2';
-import { chacha20poly1305 } from '@noble/ciphers/chacha';
-import { randomBytes } from '@noble/hashes/utils';
+// @noble/hashes 2.x and @noble/ciphers 2.x require the `.js` suffix on
+// subpath imports because their package.json `exports` maps only the
+// `.js` keys (no extensionless aliases). Without the suffix tsc errors
+// "Cannot find module" and the Next.js Docker build fails. Don't drop
+// the `.js` here unless the deps are bumped to a version that adds
+// extensionless aliases.
+import { hkdf } from '@noble/hashes/hkdf.js';
+import { sha256 } from '@noble/hashes/sha2.js';
+import { chacha20poly1305 } from '@noble/ciphers/chacha.js';
+import { randomBytes } from '@noble/hashes/utils.js';
 import { base64urlnopad } from '@scure/base';
 
 export const KEY_LEN = 32;
