@@ -14,6 +14,7 @@ import { getConfig, getRpcUrl } from "@/utils/getConfig";
 // useSellableCurrencies removed — used alkanes_protorunesbyaddress (30s).
 // Now reuses walletBalances.alkanes from useEnrichedWalletData (~1s, already cached).
 import { useEnrichedWalletData } from "@/hooks/useEnrichedWalletData";
+import { usePendingTxs } from "@/hooks/usePendingTxs";
 import { useGlobalStore } from "@/stores/global";
 import { useFeeRate } from "@/hooks/useFeeRate";
 import { useBtcPrice } from "@/hooks/useBtcPrice";
@@ -178,6 +179,80 @@ export default function SwapShell() {
   // Multi-step swap flow state (BTC→Token, Token→BTC)
   // JOURNAL (2026-03-15): Added to track progress and show TransactionStepper UI
   const [swapFlowStep, setSwapFlowStep] = useState<SwapFlowStep>({ type: 'idle' });
+
+  // Bundle-progress tracking for the BTC→Token atomic split-tx (CPFP)
+  // flow. The SDK builds and broadcasts Tx A (wrap) and Tx B (execute)
+  // sequentially inside one `executeAtomicSwap` call — during that
+  // window the JS side has no signal that Tx A is already in mempool
+  // and the stepper would otherwise show Step 2 as "Broadcasting…" for
+  // the entire 1-30s the SDK takes to broadcast both.
+  //
+  // We poll `usePendingTxs` (which merges IDB + WASM-side mempool) and
+  // count how many of *our* pending txs were added since the swap
+  // started. The atomic await is still the source of truth for
+  // success/error; the polling just upgrades the visible state from
+  // "Broadcasting…" to "Awaiting confirmation…" the moment Tx A lands
+  // in mempool, and again when Tx B does. CPFP guarantees they confirm
+  // in the same block, so a separate per-tx confirmation poll isn't
+  // useful here.
+  const { pendingTxs } = usePendingTxs();
+  const bundleStartCountRef = useRef<number | null>(null);
+
+  // Watch the pending count while a BTC→Token atomic swap is in flight.
+  // Count goes from baseline to baseline+1 (Tx A in mempool) → upgrade
+  // Step 1 to "confirming". From baseline+1 to baseline+2 (Tx B in
+  // mempool) → upgrade Step 2 to "confirming" too. The atomic await
+  // resolving will overwrite to 'complete'.
+  //
+  // The gate accepts both 'swapping' (initial) and 'wrap-confirming'
+  // (after we've already detected Tx A) so the second-tx detection
+  // can still fire. 'swap-confirming' / 'complete' / 'error' /
+  // 'idle' all stop the loop.
+  useEffect(() => {
+    // Clear the baseline when we leave the watched window so the
+    // count delta from a previous swap can't leak into the next.
+    if (
+      swapFlowStep.type === 'idle' ||
+      swapFlowStep.type === 'complete' ||
+      swapFlowStep.type === 'error'
+    ) {
+      bundleStartCountRef.current = null;
+      return;
+    }
+    if (
+      swapFlowStep.type !== 'swapping' &&
+      swapFlowStep.type !== 'wrap-confirming'
+    ) return;
+    if (bundleStartCountRef.current == null) return;
+    const newlyPending = pendingTxs.length - bundleStartCountRef.current;
+    if (newlyPending >= 2) {
+      // Both Tx A and Tx B are in our mempool view. CPFP-chained, will
+      // confirm together. Upgrade to swap-confirming so the stepper's
+      // Step 2 stops claiming "Broadcasting…" and shows "Awaiting
+      // confirmation…" instead.
+      const lastTwo = pendingTxs.slice(-2);
+      setSwapFlowStep({
+        type: 'swap-confirming',
+        txId: lastTwo[1]?.txid ?? lastTwo[0]?.txid ?? '',
+        attempt: 1,
+        // Bound the visible progress bar to mainnet block target. We
+        // don't actually wait this long — the next state transition
+        // (to 'complete') happens when executeAtomicSwap resolves.
+        maxAttempts: 60,
+      });
+    } else if (newlyPending >= 1) {
+      // Tx A is in mempool. Surface that to the user — still in the
+      // 'wrap-confirming' shape so Step 1 turns into a confirming
+      // indicator while Step 2 stays "loading" until Tx B lands.
+      const last = pendingTxs[pendingTxs.length - 1];
+      setSwapFlowStep({
+        type: 'wrap-confirming',
+        txId: last?.txid ?? '',
+        attempt: 1,
+        maxAttempts: 60,
+      });
+    }
+  }, [pendingTxs, swapFlowStep.type]);
 
   // LP positions from wallet (real data from useLPPositions hook)
   const { positions: lpPositions, isLoading: isLoadingLPPositions } = useLPPositions();
@@ -1205,6 +1280,11 @@ export default function SwapShell() {
       }
 
       try {
+        // Snapshot pending-tx count so the bundle progress effect can
+        // detect deltas (Tx A → +1, Tx A+B → +2) and upgrade Step 1/2
+        // to 'confirming' as the SDK broadcasts them. See the
+        // bundleStartCountRef effect above.
+        bundleStartCountRef.current = pendingTxs.length;
         setSwapFlowStep({ type: 'swapping' });
         const result = await executeAtomicSwap({
           btcAmount: fromAmount,
