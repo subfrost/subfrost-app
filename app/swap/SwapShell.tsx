@@ -36,6 +36,7 @@ import { useAddLiquidityMutation } from "@/hooks/useAddLiquidityMutation";
 import { useAtomicWrapSwapMutation } from "@/hooks/useAtomicWrapSwapMutation";
 import { useAtomicWrapAddLiquidityMutation } from "@/hooks/useAtomicWrapAddLiquidityMutation";
 import { useTokenToBtcSwap } from "@/hooks/useTokenToBtcSwap";
+import { getEsploraTx, getHeight } from "@/lib/alkanes/rpc";
 import { useMatchedLpPool } from "@/hooks/useMatchedLpPool";
 import { usePoolStateLive } from "@/hooks/usePoolStateLive";
 import { computePairedLpAmount, computeRemoveLiquidityMinAmounts } from "@/lib/alkanes/liquidity-math";
@@ -68,8 +69,10 @@ type SwapFlowStep =
   | { type: 'wrap-confirming'; txId: string; attempt: number; maxAttempts: number }
   | { type: 'swapping' }
   | { type: 'swap-confirming'; txId: string; attempt: number; maxAttempts: number }
+  | { type: 'swap-indexing'; txId: string; wrapTxId?: string }
   | { type: 'unwrapping' }
-  | { type: 'unwrap-confirming'; txId: string; attempt: number; maxAttempts: number }
+  | { type: 'unwrap-confirming'; txId: string; attempt: number; maxAttempts: number; swapTxId?: string }
+  | { type: 'unwrap-indexing'; txId: string; swapTxId?: string }
   | { type: 'complete'; wrapTxId?: string; swapTxId?: string; unwrapTxId?: string }
   | { type: 'error'; step: 'wrap' | 'swap' | 'unwrap'; message: string; wrapTxId?: string; swapTxId?: string };
 
@@ -1024,10 +1027,11 @@ export default function SwapShell() {
           label: `${t('swap.step1Wrap') || 'Step 1: Wrap BTC → frBTC'}`,
           status: step.type === 'wrapping' ? 'loading'
                 : step.type === 'wrap-confirming' ? 'confirming'
-                : (step.type === 'swapping' || step.type === 'swap-confirming' || step.type === 'complete') ? 'complete'
+                : (step.type === 'swapping' || step.type === 'swap-confirming' || step.type === 'swap-indexing' || step.type === 'complete') ? 'complete'
                 : step.type === 'error' && step.step === 'wrap' ? 'error'
                 : 'pending',
           txId: step.type === 'wrap-confirming' ? step.txId
+              : step.type === 'swap-indexing' ? step.wrapTxId
               : step.type === 'complete' ? step.wrapTxId
               : step.type === 'error' ? step.wrapTxId
               : undefined,
@@ -1039,10 +1043,12 @@ export default function SwapShell() {
           label: `${t('swap.step2Swap') || 'Step 2: Swap frBTC →'} ${toToken?.symbol || 'Token'}`,
           status: step.type === 'swapping' ? 'loading'
                 : step.type === 'swap-confirming' ? 'confirming'
+                : step.type === 'swap-indexing' ? 'indexing'
                 : step.type === 'complete' ? 'complete'
                 : step.type === 'error' && step.step === 'swap' ? 'error'
                 : 'pending',
           txId: step.type === 'swap-confirming' ? step.txId
+              : step.type === 'swap-indexing' ? step.txId
               : step.type === 'complete' ? step.swapTxId
               : step.type === 'error' ? step.swapTxId
               : undefined,
@@ -1052,7 +1058,7 @@ export default function SwapShell() {
         },
       ];
       const currentIdx = step.type === 'wrapping' || step.type === 'wrap-confirming' ? 0
-                       : step.type === 'swapping' || step.type === 'swap-confirming' ? 1
+                       : step.type === 'swapping' || step.type === 'swap-confirming' || step.type === 'swap-indexing' ? 1
                        : step.type === 'complete' ? 1
                        : step.type === 'error' ? (step.step === 'wrap' ? 0 : 1)
                        : 0;
@@ -1066,10 +1072,12 @@ export default function SwapShell() {
           label: `${t('swap.step1Swap') || 'Step 1: Swap'} ${fromToken?.symbol || 'Token'} → frBTC`,
           status: step.type === 'swapping' ? 'loading'
                 : step.type === 'swap-confirming' ? 'confirming'
-                : (step.type === 'unwrapping' || step.type === 'unwrap-confirming' || step.type === 'complete') ? 'complete'
+                : (step.type === 'unwrapping' || step.type === 'unwrap-confirming' || step.type === 'unwrap-indexing' || step.type === 'complete') ? 'complete'
                 : step.type === 'error' && step.step === 'swap' ? 'error'
                 : 'pending',
           txId: step.type === 'swap-confirming' ? step.txId
+              : step.type === 'unwrap-confirming' ? step.swapTxId
+              : step.type === 'unwrap-indexing' ? step.swapTxId
               : step.type === 'complete' ? step.swapTxId
               : step.type === 'error' ? step.swapTxId
               : undefined,
@@ -1081,10 +1089,12 @@ export default function SwapShell() {
           label: `${t('swap.step2Unwrap') || 'Step 2: Unwrap frBTC → BTC'}`,
           status: step.type === 'unwrapping' ? 'loading'
                 : step.type === 'unwrap-confirming' ? 'confirming'
+                : step.type === 'unwrap-indexing' ? 'indexing'
                 : step.type === 'complete' ? 'complete'
                 : step.type === 'error' && step.step === 'unwrap' ? 'error'
                 : 'pending',
           txId: step.type === 'unwrap-confirming' ? step.txId
+              : step.type === 'unwrap-indexing' ? step.txId
               : step.type === 'complete' ? step.unwrapTxId
               : undefined,
           pollingAttempt: step.type === 'unwrap-confirming' ? step.attempt : undefined,
@@ -1093,7 +1103,7 @@ export default function SwapShell() {
         },
       ];
       const currentIdx = step.type === 'swapping' || step.type === 'swap-confirming' ? 0
-                       : step.type === 'unwrapping' || step.type === 'unwrap-confirming' ? 1
+                       : step.type === 'unwrapping' || step.type === 'unwrap-confirming' || step.type === 'unwrap-indexing' ? 1
                        : step.type === 'complete' ? 1
                        : step.type === 'error' ? (step.step === 'swap' ? 0 : 1)
                        : 0;
@@ -1298,10 +1308,77 @@ export default function SwapShell() {
         });
 
         if (result?.success && result.transactionId) {
-          setSwapFlowStep({ type: 'complete', swapTxId: result.transactionId });
-          showNotification(result.transactionId, 'swap');
-          setTimeout(() => refreshWalletData(), 2000);
-          setTimeout(() => setSwapFlowStep({ type: 'idle' }), 5000);
+          const swapTxId = result.transactionId;
+          // splitTransactions=true returns wrapTxId (parent) + transactionId
+          // (child/reveal). CPFP-anchored, so they confirm together; we still
+          // poll the swap (child) tx because it's the one the user cares about
+          // — the wrap step gets ✓ from the same confirmation.
+          const wrapTxId = (result as any).wrapTxId as string | undefined;
+          showNotification(swapTxId, 'swap');
+
+          // Devnet/regtest skip polling — useAtomicWrapSwapMutation auto-mines.
+          const isLocal = ['devnet', 'regtest-local', 'qubitcoin-regtest'].includes(network ?? '');
+          const isRegtestRemote = ['regtest', 'subfrost-regtest'].includes(network ?? '');
+          if (isLocal) {
+            setSwapFlowStep({ type: 'complete', swapTxId, wrapTxId });
+            setTimeout(() => refreshWalletData(), 2000);
+            setTimeout(() => setSwapFlowStep({ type: 'idle' }), 5000);
+          } else {
+            // Confirmation poll. "Broadcasting" was misleading post-broadcast:
+            // both txs are in mempool, CPFP is anchored, but the UI used to
+            // jump straight from "Broadcasting" → ✓ when broadcast resolved.
+            // Now we explicitly show "Waiting for confirmation" until the
+            // block lands, matching what the Token→BTC flow does.
+            const pollInterval = isRegtestRemote ? 1500 : 15000;
+            const maxPollAttempts = isRegtestRemote ? 20 : 120;
+            let confirmed = false;
+            let confirmationHeight: number | undefined;
+            for (let attempt = 0; attempt < maxPollAttempts; attempt++) {
+              setSwapFlowStep({
+                type: 'swap-confirming',
+                txId: swapTxId,
+                attempt: attempt + 1,
+                maxAttempts: maxPollAttempts,
+              });
+              await new Promise(resolve => setTimeout(resolve, pollInterval));
+              try {
+                const tx = await getEsploraTx(network!, swapTxId);
+                if (tx?.status?.confirmed) {
+                  confirmed = true;
+                  confirmationHeight = tx.status.block_height;
+                  break;
+                }
+              } catch {
+                // polling RPC error — keep retrying
+              }
+            }
+            if (!confirmed) {
+              console.warn('[SWAP] BTC → Token swap did not confirm within poll window; marking complete:', swapTxId);
+            }
+
+            // Indexing beat — block landed but metashrew may still be
+            // catching up; balances won't refresh until metashrew_height
+            // reaches the confirmation block. Bounded short so a slow
+            // indexer doesn't hang the modal.
+            if (confirmed && confirmationHeight) {
+              const indexPollInterval = isRegtestRemote ? 1000 : 3000;
+              const maxIndexPolls = 10;
+              for (let attempt = 0; attempt < maxIndexPolls; attempt++) {
+                setSwapFlowStep({ type: 'swap-indexing', txId: swapTxId, wrapTxId });
+                try {
+                  const h = await getHeight(network!);
+                  if (h >= confirmationHeight) break;
+                } catch {
+                  // ignore — keep polling
+                }
+                await new Promise(resolve => setTimeout(resolve, indexPollInterval));
+              }
+            }
+
+            setSwapFlowStep({ type: 'complete', swapTxId, wrapTxId });
+            setTimeout(() => refreshWalletData(), 2000);
+            setTimeout(() => setSwapFlowStep({ type: 'idle' }), 5000);
+          }
         } else {
           setSwapFlowStep({ type: 'error', step: 'swap', message: 'No transaction ID returned' });
         }

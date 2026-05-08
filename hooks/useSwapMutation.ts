@@ -472,16 +472,25 @@ export function useSwapMutation() {
 
 
 
-        // Check if SDK auto-completed the transaction
+        // Check if SDK auto-completed the transaction.
+        //
+        // splitTransactions=true returns an EnhancedExecuteResult with both
+        // `wrap_txid` (parent CPFP-payable tx) and `reveal_txid` (child).
+        // Surface both so the UI stepper can label and confirm-poll each leg
+        // independently — without this, callers only see `reveal_txid` and
+        // lose track of the wrap leg entirely.
         if (result?.txid || result?.reveal_txid) {
           const txId = result.txid || result.reveal_txid;
+          const wrapTxId = result.wrap_txid || result.split_txid;
           return {
             success: true,
             transactionId: txId,
+            wrapTxId: wrapTxId || undefined,
             frbtcUnwrapTxId: undefined,
           } as {
             success: boolean;
             transactionId?: string;
+            wrapTxId?: string;
             frbtcUnwrapTxId?: string;
           };
         }
@@ -757,10 +766,12 @@ export function useSwapMutation() {
           return {
             success: true,
             transactionId: broadcastTxid || txid,
+            wrapTxId: undefined,
             frbtcUnwrapTxId: undefined,
           } as {
             success: boolean;
             transactionId?: string;
+            wrapTxId?: string;
             frbtcUnwrapTxId?: string;
           };
         }
@@ -768,13 +779,16 @@ export function useSwapMutation() {
         // Check if execution completed directly
         if (result?.complete) {
           const txId = result.complete?.reveal_txid || result.complete?.commit_txid;
+          const wrapTxId = result.complete?.wrap_txid || result.complete?.split_txid;
           return {
             success: true,
             transactionId: txId,
+            wrapTxId: wrapTxId || undefined,
             frbtcUnwrapTxId: undefined,
           } as {
             success: boolean;
             transactionId?: string;
+            wrapTxId?: string;
             frbtcUnwrapTxId?: string;
           };
         }
