@@ -14,6 +14,17 @@ const UPSTREAM_TIMEOUT_MS = 8_000;
 // far better than a per-process map ever could.
 const FRESH_CACHE_HEADER = 'public, s-maxage=30, stale-while-revalidate=300';
 
+// Fallback Espo deployment for /get-all-pools-details on mainnet. Same OYL
+// REST contract as subfrost.io; used when the primary upstream 5xx's. Set
+// `ESPO_MAINNET_FALLBACK_URL=""` to disable.
+const fallbackEnv = process.env.ESPO_MAINNET_FALLBACK_URL;
+const FALLBACK_BASE_URLS: Record<string, string> = {};
+if (fallbackEnv === undefined) {
+  FALLBACK_BASE_URLS.mainnet = 'https://oyl.alkanode.com';
+} else if (fallbackEnv.length > 0) {
+  FALLBACK_BASE_URLS.mainnet = fallbackEnv;
+}
+
 function getFactoryIdParts(network: string): { block: string; tx: string } {
   const cfg = getConfig(network) as { ALKANE_FACTORY_ID?: string };
   const id = cfg.ALKANE_FACTORY_ID || '4:65522';
@@ -30,20 +41,30 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: `unknown network ${network}` }, { status: 400 });
   }
 
-  try {
-    const upstream = await fetch(`${baseUrl}/get-all-pools-details`, {
+  const factoryParts = getFactoryIdParts(network);
+  const fallbackBase = FALLBACK_BASE_URLS[network];
+
+  const fetchPools = async (base: string) => {
+    const resp = await fetch(`${base}/get-all-pools-details`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ factoryId: getFactoryIdParts(network) }),
+      body: JSON.stringify({ factoryId: factoryParts }),
       signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
       cache: 'no-store',
     });
+    if (!resp.ok) throw new Error(`upstream ${resp.status} (${base})`);
+    return resp.json();
+  };
 
-    if (!upstream.ok) {
-      return NextResponse.json({ error: `upstream ${upstream.status}` }, { status: 502 });
+  try {
+    let data: any;
+    try {
+      data = await fetchPools(baseUrl);
+    } catch (primaryErr) {
+      if (!fallbackBase) throw primaryErr;
+      console.warn(`[pools/cached] primary failed (${primaryErr instanceof Error ? primaryErr.message : 'unknown'}); falling back to ${fallbackBase}`);
+      data = await fetchPools(fallbackBase);
     }
-
-    const data = await upstream.json();
     return NextResponse.json(data, {
       headers: { 'Cache-Control': FRESH_CACHE_HEADER },
     });

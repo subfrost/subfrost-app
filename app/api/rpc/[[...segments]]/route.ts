@@ -45,6 +45,19 @@ const BATCH_RPC_ENDPOINTS: Record<string, string> = {
   oylnet: 'https://regtest.subfrost.io/v4/jsonrpc',
 };
 
+// Fallback Espo REST host for mainnet — same OYL module contract as subfrost
+// (verified against /get-all-amm-tx-history, /get-all-pools-details, etc).
+// Used only for REST sub-path requests when the primary returns non-2xx, so
+// landing-page surfaces (Activity Feed, Trending Pair) survive Subfrost-side
+// Espo outages. Set `ESPO_MAINNET_FALLBACK_URL=""` to disable.
+const restFallbackEnv = process.env.ESPO_MAINNET_FALLBACK_URL;
+const REST_FALLBACK_BASE_URLS: Record<string, string> = {};
+if (restFallbackEnv === undefined) {
+  REST_FALLBACK_BASE_URLS.mainnet = 'https://oyl.alkanode.com';
+} else if (restFallbackEnv.length > 0) {
+  REST_FALLBACK_BASE_URLS.mainnet = restFallbackEnv;
+}
+
 function pickEndpoint(body: any, network: string) {
   const isBatch = Array.isArray(body);
   const single = RPC_ENDPOINTS[network] || RPC_ENDPOINTS.regtest;
@@ -62,6 +75,11 @@ export async function POST(
 
     let network: string;
     let targetUrl: string;
+    // Tracks whether this is a REST sub-path request (e.g. /get-all-amm-tx-history)
+    // and the joined path so we can construct an alkanode fallback URL on
+    // primary failure. JSON-RPC requests don't use this — they have their
+    // own metashrew-unwrap fallback below.
+    let restSubPath: string | null = null;
 
     // Qubitcoin-regtest service URLs (VPN-only, from env)
     const QBC_HOST = process.env.QUBITCOIN_REGTEST_HOST || '127.0.0.1';
@@ -120,7 +138,8 @@ export async function POST(
         }
         // REST sub-path: forward to backend base URL + rest path
         const baseUrl = (RPC_ENDPOINTS[network] || RPC_ENDPOINTS.regtest).replace(/\/$/, '');
-        targetUrl = `${baseUrl}/${restPath.join('/')}`;
+        restSubPath = restPath.join('/');
+        targetUrl = `${baseUrl}/${restSubPath}`;
       } else {
         // Plain JSON-RPC
         targetUrl = pickEndpoint(body, network);
@@ -227,6 +246,31 @@ export async function POST(
       body: JSON.stringify(body),
     });
 
+    // REST sub-path Espo fallback. When the primary upstream returns 5xx /
+    // non-JSON / connection error for a /get-* style request, retry against
+    // alkanode (or whatever ESPO_MAINNET_FALLBACK_URL is set to). JSON-RPC
+    // requests are unaffected — they have their own metashrew-unwrap
+    // fallback below and route to a different upstream.
+    const restFallbackBase = restSubPath ? REST_FALLBACK_BASE_URLS[network] : null;
+    if (restSubPath && restFallbackBase && !response.ok) {
+      const fallbackUrl = `${restFallbackBase.replace(/\/$/, '')}/${restSubPath}`;
+      console.warn(`[RPC Proxy] REST primary ${response.status} for /${restSubPath}; falling back to ${fallbackUrl}`);
+      try {
+        const fallbackResp = await fetch(fallbackUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        if (fallbackResp.ok) {
+          response = fallbackResp;
+        } else {
+          console.warn(`[RPC Proxy] REST fallback also failed: ${fallbackResp.status}`);
+        }
+      } catch (fallbackErr) {
+        console.warn(`[RPC Proxy] REST fallback threw:`, fallbackErr);
+      }
+    }
+
     // Read the response body once. Upstream is always JSON-RPC, but infrastructure
     // errors (nginx 502, rate limits, service unavailable) may return plain text or HTML.
     let responseText = await response.text();
@@ -236,6 +280,22 @@ export async function POST(
     } catch {
       // Non-JSON response — this is an infrastructure error, not a JSON-RPC response.
       // Common causes: nginx "upstream request failed", rate limit HTML pages, 502/503 errors.
+      // For REST sub-paths, attempt the alkanode fallback as a last resort.
+      if (restSubPath && restFallbackBase) {
+        const fallbackUrl = `${restFallbackBase.replace(/\/$/, '')}/${restSubPath}`;
+        console.warn(`[RPC Proxy] REST primary returned non-JSON for /${restSubPath}; trying ${fallbackUrl}`);
+        try {
+          const fallbackResp = await fetch(fallbackUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+          });
+          const fallbackText = await fallbackResp.text();
+          try {
+            return NextResponse.json(JSON.parse(fallbackText), { status: fallbackResp.status });
+          } catch { /* fall through to error response below */ }
+        } catch { /* fall through */ }
+      }
       const snippet = responseText.slice(0, 200).replace(/<[^>]*>/g, '').trim(); // strip HTML tags
       console.error(`[RPC Proxy] Non-JSON upstream response (${response.status}) for ${method}: ${snippet}`);
       return NextResponse.json(
