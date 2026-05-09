@@ -55,7 +55,8 @@
  * handle_message() returns Err on revert → atomic.commit() never called → rollback.
  */
 
-import { parseMaxVoutFromProtostones, extractPsbtBase64 } from './helpers';
+import * as bitcoin from 'bitcoinjs-lib';
+import { parseMaxVoutFromProtostones, extractPsbtBase64, getBitcoinNetwork } from './helpers';
 import type { AlkanesExecuteTypedParams } from './types';
 
 type WebProvider = import('@alkanes/ts-sdk/wasm').WebProvider;
@@ -143,6 +144,49 @@ export async function alkanesExecuteTyped(
       console.log(
         `[alkanesExecuteTyped] payment_utxos: ${clean.length} clean BTC UTXOs from prefetched cache (skipping WASM fanout)`,
       );
+    }
+  }
+
+  // PERF: prefetched_utxos — caller-supplied (outpoint, value, scriptPubKey)
+  // map that the SDK consumes inside `validate_transaction` and
+  // `build_psbt_and_fee` to skip per-UTXO `getrawtransaction` roundtrips.
+  // Required by the alkanes-rs change in https://github.com/kungfuflex/alkanes-rs/pull/256
+  // (SDK ≥0.1.5-<that-commit>); ignored by older SDKs since the field is
+  // `#[serde(default)]` Rust-side. Kills the largest contributor to swap
+  // click→signing latency (~7-10s of the 16-17s observed for 32-UTXO wallets).
+  //
+  // Every cached UTXO contributes — not just clean BTC carriers. The SDK's
+  // hot loops iterate the FULL selected set (including alkane-bearing dust
+  // and inscribed UTXOs), so anything we cache here saves a roundtrip.
+  if (params.cachedUtxos?.length) {
+    try {
+      const btcNetwork = getBitcoinNetwork(params.network ?? 'mainnet');
+      const prefetched = params.cachedUtxos.map((u) => {
+        // Derive scriptPubKey from address — pure compute, no RPC.
+        // Falls through to the slow path on per-UTXO derivation failure
+        // (defensive: never let a bad address abort the whole execute).
+        if (!u.address) return null;
+        let scriptPubKeyHex: string;
+        try {
+          const script = bitcoin.address.toOutputScript(u.address, btcNetwork);
+          scriptPubKeyHex = Buffer.from(script).toString('hex');
+        } catch {
+          return null;
+        }
+        return {
+          outpoint: `${u.txid}:${u.vout}`,
+          value: u.value,
+          script_pubkey_hex: scriptPubKeyHex,
+        };
+      }).filter((x): x is { outpoint: string; value: number; script_pubkey_hex: string } => x !== null);
+      if (prefetched.length > 0) {
+        options.prefetched_utxos = prefetched;
+        console.log(
+          `[alkanesExecuteTyped] prefetched_utxos: ${prefetched.length} TxOuts from wallet cache (skips ~${prefetched.length * 2} getrawtransaction roundtrips)`,
+        );
+      }
+    } catch (e) {
+      console.warn('[alkanesExecuteTyped] failed to build prefetched_utxos:', e);
     }
   }
 
