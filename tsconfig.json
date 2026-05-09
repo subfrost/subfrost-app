@@ -42,6 +42,7 @@
     "e2e-tests",
     "__tests__/devnet",
     "vendor",
-    "services"
+    "services",
+    "reference"
   ]
 }

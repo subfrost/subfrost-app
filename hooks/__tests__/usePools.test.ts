@@ -55,7 +55,7 @@ vi.mock('@/utils/getConfig', () => ({
 vi.mock('@/queries/keys', () => ({
   queryKeys: {
     pools: {
-      list: (network: string, paramsKey: string) => ['pools', network, paramsKey],
+      list: (network: string) => ['pools', network],
     },
   },
 }));

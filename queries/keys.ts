@@ -66,8 +66,8 @@ export const queryKeys = {
   // Pools
   // -------------------------------------------------------------------------
   pools: {
-    list: (network: string, paramsKey: string) =>
-      ['pools', network, paramsKey] as const,
+    list: (network: string) =>
+      ['pools', network] as const,
     dynamic: (network: string, factoryId: string) =>
       ['dynamic-pools', network, factoryId] as const,
     tokenPairs: (network: string, alkaneId: string, paramsKey: string) =>

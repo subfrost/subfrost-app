@@ -2,8 +2,7 @@
 
 import { useMemo } from 'react';
 import Link from 'next/link';
-import { usePools } from '@/hooks/usePools';
-import { useAllPoolStats } from '@/hooks/usePoolData';
+import { usePoolMarkets } from '@/hooks/usePoolMarkets';
 import TokenIcon from '@/app/components/TokenIcon';
 import HomeMarketsButton from '@/app/components/HomeMarketsButton';
 import { useTranslation } from '@/hooks/useTranslation';
@@ -44,51 +43,21 @@ function formatUsd(n?: number, showZeroAsDash = false) {
 
 export default function TrendingPairs() {
   const { t } = useTranslation();
-  const { data } = usePools({ sortBy: 'tvl', order: 'desc', limit: 200 });
-
-  // Enhanced pool stats from our local API (TVL, Volume, APR)
-  const { data: poolStats } = useAllPoolStats();
+  const { markets } = usePoolMarkets();
 
   const pairs = useMemo(() => {
-    const filtered = data?.items ?? [];
+    const hasAny24hVolume = markets.some((p) => (p.vol24hUsd ?? 0) > 0);
+    const hasAny30dVolume = markets.some((p) => (p.vol30dUsd ?? 0) > 0);
 
-    // Create stats lookup map (fallback)
-    const statsMap = new Map<string, NonNullable<typeof poolStats>[string]>();
-    if (poolStats) {
-      for (const [, stats] of Object.entries(poolStats)) {
-        statsMap.set(stats.poolId, stats);
-      }
-    }
-
-    // Merge stats with pools (usePools already provides TVL/volume from OYL Alkanode)
-    const enrichedPools = filtered.map(p => {
-      const stats = statsMap.get(p.id);
-      return {
-        ...p,
-        tvlUsd: p.tvlUsd || stats?.tvlUsd || 0,
-        vol24hUsd: p.vol24hUsd || stats?.volume24hUsd || 0,
-        vol30dUsd: p.vol30dUsd || stats?.volume30dUsd || 0,
-      };
-    });
-
-    // Check if any pool has volume data
-    const hasAny24hVolume = enrichedPools.some(p => (p.vol24hUsd ?? 0) > 0);
-    const hasAny30dVolume = enrichedPools.some(p => (p.vol30dUsd ?? 0) > 0);
-
-    // Sort by 24h volume if any exists, otherwise 30d volume, otherwise TVL
-    return enrichedPools
+    // Sort by 24h volume if any exists, otherwise 30d volume, otherwise TVL.
+    return [...markets]
       .sort((a, b) => {
-        if (hasAny24hVolume) {
-          return (b.vol24hUsd ?? 0) - (a.vol24hUsd ?? 0);
-        }
-        if (hasAny30dVolume) {
-          return (b.vol30dUsd ?? 0) - (a.vol30dUsd ?? 0);
-        }
-        // Final fallback to TVL
+        if (hasAny24hVolume) return (b.vol24hUsd ?? 0) - (a.vol24hUsd ?? 0);
+        if (hasAny30dVolume) return (b.vol30dUsd ?? 0) - (a.vol30dUsd ?? 0);
         return (b.tvlUsd ?? 0) - (a.tvlUsd ?? 0);
       })
       .slice(0, 1);
-  }, [data?.items, poolStats]);
+  }, [markets]);
 
   return (
     <div className="sf-card h-full">

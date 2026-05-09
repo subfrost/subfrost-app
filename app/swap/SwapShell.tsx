@@ -18,8 +18,7 @@ import { usePendingTxs } from "@/hooks/usePendingTxs";
 import { useGlobalStore } from "@/stores/global";
 import { useFeeRate } from "@/hooks/useFeeRate";
 import { useBtcPrice } from "@/hooks/useBtcPrice";
-import { usePools } from "@/hooks/usePools";
-import { useAllPoolStats } from "@/hooks/usePoolData";
+import { usePoolMarkets } from "@/hooks/usePoolMarkets";
 import { useModalStore } from "@/stores/modals";
 import BigNumber from 'bignumber.js';
 import { useWrapMutation } from "@/hooks/useWrapMutation";
@@ -92,38 +91,16 @@ function getBridgeRoute(from: string, to: string): string {
 export default function SwapShell() {
   const { t } = useTranslation();
 
-  // Markets from API: all pools sorted by TVL desc
-  const { data: poolsData, isLoading: isLoadingPools } = usePools({ sortBy: 'tvl', order: 'desc' });
-
-  // Enhanced pool stats from our local API (TVL, Volume, APR)
-  const { data: poolStats, isLoading: isLoadingPoolStats } = useAllPoolStats();
-
-  // Merge pool data with stats from /api/pools/stats (fallback for any missing data)
-  const markets = useMemo<PoolSummary[]>(() => {
-    const basePools = poolsData?.items ?? [];
-
-    // If poolStats available, use as fallback overlay
-    const statsMap = new Map<string, NonNullable<typeof poolStats>[string]>();
-    if (poolStats) {
-      for (const [, stats] of Object.entries(poolStats)) {
-        statsMap.set(stats.poolId, stats);
-      }
-    }
-
-    return basePools.map(pool => {
-      const stats = statsMap.get(pool.id);
-
-      return {
-        ...pool,
-        tvlUsd: pool.tvlUsd || stats?.tvlUsd || 0,
-        token0TvlUsd: pool.token0TvlUsd || stats?.tvlToken0 || (pool.tvlUsd || 0) / 2,
-        token1TvlUsd: pool.token1TvlUsd || stats?.tvlToken1 || (pool.tvlUsd || 0) / 2,
-        vol24hUsd: pool.vol24hUsd || stats?.volume24hUsd || 0,
-        vol30dUsd: pool.vol30dUsd || stats?.volume30dUsd || 0,
-        apr: pool.apr || stats?.apr || 0,
-      } as PoolSummary;
-    });
-  }, [poolsData?.items, poolStats]);
+  // Markets, loading flags, and merge-derived booleans all come from the
+  // shared `usePoolMarkets` hook so this surface stays consistent with
+  // TrendingPairs / HomeMarketsButton / MarketsGrid by construction.
+  const {
+    markets,
+    isLoadingPools,
+    isLoadingPoolStats,
+    poolStatsHasData,
+    hasVolumeDataMerged,
+  } = usePoolMarkets();
 
   const marketType = 'spot' as const;
 
@@ -414,16 +391,6 @@ export default function SwapShell() {
 
     return sorted[0];
   }, [markets]);
-
-  // Check if we have meaningful volume data merged into markets
-  const hasVolumeDataMerged = useMemo(() => {
-    return markets.some(p => (p.vol24hUsd ?? 0) > 0 || (p.vol30dUsd ?? 0) > 0);
-  }, [markets]);
-
-  // Check if poolStats actually has data (not just loaded as empty object)
-  const poolStatsHasData = useMemo(() => {
-    return poolStats !== undefined && Object.keys(poolStats).length > 0;
-  }, [poolStats]);
 
   // Initialize swap tokens to the trending pair (highest volume) on every visit.
   // A saved pair is only honored as a one-shot handoff from explicit cross-page
