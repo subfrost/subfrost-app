@@ -5,12 +5,33 @@
  *
  * Returns a map of alkaneId → { name, symbol } for the top N tokens.
  * This proxy avoids CORS issues when fetching directly from subfrost API.
+ *
+ * ## Env-configurable Espo upstreams (mainnet only)
+ *
+ * Both default to sensible values, override only when ops needs to flip
+ * the active deployment without a code change. Examples:
+ *
+ *   ESPO_MAINNET_PRIMARY_URL   — primary base URL for /get-alkanes.
+ *                                Default: https://mainnet.subfrost.io/v4/subfrost
+ *                                Set to https://oyl.alkanode.com to use
+ *                                alkanode as primary while subfrost's
+ *                                hosted Espo is down.
+ *   ESPO_MAINNET_FALLBACK_URL  — fallback used when the primary returns
+ *                                non-2xx / times out. Default:
+ *                                https://oyl.alkanode.com
+ *                                Set empty string to disable fallback.
+ *
+ * Non-mainnet networks (testnet/signet/regtest/etc) ignore these vars
+ * since alkanode only hosts a mainnet Espo deployment.
  */
 
 import { NextResponse } from 'next/server';
 
+const SUBFROST_MAINNET = 'https://mainnet.subfrost.io/v4/subfrost';
+const ALKANODE_OYL_MAINNET = 'https://oyl.alkanode.com';
+
 const RPC_ENDPOINTS: Record<string, string> = {
-  mainnet: 'https://mainnet.subfrost.io/v4/subfrost',
+  mainnet: process.env.ESPO_MAINNET_PRIMARY_URL || SUBFROST_MAINNET,
   testnet: 'https://testnet.subfrost.io/v4/subfrost',
   signet: 'https://signet.subfrost.io/v4/subfrost',
   regtest: 'https://regtest.subfrost.io/v4/subfrost',
@@ -25,9 +46,17 @@ const RPC_ENDPOINTS: Record<string, string> = {
 // 2026-05-08, espo dev confirmed it's a Subfrost-side ops issue), the proxy
 // can degrade to this without any consumer-visible change. Mainnet only —
 // alkanode does not host testnet/signet/regtest Espo deployments.
-const FALLBACK_BASE_URLS: Record<string, string> = {
-  mainnet: 'https://oyl.alkanode.com',
-};
+//
+// `ESPO_MAINNET_FALLBACK_URL=""` disables fallback entirely (single-upstream
+// mode). Any other value overrides the default alkanode URL.
+const fallbackEnv = process.env.ESPO_MAINNET_FALLBACK_URL;
+const FALLBACK_BASE_URLS: Record<string, string> = {};
+if (fallbackEnv === undefined) {
+  FALLBACK_BASE_URLS.mainnet = ALKANODE_OYL_MAINNET;
+} else if (fallbackEnv.length > 0) {
+  FALLBACK_BASE_URLS.mainnet = fallbackEnv;
+}
+// fallbackEnv === '' → no mainnet fallback (intentional opt-out)
 
 /**
  * Well-known devnet token names — returned directly when network=devnet
