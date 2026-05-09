@@ -87,16 +87,41 @@ export async function GET(request: Request) {
     const data = await response.json();
     const tokens: any[] = data?.data?.tokens || [];
 
-    // Build a flat map: alkaneId → { name, symbol }
+    // Build name map AND a parallel price map. Espo's /get-alkanes
+    // returns priceUsd / busdPoolPriceInUsd / priceInSatoshi per token
+    // (same fields as /get-alkanes-by-address). Without this, the swap
+    // UI's USD-equivalent display falls through to derived-from-pool-TVL
+    // and shows $0.00 whenever the user doesn't already hold the token
+    // and the pools query hasn't populated TVL yet.
+    //
+    // frBTC special-case: espo derives priceUsd from the bUSD/frBTC pool
+    // which isn't peg-arbitraged, so its implied price drifts from BTC.
+    // Skip it here and let consumers fall back to the live BTC price.
     const names: Record<string, { name: string; symbol: string }> = {};
+    const prices: Record<string, { priceUsd?: number; priceInSatoshi?: number }> = {};
     for (const token of tokens) {
-      const alkaneId = `${token.id?.block || 0}:${token.id?.tx || 0}`;
-      if (alkaneId && (token.name || token.symbol)) {
+      const block = token.id?.block ?? 0;
+      const tx = token.id?.tx ?? 0;
+      const alkaneId = `${block}:${tx}`;
+      if (!alkaneId) continue;
+      if (token.name || token.symbol) {
         names[alkaneId] = { name: token.name || '', symbol: token.symbol || '' };
+      }
+      const isFrbtc = alkaneId === '32:0';
+      const rawUsd = isFrbtc ? undefined : (token.priceUsd ?? token.busdPoolPriceInUsd);
+      const rawSats = token.priceInSatoshi;
+      const priceUsd = typeof rawUsd === 'number' && rawUsd > 0
+        ? rawUsd
+        : (typeof rawUsd === 'string' && Number(rawUsd) > 0 ? Number(rawUsd) : undefined);
+      const priceInSatoshi = typeof rawSats === 'number' && rawSats > 0
+        ? rawSats
+        : (typeof rawSats === 'string' && Number(rawSats) > 0 ? Number(rawSats) : undefined);
+      if (priceUsd !== undefined || priceInSatoshi !== undefined) {
+        prices[alkaneId] = { priceUsd, priceInSatoshi };
       }
     }
 
-    const payload = { names, count: Object.keys(names).length };
+    const payload = { names, prices, count: Object.keys(names).length };
     const entry: CacheEntry = { data: payload, timestamp: now };
     fresh.set(cacheKey, entry);
     lastGood.set(cacheKey, entry);

@@ -926,18 +926,18 @@ export default function SwapShell() {
   // Get price for any token (from user currencies or derive from pools)
   const getTokenPrice = (tokenId?: string): number | undefined => {
     if (!tokenId) return undefined;
-    
+
     // Handle BTC price separately
     if (tokenId === 'btc') {
       return btcPrice;
     }
-    
+
     // Check user currencies first (most reliable)
     const cur = idToUserCurrency.get(tokenId);
     if (cur?.priceUsd && cur.priceUsd > 0) {
       return cur.priceUsd;
     }
-    
+
     // For frBTC, use BTC price
     if (tokenId === FRBTC_ALKANE_ID) {
       return btcPrice;
@@ -946,6 +946,19 @@ export default function SwapShell() {
     // For bUSD and USDT, assume $1
     if (tokenId === BUSD_ALKANE_ID || tokenId === 'usdt') {
       return 1.0;
+    }
+
+    // Espo's global price catalog (`/get-alkanes` priceUsd) — works without
+    // a wallet connection AND without depending on the pools query landing
+    // first. Without this, swap inputs for tokens the user doesn't already
+    // hold show $0.00 in the precious window between page load and the
+    // pool-TVL derivation populating.
+    const meta = tokenNamesMap?.get(tokenId);
+    if (meta?.priceUsd && meta.priceUsd > 0) {
+      return meta.priceUsd;
+    }
+    if (meta?.priceInSatoshi && meta.priceInSatoshi > 0 && btcPrice && btcPrice > 0) {
+      return (meta.priceInSatoshi / 1e8) * btcPrice;
     }
 
     // Fallback: derive from pool TVL — works without a wallet connection.
