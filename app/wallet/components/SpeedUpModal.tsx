@@ -51,6 +51,17 @@ export default function SpeedUpModal({
           // Auto-close after 2s so the user sees the success state.
           setTimeout(onClose, 2000);
         },
+        onError: (err) => {
+          // Defensive logging: surface the full shape regardless of
+          // whether the thrown thing was an Error, a WASM panic
+          // string, or a serde-wasm-bindgen object.
+          console.error('[SpeedUpModal] mutation failed:', err);
+          try {
+            console.error('[SpeedUpModal] error JSON:', JSON.stringify(err, Object.getOwnPropertyNames(err as object)));
+          } catch {
+            console.error('[SpeedUpModal] error stringify failed; raw:', err);
+          }
+        },
       },
     );
   };
@@ -117,14 +128,25 @@ export default function SpeedUpModal({
 
             {speedUp.isError && (() => {
               const err = speedUp.error as Error & { stack?: string; cause?: unknown };
-              const msg = err?.message ?? 'Speed-up failed';
+              const msg = err?.message && err.message.length > 0 ? err.message : '(empty .message)';
               const stack = err?.stack ? err.stack.slice(0, 600) : '';
               const cause = err?.cause ? `\ncause: ${String(err.cause)}` : '';
+              // Dump the raw shape too — when the WASM panics or a non-Error
+              // is thrown, .message may be empty but the object still has
+              // useful info on its own properties.
+              let rawDump = '';
+              try {
+                rawDump = JSON.stringify(err, Object.getOwnPropertyNames(err as object));
+              } catch {
+                rawDump = String(err);
+              }
               return (
                 <div className="rounded-lg p-3 mt-3 bg-red-500/10 border border-red-500/30 text-xs text-red-400 break-all whitespace-pre-wrap font-mono">
                   {msg}
                   {cause}
-                  {stack ? `\n\n${stack}` : ''}
+                  {`\nname: ${err?.name ?? '(none)'} | type: ${typeof err}`}
+                  {`\nraw: ${rawDump.slice(0, 500)}`}
+                  {stack ? `\n\nstack:\n${stack}` : ''}
                 </div>
               );
             })()}

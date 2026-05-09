@@ -71,22 +71,37 @@ export function useAtomicWrapSwapMutation() {
 
   const executeAtomicSwap = useCallback(
     async (params: AtomicWrapSwapParams) => {
+      const t0 = performance.now();
+      const stamp = (label: string) =>
+        console.log(`[atomicWrapSwap] +${(performance.now() - t0).toFixed(0)}ms ${label}`);
+
+      stamp('start');
       const config = getConfig(network);
       if (!address) throw new Error('No wallet address');
 
       const { getSignerAddressDynamic } = await import('@/lib/alkanes/helpers');
       const { buildAtomicWrapSwapProtostones } = await import('@/lib/alkanes/builders');
+      stamp('dynamic imports loaded');
 
       const wrapFeePerThousand = premiumData?.wrapFeePerThousand ?? FRBTC_WRAP_FEE_PER_1000;
       const btcSats = new BigNumber(params.btcAmount).multipliedBy(1e8).integerValue(BigNumber.ROUND_FLOOR);
       const frbtcAfterFee = btcSats.multipliedBy(1000 - wrapFeePerThousand).dividedBy(1000)
         .integerValue(BigNumber.ROUND_FLOOR).toString();
+      stamp(`fee math done (btcSats=${btcSats.toString()}, frbtcAfterFee=${frbtcAfterFee})`);
 
       // Block height via the WASM provider — the localStorage path was
       // unreliable (stale "NaN" propagating into the cellpack as
       // "Invalid edict format"). Same pattern as
       // useRemoveLiquidityMutation / useSwapMutation.
-      const deadline = (await getFutureBlockHeight(params.deadlineBlocks, provider as any)).toString();
+      // Wrap with a hard timeout so a hung WASM call surfaces visibly
+      // instead of spinning forever.
+      const deadline = await Promise.race([
+        getFutureBlockHeight(params.deadlineBlocks, provider as any).then(String),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('getFutureBlockHeight: 15s timeout')), 15_000),
+        ),
+      ]);
+      stamp(`deadline resolved (${deadline})`);
 
       const protostones = buildAtomicWrapSwapProtostones({
         factoryId: config.ALKANE_FACTORY_ID,
@@ -95,9 +110,17 @@ export function useAtomicWrapSwapMutation() {
         minOutput: params.minimumReceived || '1',
         deadline,
       });
+      stamp('protostones built');
 
-      const signerAddress = await getSignerAddressDynamic(network);
+      const signerAddress = await Promise.race([
+        getSignerAddressDynamic(network),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('getSignerAddressDynamic: 15s timeout')), 15_000),
+        ),
+      ]);
+      stamp(`signerAddress resolved (${signerAddress})`);
 
+      stamp('handing off to swapMutation.mutateAsync — wallet modal should appear next');
       return swapMutation.mutateAsync({
         sellCurrency: 'btc',
         buyCurrency: params.buyTokenId,

@@ -454,11 +454,17 @@ export function useSwapMutation() {
         const RETRY_BACKOFF_MS = [3_000, 8_000];
         let result: any;
         let attempt = 0;
+        const swapT0 = performance.now();
+        const swapStamp = (label: string) =>
+          console.log(`[swap] +${(performance.now() - swapT0).toFixed(0)}ms ${label}`);
+        swapStamp(`calling alkanesExecuteTyped (splitTransactions=${(swapData as any).splitTransactions === true})`);
         while (true) {
           try {
             result = await provider.alkanesExecuteTyped(buildExecuteOpts() as any);
+            swapStamp(`alkanesExecuteTyped returned (keys=${result ? Object.keys(result).join(',') : 'null'})`);
             break;
           } catch (err) {
+            swapStamp(`alkanesExecuteTyped threw: ${err instanceof Error ? err.message : String(err)}`);
             if (!isIndexerSyncError(err) || attempt >= RETRY_BACKOFF_MS.length) {
               throw err;
             }
