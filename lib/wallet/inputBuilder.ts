@@ -49,12 +49,29 @@ export interface SubfrostUtxo {
   /** REQUIRED for P2PKH (legacy needs full prev-tx); ignored otherwise */
   prevTxHex?: string;
   /**
-   * nSequence for the input. Defaults to bitcoinjs-lib's default
-   * (0xffffffff) when omitted. RBF callers must pass the original
-   * input's sequence so the rebuilt tx preserves locktime semantics.
+   * nSequence for the input. Defaults to 0xfffffffd (BIP125 RBF opt-in)
+   * when omitted — required so `useSpeedUpMutation` can later replace the
+   * tx (the WASM rebuilder rejects non-RBF-signaling inputs with
+   * "rbf: tx is not RBF-signaling").
+   *
+   * Pass an explicit value to override:
+   *   - 0xffffffff to opt OUT of RBF (final settlement; rare)
+   *   - The original input's sequence when rebuilding for RBF, so the
+   *     bumped child preserves the parent's BIP68 / locktime semantics
+   *     (used by useSpeedUpMutation's buildPsbtForRbf).
+   *
+   * 0xfffffffd has the BIP68 disable bit set (0x80000000), so no
+   * relative-locktime constraint is implied.
    */
   sequence?: number;
 }
+
+/**
+ * BIP125 RBF opt-in sentinel. Highest sequence value that still signals
+ * replaceability (BIP125 threshold: < 0xfffffffe). Exported so tests can
+ * assert the default and callers can reference it without magic numbers.
+ */
+export const DEFAULT_RBF_SEQUENCE = 0xfffffffd;
 
 export interface AddInputDynamicOpts {
   /** 64- or 66-char hex; normalized via toXOnlyPubKeyHex */
@@ -220,8 +237,11 @@ export function addInputDynamic(
   }
 
   const valueBig = BigInt(utxo.value);
-  // Common header — sequence is conditionally folded in via spread.
-  const seqFragment = utxo.sequence !== undefined ? { sequence: utxo.sequence } : {};
+  // Default to BIP125 RBF opt-in unless the caller explicitly set a value.
+  // Speed-up rebuilds pass `input.sequence` to preserve the original.
+  const seqFragment = {
+    sequence: utxo.sequence !== undefined ? utxo.sequence : DEFAULT_RBF_SEQUENCE,
+  };
 
   switch (type) {
     case AddressType.P2TR: {

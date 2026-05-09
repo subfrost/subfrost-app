@@ -155,6 +155,8 @@ async function sendBrowser(args: {
         // empty — scriptPubKeyHex always wins via redeemTypeFromOutput
         address: '',
         prevTxHex,
+        // sequence omitted on purpose — addInputDynamic defaults to
+        // 0xfffffffd (BIP125 RBF opt-in) so useSpeedUpMutation can RBF.
       },
       {
         taprootPubKeyXOnly: account?.taproot?.pubKeyXOnly,

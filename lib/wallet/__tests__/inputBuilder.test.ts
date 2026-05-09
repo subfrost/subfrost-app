@@ -18,6 +18,7 @@ import { ECPairFactory } from 'ecpair';
 
 import {
   AddressType,
+  DEFAULT_RBF_SEQUENCE,
   addInputDynamic,
   getAddressType,
   redeemTypeFromOutput,
@@ -389,6 +390,48 @@ describe('addInputDynamic — P2TR', () => {
 
     const tapHex = Buffer.from(psbt.data.inputs[0].tapInternalKey!).toString('hex');
     expect(tapHex).toBe(fx.xOnlyHex);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// sequence handling — RBF opt-in default + override passthrough
+// ---------------------------------------------------------------------------
+
+describe('addInputDynamic — sequence (RBF)', () => {
+  const network = bitcoin.networks.regtest;
+
+  it('defaults to DEFAULT_RBF_SEQUENCE (0xfffffffd) when sequence omitted', () => {
+    const fx = makeAddressFixture(network);
+    const psbt = new bitcoin.Psbt({ network });
+    addInputDynamic(psbt, network, utxoFor({ output: fx.p2wpkh.output }), {});
+    expect(DEFAULT_RBF_SEQUENCE).toBe(0xfffffffd);
+    expect(psbt.txInputs[0].sequence).toBe(DEFAULT_RBF_SEQUENCE);
+    // BIP125 threshold: any value < 0xfffffffe signals RBF.
+    expect(psbt.txInputs[0].sequence).toBeLessThan(0xfffffffe);
+  });
+
+  it('preserves an explicit sequence (used by useSpeedUpMutation rebuilds)', () => {
+    const fx = makeAddressFixture(network);
+    const psbt = new bitcoin.Psbt({ network });
+    addInputDynamic(
+      psbt,
+      network,
+      { ...utxoFor({ output: fx.p2wpkh.output }), sequence: 0xfdffffff },
+      {},
+    );
+    expect(psbt.txInputs[0].sequence).toBe(0xfdffffff);
+  });
+
+  it('allows opting OUT of RBF by passing 0xffffffff', () => {
+    const fx = makeAddressFixture(network);
+    const psbt = new bitcoin.Psbt({ network });
+    addInputDynamic(
+      psbt,
+      network,
+      { ...utxoFor({ output: fx.p2wpkh.output }), sequence: 0xffffffff },
+      {},
+    );
+    expect(psbt.txInputs[0].sequence).toBe(0xffffffff);
   });
 });
 
