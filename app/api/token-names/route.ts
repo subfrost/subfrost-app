@@ -20,6 +20,15 @@ const RPC_ENDPOINTS: Record<string, string> = {
   devnet: 'http://localhost:18888', // In-browser only
 };
 
+// Fallback Espo deployments hosted by alkanode — same OYL module + same REST
+// shape, so when the primary subfrost gateway has an Espo outage (verified
+// 2026-05-08, espo dev confirmed it's a Subfrost-side ops issue), the proxy
+// can degrade to this without any consumer-visible change. Mainnet only —
+// alkanode does not host testnet/signet/regtest Espo deployments.
+const FALLBACK_BASE_URLS: Record<string, string> = {
+  mainnet: 'https://oyl.alkanode.com',
+};
+
 /**
  * Well-known devnet token names — returned directly when network=devnet
  * since the devnet WASM runs in-browser and server-side can't reach it.
@@ -70,18 +79,32 @@ export async function GET(request: Request) {
   }
 
   const baseUrl = RPC_ENDPOINTS[network] || RPC_ENDPOINTS.mainnet;
+  const fallbackBase = FALLBACK_BASE_URLS[network];
 
-  try {
-    const response = await fetch(`${baseUrl}/get-alkanes`, {
+  // Try primary; if it 502s / times out / errors, try the alkanode-hosted
+  // Espo as a fallback. Both expose the same `/get-alkanes` REST contract.
+  const fetchAlkanes = async (base: string) => {
+    const resp = await fetch(`${base}/get-alkanes`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ limit, offset: 0 }),
       signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
       cache: 'no-store',
     });
+    if (!resp.ok) {
+      throw new Error(`Data API failed: ${resp.status} (${base})`);
+    }
+    return resp;
+  };
 
-    if (!response.ok) {
-      throw new Error(`Data API failed: ${response.status}`);
+  try {
+    let response: Response;
+    try {
+      response = await fetchAlkanes(baseUrl);
+    } catch (primaryErr) {
+      if (!fallbackBase) throw primaryErr;
+      console.warn(`[token-names] primary upstream failed (${primaryErr instanceof Error ? primaryErr.message : 'unknown'}); falling back to ${fallbackBase}`);
+      response = await fetchAlkanes(fallbackBase);
     }
 
     const data = await response.json();
