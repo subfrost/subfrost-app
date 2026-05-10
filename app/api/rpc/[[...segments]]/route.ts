@@ -23,19 +23,15 @@ import { NextRequest, NextResponse } from 'next/server';
 
 // All RPC endpoints point to subfrost infrastructure.
 //
-// JOURNAL ENTRY (2026-05-10): mainnet flipped from /v4/<token> to /v6/subfrost.
-// /v6/subfrost is the CDN-fronted mainnet endpoint. Benchmarked ~30× faster
-// than /v4/<token> under 27-way parallel `protorunesbyoutpoint` load
-// (0.29s wall time vs 8.7s on /v4/<token>) — the user-visible
-// "perpetual loading" window during wallet UTXO cache prewarm.
-// Other networks left on /v4/<token> — only mainnet has /v6/subfrost.
-//
-// Aggressive bursts (>~18 concurrent requests) trigger HTTP 429 rate limits,
-// which the proxy forwards to the client unchanged. The wallet cache's
-// `fetchWithRetry` (queries/account.ts) handles 429s with [0, 500, 1500]ms
-// per-call backoff, so partial-throttle scenarios still complete cleanly.
+// JOURNAL ENTRY (2026-05-10): mainnet uses /v4/subfrost (canonical).
+// Tried /v6/subfrost briefly (faster on metashrew_view but doesn't support
+// the REST sub-paths /get-all-amm-tx-history / /get-pool-swap-history that
+// the activity feed and swap history depend on; rolled back same day).
+// /v4/subfrost benchmarks ~9× faster than /v4/<token> on protorunesbyoutpoint
+// fanout (0.92s wall time for 27-way parallel vs 8.7s on /v4/<token>).
+// Other networks left on /v4/<token> — only mainnet has /v4/subfrost.
 const RPC_ENDPOINTS: Record<string, string> = {
-  mainnet: 'https://mainnet.subfrost.io/v6/subfrost',
+  mainnet: 'https://mainnet.subfrost.io/v4/subfrost',
   testnet: 'https://testnet.subfrost.io/v4/5d37098b75581792a44b9d230d48aa75',
   signet: 'https://signet.subfrost.io/v4/5d37098b75581792a44b9d230d48aa75',
   regtest: 'https://regtest.subfrost.io/v4/5d37098b75581792a44b9d230d48aa75',
@@ -46,9 +42,9 @@ const RPC_ENDPOINTS: Record<string, string> = {
 };
 
 // Batch JSON-RPC requests are more reliably handled by the explicit /jsonrpc path.
-// Mainnet uses /v6/subfrost (CDN-fronted, handles both single + batch).
+// Mainnet uses /v4/subfrost (the canonical mainnet endpoint shared by the rest of the app).
 const BATCH_RPC_ENDPOINTS: Record<string, string> = {
-  mainnet: 'https://mainnet.subfrost.io/v6/subfrost',
+  mainnet: 'https://mainnet.subfrost.io/v4/subfrost',
   testnet: 'https://testnet.subfrost.io/v4/jsonrpc',
   signet: 'https://signet.subfrost.io/v4/jsonrpc',
   regtest: 'https://regtest.subfrost.io/v4/jsonrpc',
