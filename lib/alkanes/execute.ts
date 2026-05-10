@@ -55,7 +55,8 @@
  * handle_message() returns Err on revert → atomic.commit() never called → rollback.
  */
 
-import { parseMaxVoutFromProtostones, extractPsbtBase64 } from './helpers';
+import * as bitcoin from 'bitcoinjs-lib';
+import { parseMaxVoutFromProtostones, extractPsbtBase64, getBitcoinNetwork } from './helpers';
 import type { AlkanesExecuteTypedParams } from './types';
 
 type WebProvider = import('@alkanes/ts-sdk/wasm').WebProvider;
@@ -143,6 +144,75 @@ export async function alkanesExecuteTyped(
       console.log(
         `[alkanesExecuteTyped] payment_utxos: ${clean.length} clean BTC UTXOs from prefetched cache (skipping WASM fanout)`,
       );
+    }
+  }
+
+  // PERF: prefetched_utxos — caller-supplied (outpoint, value, scriptPubKey,
+  // alkanes) map that the SDK consumes inside:
+  //   - `validate_transaction` / `build_psbt_and_fee`: skip per-UTXO
+  //     `getrawtransaction` roundtrips (PR #256).
+  //   - `select_utxos` per-outpoint `protorunesbyoutpoint` fanout
+  //     (mainnet 2026-05-09: 40s on 36-dust-UTXO wallet, second-pass
+  //     extension built on top of #256).
+  // Required by the alkanes-rs change in https://github.com/kungfuflex/alkanes-rs/pull/256
+  // and its second-pass alkanes extension; ignored by older SDKs since the
+  // fields are `#[serde(default)]` Rust-side.
+  //
+  // Every cached UTXO contributes — not just clean BTC carriers. The SDK's
+  // hot loops iterate the FULL selected set (including alkane-bearing dust
+  // and inscribed UTXOs), so anything we cache here saves a roundtrip.
+  //
+  // `alkanes` field semantics (load-bearing, mirrors Rust `Option<Vec<_>>`):
+  //   - `[]`        → Rust `Some(vec![])` → "asserted clean — do not query."
+  //   - `[{...}]`   → Rust `Some([...])`   → authoritative balances.
+  //   - omitted     → Rust `None`          → fall back to RPC for this outpoint.
+  // Every UTXO returned by the wallet UTXO cache is fully covered (dust gets
+  // a populated balance sheet, non-dust gets `[]`), so we always emit `Some`.
+  if (params.cachedUtxos?.length) {
+    try {
+      const btcNetwork = getBitcoinNetwork(params.network ?? 'mainnet');
+      let alkaneAsserted = 0;
+      const prefetched = params.cachedUtxos.map((u) => {
+        // Derive scriptPubKey from address — pure compute, no RPC.
+        // Falls through to the slow path on per-UTXO derivation failure
+        // (defensive: never let a bad address abort the whole execute).
+        if (!u.address) return null;
+        let scriptPubKeyHex: string;
+        try {
+          const script = bitcoin.address.toOutputScript(u.address, btcNetwork);
+          scriptPubKeyHex = Buffer.from(script).toString('hex');
+        } catch {
+          return null;
+        }
+        const alkanesAsserted = (u.alkanes ?? []).map((a) => ({
+          block: a.block,
+          tx: a.tx,
+          amount: a.amount.toString(),
+        }));
+        if (alkanesAsserted.length > 0) alkaneAsserted++;
+        return {
+          outpoint: `${u.txid}:${u.vout}`,
+          value: u.value,
+          script_pubkey_hex: scriptPubKeyHex,
+          alkanes: alkanesAsserted, // [] = "asserted clean" (NOT undefined)
+        };
+      }).filter((x): x is {
+        outpoint: string;
+        value: number;
+        script_pubkey_hex: string;
+        alkanes: Array<{ block: number; tx: number; amount: string }>;
+      } => x !== null);
+      if (prefetched.length > 0) {
+        options.prefetched_utxos = prefetched;
+        console.log(
+          `[alkanesExecuteTyped] prefetched_utxos: ${prefetched.length} TxOuts ` +
+          `(${alkaneAsserted} with alkane assertion) from wallet cache ` +
+          `(skips ~${prefetched.length * 2} getrawtransaction + ` +
+          `${prefetched.length} protorunesbyoutpoint roundtrips)`,
+        );
+      }
+    } catch (e) {
+      console.warn('[alkanesExecuteTyped] failed to build prefetched_utxos:', e);
     }
   }
 

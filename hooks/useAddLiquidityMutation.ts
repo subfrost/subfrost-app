@@ -506,6 +506,12 @@ export function useAddLiquidityMutation() {
           // Opt-in: SDK splits wrap+addLiquidity into a CPFP chain so each
           // tx fits under the per-tx fuel floor. See useAtomicWrapAddLiquidityMutation.
           splitTransactions: wantsSplit,
+          // Caller-supplied UTXO cache — feeds prefetched_utxos so the
+          // SDK skips its `getrawtransaction` + `protorunesbyoutpoint`
+          // fanouts. Mirrors swap / wrap / unwrap / send / removeLiquidity
+          // for consistency; the cache is already mounted via
+          // WalletStatePrewarmer at connect time.
+          cachedUtxos: utxoCache.utxos,
         });
 
         console.log('[AddLiquidity] Called alkanesExecuteTyped (browser:', isBrowserWallet, ')');

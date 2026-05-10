@@ -327,10 +327,10 @@ const en: Record<string, string> = {
   'settings.noKeystore': 'No keystore found',
   'settings.invalidPassword': 'Invalid password or decryption failed',
   'settings.advancedOptions': 'Advanced Options',
-  'settings.ignoreOrdinals': 'Ignore Ordinals',
+  'settings.ignoreOrdinals': 'Ignore Inscriptions',
   'settings.ignoreRunes': 'Ignore Runes',
-  'settings.ignoreOrdinalsDescription': 'Treat all UTXOs as spendable, ignoring any inscriptions. Disable this to protect inscription-bearing UTXOs from being spent.',
-  'settings.ignoreRunesDescription': 'Treat all UTXOs as spendable, ignoring any runes. Disable this to protect rune-bearing UTXOs from being spent.',
+  'settings.ignoreOrdinalsDescription': 'Subfrost does not index inscriptions. Do not use a wallet that holds inscriptions with this app — they may be burned as fees during transactions.',
+  'settings.ignoreRunesDescription': 'Subfrost does not index runes. Do not use a wallet that holds runes with this app — they may be burned as fees during transactions.',
 
   // Vaults
   'vaults.title': 'Defi Vaults (Preview)',

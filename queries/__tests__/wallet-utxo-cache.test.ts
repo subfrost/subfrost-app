@@ -207,6 +207,26 @@ describe('alkanesExecuteTyped consumes cachedUtxos', () => {
     // WASM uses ONLY these for fee inputs and skips its own fanout.
     expect(src).toMatch(/options\.payment_utxos\s*=\s*clean/);
   });
+
+  it('builds prefetched_utxos with the alkanes assertion field', () => {
+    // PR #256 (TxOut prefetch) was extended with caller-asserted
+    // alkane balances so the SDK's `select_utxos` can short-circuit
+    // its `protorunesbyoutpoint` fanout (~40s on dust-heavy wallets).
+    // The build site must populate `alkanes: []` for clean carriers
+    // (Rust-side `Some(vec![])` = "asserted clean — do not query")
+    // and `alkanes: [{block, tx, amount: string}]` for alkane-bearing
+    // carriers. `undefined` would mean "fall back to RPC" — the wrong
+    // semantics for in-cache outpoints.
+    expect(src).toMatch(/options\.prefetched_utxos\s*=\s*prefetched/);
+    expect(src).toMatch(/script_pubkey_hex/);
+    expect(src).toMatch(/alkanes:\s*alkanesAsserted/);
+    // Ensure amount is stringified (u128 doesn't round-trip JSON numbers
+    // > 2^53; Rust deserializes via `u128::from_str`).
+    expect(src).toMatch(/amount:\s*a\.amount\.toString\(\)/);
+    // Empty array is load-bearing — explicit comment guards against a
+    // future "simplification" that drops it to `undefined`.
+    expect(src).toMatch(/asserted clean/i);
+  });
 });
 
 describe('WalletStatePrewarmer', () => {

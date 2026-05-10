@@ -340,6 +340,39 @@ type FormattedUtxo = {
   confirmations: number;
 };
 
+// ---------------------------------------------------------------------------
+// Wallet-policy constants
+// ---------------------------------------------------------------------------
+
+/**
+ * The ordinals_strategy we send to the alkanes-rs SDK for ALL wallet types.
+ *
+ * Subfrost does not index inscriptions or runes. Per the SDK maintainer's
+ * direction (Discord, 2026-05-09), we accept a "no inscriptions / no runes"
+ * policy app-wide:
+ *
+ *   "We don't have ord. Don't use a wallet with inscriptions in it, please.
+ *    Or any of the other crap."
+ *
+ * Setting `'burn'` makes the SDK's `OrdinalsHandler::check_utxos_for_inscriptions`
+ * return early before any per-UTXO `ord_output` RPC, removing 32+ sequential
+ * roundtrips from the swap critical path between user-click and signing-modal
+ * popup (empirically ~6-9s of the 16-17s observed for a 32-UTXO wallet).
+ *
+ * The Send/Swap UI surfaces this policy as a locked "I confirm no inscriptions
+ * or runes in this wallet" disclosure (see `i18n/en.ts settings.ignoreOrdinals*`)
+ * so the user can't claim they weren't told. The `restoreMnemonicWarning`
+ * already covers keystore-imported wallets; the disclosure extends that to
+ * browser-extension wallets.
+ *
+ * Risk: a user holding inscriptions on a UTXO that gets selected for fees
+ * would lose the inscription. The keystore path has accepted this risk since
+ * its inception (`'burn'` was already its default). With this policy aligned
+ * across both wallet types, the SDK never inspects inscription state at all
+ * during execute — every selected UTXO is treated as spendable.
+ */
+const ORDINALS_STRATEGY: 'burn' | 'exclude' | 'preserve' = 'burn';
+
 // Storage keys
 const STORAGE_KEYS = {
   ENCRYPTED_KEYSTORE: 'subfrost_encrypted_keystore',
@@ -895,10 +928,8 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
         btcChangeAddress: taproot,
         alkanesChangeAddress: taproot,
         shouldProtectTaproot: false,
-        // Keystore never holds inscriptions — skip the ord lookup entirely.
-        // 'burn' makes `check_utxos_for_inscriptions_with_provider` return
-        // early before any per-UTXO ord_outputs RPC call.
-        defaultOrdinalsStrategy: 'burn',
+        // App-wide policy — see ORDINALS_STRATEGY definition for rationale.
+        defaultOrdinalsStrategy: ORDINALS_STRATEGY,
         walletType: 'keystore',
       };
     }
@@ -930,11 +961,12 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       // BTC fees from. Single-address wallets must spend taproot UTXOs for
       // both alkanes and fees, so reserving them would block fee selection.
       shouldProtectTaproot: isDualAddress,
-      // Browser wallets opt into split-tx by default — SDK's alkane-aware
-      // `build_split_psbt` keeps both inscriptions and alkanes intact even
-      // when they share a UTXO. Per-call overrides at the call site still
-      // win if some operation needs different semantics.
-      defaultOrdinalsStrategy: 'preserve',
+      // App-wide policy — see ORDINALS_STRATEGY definition for rationale.
+      // Previously 'preserve' here. Flipped to 'burn' (via ORDINALS_STRATEGY)
+      // 2026-05-09 per SDK maintainer direction. The Send/Swap UI surfaces
+      // a user-facing disclosure (i18n: settings.ignoreOrdinals*) so users
+      // explicitly acknowledge the policy before the modal pops.
+      defaultOrdinalsStrategy: ORDINALS_STRATEGY,
       walletType: 'browser',
       browserWalletId: browserWallet?.info?.id,
     };
