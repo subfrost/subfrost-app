@@ -60,6 +60,26 @@ export async function GET(request: Request) {
     let data: any;
     try {
       data = await fetchPools(baseUrl);
+
+      // Subfrost upstream sometimes returns 200 OK with `total: 0` even when
+      // pools exist (indexer drift, partial outage). On mainnet specifically,
+      // the alkanode mirror is authoritative — if primary returns suspiciously
+      // empty AND a fallback is configured, fall through to it.
+      const total = Number(data?.data?.total ?? 0);
+      if (fallbackBase && total === 0) {
+        console.warn(`[pools/cached] primary returned 0 pools (likely indexer drift); checking fallback ${fallbackBase}`);
+        try {
+          const fallbackData = await fetchPools(fallbackBase);
+          const fallbackTotal = Number(fallbackData?.data?.total ?? 0);
+          if (fallbackTotal > total) {
+            console.warn(`[pools/cached] fallback returned ${fallbackTotal} pools; using fallback data`);
+            data = fallbackData;
+          }
+        } catch (fallbackErr) {
+          // Fallback failed — keep primary's empty response rather than 502.
+          console.warn(`[pools/cached] fallback also failed: ${fallbackErr instanceof Error ? fallbackErr.message : 'unknown'}`);
+        }
+      }
     } catch (primaryErr) {
       if (!fallbackBase) throw primaryErr;
       console.warn(`[pools/cached] primary failed (${primaryErr instanceof Error ? primaryErr.message : 'unknown'}); falling back to ${fallbackBase}`);
