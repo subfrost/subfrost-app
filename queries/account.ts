@@ -527,6 +527,56 @@ export function walletUtxoCacheQueryOptions(deps: WalletUtxoCacheDeps) {
         }
       }
 
+      // Step 2b: alkanode fallback for the wallet UTXO cache.
+      //
+      // Same indexer-drift signature PR #112 patches in the balance-display
+      // path: dust UTXOs exist but the per-outpoint fanout came back empty
+      // for ALL of them. Without this, the swap path reads the empty cache
+      // and reports "Insufficient alkanes: have 0" even though the user's
+      // balance display correctly shows the alkane (because the display
+      // path has its own alkanode fallback).
+      //
+      // Alkanode returns address-aggregated balances, but the swap path's
+      // SDK consumer (`select_utxos`) only checks "is there a UTXO whose
+      // recorded alkane balance covers the request" — it doesn't care which
+      // dust outpoint carries the balance. So we credit the ENTIRE balance
+      // for each token to the FIRST dust UTXO at each address. The SDK
+      // picks that UTXO, and on broadcast the real on-chain state is
+      // resolved by the indexer (which by then will have caught up; the
+      // cache is just a hint for selection, not a source of truth).
+      //
+      // Skipped on non-mainnet networks. SoT-1 still holds: alkanode is
+      // consulted only when subfrost has zero data.
+      if (alkaneMap.size === 0 && dustUtxos.length > 0 && deps.network === 'mainnet') {
+        const fallbackByAddress = await Promise.all(
+          addresses.map((addr) => tryAlkanodeAlkaneBalances(addr).then((res) => ({ addr, res }))),
+        );
+        const totalFallbackEntries = fallbackByAddress.reduce(
+          (sum, { res }) => sum + (res?.length ?? 0),
+          0,
+        );
+        if (totalFallbackEntries > 0) {
+          console.warn(
+            `[walletUtxoCache] subfrost returned 0 alkanes for ${dustUtxos.length} dust UTXOs; using alkanode fallback (${totalFallbackEntries} entries across ${fallbackByAddress.length} addresses)`,
+          );
+          // Credit each address's alkanode balances to the first dust UTXO
+          // belonging to that address. The SDK's selector treats the cache
+          // as a hint about where balances live; the on-chain truth is
+          // resolved at submit time, so any dust UTXO is a valid hint.
+          for (const { addr, res } of fallbackByAddress) {
+            if (!res || res.length === 0) continue;
+            const carrier = dustUtxos.find((u) => u.address === addr);
+            if (!carrier) continue;
+            const alkanes: Array<{ block: number; tx: number; amount: bigint }> = res.map((entry) => ({
+              block: Number(entry.alkaneId.block),
+              tx: Number(entry.alkaneId.tx),
+              amount: BigInt(entry.balance),
+            }));
+            alkaneMap.set(`${carrier.txid}:${carrier.vout}`, alkanes);
+          }
+        }
+      }
+
       // Step 3: assemble lookups.
       const utxos: CachedUtxo[] = allUtxos.map((u) => ({
         txid: u.txid,
