@@ -14,7 +14,7 @@
  * Changed to check both: `result.alkanes || result.data` and `entry.amount || entry.balance`.
  */
 
-import { queryOptions } from '@tanstack/react-query';
+import { queryOptions, keepPreviousData } from '@tanstack/react-query';
 import { queryKeys } from './keys';
 import { KNOWN_TOKENS } from '@/lib/alkanes-client';
 import { getRpcUrl } from '@/utils/getConfig';
@@ -1145,6 +1145,11 @@ export function alkaneBalanceQueryOptions(deps: AlkaneBalanceDeps) {
     refetchOnMount: true,
     refetchOnWindowFocus: false,
     refetchInterval: (deps.network === 'devnet' || deps.network === 'regtest-local' || deps.network === 'qubitcoin-regtest') ? 5_000 : undefined,
+    // Keep the previous fetch's data visible while a refetch is in flight.
+    // Without this, HeightPoller invalidation (every block) sets data to undefined
+    // mid-refetch, the consumer falls through to `?? []`, and balances visibly
+    // disappear and reappear once per block.
+    placeholderData: keepPreviousData,
     retry: 3,
     retryDelay: (attempt: number) => Math.min(1000 * 2 ** attempt, 10000),
     queryFn: async () => {

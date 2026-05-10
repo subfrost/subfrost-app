@@ -666,7 +666,7 @@ describe('Cross-cutting: error handling patterns', () => {
 describe('Cross-cutting: React Query caching', () => {
   it('useEnrichedWalletData uses queryOptions from @tanstack/react-query', () => {
     const querySrc = readSrc('queries/account.ts');
-    expect(querySrc).toContain("import { queryOptions } from '@tanstack/react-query'");
+    expect(querySrc).toMatch(/import\s*{[^}]*\bqueryOptions\b[^}]*}\s*from\s*['"]@tanstack\/react-query['"]/);
   });
 
   it('useTransactionHistory uses useInfiniteQuery from @tanstack/react-query', () => {
