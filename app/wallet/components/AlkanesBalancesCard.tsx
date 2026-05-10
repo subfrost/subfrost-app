@@ -415,10 +415,30 @@ export default function AlkanesBalancesCard({ onSendAlkane }: AlkanesBalancesCar
                               const meta = positionMeta[alkane.alkaneId];
                               return `${meta.depositTokenName} ${alkane.name}`;
                             }
-                            return alkane.name;
+                            // METHANE convention: prefer symbol as title (e.g. "METHANE")
+                            // and fall back to name then ID. The `Token X:Y` placeholder
+                            // (set in queries/account.ts when no on-chain name is found)
+                            // is treated as no-name so the alkaneId becomes the title.
+                            const isPlaceholderName =
+                              !alkane.name || alkane.name.startsWith('Token ') || /^\d+:\d+$/.test(alkane.name);
+                            if (alkane.symbol) return alkane.symbol;
+                            if (!isPlaceholderName) return alkane.name;
+                            return alkane.alkaneId;
                           })()}
                         </div>
-                        <div className="text-[10px] text-[color:var(--sf-text)]/40 truncate">{alkane.symbol ? `${alkane.symbol} · ` : ''}{alkane.alkaneId}</div>
+                        <div className="text-[10px] text-[color:var(--sf-text)]/40 truncate">
+                          {(() => {
+                            // METHANE convention: description shows "<name> - <id>" (e.g. "CH4 - 2:16").
+                            // Skip the leading name when it's the "Token X:Y" placeholder or matches
+                            // the symbol — both would just duplicate information.
+                            const isPlaceholderName =
+                              !alkane.name || alkane.name.startsWith('Token ') || /^\d+:\d+$/.test(alkane.name);
+                            if (alkane.name && !isPlaceholderName && alkane.name !== alkane.symbol) {
+                              return `${alkane.name} - ${alkane.alkaneId}`;
+                            }
+                            return alkane.alkaneId;
+                          })()}
+                        </div>
                       </div>
                     </div>
                     <div className="text-right shrink-0 ml-2">
