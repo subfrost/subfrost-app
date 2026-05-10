@@ -73,10 +73,11 @@ describe('waitForIndexerSync', () => {
     });
   });
 
-  it('polls until lag resolves to within maxLagBlocks (default 1)', async () => {
+  it('polls until lag === 0 (default — strict)', async () => {
     mockFetchSequence([
-      { metashrew: 98, bitcoind: 100 }, // lag 2 — keep waiting
-      { metashrew: 99, bitcoind: 100 }, // lag 1 — done (within default tolerance)
+      { metashrew: 98, bitcoind: 100 }, // lag 2
+      { metashrew: 99, bitcoind: 100 }, // lag 1
+      { metashrew: 100, bitcoind: 100 }, // lag 0 — done
     ]);
     const onProgress = vi.fn();
     const result = await waitForIndexerSync({
@@ -84,37 +85,38 @@ describe('waitForIndexerSync', () => {
       onProgress,
       intervalMs: 1, // fast for tests
     });
-    expect(result.lag).toBe(1);
-    expect(onProgress).toHaveBeenCalledTimes(2);
+    expect(result.lag).toBe(0);
+    expect(onProgress).toHaveBeenCalledTimes(3);
     expect(onProgress.mock.calls[0][0].lag).toBe(2);
     expect(onProgress.mock.calls[1][0].lag).toBe(1);
+    expect(onProgress.mock.calls[2][0].lag).toBe(0);
   });
 
-  it('honors maxLagBlocks=0 (strict — wait until lag === 0)', async () => {
+  it('honors maxLagBlocks=2 (caller tolerates lag — used when SDK has its own per-UTXO filter)', async () => {
     mockFetchSequence([
-      { metashrew: 99, bitcoind: 100 }, // lag 1 — keep waiting
-      { metashrew: 100, bitcoind: 100 }, // lag 0 — done
+      { metashrew: 95, bitcoind: 100 }, // lag 5 — keep waiting
+      { metashrew: 98, bitcoind: 100 }, // lag 2 — within tolerance
     ]);
     const onProgress = vi.fn();
     const result = await waitForIndexerSync({
       network: 'mainnet',
       onProgress,
       intervalMs: 1,
-      maxLagBlocks: 0,
+      maxLagBlocks: 2,
     });
-    expect(result.lag).toBe(0);
+    expect(result.lag).toBe(2);
     expect(onProgress).toHaveBeenCalledTimes(2);
   });
 
-  it('returns immediately when lag <= maxLagBlocks (default tolerates 1)', async () => {
-    mockFetchSequence([{ metashrew: 99, bitcoind: 100 }]); // lag 1
+  it('returns immediately when lag === 0 on first poll', async () => {
+    mockFetchSequence([{ metashrew: 100, bitcoind: 100 }]);
     const onProgress = vi.fn();
     const result = await waitForIndexerSync({
       network: 'mainnet',
       onProgress,
       intervalMs: 100,
     });
-    expect(result.lag).toBe(1);
+    expect(result.lag).toBe(0);
     expect(onProgress).toHaveBeenCalledTimes(1);
   });
 

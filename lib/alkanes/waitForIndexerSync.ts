@@ -1,19 +1,7 @@
 /**
- * Poll metashrew + bitcoind heights until metashrew catches up
- * within `maxLagBlocks` (default 1). Used by every alkane mutation hook
- * in place of the old "Indexer catching up — try again in a moment"
- * hard-throw.
- *
- * Why tolerate 1 block of lag by default:
- *   - Mainnet metashrew indexes a new block ~10–60s after bitcoind
- *     mines it. The "lag === 1" state is the *normal* steady state
- *     between block landing and indexing.
- *   - alkanes_simulate at metashrew's view is fully consistent at its
- *     current height; quotes/reserves are 1-block-old at worst, which
- *     is correct for building a tx that'll mine into the *next* block.
- *   - With strict lag === 0 the entire app stalled for several minutes
- *     after each mainnet block while metashrew caught up. Confirmed
- *     2026-05-10 with `bn14ngq13` test loop.
+ * Poll metashrew + bitcoind heights until metashrew has caught up. Used
+ * by every alkane mutation hook in place of the old "Indexer catching
+ * up — try again in a moment" hard-throw.
  *
  * Why polling at the app layer rather than relying on the WASM SDK's
  * internal `waitForIndexer`:
@@ -23,6 +11,20 @@
  *   - The app-layer wait is unbounded (caller-cancellable), reports
  *     incremental progress, and proceeds automatically the moment
  *     sync resolves.
+ *
+ * Why we no longer need to hard-block on full sync:
+ *   - Most callers (swap, send-btc, send-alkane, addLP) pass
+ *     `max_indexed_height = currentMetashrewHeight` into the SDK so
+ *     `select_utxos` per-UTXO skips outpoints metashrew hasn't indexed
+ *     yet (alkane balance sheets are immutable per-outpoint, so any
+ *     UTXO at height ≤ max_indexed_height is safe to spend). That makes
+ *     the *full-sync* wait moot for the swap path: even with esplora
+ *     1–2 blocks ahead of metashrew, the SDK only picks UTXOs the
+ *     indexer can introspect.
+ *   - This file is kept for surfaces that genuinely need lag === 0:
+ *     post-broadcast confirmation polling, balance refreshes after a
+ *     mined block, etc. Those callers pass `maxLagBlocks: 0` (the
+ *     default).
  *
  * Skip on local networks (devnet/regtest) — the user mines blocks
  * manually there, so a sync gap means "we're paused waiting for you
@@ -50,10 +52,10 @@ export interface WaitForIndexerOpts {
   /** Poll cadence. Default 4s — matches `syncStatusQueryOptions`'s
    *  `refetchInterval` so we don't out-poll the rest of the app. */
   intervalMs?: number;
-  /** Maximum tolerated metashrew-bitcoind lag, in blocks. Default 1 —
-   *  the steady-state delay between bitcoind mining a block and
-   *  metashrew finishing its index of that block. Pass 0 only if you
-   *  *strictly* need state at the latest block. */
+  /** Maximum tolerated metashrew-bitcoind lag, in blocks. Default 0 —
+   *  callers that have an alternative correctness mechanism (e.g. the
+   *  SDK's per-UTXO `max_indexed_height` filter) can pass a higher
+   *  value to avoid blocking on steady-state indexer lag. */
   maxLagBlocks?: number;
 }
 
@@ -81,12 +83,12 @@ async function fetchHeights(network: string, signal?: AbortSignal): Promise<Sync
 }
 
 /**
- * Resolves once metashrew lag <= maxLagBlocks (default 1). Calls
- * `onProgress` on every poll (including the first). Returns immediately
- * on local networks. Throws on signal abort.
+ * Resolves once metashrew lag <= maxLagBlocks (default 0 — strict).
+ * Calls `onProgress` on every poll (including the first). Returns
+ * immediately on local networks. Throws on signal abort.
  */
 export async function waitForIndexerSync(opts: WaitForIndexerOpts): Promise<SyncProgress> {
-  const { network, onProgress, signal, intervalMs = 4_000, maxLagBlocks = 1 } = opts;
+  const { network, onProgress, signal, intervalMs = 4_000, maxLagBlocks = 0 } = opts;
   if (LOCAL_NETWORKS.has(network)) {
     // Local networks: caller is responsible for mining; never block.
     return { metashrewHeight: 0, bitcoindHeight: 0, lag: 0 };

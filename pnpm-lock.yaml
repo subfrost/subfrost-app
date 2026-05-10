@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       '@alkanes/ts-sdk':
-        specifier: https://pkg.alkanes.build/dist/@alkanes/ts-sdk?v=0.1.5-e6220ff
-        version: https://pkg.alkanes.build/dist/@alkanes/ts-sdk?v=0.1.5-e6220ff(@types/node@20.19.37)
+        specifier: https://pkg.alkanes.build/dist/@alkanes/ts-sdk?v=0.1.5-bab8c3d
+        version: https://pkg.alkanes.build/dist/@alkanes/ts-sdk?v=0.1.5-bab8c3d(@types/node@20.19.37)
       '@bitcoinerlab/secp256k1':
         specifier: ^1.2.0
         version: 1.2.0
@@ -183,9 +183,9 @@ packages:
   '@adobe/css-tools@4.4.4':
     resolution: {integrity: sha512-Elp+iwUx5rN5+Y8xLt5/GRoG20WGoDCQ/1Fb+1LiGtvwbDavuSk0jhD/eZdckHAuzcDzccnkv+rEjyWfRx18gg==}
 
-  '@alkanes/ts-sdk@https://pkg.alkanes.build/dist/@alkanes/ts-sdk?v=0.1.5-e6220ff':
-    resolution: {tarball: https://pkg.alkanes.build/dist/@alkanes/ts-sdk?v=0.1.5-e6220ff}
-    version: 0.1.5-e6220ff
+  '@alkanes/ts-sdk@https://pkg.alkanes.build/dist/@alkanes/ts-sdk?v=0.1.5-bab8c3d':
+    resolution: {tarball: https://pkg.alkanes.build/dist/@alkanes/ts-sdk?v=0.1.5-bab8c3d}
+    version: 0.1.5-bab8c3d
     hasBin: true
     peerDependencies:
       '@oyl/sdk': '*'
@@ -4080,7 +4080,7 @@ snapshots:
 
   '@adobe/css-tools@4.4.4': {}
 
-  '@alkanes/ts-sdk@https://pkg.alkanes.build/dist/@alkanes/ts-sdk?v=0.1.5-e6220ff(@types/node@20.19.37)':
+  '@alkanes/ts-sdk@https://pkg.alkanes.build/dist/@alkanes/ts-sdk?v=0.1.5-bab8c3d(@types/node@20.19.37)':
     dependencies:
       '@bitcoinerlab/secp256k1': 1.2.0
       bip32: 4.0.0
