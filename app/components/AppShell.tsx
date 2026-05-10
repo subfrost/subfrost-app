@@ -6,7 +6,12 @@ import Footer from '@/app/components/Footer';
 import FloatingActions from '@/app/components/FloatingActions';
 import MobileBottomNav from '@/app/components/MobileBottomNav';
 import DemoBanner from '@/app/components/DemoBanner';
-import SplashScreen from '@/app/components/SplashScreen';
+// 2026-05-10 — Removed SplashScreen. The animated canvas snowflake +
+// progress bar tied dismiss to `pageLoaded` (document.readyState ===
+// 'complete'), which blocks until every initial fetch resolves. When
+// upstream subfrost.io is 502'ing, the splash sat at 75% for the full
+// 5s safety timeout on every page load. Per user request: brand identity
+// is just the SUBFROST wordmark in the Header — no separate loader.
 import ConnectWalletModal from '@/app/components/ConnectWalletModal';
 import { useWallet } from '@/context/WalletContext';
 
@@ -38,7 +43,6 @@ function PendingTxSync() {
 export default function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="sf-bg min-h-dvh relative flex flex-col">
-      <SplashScreen />
       <Header />
       <DemoBanner />
       <main className="relative flex-1 flex flex-col min-h-0">
