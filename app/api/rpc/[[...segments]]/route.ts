@@ -52,9 +52,18 @@ const RPC_ENDPOINTS: Record<string, string> = {
 };
 
 // Per-network metashrew-only endpoint. When set for a network, JSON-RPC
-// requests with method `metashrew_view` or `metashrew_height` route here
-// instead of `RPC_ENDPOINTS[network]`. Other methods (bitcoin_*, alkanes_*,
-// esplora_*) and REST sub-paths still go through the gateway endpoint.
+// requests with method `metashrew_view` route here instead of
+// `RPC_ENDPOINTS[network]` — that's the per-outpoint fanout used by the
+// wallet cache prewarm. Other methods (including `metashrew_height`,
+// `bitcoin_*`, `alkanes_*`, `esplora_*`) and REST sub-paths still go
+// through the gateway endpoint.
+//
+// `metashrew_height` deliberately stays on the gateway (NOT here) because
+// the SDK's `WebProvider::sync` polls it every ~500ms while waiting for
+// the indexer to catch up — that polling rate trips /v6/subfrost's burst
+// rate limit and the swap aborts with HTTP 429. The gateway is slower per
+// call but doesn't rate-limit, which matters more for a poll loop than
+// for a single height check.
 //
 // Mainnet uses /v6/subfrost which is metashrew-sticky and significantly faster
 // for the wallet cache prewarm fanout. Other networks left undefined (no
@@ -101,13 +110,23 @@ function pickEndpoint(body: any, network: string) {
     return BATCH_RPC_ENDPOINTS[network] || BATCH_RPC_ENDPOINTS.regtest;
   }
 
-  // Single requests: route metashrew_view + metashrew_height to the dedicated
-  // metashrew endpoint when the network has one configured. Everything else
-  // (bitcoin_*, alkanes_*, esplora_*) goes to the gateway endpoint.
+  // Single requests: route metashrew_view to the dedicated metashrew endpoint
+  // when the network has one configured (the perf-critical fanout path).
+  // Everything else — including metashrew_height — routes to the gateway.
+  //
+  // metashrew_height EXCLUSION rationale (2026-05-10): the SDK's
+  // `WebProvider::sync` polls metashrew_height every ~500ms while waiting
+  // for the indexer to catch up to bitcoind (up to 60 attempts = 30s).
+  // /v6/subfrost rate-limits aggressive bursts (HTTP 429), and the SDK's
+  // poll loop trips that limit reliably during 1-block lag windows. The
+  // 429 propagates as "Network error: HTTP error: 429" and the swap
+  // aborts. The gateway URL doesn't rate-limit; metashrew_height is a
+  // cheap call there. So we keep the perf benefit on the heavy
+  // metashrew_view path while keeping sync polling reliable.
   const method = typeof body?.method === 'string' ? body.method : '';
-  const isMetashrew = method === 'metashrew_view' || method === 'metashrew_height';
+  const isStickyMetashrew = method === 'metashrew_view';
   const metashrewUrl = METASHREW_RPC_ENDPOINTS[network];
-  if (isMetashrew && metashrewUrl) {
+  if (isStickyMetashrew && metashrewUrl) {
     return metashrewUrl;
   }
 
