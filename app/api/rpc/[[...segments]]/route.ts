@@ -21,9 +21,21 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 
-// All RPC endpoints point to subfrost infrastructure
+// All RPC endpoints point to subfrost infrastructure.
+//
+// JOURNAL ENTRY (2026-05-10): mainnet flipped from /v4/<token> to /v6/subfrost.
+// /v6/subfrost is the CDN-fronted mainnet endpoint. Benchmarked ~30× faster
+// than /v4/<token> under 27-way parallel `protorunesbyoutpoint` load
+// (0.29s wall time vs 8.7s on /v4/<token>) — the user-visible
+// "perpetual loading" window during wallet UTXO cache prewarm.
+// Other networks left on /v4/<token> — only mainnet has /v6/subfrost.
+//
+// Aggressive bursts (>~18 concurrent requests) trigger HTTP 429 rate limits,
+// which the proxy forwards to the client unchanged. The wallet cache's
+// `fetchWithRetry` (queries/account.ts) handles 429s with [0, 500, 1500]ms
+// per-call backoff, so partial-throttle scenarios still complete cleanly.
 const RPC_ENDPOINTS: Record<string, string> = {
-  mainnet: 'https://mainnet.subfrost.io/v4/5d37098b75581792a44b9d230d48aa75',
+  mainnet: 'https://mainnet.subfrost.io/v6/subfrost',
   testnet: 'https://testnet.subfrost.io/v4/5d37098b75581792a44b9d230d48aa75',
   signet: 'https://signet.subfrost.io/v4/5d37098b75581792a44b9d230d48aa75',
   regtest: 'https://regtest.subfrost.io/v4/5d37098b75581792a44b9d230d48aa75',
@@ -33,9 +45,10 @@ const RPC_ENDPOINTS: Record<string, string> = {
   oylnet: 'https://regtest.subfrost.io/v4/5d37098b75581792a44b9d230d48aa75',
 };
 
-// Batch JSON-RPC requests are more reliably handled by the explicit /jsonrpc path
+// Batch JSON-RPC requests are more reliably handled by the explicit /jsonrpc path.
+// Mainnet uses /v6/subfrost (CDN-fronted, handles both single + batch).
 const BATCH_RPC_ENDPOINTS: Record<string, string> = {
-  mainnet: 'https://mainnet.subfrost.io/v4/jsonrpc',
+  mainnet: 'https://mainnet.subfrost.io/v6/subfrost',
   testnet: 'https://testnet.subfrost.io/v4/jsonrpc',
   signet: 'https://signet.subfrost.io/v4/jsonrpc',
   regtest: 'https://regtest.subfrost.io/v4/jsonrpc',
@@ -233,7 +246,10 @@ export async function POST(
     const method = Array.isArray(body) ? 'batch' : body?.method;
     console.log(`[RPC Proxy] ${method} -> ${targetUrl}`);
 
-    // Fallback endpoint for mainnet when primary hits metashrew-unwrap errors
+    // Fallback endpoint for mainnet when primary hits metashrew-unwrap errors.
+    // Mainnet primary is /v4/subfrost (faster for metashrew_view fanout) but it
+    // returns metashrew-unwrap routing errors on metashrew_height — the fallback
+    // /v4/jsonrpc handles those reliably.
     const FALLBACK_ENDPOINTS: Record<string, string> = {
       mainnet: 'https://mainnet.subfrost.io/v4/jsonrpc',
       testnet: 'https://testnet.subfrost.io/v4/jsonrpc',
