@@ -49,7 +49,7 @@
     "test:pw:all": "npx playwright test"
   },
   "dependencies": {
-    "@alkanes/ts-sdk": "https://pkg.alkanes.build/dist/@alkanes/ts-sdk?v=0.1.5-138a9cf",
+    "@alkanes/ts-sdk": "https://pkg.alkanes.build/dist/@alkanes/ts-sdk?v=0.1.5-e6220ff",
     "@bitcoinerlab/secp256k1": "^1.2.0",
     "@bprogress/next": "^3.2.12",
     "@noble/ciphers": "^2.2.0",
