@@ -23,13 +23,23 @@ import { NextRequest, NextResponse } from 'next/server';
 
 // All RPC endpoints point to subfrost infrastructure.
 //
-// JOURNAL ENTRY (2026-05-10): mainnet uses /v4/subfrost (canonical).
-// Tried /v6/subfrost briefly (faster on metashrew_view but doesn't support
-// the REST sub-paths /get-all-amm-tx-history / /get-pool-swap-history that
-// the activity feed and swap history depend on; rolled back same day).
-// /v4/subfrost benchmarks ~9× faster than /v4/<token> on protorunesbyoutpoint
-// fanout (0.92s wall time for 27-way parallel vs 8.7s on /v4/<token>).
-// Other networks left on /v4/<token> — only mainnet has /v4/subfrost.
+// JOURNAL ENTRY (2026-05-10): mainnet dual-routes by method.
+// Per @flex: /v6/subfrost is JSON-RPC-only with sticky metashrew (perf),
+// while /v4/subfrost handles legacy REST sub-paths + the rest of the
+// JSON-RPC gateway (bitcoin RPC, alkanes_*, esplora_*).
+//
+// Routing matrix for mainnet:
+//   - metashrew_view, metashrew_height       → /v6/subfrost (sticky, ~30× faster)
+//   - REST sub-paths (/get-all-amm-tx-history etc.) → /v4/subfrost (data API)
+//   - All other JSON-RPC                      → /v4/subfrost (gateway)
+//
+// /v6/subfrost benefit: 27-way parallel protorunesbyoutpoint fanout completes
+// in ~0.18-0.29s wall time vs 0.92s on /v4/subfrost vs 8.7s on /v4/<token>.
+// /v6/subfrost rate-limits aggressive bursts (HTTP 429) but the wallet cache's
+// fetchWithRetry handles those with [0, 500, 1500]ms backoff.
+//
+// Other networks (testnet/signet/regtest) stay on /v4/<token> — only mainnet
+// has the dual-endpoint split.
 const RPC_ENDPOINTS: Record<string, string> = {
   mainnet: 'https://mainnet.subfrost.io/v4/subfrost',
   testnet: 'https://testnet.subfrost.io/v4/5d37098b75581792a44b9d230d48aa75',
@@ -41,8 +51,22 @@ const RPC_ENDPOINTS: Record<string, string> = {
   oylnet: 'https://regtest.subfrost.io/v4/5d37098b75581792a44b9d230d48aa75',
 };
 
+// Per-network metashrew-only endpoint. When set for a network, JSON-RPC
+// requests with method `metashrew_view` or `metashrew_height` route here
+// instead of `RPC_ENDPOINTS[network]`. Other methods (bitcoin_*, alkanes_*,
+// esplora_*) and REST sub-paths still go through the gateway endpoint.
+//
+// Mainnet uses /v6/subfrost which is metashrew-sticky and significantly faster
+// for the wallet cache prewarm fanout. Other networks left undefined (no
+// override → use the gateway URL for everything).
+const METASHREW_RPC_ENDPOINTS: Record<string, string | undefined> = {
+  mainnet: 'https://mainnet.subfrost.io/v6/subfrost',
+};
+
 // Batch JSON-RPC requests are more reliably handled by the explicit /jsonrpc path.
-// Mainnet uses /v4/subfrost (the canonical mainnet endpoint shared by the rest of the app).
+// Mainnet batches go through the gateway since they may contain mixed methods
+// (a future enhancement could split batches by method, but isn't worth the
+// complexity until profiling shows it matters).
 const BATCH_RPC_ENDPOINTS: Record<string, string> = {
   mainnet: 'https://mainnet.subfrost.io/v4/subfrost',
   testnet: 'https://testnet.subfrost.io/v4/jsonrpc',
@@ -69,9 +93,25 @@ if (restFallbackEnv === undefined) {
 
 function pickEndpoint(body: any, network: string) {
   const isBatch = Array.isArray(body);
-  const single = RPC_ENDPOINTS[network] || RPC_ENDPOINTS.regtest;
-  const batch = BATCH_RPC_ENDPOINTS[network] || BATCH_RPC_ENDPOINTS.regtest;
-  return isBatch ? batch : single;
+
+  // Batch requests don't get method-level routing — they may contain mixed
+  // methods, and splitting batches client-side is more complexity than the
+  // perf delta justifies. Use the gateway endpoint for batches.
+  if (isBatch) {
+    return BATCH_RPC_ENDPOINTS[network] || BATCH_RPC_ENDPOINTS.regtest;
+  }
+
+  // Single requests: route metashrew_view + metashrew_height to the dedicated
+  // metashrew endpoint when the network has one configured. Everything else
+  // (bitcoin_*, alkanes_*, esplora_*) goes to the gateway endpoint.
+  const method = typeof body?.method === 'string' ? body.method : '';
+  const isMetashrew = method === 'metashrew_view' || method === 'metashrew_height';
+  const metashrewUrl = METASHREW_RPC_ENDPOINTS[network];
+  if (isMetashrew && metashrewUrl) {
+    return metashrewUrl;
+  }
+
+  return RPC_ENDPOINTS[network] || RPC_ENDPOINTS.regtest;
 }
 
 export async function POST(
