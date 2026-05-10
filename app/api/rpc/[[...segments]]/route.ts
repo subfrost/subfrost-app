@@ -494,6 +494,49 @@ export async function POST(
       }
     }
 
+    // alkanes_* retry on transient gateway errors. The /v4/subfrost gateway
+    // returns transient JSON-RPC errors (~3-7% of bursts) on
+    // alkanes_protorunesbyoutpoint and friends — "metashrew-unwrap" /
+    // "error decoding response body" / similar non-deterministic signatures.
+    // Each failed call cascades through the wallet cache's fetchWithRetry
+    // (3× per outpoint) and, if even one outpoint exhausts retries, blanks
+    // the whole alkane balance display. This block adds a server-side retry
+    // (up to 2 extra attempts, ~100ms backoff) so transient errors don't
+    // reach the client. If retries are also exhausted we forward the last
+    // response as-is (the client cache will retry, and Layer 2's alkanode
+    // fallback in queries/account.ts catches the steady-state empty case).
+    {
+      const isAlkanesRpc = !Array.isArray(body) &&
+        typeof body?.method === 'string' &&
+        body.method.startsWith('alkanes_');
+      const upstreamFailed = !response.ok || !!data?.error;
+      if (isAlkanesRpc && upstreamFailed && network) {
+        for (let attempt = 0; attempt < 2; attempt++) {
+          await new Promise((r) => setTimeout(r, 100 * (attempt + 1)));
+          try {
+            const retryResp = await fetch(targetUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(body),
+            });
+            const retryText = await retryResp.text();
+            try {
+              const retryData = JSON.parse(retryText);
+              if (retryResp.ok && !retryData?.error) {
+                if (attempt > 0 || !response.ok) {
+                  console.warn(`[RPC Proxy] alkanes_* retry succeeded on attempt ${attempt + 2} for ${body.method}`);
+                }
+                return NextResponse.json(retryData);
+              }
+              // Update `data` so a downstream fallback (or the client-cache
+              // retry loop) sees the most-recent response, not a stale one.
+              data = retryData;
+            } catch { /* retry non-JSON; loop again */ }
+          } catch { /* retry threw; loop again */ }
+        }
+      }
+    }
+
     // Non-200 status with valid JSON body — forward the JSON-RPC error as-is
     if (!response.ok) {
       console.error(`[RPC Proxy] Upstream HTTP ${response.status} for ${method}`);
