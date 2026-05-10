@@ -756,13 +756,48 @@ export function usePools(params: UsePoolsParams = {}) {
       // a 2-pool partial list (the espo proxy serves stale partial data
       // before it's fully populated). Symptom: BTC→Token swap picker only
       // surfaced frBTC/bUSD/FIRE despite the curated path having succeeded.
+      //
+      // 2026-05-10 — Enrich, don't skip. Previously, when a pool ID was
+      // already in `items` (e.g. DIESEL/frBTC seeded by the curated path
+      // with `tvlUsd: undefined`, `vol24hUsd: undefined`, `vol30dUsd:
+      // undefined`), the REST fallback's pool data with REAL volume/TVL
+      // was silently dropped. The "Other Markets" sidepanel then showed
+      // $0 TVL / $0 volume for DIESEL/frBTC even though the API had the
+      // numbers. Fix: when the same pool ID shows up in `extra`, overlay
+      // any non-undefined numeric fields onto the existing entry instead
+      // of dropping the new data.
       const mergeItems = (extra: PoolsListItem[]) => {
-        const seen = new Set(items.map((p) => p.id));
+        const byId = new Map<string, PoolsListItem>(items.map((p) => [p.id, p]));
         for (const p of extra) {
-          if (!seen.has(p.id)) {
+          const existing = byId.get(p.id);
+          if (!existing) {
             items.push(p);
-            seen.add(p.id);
+            byId.set(p.id, p);
+            continue;
           }
+          // Pool already known — overlay any field the new entry has data for.
+          // Preserve curated metadata (name/symbol mappings) by treating
+          // existing values as authoritative when the new entry is missing.
+          const merged: PoolsListItem = {
+            ...existing,
+            tvlUsd: existing.tvlUsd ?? p.tvlUsd,
+            token0TvlUsd: existing.token0TvlUsd ?? p.token0TvlUsd,
+            token1TvlUsd: existing.token1TvlUsd ?? p.token1TvlUsd,
+            vol24hUsd: existing.vol24hUsd ?? p.vol24hUsd,
+            vol7dUsd: existing.vol7dUsd ?? p.vol7dUsd,
+            vol30dUsd: existing.vol30dUsd ?? p.vol30dUsd,
+            apr: existing.apr ?? p.apr,
+            // Reserve amounts: prefer existing (curated reads from on-chain
+            // opcode-999 directly which is more authoritative than indexer-derived
+            // amounts), but fall through if curated didn't provide them.
+            token0Amount: existing.token0Amount ?? p.token0Amount,
+            token1Amount: existing.token1Amount ?? p.token1Amount,
+            lpTotalSupply: existing.lpTotalSupply ?? p.lpTotalSupply,
+          };
+          // Replace in items array (find index)
+          const idx = items.findIndex((it) => it.id === p.id);
+          if (idx >= 0) items[idx] = merged;
+          byId.set(p.id, merged);
         }
       };
 

@@ -288,7 +288,17 @@ export default function TokenSelectorModal({
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <span className="font-bold text-[color:var(--sf-text)] group-hover:text-[color:var(--sf-primary)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none">
-                            {token.name || token.symbol}
+                            {(() => {
+                              // METHANE convention: title is the symbol (e.g. "METHANE"),
+                              // falling back to a real name, then the ID. "Token X:Y"
+                              // placeholder names are filtered out so they don't show up
+                              // as the title.
+                              const isPlaceholderName =
+                                !token.name || token.name.startsWith('Token ') || /^\d+:\d+$/.test(token.name);
+                              if (token.symbol) return token.symbol;
+                              if (!isPlaceholderName) return token.name;
+                              return token.id;
+                            })()}
                           </span>
                           {isSelected && (
                             <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[color:var(--sf-primary)] text-white">
@@ -299,7 +309,16 @@ export default function TokenSelectorModal({
                           )}
                         </div>
                         <p className="text-xs font-medium text-[color:var(--sf-text)]/60 truncate">
-                          {token.id}
+                          {(() => {
+                            // METHANE convention: description shows "<name> - <id>" (e.g. "CH4 - 2:16").
+                            // When the name is a placeholder or matches the symbol, render just the ID.
+                            const isPlaceholderName =
+                              !token.name || token.name.startsWith('Token ') || /^\d+:\d+$/.test(token.name);
+                            if (token.name && !isPlaceholderName && token.name !== token.symbol) {
+                              return `${token.name} - ${token.id}`;
+                            }
+                            return token.id;
+                          })()}
                         </p>
                       </div>
                       {!isAvailable && (mode === 'from' || mode === 'to') && (
