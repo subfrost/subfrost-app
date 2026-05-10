@@ -331,7 +331,37 @@ export async function POST(
       data = JSON.parse(responseText);
     } catch {
       // Non-JSON response — this is an infrastructure error, not a JSON-RPC response.
-      // Common causes: nginx "upstream request failed", rate limit HTML pages, 502/503 errors.
+      // Common causes: nginx "upstream request failed", rate limit HTML pages, 408/502/503 errors.
+
+      // Metashrew-route fallback. /v6/subfrost is the fast metashrew-only path
+      // for mainnet (see METASHREW_RPC_ENDPOINTS) but it intermittently returns
+      // 408 timeouts under load. When that happens for a metashrew_* request,
+      // retry against the network's gateway (RPC_ENDPOINTS) which also serves
+      // metashrew calls (just slower, no sticky-session optimization).
+      // Without this fallback, every 408 cascades into a balance-fetch error
+      // and the wallet UI shows phantom-empty balances.
+      const isMetashrewMethod = !Array.isArray(body) &&
+        (body?.method === 'metashrew_view' || body?.method === 'metashrew_height');
+      const metashrewPrimary = METASHREW_RPC_ENDPOINTS[network];
+      const gatewayUrl = RPC_ENDPOINTS[network];
+      if (isMetashrewMethod && metashrewPrimary && gatewayUrl && targetUrl === metashrewPrimary) {
+        console.warn(`[RPC Proxy] metashrew primary ${response.status} for ${body.method}; falling back to ${gatewayUrl}`);
+        try {
+          const fallbackResp = await fetch(gatewayUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+          });
+          const fallbackText = await fallbackResp.text();
+          try {
+            const fallbackData = JSON.parse(fallbackText);
+            if (!fallbackData?.error) {
+              return NextResponse.json(fallbackData);
+            }
+          } catch { /* fallback also non-JSON, fall through */ }
+        } catch { /* fallback failed, fall through */ }
+      }
+
       // For REST sub-paths, attempt the alkanode fallback as a last resort.
       if (restSubPath && restFallbackBase) {
         const fallbackUrl = `${restFallbackBase.replace(/\/$/, '')}/${restSubPath}`;
@@ -371,6 +401,45 @@ export async function POST(
           data = fallbackData;
         }
       } catch { /* fallback failed, use original error */ }
+    }
+
+    // Metashrew rate-limit / error fallback. /v6/subfrost rate-limits aggressive
+    // bursts (HTTP 429) and the wallet cache's per-call retry doesn't backoff
+    // enough to clear the rate window — every 429 cascades into a balance error.
+    // When a metashrew_* request gets a non-2xx OR a JSON-RPC error from the
+    // sticky /v6 endpoint, retry once against the gateway URL which serves the
+    // same method (slower, no rate limit, no sticky session).
+    {
+      const isMetashrewMethod = !Array.isArray(body) &&
+        (body?.method === 'metashrew_view' || body?.method === 'metashrew_height');
+      const metashrewPrimary = METASHREW_RPC_ENDPOINTS[network];
+      const gatewayUrl = RPC_ENDPOINTS[network];
+      const upstreamFailed = !response.ok || !!data?.error;
+      if (
+        isMetashrewMethod &&
+        metashrewPrimary &&
+        gatewayUrl &&
+        targetUrl === metashrewPrimary &&
+        upstreamFailed
+      ) {
+        console.warn(
+          `[RPC Proxy] metashrew primary ${response.status} for ${body.method}; falling back to ${gatewayUrl}`
+        );
+        try {
+          const fallbackResp = await fetch(gatewayUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+          });
+          const fallbackText = await fallbackResp.text();
+          try {
+            const fallbackData = JSON.parse(fallbackText);
+            if (!fallbackData?.error) {
+              return NextResponse.json(fallbackData);
+            }
+          } catch { /* fallback also non-JSON, fall through to original error */ }
+        } catch { /* fallback request failed, fall through */ }
+      }
     }
 
     // Non-200 status with valid JSON body — forward the JSON-RPC error as-is
