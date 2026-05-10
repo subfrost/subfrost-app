@@ -386,6 +386,58 @@ export async function POST(
       );
     }
 
+    // REST sub-path "200-with-empty" fallback. Subfrost espo intermittently
+    // returns successful HTTP 200 responses with empty data while it's
+    // catching up on indexing — but the alkanode mirror has the real data.
+    // The 5xx fallback above doesn't fire on 200, and consumers that don't
+    // implement their own emptiness check (which is most of them) silently
+    // shadow real data with empty data.
+    //
+    // Detect both common OYL-API empty shapes:
+    //   { data: { total: 0, ... } }         (paginated endpoints)
+    //   { data: [] }                         (list endpoints)
+    // For either, retry against the configured REST fallback (alkanode on
+    // mainnet) and use its response if it has more data than primary.
+    //
+    // Skipped if response is non-2xx or already-fallback'd (the 5xx path
+    // above already handled it) or if no REST fallback is configured.
+    if (
+      restSubPath &&
+      restFallbackBase &&
+      response.ok
+    ) {
+      const isEmpty = (parsed: any): boolean => {
+        const d = parsed?.data;
+        if (Array.isArray(d)) return d.length === 0;
+        if (typeof d?.total === 'number') return d.total === 0;
+        if (typeof d?.count === 'number') return d.count === 0;
+        return false;
+      };
+      if (isEmpty(data)) {
+        const fallbackUrl = `${restFallbackBase.replace(/\/$/, '')}/${restSubPath}`;
+        console.warn(`[RPC Proxy] REST primary returned empty for /${restSubPath} (likely indexer drift); checking ${fallbackUrl}`);
+        try {
+          const fallbackResp = await fetch(fallbackUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+          });
+          if (fallbackResp.ok) {
+            const fallbackText = await fallbackResp.text();
+            try {
+              const fallbackParsed = JSON.parse(fallbackText);
+              if (!isEmpty(fallbackParsed)) {
+                console.warn(`[RPC Proxy] REST fallback ${fallbackUrl} returned non-empty data; using fallback`);
+                data = fallbackParsed;
+              }
+            } catch { /* fallback non-JSON; keep primary */ }
+          }
+        } catch (fallbackErr) {
+          console.warn(`[RPC Proxy] REST empty-fallback threw:`, fallbackErr);
+        }
+      }
+    }
+
     // Retry on metashrew-unwrap errors — fallback to /v4/jsonrpc which routes correctly
     if (data?.error?.message?.includes('metashrew-unwrap') && network && FALLBACK_ENDPOINTS[network]) {
       console.log(`[RPC Proxy] metashrew-unwrap error, retrying via fallback: ${FALLBACK_ENDPOINTS[network]}`);
