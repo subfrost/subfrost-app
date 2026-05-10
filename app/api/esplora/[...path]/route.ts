@@ -40,10 +40,11 @@ export async function GET(
       },
     });
 
-    // If primary esplora fails with 404 on mainnet, try mempool.space fallback
-    if (!response.ok && response.status === 404 && network === 'mainnet') {
+    // If primary esplora fails on mainnet, try mempool.space fallback.
+    // Triggers on 404 (missing index) and 5xx (upstream outage like 502).
+    if (!response.ok && network === 'mainnet' && (response.status === 404 || response.status >= 500)) {
       const fallbackUrl = `${MAINNET_FALLBACK_URL}/api/${pathString}`;
-      console.log(`[Esplora Proxy] Primary 404, trying fallback: ${fallbackUrl}`);
+      console.log(`[Esplora Proxy] Primary ${response.status}, trying fallback: ${fallbackUrl}`);
 
       const fallbackResponse = await fetch(fallbackUrl, {
         method: 'GET',

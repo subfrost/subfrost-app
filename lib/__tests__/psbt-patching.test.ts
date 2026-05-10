@@ -22,7 +22,9 @@ import {
   injectRedeemScripts,
   patchPsbtForBrowserWallet,
   patchTapInternalKeys,
+  patchInputsOnly,
 } from '../psbt-patching';
+import { DEFAULT_RBF_SEQUENCE } from '../wallet/inputBuilder';
 
 bitcoin.initEccLib(ecc);
 const bip32 = BIP32Factory(ecc);
@@ -1005,5 +1007,113 @@ describe('Full patch-then-sign round-trip', () => {
     expect(psbt.data.inputs[0].tapKeySig).toBeDefined();
     expect(psbt.data.inputs[1].partialSig).toBeDefined();
     expect(psbt.data.inputs[1].partialSig!.length).toBeGreaterThan(0);
+  });
+});
+
+// ===========================================================================
+// patchInputsOnly — RBF sequence opt-in (BIP125)
+// ===========================================================================
+// The SDK's WebProvider builds inputs with sequence=0xffffffff (final, not
+// RBF-signaling). patchInputsOnly is the universal browser-wallet chokepoint
+// for swap/wrap/unwrap/liquidity/vault/bridge/fire/etc. — flipping every
+// 0xffffffff input to DEFAULT_RBF_SEQUENCE here makes every alkane execute
+// flow Speed-Up-able in one shot.
+// ===========================================================================
+describe('patchInputsOnly — RBF sequence', () => {
+  it('flips a default-sequence (0xffffffff) input to DEFAULT_RBF_SEQUENCE', () => {
+    const psbt = new bitcoin.Psbt({ network: REGTEST });
+    psbt.addInput({
+      hash: Buffer.alloc(32, 0xaa),
+      index: 0,
+      witnessUtxo: {
+        script: KEYS.taprootScript,
+        value: BigInt(100000),
+      },
+    });
+    psbt.addOutput({ address: KEYS.taprootAddress, value: BigInt(50000) });
+
+    expect(psbt.txInputs[0].sequence).toBe(0xffffffff);
+
+    const result = patchInputsOnly({
+      psbtBase64: psbt.toBase64(),
+      network: REGTEST,
+      taprootAddress: KEYS.taprootAddress,
+    });
+
+    const patched = bitcoin.Psbt.fromBase64(result.psbtBase64, { network: REGTEST });
+    expect(patched.txInputs[0].sequence).toBe(DEFAULT_RBF_SEQUENCE);
+    expect(patched.txInputs[0].sequence).toBeLessThan(0xfffffffe);
+  });
+
+  it('flips ALL inputs in a multi-input PSBT (BIP125 opt-in is per-tx)', () => {
+    const psbt = new bitcoin.Psbt({ network: REGTEST });
+    for (let i = 0; i < 3; i++) {
+      psbt.addInput({
+        hash: Buffer.alloc(32, 0xaa + i),
+        index: 0,
+        witnessUtxo: {
+          script: KEYS.taprootScript,
+          value: BigInt(100000),
+        },
+      });
+    }
+    psbt.addOutput({ address: KEYS.taprootAddress, value: BigInt(250000) });
+
+    const result = patchInputsOnly({
+      psbtBase64: psbt.toBase64(),
+      network: REGTEST,
+      taprootAddress: KEYS.taprootAddress,
+    });
+
+    const patched = bitcoin.Psbt.fromBase64(result.psbtBase64, { network: REGTEST });
+    for (let i = 0; i < 3; i++) {
+      expect(patched.txInputs[i].sequence).toBe(DEFAULT_RBF_SEQUENCE);
+    }
+  });
+
+  it('does NOT down-shift an input that already signals RBF', () => {
+    const psbt = new bitcoin.Psbt({ network: REGTEST });
+    psbt.addInput({
+      hash: Buffer.alloc(32, 0xaa),
+      index: 0,
+      sequence: 0xfdffffff, // BIP68-compatible RBF-signaling value
+      witnessUtxo: {
+        script: KEYS.taprootScript,
+        value: BigInt(100000),
+      },
+    });
+    psbt.addOutput({ address: KEYS.taprootAddress, value: BigInt(50000) });
+
+    const result = patchInputsOnly({
+      psbtBase64: psbt.toBase64(),
+      network: REGTEST,
+      taprootAddress: KEYS.taprootAddress,
+    });
+
+    const patched = bitcoin.Psbt.fromBase64(result.psbtBase64, { network: REGTEST });
+    expect(patched.txInputs[0].sequence).toBe(0xfdffffff);
+  });
+
+  it('also flips 0xfffffffe (final, NOT RBF) up to DEFAULT_RBF_SEQUENCE', () => {
+    const psbt = new bitcoin.Psbt({ network: REGTEST });
+    psbt.addInput({
+      hash: Buffer.alloc(32, 0xaa),
+      index: 0,
+      sequence: 0xfffffffe,
+      witnessUtxo: {
+        script: KEYS.taprootScript,
+        value: BigInt(100000),
+      },
+    });
+    psbt.addOutput({ address: KEYS.taprootAddress, value: BigInt(50000) });
+
+    const result = patchInputsOnly({
+      psbtBase64: psbt.toBase64(),
+      network: REGTEST,
+      taprootAddress: KEYS.taprootAddress,
+    });
+
+    const patched = bitcoin.Psbt.fromBase64(result.psbtBase64, { network: REGTEST });
+    expect(patched.txInputs[0].sequence).toBe(DEFAULT_RBF_SEQUENCE);
   });
 });

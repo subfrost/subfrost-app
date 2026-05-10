@@ -198,9 +198,12 @@ describe('buildPsbtForRbf', () => {
       taprootXOnlyHex: taprootProgram,
       network: bitcoin.networks.bitcoin,
     });
-    const internalKey = (psbt.data.inputs[0] as { tapInternalKey?: Buffer }).tapInternalKey;
+    // tapInternalKey is Uint8Array under bitcoinjs v7 — wrap with Buffer.from
+    // for the hex assertion (Uint8Array#toString without an arg gives a
+    // comma-joined byte list, not hex).
+    const internalKey = (psbt.data.inputs[0] as { tapInternalKey?: Uint8Array }).tapInternalKey;
     expect(internalKey).toBeDefined();
-    expect(internalKey?.toString('hex')).toBe(taprootProgram);
+    expect(Buffer.from(internalKey!).toString('hex')).toBe(taprootProgram);
   });
 
   it('omits tapInternalKey for non-P2TR inputs', async () => {
@@ -244,6 +247,48 @@ describe('buildPsbtForRbf', () => {
         network: bitcoin.networks.bitcoin,
       }),
     ).toThrow(/prevout missing/);
+  });
+
+  it('builds nonWitnessUtxo for P2PKH inputs when prevTxHex is supplied', async () => {
+    const { buildPsbtForRbf } = await import('@/hooks/useSpeedUpMutation');
+    // P2PKH script: OP_DUP OP_HASH160 <20> OP_EQUALVERIFY OP_CHECKSIG
+    const p2pkhScript = Buffer.concat([
+      Buffer.from([0x76, 0xa9, 0x14]),
+      Buffer.from('bb'.repeat(20), 'hex'),
+      Buffer.from([0x88, 0xac]),
+    ]);
+    // Build a syntactically valid prev-tx whose vout 0 carries the P2PKH script.
+    const prevTx = new bitcoin.Transaction();
+    prevTx.addInput(Buffer.alloc(32), 0xffffffff, 0xffffffff, Buffer.alloc(0));
+    prevTx.addOutput(p2pkhScript, BigInt(50_000));
+    const prevTxHex = prevTx.toHex();
+    const prevTxid = prevTx.getId();
+    // Build an unsigned tx that spends prev:0.
+    const unsigned = new bitcoin.Transaction();
+    unsigned.version = 2;
+    unsigned.addInput(Buffer.from(prevTxid, 'hex').reverse(), 0, 0xfdffffff);
+    unsigned.addOutput(p2pkhScript, BigInt(40_000));
+
+    const psbt = buildPsbtForRbf({
+      unsignedHex: unsigned.toHex(),
+      prevouts: [
+        {
+          txid: prevTxid,
+          vout: 0,
+          value_sats: 50_000,
+          scriptpubkey: p2pkhScript.toString('hex'),
+          prevTxHex,
+        },
+      ],
+      network: bitcoin.networks.bitcoin,
+    });
+    expect(psbt.inputCount).toBe(1);
+    const input = psbt.data.inputs[0] as {
+      nonWitnessUtxo?: Uint8Array;
+      witnessUtxo?: unknown;
+    };
+    expect(input.nonWitnessUtxo).toBeDefined();
+    expect(input.witnessUtxo).toBeUndefined();
   });
 
   it('findParentInPending returns the parent when child references it', async () => {

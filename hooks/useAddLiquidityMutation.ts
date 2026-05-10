@@ -62,6 +62,7 @@ import * as ecc from '@bitcoinerlab/secp256k1';
 // Output patching was removed - see useSwapMutation.ts for why
 import { patchInputsOnly } from '@/lib/psbt-patching';
 import { toXOnlyPubKeyHex, X_ONLY_HEX_LENGTH } from '@/lib/wallet/pubkeyHelpers';
+import { DEFAULT_RBF_SEQUENCE } from '@/lib/wallet/inputBuilder';
 import { buildCreateNewPoolProtostone, buildFactoryAddLiquidityProtostones, buildAddLiquidityInputRequirements } from '@/lib/alkanes/builders';
 import { getAddressUtxos, getProtorunesByOutpoint } from '@/lib/alkanes/rpc';
 import { useWalletUtxoCache, type WalletUtxoCache } from '@/hooks/useWalletUtxoCache';
@@ -313,6 +314,9 @@ function injectAlkaneInputs(
     const inputData: Parameters<typeof psbt.addInput>[0] = {
       hash: utxo.txid,
       index: utxo.vout,
+      // BIP125 RBF opt-in. Without this, defaults to 0xffffffff and
+      // useSpeedUpMutation refuses to bump with "rbf: tx is not RBF-signaling".
+      sequence: DEFAULT_RBF_SEQUENCE,
       witnessUtxo: {
         script: taprootScript,
         value: BigInt(utxo.value),

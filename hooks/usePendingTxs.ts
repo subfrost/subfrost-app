@@ -187,12 +187,22 @@ export function usePendingTxs(): UsePendingTxsResult {
   // send mutation pushes here) and the WASM in-memory store (every
   // broadcast through `alkanesExecuteTyped` auto-pushes — wrap, swap,
   // addLiquidity, alkane-send, etc.). Merge + dedupe by txid.
+  //
+  // Then sweep: for every txid in the merged list, query the esplora
+  // proxy for status. Drop+evict from IDB any tx that:
+  //   - confirmed (chain says so), OR
+  //   - returns 404 = not in mempool AND not in chain. This catches
+  //     RBF-replaced txs (the bumped child evicted the original from
+  //     mempool, original never confirms) AND failed-broadcast txs
+  //     (UI showed "submitted" but the network never accepted it).
+  // Without this sweep, each broadcast accumulates a stale entry forever
+  // and the UI's "X pending" count diverges from on-chain reality.
   const { data, isLoading, refetch } = useQuery<string[]>({
-    queryKey: ['pendingTxs', !!provider],
+    queryKey: ['pendingTxs', !!provider, network],
     enabled: typeof window !== 'undefined' && ourAddresses.size > 0,
     queryFn: async () => {
       const seen = new Set<string>();
-      const merged: string[] = [];
+      const merged: { txid: string; hex: string }[] = [];
       try {
         const idbList = await pendingTxStore.list();
         for (const hex of idbList) {
@@ -200,7 +210,7 @@ export function usePendingTxs(): UsePendingTxsResult {
             const txid = bitcoin.Transaction.fromHex(hex).getId();
             if (!seen.has(txid)) {
               seen.add(txid);
-              merged.push(hex);
+              merged.push({ txid, hex });
             }
           } catch {
             /* skip malformed */
@@ -219,7 +229,7 @@ export function usePendingTxs(): UsePendingTxsResult {
                 const txid = bitcoin.Transaction.fromHex(hex).getId();
                 if (!seen.has(txid)) {
                   seen.add(txid);
-                  merged.push(hex);
+                  merged.push({ txid, hex });
                 }
               } catch {
                 /* skip malformed */
@@ -230,7 +240,69 @@ export function usePendingTxs(): UsePendingTxsResult {
           console.warn('[usePendingTxs] wasm list failed:', e);
         }
       }
-      return merged;
+
+      // Eviction sweep — chain check + IDB prune.
+      const networkArg = network ?? 'mainnet';
+      const aliveHexes: string[] = [];
+      const toEvict: string[] = [];
+      await Promise.all(
+        merged.map(async ({ txid, hex }) => {
+          try {
+            const r = await fetch(
+              `/api/esplora/tx/${txid}/status?network=${encodeURIComponent(networkArg)}`,
+            );
+            if (r.status === 404) {
+              // Not in mempool, not in a block → RBF-replaced or
+              // never-broadcast. Evict.
+              toEvict.push(txid);
+              return;
+            }
+            if (!r.ok) {
+              // Indexer error (e.g. esplora 5xx mid-outage) — be
+              // CONSERVATIVE and keep the entry. The next sweep will
+              // re-check; better a temporary stale entry than to
+              // wrongly evict a real pending tx.
+              aliveHexes.push(hex);
+              return;
+            }
+            const status = await r.json();
+            if (status?.confirmed === true) {
+              toEvict.push(txid);
+              return;
+            }
+            // Still in mempool, unconfirmed → keep.
+            aliveHexes.push(hex);
+          } catch {
+            // Network/parse failure — same conservative path.
+            aliveHexes.push(hex);
+          }
+        }),
+      );
+      if (toEvict.length > 0) {
+        try {
+          await pendingTxStore.evict(toEvict);
+        } catch (e) {
+          console.warn('[usePendingTxs] idb evict failed:', e);
+        }
+        // Also evict from the WASM in-memory pending store, otherwise
+        // pendingTxStoreList() re-surfaces the same txids on every poll
+        // and the HUD count never goes to zero. The HUD reads from this
+        // hook, but the wallet history page's row list is driven by
+        // /esplora — that's why the discrepancy "HUD says 1, history
+        // says 0" appears: the WASM store keeps emitting a phantom.
+        if (provider && typeof (provider as any).pendingTxStoreEvict === 'function') {
+          try {
+            await (provider as any).pendingTxStoreEvict(toEvict);
+          } catch (e) {
+            console.warn('[usePendingTxs] wasm evict failed:', e);
+          }
+        }
+        console.log(
+          `[usePendingTxs] evicted ${toEvict.length} stale pending tx(s):`,
+          toEvict,
+        );
+      }
+      return aliveHexes;
     },
     staleTime: 5_000, // re-poll occasionally so newly-broadcast WASM-side txs surface
     refetchInterval: 8_000,

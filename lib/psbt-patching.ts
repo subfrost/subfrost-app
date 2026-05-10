@@ -100,6 +100,7 @@
  * (Xverse P2SH-P2WPKH input 0 signed correctly with injected redeemScript)
  */
 import * as bitcoin from 'bitcoinjs-lib';
+import { DEFAULT_RBF_SEQUENCE } from '@/lib/wallet/inputBuilder';
 
 // ---------------------------------------------------------------------------
 // Script type detection helpers
@@ -541,7 +542,44 @@ export function patchInputsOnly(params: PatchInputsOnlyParams): {
     }
   }
 
+  // 3. BIP125 RBF opt-in on every input.
+  // The SDK's WebProvider currently builds inputs with sequence=0xffffffff
+  // (final, not RBF-signaling). Without this patch, useSpeedUpMutation refuses
+  // to bump any swap / wrap / unwrap / liquidity / vault / bridge tx with
+  // "rbf: tx is not RBF-signaling". Sequence is part of the sighash preimage
+  // for ALL types (legacy / segwit / taproot), so we MUST mutate it before the
+  // wallet signs — bitcoinjs's setInputSequence enforces this by refusing if
+  // partial sigs are attached, which is exactly the right invariant.
+  // (Per BIP125: any input with sequence < 0xfffffffe makes the WHOLE tx
+  // RBF-signaling, so flipping all inputs is over-broad but harmless.)
+  const seqPatched = patchSequencesForRBF(psbt);
+  if (seqPatched > 0) {
+    console.log(`[patchInputsOnly] Set RBF sequence on ${seqPatched} input(s)`);
+    totalPatched += seqPatched;
+  }
+
   return { psbtBase64: psbt.toBase64(), inputsPatched: totalPatched };
+}
+
+/**
+ * Set every PSBT input's sequence to DEFAULT_RBF_SEQUENCE so the resulting tx
+ * opts into BIP125 Replace-By-Fee. Skips inputs that are already RBF-signaling
+ * (sequence < 0xfffffffe) — including ones a future caller may set lower for
+ * BIP68 relative-locktime semantics — so this never *down*-shifts a sequence.
+ *
+ * Returns the count of inputs actually changed (for logging).
+ */
+function patchSequencesForRBF(psbt: bitcoin.Psbt): number {
+  const RBF_THRESHOLD = 0xfffffffe;
+  let patched = 0;
+  for (let i = 0; i < psbt.txInputs.length; i++) {
+    const cur = psbt.txInputs[i].sequence;
+    if (cur === undefined || cur >= RBF_THRESHOLD) {
+      psbt.setInputSequence(i, DEFAULT_RBF_SEQUENCE);
+      patched++;
+    }
+  }
+  return patched;
 }
 
 // ---------------------------------------------------------------------------

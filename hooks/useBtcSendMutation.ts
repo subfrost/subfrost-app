@@ -8,7 +8,7 @@ import { useTransactionConfirm } from '@/context/TransactionConfirmContext';
 import { useSandshrewProvider } from './useSandshrewProvider';
 import { useWalletUtxoCache } from './useWalletUtxoCache';
 import { getBitcoinNetwork } from '@/lib/alkanes/helpers';
-import { injectRedeemScripts } from '@/lib/psbt-patching';
+import { addInputDynamic } from '@/lib/wallet/inputBuilder';
 import { sendBtcViaWallet } from '@/lib/wallet/walletCapabilities';
 import { buildPlanFromTx } from '@/lib/alkanes/planBuilder';
 import type { WalletUtxoCache } from '@/queries/account';
@@ -130,12 +130,6 @@ async function sendBrowser(args: {
   const btcNetwork = getBitcoinNetwork(network);
   const psbt = new bitcoin.Psbt({ network: btcNetwork });
 
-  // Wallets reject Buffer here ("Expected Uint8Array") — coerce.
-  const tapInternalKeyHex = account?.taproot?.pubKeyXOnly;
-  const tapInternalKey = tapInternalKeyHex
-    ? new Uint8Array(Buffer.from(tapInternalKeyHex, 'hex'))
-    : undefined;
-
   let totalInputValue = 0;
   for (const utxoKey of selectedUtxoKeys) {
     const [txid, voutStr] = utxoKey.split(':');
@@ -146,20 +140,29 @@ async function sendBrowser(args: {
 
     const txHexRes = await fetch(`/api/esplora/tx/${txid}/hex?network=${network}`);
     if (!txHexRes.ok) throw new Error(`Failed to fetch transaction ${txid}: ${txHexRes.statusText}`);
-    const tx = bitcoin.Transaction.fromHex(await txHexRes.text());
+    const prevTxHex = await txHexRes.text();
+    const tx = bitcoin.Transaction.fromHex(prevTxHex);
     const script = tx.outs[vout].script;
 
-    // P2TR scriptPubKey is OP_1 + push 32.
-    const isTaprootInput = script.length === 34 && script[0] === 0x51 && script[1] === 0x20;
-
-    const inputData: any = {
-      hash: txid,
-      index: vout,
-      witnessUtxo: { script, value: BigInt(fresh.value) },
-    };
-    if (isTaprootInput && tapInternalKey) inputData.tapInternalKey = tapInternalKey;
-
-    psbt.addInput(inputData);
+    addInputDynamic(
+      psbt,
+      btcNetwork,
+      {
+        txid,
+        vout,
+        value: fresh.value,
+        scriptPubKeyHex: Buffer.from(script).toString('hex'),
+        // empty — scriptPubKeyHex always wins via redeemTypeFromOutput
+        address: '',
+        prevTxHex,
+        // sequence omitted on purpose — addInputDynamic defaults to
+        // 0xfffffffd (BIP125 RBF opt-in) so useSpeedUpMutation can RBF.
+      },
+      {
+        taprootPubKeyXOnly: account?.taproot?.pubKeyXOnly,
+        nativeSegwitPubkeyHex: account?.nativeSegwit?.pubkey ?? undefined,
+      },
+    );
     totalInputValue += fresh.value;
   }
 
@@ -175,19 +178,9 @@ async function sendBrowser(args: {
     psbt.addOutput({ address: txContext.btcChangeAddress, value: BigInt(fee.change) });
   }
 
-  let psbtBase64 = psbt.toBase64();
-
-  // Xverse legacy P2SH-P2WPKH needs an explicit redeemScript; no-op for native segwit / taproot.
-  const paymentAddress = account?.nativeSegwit?.address;
-  if (account?.nativeSegwit?.pubkey && paymentAddress) {
-    const psbtForPatch = bitcoin.Psbt.fromBase64(psbtBase64, { network: btcNetwork });
-    injectRedeemScripts(psbtForPatch, {
-      paymentAddress,
-      pubkeyHex: account.nativeSegwit.pubkey,
-      network: btcNetwork,
-    });
-    psbtBase64 = psbtForPatch.toBase64();
-  }
+  // P2SH-P2WPKH redeemScripts are now built inline by addInputDynamic;
+  // the previous post-build injectRedeemScripts call is no longer needed.
+  const psbtBase64 = psbt.toBase64();
 
   const signedPsbtBase64 = await signTaprootPsbt(psbtBase64);
   const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtBase64, { network: btcNetwork });

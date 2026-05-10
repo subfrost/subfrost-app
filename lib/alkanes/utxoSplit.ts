@@ -14,6 +14,7 @@
  */
 
 import * as bitcoin from 'bitcoinjs-lib';
+import { DEFAULT_RBF_SEQUENCE } from '@/lib/wallet/inputBuilder';
 
 const DUST_VALUE = 600;
 
@@ -102,6 +103,9 @@ export async function buildUtxoSplitPsbt(
   const inputData: any = {
     hash: txid,
     index: vout,
+    // BIP125 RBF opt-in. Without this, defaults to 0xffffffff and
+    // useSpeedUpMutation refuses to bump with "rbf: tx is not RBF-signaling".
+    sequence: DEFAULT_RBF_SEQUENCE,
     witnessUtxo: { script, value: BigInt(utxoValue) },
   };
 

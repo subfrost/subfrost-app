@@ -103,19 +103,19 @@ describe('useBtcSendMutation — browser path safety', () => {
     expect(src).toMatch(/throw new BtcSendStaleUtxosError/);
   });
 
-  it('attaches tapInternalKey to taproot inputs (detected by script shape)', () => {
-    expect(src).toMatch(/tapInternalKey/);
-    // Script-shape detection: OP_1 (0x51) + push 32 (0x20) — not address-prefix.
-    expect(src).toMatch(/0x51[\s\S]*0x20/);
+  it('delegates per-utxo input shaping to addInputDynamic (4-address-type switchboard)', () => {
+    // tapInternalKey selection, P2SH-P2WPKH redeemScript building, P2PKH
+    // nonWitnessUtxo, and P2WPKH witnessUtxo all live in lib/wallet/inputBuilder.
+    // This hook only needs to import + call the helper with the right opts.
+    expect(src).toMatch(/from '@\/lib\/wallet\/inputBuilder'/);
+    expect(src).toMatch(/addInputDynamic\(/);
+    expect(src).toMatch(/taprootPubKeyXOnly:\s*account\?\.taproot\?\.pubKeyXOnly/);
+    expect(src).toMatch(/nativeSegwitPubkeyHex:\s*account\?\.nativeSegwit\?\.pubkey/);
   });
 
   it('uses computeSendFee for change output (handles dust threshold)', () => {
     expect(src).toMatch(/computeSendFee/);
     expect(src).toMatch(/numOutputs === 2/);
-  });
-
-  it('injects redeemScript for P2SH-P2WPKH (Xverse legacy support)', () => {
-    expect(src).toMatch(/injectRedeemScripts/);
   });
 
   it('handles both finalized and un-finalized PSBT shapes from wallets', () => {

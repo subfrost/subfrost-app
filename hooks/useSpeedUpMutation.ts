@@ -35,6 +35,7 @@ import * as bitcoin from 'bitcoinjs-lib';
 import { useWallet } from '@/context/WalletContext';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { pendingTxStore } from '@/lib/alkanes/pendingTxStore';
+import { addInputDynamic } from '@/lib/wallet/inputBuilder';
 
 interface SpeedUpParams {
   /** Original signed tx hex (still in mempool). */
@@ -58,13 +59,22 @@ interface PrevoutInfo {
   vout: number;
   value_sats: number;
   scriptpubkey: string; // hex
+  /**
+   * Full prev-tx hex. Required by addInputDynamic for the P2PKH
+   * (legacy) input branch — `nonWitnessUtxo` must carry the entire
+   * funding transaction. Optional for witness types (P2WPKH/P2TR/
+   * P2SH-P2WPKH), which sign against witnessUtxo only.
+   */
+  prevTxHex?: string;
 }
 
 /**
- * Fetch each input's prevout (value + scriptpubkey) via the Esplora
- * proxy. Both fields are needed: the cargo bridge takes value to
- * compute the original fee rate; the browser-wallet PSBT builder
- * also needs scriptpubkey for witnessUtxo.
+ * Fetch each input's prevout (value + scriptpubkey + full hex) via the
+ * Esplora proxy. The JSON endpoint gives value + scriptpubkey for the
+ * cargo bridge and witnessUtxo construction; the /hex endpoint gives
+ * the full prev-tx for legacy P2PKH `nonWitnessUtxo`. Both run in the
+ * same Promise.all so latency is unchanged from the prior single-fetch
+ * implementation.
  */
 async function fetchPrevoutInfo(
   tx: bitcoin.Transaction,
@@ -75,23 +85,30 @@ async function fetchPrevoutInfo(
     tx.ins.map(async (input) => {
       const prevTxid = Buffer.from(input.hash).reverse().toString('hex');
       try {
-        const res = await fetch(
-          `/api/esplora/tx/${prevTxid}?network=${encodeURIComponent(network)}`,
-        );
-        if (!res.ok) return;
-        const json = await res.json();
+        const [jsonRes, hexRes] = await Promise.all([
+          fetch(`/api/esplora/tx/${prevTxid}?network=${encodeURIComponent(network)}`),
+          fetch(`/api/esplora/tx/${prevTxid}/hex?network=${encodeURIComponent(network)}`),
+        ]);
+        if (!jsonRes.ok) return;
+        const json = await jsonRes.json();
         const prevout = json?.vout?.[input.index];
         if (
-          typeof prevout?.value === 'number' &&
-          typeof prevout?.scriptpubkey === 'string'
+          typeof prevout?.value !== 'number' ||
+          typeof prevout?.scriptpubkey !== 'string'
         ) {
-          out.push({
-            txid: prevTxid,
-            vout: input.index,
-            value_sats: prevout.value,
-            scriptpubkey: prevout.scriptpubkey,
-          });
+          return;
         }
+        // /hex is best-effort — the JSON path is the load-bearing one
+        // for non-legacy inputs. P2PKH inputs without prevTxHex throw
+        // explicitly inside addInputDynamic.
+        const prevTxHex = hexRes.ok ? await hexRes.text() : undefined;
+        out.push({
+          txid: prevTxid,
+          vout: input.index,
+          value_sats: prevout.value,
+          scriptpubkey: prevout.scriptpubkey,
+          prevTxHex,
+        });
       } catch {
         /* skip — bridge will reject with MissingPrevoutValue */
       }
@@ -178,9 +195,11 @@ function bitcoinNetworkFor(network: string | undefined): bitcoin.Network {
 }
 
 /**
- * Build a PSBT from an unsigned tx hex by re-attaching witnessUtxo
- * data per input. For taproot inputs, also patches in `tapInternalKey`
- * so browser wallets that scrutinize PSBTs (Xverse, OKX) can sign.
+ * Build a PSBT from an unsigned tx hex by attaching the right input
+ * shape per address type via `addInputDynamic`. Browser wallets
+ * (Xverse, OKX, UniSat, OYL) all need their respective fields
+ * (`tapInternalKey`, `redeemScript`, `nonWitnessUtxo`) — the helper
+ * picks the right one from the prevout's scriptPubKey.
  *
  * Exported so the vitest mirror can pin the shape.
  */
@@ -188,9 +207,15 @@ export function buildPsbtForRbf(params: {
   unsignedHex: string;
   prevouts: PrevoutInfo[];
   taprootXOnlyHex?: string;
+  /**
+   * Compressed 33-byte hex of the user's native-segwit pubkey.
+   * Required for P2SH-P2WPKH (Xverse) input branches; ignored for
+   * other types.
+   */
+  nativeSegwitPubkeyHex?: string;
   network: bitcoin.Network;
 }): bitcoin.Psbt {
-  const { unsignedHex, prevouts, taprootXOnlyHex, network } = params;
+  const { unsignedHex, prevouts, taprootXOnlyHex, nativeSegwitPubkeyHex, network } = params;
   const tx = bitcoin.Transaction.fromHex(unsignedHex);
   const psbt = new bitcoin.Psbt({ network });
   psbt.setVersion(tx.version);
@@ -203,20 +228,24 @@ export function buildPsbtForRbf(params: {
     if (!prev) {
       throw new Error(`prevout missing for ${txid}:${vout}`);
     }
-    const script = Buffer.from(prev.scriptpubkey, 'hex');
-    const inputData: Parameters<bitcoin.Psbt['addInput']>[0] = {
-      hash: input.hash,
-      index: input.index,
-      sequence: input.sequence,
-      witnessUtxo: { script, value: BigInt(prev.value_sats) },
-    };
-    // Detect P2TR (segwit v1): OP_1 + 32-byte program.
-    const isTaproot =
-      script.length === 34 && script[0] === 0x51 && script[1] === 0x20;
-    if (isTaproot && taprootXOnlyHex) {
-      inputData.tapInternalKey = Buffer.from(taprootXOnlyHex, 'hex');
-    }
-    psbt.addInput(inputData);
+    addInputDynamic(
+      psbt,
+      network,
+      {
+        txid,
+        vout,
+        value: prev.value_sats,
+        scriptPubKeyHex: prev.scriptpubkey,
+        // address fallback unused — scriptPubKeyHex always wins
+        address: '',
+        prevTxHex: prev.prevTxHex,
+        sequence: input.sequence,
+      },
+      {
+        taprootPubKeyXOnly: taprootXOnlyHex,
+        nativeSegwitPubkeyHex,
+      },
+    );
   }
 
   for (const output of tx.outs) {
@@ -336,6 +365,7 @@ async function runBundleRbf(args: BundleRbfArgs): Promise<SpeedUpResult> {
         unsignedHex,
         prevouts: prevoutsForSigning,
         taprootXOnlyHex: xOnly,
+        nativeSegwitPubkeyHex: account?.nativeSegwit?.pubkey ?? undefined,
         network: bitcoinNetworkFor(network),
       });
       return await bridge.walletSignPsbtBase64(psbt.toBase64());
@@ -346,6 +376,7 @@ async function runBundleRbf(args: BundleRbfArgs): Promise<SpeedUpResult> {
         unsignedHex,
         prevouts: prevoutsForSigning,
         taprootXOnlyHex: xOnly,
+        nativeSegwitPubkeyHex: account?.nativeSegwit?.pubkey ?? undefined,
         network: bitcoinNetworkFor(network),
       });
       const signedPsbtBase64 = await signTaprootPsbt(psbt.toBase64());
@@ -552,6 +583,7 @@ export function useSpeedUpMutation() {
             unsignedHex: plan.tx_hex,
             prevouts,
             taprootXOnlyHex: xOnly,
+            nativeSegwitPubkeyHex: account?.nativeSegwit?.pubkey ?? undefined,
             network: bitcoinNetworkFor(network),
           });
           broadcastHex = await bridge.walletSignPsbtBase64(psbt.toBase64());
@@ -579,6 +611,7 @@ export function useSpeedUpMutation() {
           unsignedHex: plan.tx_hex,
           prevouts,
           taprootXOnlyHex: xOnly,
+          nativeSegwitPubkeyHex: account?.nativeSegwit?.pubkey ?? undefined,
           network: bitcoinNetworkFor(network),
         });
         const signedPsbtBase64 = await signTaprootPsbt(psbt.toBase64());
