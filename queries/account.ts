@@ -306,10 +306,71 @@ export async function fetchAlkaneBalancesViaProtobuf(
     }
   }
 
+  // Step 4: alkanode REST fallback when subfrost's alkane indexer drift
+  // causes every dust outpoint to come back with an empty balance sheet.
+  //
+  // The 2026-05-10 mainnet incident: subfrost upstream returned valid HTTP 200
+  // for every alkanes_protorunesbyoutpoint call but with `balances: []` in the
+  // payload, while alkanode reported the wallet's actual DIESEL holdings via
+  // /get-alkanes-by-address. The per-outpoint fanout above can't tell the
+  // difference between "this outpoint is genuinely empty" and "subfrost is
+  // lying" — both shapes are structurally identical. So at the aggregate
+  // level we check: dust UTXOs exist (so SOMETHING should have value) but
+  // we got zero alkanes. That's the only signature of indexer drift.
+  //
+  // SoT-1 still holds: subfrost is primary. Alkanode is consulted only when
+  // subfrost has zero data. If even one outpoint produces a balance, we
+  // trust subfrost completely and skip the fallback.
+  if (aggregate.size === 0 && dustUtxos.length > 0 && network === 'mainnet') {
+    const fallback = await tryAlkanodeAlkaneBalances(address);
+    if (fallback && fallback.length > 0) {
+      console.warn(`[alkaneBalances] subfrost returned 0 alkanes for ${dustUtxos.length} dust UTXOs at ${address}; using alkanode fallback (${fallback.length} entries)`);
+      return fallback;
+    }
+  }
+
   return Array.from(aggregate, ([id, bal]) => {
     const [block, tx] = id.split(':');
     return { alkaneId: { block, tx }, balance: bal.toString() };
   });
+}
+
+// Alkanode REST fallback for `fetchAlkaneBalancesViaProtobuf`. Used only
+// when subfrost upstream's alkane indexer returns 200-with-empty across every
+// dust outpoint at an address. Returns the same shape as the primary path so
+// callers can swap freely.
+//
+// Set `ESPO_MAINNET_FALLBACK_URL=""` (env) to disable. Defaults to alkanode.
+async function tryAlkanodeAlkaneBalances(
+  address: string,
+): Promise<{ alkaneId: { block: string; tx: string }; balance: string }[] | null> {
+  const fallbackBase = (typeof process !== 'undefined' && process.env?.ESPO_MAINNET_FALLBACK_URL !== undefined)
+    ? process.env.ESPO_MAINNET_FALLBACK_URL
+    : 'https://oyl.alkanode.com';
+  if (!fallbackBase) return null;
+  try {
+    const resp = await fetch(`${fallbackBase.replace(/\/$/, '')}/get-alkanes-by-address`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ address }),
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    const items: any[] = Array.isArray(data?.data) ? data.data : [];
+    return items
+      .map((item) => {
+        const block = String(item?.alkaneId?.block ?? '');
+        const tx = String(item?.alkaneId?.tx ?? '');
+        const balance = String(item?.balance ?? '0');
+        if (!block || !tx) return null;
+        return { alkaneId: { block, tx }, balance };
+      })
+      .filter((x): x is { alkaneId: { block: string; tx: string }; balance: string } => x !== null);
+  } catch (err) {
+    console.warn('[alkaneBalances] alkanode fallback threw:', err);
+    return null;
+  }
 }
 
 // ---------------------------------------------------------------------------
