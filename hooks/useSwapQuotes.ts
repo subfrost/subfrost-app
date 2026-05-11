@@ -343,12 +343,13 @@ export function useSwapQuotes(
     }
   }, [poolsData, sellPairs, buyPairs, sellCurrencyId, buyCurrencyId, directPool]);
 
-  // Live reserves for the direct pool. Only polls while the user has typed an
-  // amount (avoids background traffic when the swap form is idle). HeightPoller
-  // also invalidates this on every new block.
-  const hasAmount = !!debouncedAmount && parseFloat(debouncedAmount) > 0;
+  // Live reserves for the direct pool. Pre-fetched as soon as a pair is
+  // matched — removes the ~500ms lag on the first amount keystroke
+  // (the quote pipeline runs synchronously and returns null while the
+  // first fetch is in flight). `staleTime: Infinity` in usePoolStateLive
+  // means no extra traffic; HeightPoller invalidates on every new block.
   const liveDirect = usePoolStateLive(directPool?.id, {
-    enabled: !!directPool && hasAmount,
+    enabled: !!directPool,
   });
   const liveReserve0 = liveDirect.data?.reserve0;
   const liveReserve1 = liveDirect.data?.reserve1;
