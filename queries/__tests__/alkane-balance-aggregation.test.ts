@@ -170,8 +170,11 @@ describe('fetchAlkaneBalancesViaProtobuf source contract', () => {
     expect(balanceFn).not.toMatch(/protorunesbyaddress/);
   });
 
-  it('parallelizes per-outpoint queries via Promise.all', () => {
-    expect(src).toMatch(/Promise\.all\(checks\)/);
+  it('parallelizes per-outpoint queries via Promise.allSettled', () => {
+    // allSettled (not all) so a single failed outpoint doesn't poison the
+    // entire wallet display when the alkanode fallback would otherwise
+    // recover the data. See queries/account.ts step 4 fallback comment.
+    expect(src).toMatch(/Promise\.allSettled\(checks\)/);
   });
 
   it('filters to dust UTXOs (≤1000 sats) before fanning out', () => {

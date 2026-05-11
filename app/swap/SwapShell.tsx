@@ -20,6 +20,7 @@ import { useFeeRate } from "@/hooks/useFeeRate";
 import { useBtcPrice } from "@/hooks/useBtcPrice";
 import { usePools } from "@/hooks/usePools";
 import { useAllPoolStats } from "@/hooks/usePoolData";
+import { pickPositive } from "@/lib/pools/mergeStats";
 import { useModalStore } from "@/stores/modals";
 import BigNumber from 'bignumber.js';
 import { useWrapMutation } from "@/hooks/useWrapMutation";
@@ -113,14 +114,20 @@ export default function SwapShell() {
     return basePools.map(pool => {
       const stats = statsMap.get(pool.id);
 
+      // pickPositive (not `||`) so a `0` from the primary `pool` doesn't
+      // short-circuit the stats overlay. Same rationale as TrendingPairs —
+      // see lib/pools/mergeStats.ts header. The token0/token1 split keeps
+      // its existing fallback to `pool.tvlUsd / 2` for symmetry, but uses
+      // pickPositive on the merged tvl too.
+      const mergedTvl = pickPositive(pool.tvlUsd, stats?.tvlUsd);
       return {
         ...pool,
-        tvlUsd: pool.tvlUsd || stats?.tvlUsd || 0,
-        token0TvlUsd: pool.token0TvlUsd || stats?.tvlToken0 || (pool.tvlUsd || 0) / 2,
-        token1TvlUsd: pool.token1TvlUsd || stats?.tvlToken1 || (pool.tvlUsd || 0) / 2,
-        vol24hUsd: pool.vol24hUsd || stats?.volume24hUsd || 0,
-        vol30dUsd: pool.vol30dUsd || stats?.volume30dUsd || 0,
-        apr: pool.apr || stats?.apr || 0,
+        tvlUsd: mergedTvl,
+        token0TvlUsd: pickPositive(pool.token0TvlUsd, stats?.tvlToken0, mergedTvl / 2),
+        token1TvlUsd: pickPositive(pool.token1TvlUsd, stats?.tvlToken1, mergedTvl / 2),
+        vol24hUsd: pickPositive(pool.vol24hUsd, stats?.volume24hUsd),
+        vol30dUsd: pickPositive(pool.vol30dUsd, stats?.volume30dUsd),
+        apr: pickPositive(pool.apr, stats?.apr),
       } as PoolSummary;
     });
   }, [poolsData?.items, poolStats]);
@@ -1477,7 +1484,17 @@ export default function SwapShell() {
     }
 
     // Default AMM swap (frBTC/DIESEL or other alkane pairs)
-    if (!quote) return;
+    // DIAGNOSTIC 2026-05-11: log when click is silently dropped because the
+    // quote engine hasn't produced a quote yet. Symptom: user reports "click
+    // does nothing, no logs, hangs forever" — the quote was still computing
+    // when they clicked, the function returned silently, and there was no
+    // user-visible signal of why. Should be replaced with a real CTA-disable
+    // (`!quote` should grey out the button until the quote is ready).
+    if (!quote) {
+      console.warn('[SWAP] handleSwap fired but quote is undefined — quote still computing or failed. fromToken:', fromToken, 'toToken:', toToken, 'fromAmount:', fromAmount, 'toAmount:', toAmount, 'isCalculating:', isCalculating);
+      showSwapError(t('errors.poolNotFound'));
+      return;
+    }
 
     // Validate that we have either a poolId (direct swap) or a route (multi-hop swap).
     // Multi-hop swaps use the factory's opcode 13 with a token path, not a single poolId.

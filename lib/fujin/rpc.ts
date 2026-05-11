@@ -15,10 +15,23 @@
  *                                    surface, which is a different host
  */
 
-import { metashrewView, getHeight } from '@/lib/alkanes/rpc';
+import { metashrewView } from '@/lib/alkanes/rpc';
 
-/** Encode unsigned integer as LEB128 */
+/**
+ * Encode unsigned integer as LEB128.
+ *
+ * Hardened 2026-05-11: a previous version would infinite-loop on non-finite or
+ * negative input — `Math.floor(NaN / 128)` is `NaN`, `NaN !== 0` is true, the
+ * loop never terminates, and `Array.push` eventually throws
+ * `RangeError: Invalid array length`. The trigger was an upstream failure (the
+ * metashrew_height probe returning undefined → `simulateContract` passing
+ * NaN as `height` → encodeLEB128 → infinite loop). Throw on bad input so the
+ * caller can fall back instead of crashing the whole React tree.
+ */
 function encodeLEB128(value: number): number[] {
+  if (!Number.isFinite(value) || value < 0 || !Number.isInteger(value)) {
+    throw new Error(`encodeLEB128: invalid input ${value} (must be non-negative finite integer)`);
+  }
   const bytes: number[] = [];
   let val = value;
   do {
@@ -113,17 +126,28 @@ export async function simulateContract(
 ): Promise<string> {
   const network = urlToNetwork(networkOrUrl);
   const [block, tx] = contractId.split(':').map(Number);
-  const height = await getHeight(network);
 
+  // No `getHeight` round-trip. The JSON-RPC `blockTag='latest'` (last arg
+  // to metashrewView below) tells the metashrew node to use the latest
+  // committed block — the protobuf `height` field is then ignored, so we
+  // can hardcode it to 0. Verified 2026-05-11 by curl: identical
+  // PoolDetails returned with height=0 vs height=948866.
+  //
+  // Why this matters: previously this called `getHeight(network)` which
+  // hit `metashrew_height` on /v4/subfrost. When subfrost.io was choking
+  // (Cloudflare 502/408 storms verified in dev log), getHeight threw,
+  // simulateContract threw, and the entire swap-quote pipeline collapsed
+  // into "no quote" — even though /v6/subfrost was happily serving
+  // metashrew_view simulate. One fewer upstream dependency = one fewer
+  // failure mode.
   const calldata: number[] = [];
   for (const val of [block, tx, opcode, ...args]) {
     calldata.push(...encodeLEB128(val));
   }
 
   const parts: number[] = [];
-  // Field 4: height (varint, tag 0x20)
-  parts.push(0x20);
-  parts.push(...encodeLEB128(height));
+  // Field 4: height (varint, tag 0x20) — encoded as 0; node uses 'latest'.
+  parts.push(0x20, 0x00);
   // Field 5: calldata (length-delimited, tag 0x2A)
   parts.push(0x2A);
   parts.push(...encodeLEB128(calldata.length));

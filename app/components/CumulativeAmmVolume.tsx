@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { useTheme } from '@/context/ThemeContext';
 import { useAmmTotalVolume, type AmmVolumePoint } from '@/hooks/useAmmTotalVolume';
+import { fillDailyForward } from '@/lib/amm/volumeSeries';
 
 const ASSUMED_SECONDS_PER_BLOCK = 600;
 
@@ -14,13 +15,20 @@ function formatUsd(value: number): string {
 }
 
 /**
- * Convert sparse (height, valueUsd) points into a sorted, dedup'd
- * (time, value) series suitable for lightweight-charts.
+ * Convert sparse (height, valueUsd) points into a dense, sorted (time, value)
+ * series suitable for lightweight-charts.
  *
- * Espo only emits per-block-event points (no timestamps), so we estimate
- * each point's time by anchoring the latest point to "now" and walking
- * backward at 600s/block. Drift over a 30-day window is small enough for
- * a marketing-quality landing-page chart; precision isn't the goal.
+ * Espo only emits per-block-event points (no timestamps and gaps for blocks
+ * with no swap activity), so we estimate each point's time by anchoring the
+ * latest point to "now" and walking backward at 600s/block. Drift over a
+ * multi-month window is small enough for a marketing-quality landing-page
+ * chart; precision isn't the goal.
+ *
+ * After bucketing per UTC date, `fillDailyForward` carries the most-recent
+ * cumulative value forward into every otherwise-empty UTC day. Without this,
+ * a multi-month low-volume gap rendered as a single straight segment between
+ * the two outer points (the user-reported "August 2025 → today" symptom on
+ * staging, 2026-05-10).
  */
 function pointsToSeries(
   points: AmmVolumePoint[],
@@ -55,9 +63,15 @@ function pointsToSeries(
     }
   }
 
-  return Array.from(byDate.entries())
+  const sparse = Array.from(byDate.entries())
     .map(([time, value]) => ({ time, value }))
     .sort((a, b) => (a.time < b.time ? -1 : a.time > b.time ? 1 : 0));
+
+  // Densify: one point per UTC day from first → today, missing days inherit
+  // the most-recent prior value. Cumulative volume is monotonic so this is
+  // semantically correct (carry-forward = "no new activity that day").
+  const today = new Date(anchorMs).toISOString().slice(0, 10);
+  return fillDailyForward(sparse, today);
 }
 
 export default function CumulativeAmmVolume() {

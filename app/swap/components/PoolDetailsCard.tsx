@@ -14,7 +14,12 @@ type Props = {
   bare?: boolean;
 };
 
-const ALKANODE_RPC_URL = 'https://api.alkanode.com/rpc';
+// Override via `NEXT_PUBLIC_ESPO_RPC_URL` if alkanode is unreachable. See
+// `lib/alkanes/rpc.ts` for the parallel definition. (Pattern ported from
+// PR #115 on subfrost/subfrost-app, 2026-05-11.)
+const ALKANODE_RPC_URL =
+  (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_ESPO_RPC_URL) ||
+  'https://api.alkanode.com/rpc';
 
 /**
  * Resolve the pizza.fun series ID (symbol) for a given alkane ID.
