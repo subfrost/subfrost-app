@@ -14,9 +14,17 @@
  *
  * JOURNAL ENTRY (2026-01-28): Created for CORS workaround.
  * JOURNAL ENTRY (2026-02-06): Consolidated into single optional catch-all.
- * JOURNAL ENTRY (2026-02-07): Removed alkanode/Espo routing. All methods go
- * to subfrost endpoints. Pool data, token info, and heights are fetched via
- * the @alkanes/ts-sdk bindings or alkanes_simulate on subfrost RPC.
+ * JOURNAL ENTRY (2026-05-10, supersedes 2026-02-07): REST sub-paths route
+ * to canon Espo on alkanode for mainnet (per flex: "All of the
+ * /v4/subfrost/* routes other than BTC pricing are espo routes. They should
+ * be bypassed and go directly to espo"). The earlier 2026-02-07 note saying
+ * "all methods go to subfrost" no longer holds — see REST_PRIMARY_BASE_URLS
+ * below.
+ * JOURNAL ENTRY (2026-05-11): Both `metashrew_view` AND `metashrew_height`
+ * now route to /v6/subfrost on mainnet so they read the same replica's
+ * indexer state. Earlier split (height on /v4) caused phantom multi-block
+ * lag when /v4's replica fell behind /v6's — see pickEndpoint comment for
+ * the full rationale and the rate-limit re-verification.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -174,11 +182,6 @@ export async function POST(
 
     let network: string;
     let targetUrl: string;
-    // Tracks whether this is a REST sub-path request (e.g. /get-all-amm-tx-history)
-    // and the joined path so we can construct an alkanode fallback URL on
-    // primary failure. JSON-RPC requests don't use this — they have their
-    // own metashrew-unwrap fallback below.
-    let restSubPath: string | null = null;
 
     // Qubitcoin-regtest service URLs (VPN-only, from env)
     const QBC_HOST = process.env.QUBITCOIN_REGTEST_HOST || '127.0.0.1';
@@ -236,15 +239,16 @@ export async function POST(
           return NextResponse.json({ statusCode: 200, data: [] });
         }
         // REST sub-path: forward to canon Espo (alkanode on mainnet, per
-        // flex 2026-05-10) with subfrost.io as the configured fallback.
-        // For non-mainnet networks the primary stays on subfrost.io because
-        // alkanode hosts a mainnet espo deployment only.
+        // flex 2026-05-10). NO subfrost.io fallback — falling back would
+        // re-introduce the broken /v4/subfrost/* path this proxy exists to
+        // bypass. For non-mainnet networks the primary stays on
+        // subfrost.io because alkanode hosts a mainnet espo deployment
+        // only.
         const restPrimary = REST_PRIMARY_BASE_URLS[network]
           || RPC_ENDPOINTS[network]
           || RPC_ENDPOINTS.regtest;
         const baseUrl = restPrimary.replace(/\/$/, '');
-        restSubPath = restPath.join('/');
-        targetUrl = `${baseUrl}/${restSubPath}`;
+        targetUrl = `${baseUrl}/${restPath.join('/')}`;
       } else {
         // Plain JSON-RPC
         targetUrl = pickEndpoint(body, network);
@@ -338,198 +342,53 @@ export async function POST(
     const method = Array.isArray(body) ? 'batch' : body?.method;
     console.log(`[RPC Proxy] ${method} -> ${targetUrl}`);
 
-    // Fallback endpoint for mainnet when primary hits metashrew-unwrap errors.
-    // Mainnet primary is /v4/subfrost (faster for metashrew_view fanout) but it
-    // returns metashrew-unwrap routing errors on metashrew_height — the fallback
-    // /v4/jsonrpc handles those reliably.
-    const FALLBACK_ENDPOINTS: Record<string, string> = {
-      mainnet: 'https://mainnet.subfrost.io/v4/jsonrpc',
-      testnet: 'https://testnet.subfrost.io/v4/jsonrpc',
-      signet: 'https://signet.subfrost.io/v4/jsonrpc',
-    };
-
+    // Single upstream, no fallbacks. Per flex 2026-05-11: "OK lets remove
+    // all fallbacks everywhere. We should never have more than 1 way to do
+    // something." This used to carry four fallback chains: a metashrew /v6
+    // → /v4-gateway retry on non-JSON, a metashrew-unwrap → /v4/jsonrpc
+    // retry, a metashrew /v6 → /v4-gateway retry on rate-limit / JSON-RPC
+    // error, and a 2-attempt server-side retry for alkanes_*. All deleted
+    // because:
+    //
+    //   1. The "metashrew-unwrap" routing error on /v4/<token> motivated
+    //      the JSON-RPC fallback. Today (PR #117) `metashrew_height` and
+    //      `metashrew_view` both route to /v6 which doesn't have that
+    //      error class. The /v4 unwrap failure mode is no longer reachable
+    //      from this proxy.
+    //   2. The /v6 rate-limit fallback assumed /v6 would 429 the SDK's
+    //      500ms poll. Re-verified 2026-05-11: 8/8 requests succeeded at
+    //      that cadence, no 429. Whatever rate-limit window /v6 used to
+    //      enforce is gone or raised.
+    //   3. The alkanes_* server-side retry was masking transient subfrost
+    //      flakes that the client-side cache (with Promise.allSettled in
+    //      queries/account.ts:walletUtxoCacheQueryOptions) already
+    //      tolerates per-outpoint. Doubling up just delayed the surface.
+    //
+    // If subfrost regresses to needing one of these again, re-add the
+    // SPECIFIC fallback (with the failure-mode evidence in the comment)
+    // rather than re-introducing the whole chain.
     const response = await fetch(targetUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
 
-    // No REST sub-path fallback. The primary REST upstream (canon Espo on
-    // alkanode for mainnet, set in REST_PRIMARY_BASE_URLS above) is the
-    // single source of truth — falling back to subfrost.io would re-introduce
-    // the broken /v4/subfrost/* path this proxy exists to bypass per flex
-    // (alkanes-rs maintainer, 2026-05-10). The JSON-RPC metashrew-unwrap
-    // fallback below is unrelated and stays — that path is for the
-    // /v6/subfrost intermittent 408/502 retry on metashrew_* methods.
-
-    // Read the response body once. Upstream is always JSON-RPC, but infrastructure
-    // errors (nginx 502, rate limits, service unavailable) may return plain text or HTML.
-    let responseText = await response.text();
+    // Read the response body once. Upstream is always JSON-RPC, but
+    // infrastructure errors (nginx 502, rate limits, service unavailable)
+    // may return plain text or HTML.
+    const responseText = await response.text();
     let data;
     try {
       data = JSON.parse(responseText);
     } catch {
-      // Non-JSON response — this is an infrastructure error, not a JSON-RPC response.
-      // Common causes: nginx "upstream request failed", rate limit HTML pages, 408/502/503 errors.
-
-      // Metashrew-route fallback. /v6/subfrost is the fast metashrew-only path
-      // for mainnet (see METASHREW_RPC_ENDPOINTS) but it intermittently returns
-      // 408 timeouts and 502s under load. When that happens for a metashrew_*
-      // request, retry against the network's gateway (RPC_ENDPOINTS) which
-      // also serves metashrew calls (slower, no sticky-session optimization).
-      //
-      // The gateway is itself flaky on metashrew_height under burst load
-      // (~5% non-JSON 502s), so we retry up to 3 times with progressive
-      // backoff. Without all attempts, the WASM SDK's `select_utxos`
-      // sees the 502 and aborts the entire swap with "Network error".
-      const isMetashrewMethod = !Array.isArray(body) &&
-        (body?.method === 'metashrew_view' || body?.method === 'metashrew_height');
-      const metashrewPrimary = METASHREW_RPC_ENDPOINTS[network];
-      const gatewayUrl = RPC_ENDPOINTS[network];
-      if (isMetashrewMethod && metashrewPrimary && gatewayUrl && targetUrl === metashrewPrimary) {
-        console.warn(`[RPC Proxy] metashrew primary ${response.status} for ${body.method}; falling back to ${gatewayUrl}`);
-        for (let attempt = 0; attempt < 3; attempt++) {
-          if (attempt > 0) {
-            await new Promise((r) => setTimeout(r, 200 * attempt));
-          }
-          try {
-            const fallbackResp = await fetch(gatewayUrl, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(body),
-            });
-            const fallbackText = await fallbackResp.text();
-            try {
-              const fallbackData = JSON.parse(fallbackText);
-              if (!fallbackData?.error) {
-                if (attempt > 0) {
-                  console.warn(`[RPC Proxy] metashrew non-JSON fallback succeeded on attempt ${attempt + 1} for ${body.method}`);
-                }
-                return NextResponse.json(fallbackData);
-              }
-              // JSON-RPC error from gateway — retry.
-            } catch { /* fallback also non-JSON, retry */ }
-          } catch { /* fallback request failed, retry */ }
-        }
-        console.warn(`[RPC Proxy] metashrew non-JSON fallback exhausted for ${body.method}; falling through to error response`);
-      }
-
-      // No REST fallback. Per flex (alkanes-rs maintainer, 2026-05-10) the
-      // canon Espo (alkanode for mainnet) is the only upstream — falling
-      // back to subfrost.io would re-introduce the broken /v4/subfrost/*
-      // path this proxy exists to bypass.
-      const snippet = responseText.slice(0, 200).replace(/<[^>]*>/g, '').trim(); // strip HTML tags
+      // Non-JSON response — propagate as a JSON-RPC error. No retry, no
+      // fallback (see header comment above).
+      const snippet = responseText.slice(0, 200).replace(/<[^>]*>/g, '').trim();
       console.error(`[RPC Proxy] Non-JSON upstream response (${response.status}) for ${method}: ${snippet}`);
       return NextResponse.json(
         { jsonrpc: '2.0', error: { code: -32603, message: `Upstream error (${response.status}): ${snippet}` }, id: body?.id ?? null },
         { status: 502 }
       );
-    }
-
-    // No REST sub-path "200-with-empty" fallback. Per flex (2026-05-10) the
-    // canon Espo (alkanode for mainnet) is the single source of truth — if
-    // it returns empty, the data is genuinely absent. Layering subfrost.io
-    // as a fallback would shadow real on-chain absence with stale-cache
-    // hits AND re-introduce the broken /v4/subfrost/* path this proxy is
-    // bypassing.
-
-    // Retry on metashrew-unwrap errors — fallback to /v4/jsonrpc which routes correctly
-    if (data?.error?.message?.includes('metashrew-unwrap') && network && FALLBACK_ENDPOINTS[network]) {
-      console.log(`[RPC Proxy] metashrew-unwrap error, retrying via fallback: ${FALLBACK_ENDPOINTS[network]}`);
-      try {
-        const fallbackResp = await fetch(FALLBACK_ENDPOINTS[network], {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-        });
-        const fallbackText = await fallbackResp.text();
-        const fallbackData = JSON.parse(fallbackText);
-        if (!fallbackData?.error) {
-          data = fallbackData;
-        }
-      } catch { /* fallback failed, use original error */ }
-    }
-
-    // Metashrew rate-limit / error fallback. /v6/subfrost rate-limits aggressive
-    // bursts (HTTP 429) and the wallet cache's per-call retry doesn't backoff
-    // enough to clear the rate window — every 429 cascades into a balance error.
-    // When a metashrew_* request gets a non-2xx OR a JSON-RPC error from the
-    // sticky /v6 endpoint, retry once against the gateway URL which serves the
-    // same method (slower, no rate limit, no sticky session).
-    {
-      const isMetashrewMethod = !Array.isArray(body) &&
-        (body?.method === 'metashrew_view' || body?.method === 'metashrew_height');
-      const metashrewPrimary = METASHREW_RPC_ENDPOINTS[network];
-      const gatewayUrl = RPC_ENDPOINTS[network];
-      const upstreamFailed = !response.ok || !!data?.error;
-      if (
-        isMetashrewMethod &&
-        metashrewPrimary &&
-        gatewayUrl &&
-        targetUrl === metashrewPrimary &&
-        upstreamFailed
-      ) {
-        console.warn(
-          `[RPC Proxy] metashrew primary ${response.status} for ${body.method}; falling back to ${gatewayUrl}`
-        );
-        try {
-          const fallbackResp = await fetch(gatewayUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body),
-          });
-          const fallbackText = await fallbackResp.text();
-          try {
-            const fallbackData = JSON.parse(fallbackText);
-            if (!fallbackData?.error) {
-              return NextResponse.json(fallbackData);
-            }
-          } catch { /* fallback also non-JSON, fall through to original error */ }
-        } catch { /* fallback request failed, fall through */ }
-      }
-    }
-
-    // alkanes_* retry on transient gateway errors. The /v4/subfrost gateway
-    // returns transient JSON-RPC errors (~3-7% of bursts) on
-    // alkanes_protorunesbyoutpoint and friends — "metashrew-unwrap" /
-    // "error decoding response body" / similar non-deterministic signatures.
-    // Each failed call cascades through the wallet cache's fetchWithRetry
-    // (3× per outpoint) and, if even one outpoint exhausts retries, blanks
-    // the whole alkane balance display. This block adds a server-side retry
-    // (up to 2 extra attempts, ~100ms backoff) so transient errors don't
-    // reach the client. If retries are also exhausted we forward the last
-    // response as-is (the client cache will retry, and Layer 2's alkanode
-    // fallback in queries/account.ts catches the steady-state empty case).
-    {
-      const isAlkanesRpc = !Array.isArray(body) &&
-        typeof body?.method === 'string' &&
-        body.method.startsWith('alkanes_');
-      const upstreamFailed = !response.ok || !!data?.error;
-      if (isAlkanesRpc && upstreamFailed && network) {
-        for (let attempt = 0; attempt < 2; attempt++) {
-          await new Promise((r) => setTimeout(r, 100 * (attempt + 1)));
-          try {
-            const retryResp = await fetch(targetUrl, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(body),
-            });
-            const retryText = await retryResp.text();
-            try {
-              const retryData = JSON.parse(retryText);
-              if (retryResp.ok && !retryData?.error) {
-                if (attempt > 0 || !response.ok) {
-                  console.warn(`[RPC Proxy] alkanes_* retry succeeded on attempt ${attempt + 2} for ${body.method}`);
-                }
-                return NextResponse.json(retryData);
-              }
-              // Update `data` so a downstream fallback (or the client-cache
-              // retry loop) sees the most-recent response, not a stale one.
-              data = retryData;
-            } catch { /* retry non-JSON; loop again */ }
-          } catch { /* retry threw; loop again */ }
-        }
-      }
     }
 
     // Non-200 status with valid JSON body — forward the JSON-RPC error as-is

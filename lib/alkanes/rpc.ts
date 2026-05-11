@@ -34,22 +34,21 @@ import { getRpcUrl } from '@/utils/getConfig';
  * Per flex 2026-05-11 ("we should never have more than 1 way to do
  * something"), every browser-side RPC call funnels through the
  * same-origin Next.js proxy at /api/rpc/${network} regardless of method.
- * The proxy is the only place that knows about subfrost.io's broken
- * /v4/<token> metashrew-unwrap path, the /v6/subfrost stickiness for
- * metashrew_view, and the canon Espo (alkanode) REST routing — letting
- * each helper pick its own upstream resurrects the routing-bug parade
- * we just deleted.
+ * The proxy is the only place that knows the subfrost.io routing matrix
+ * (`metashrew_view` + `metashrew_height` → /v6/subfrost; everything else
+ * → /v4 gateway; REST sub-paths → canon Espo on alkanode). Letting each
+ * helper pick its own upstream resurrects the routing-bug parade PR #116
+ * deleted.
  *
  * History: this used to point straight at SUBFROST_API_URLS[network],
- * which on mainnet is /v4/<token>. /v4 was returning
+ * which on mainnet is /v4/<token>. That path was returning
  * `error sending request for url (http://metashrew-unwrap:8080/)` for
- * `metashrew_height`, which broke the swap quote engine end-to-end:
+ * `metashrew_height` on 2026-05-11, which broke the swap quote engine
+ * end-to-end (PR #116):
  *   simulateContract → getHeight → POST /v4 → JSON-RPC error →
  *   throw → fetchLivePoolState returns null → usePoolStateLive returns
  *   null → useSwapQuotes can't compute a quote → user sees "no quote".
- * Routing through /api/rpc fixes it because the proxy sends
- * `metashrew_height` to the gateway URL on mainnet (which works) and
- * `metashrew_view` to /v6 (which is the fast sticky path).
+ * Routing through /api/rpc lets the proxy isolate that failure mode.
  */
 function subfrostRpcUrl(network: string): string {
   return getRpcUrl(network);
@@ -96,50 +95,12 @@ async function jsonRpcCall<T = unknown>(
   return body.result as T;
 }
 
-/**
- * Hedged retry: start source A; if unresolved after `hedgeMs`, race source B.
- * First successful result wins; losers are left to resolve in the background
- * (no abort — fetch without signal is fire-and-forget and short enough to drop).
- *
- * Use when one source is authoritative but slow, and a second is a cheap hedge.
- * For multi-source fan-out where all sources are equivalent, use `Promise.any`.
- */
-async function hedged<T>(
-  primary: (signal: AbortSignal) => Promise<T>,
-  fallback: (signal: AbortSignal) => Promise<T>,
-  hedgeMs: number,
-  signal?: AbortSignal,
-): Promise<T> {
-  const primaryCtrl = new AbortController();
-  const fallbackCtrl = new AbortController();
-  if (signal) {
-    signal.addEventListener('abort', () => {
-      primaryCtrl.abort();
-      fallbackCtrl.abort();
-    });
-  }
-
-  const primaryP = primary(primaryCtrl.signal);
-  let fallbackStarted = false;
-
-  const delay = new Promise<never>((_, reject) => {
-    setTimeout(() => reject(new Error('hedge timeout')), hedgeMs);
-  });
-
-  try {
-    // Either primary resolves in time, or we race it against the fallback.
-    return await Promise.race([primaryP, delay]);
-  } catch {
-    fallbackStarted = true;
-    const fallbackP = fallback(fallbackCtrl.signal);
-    const winner = await Promise.any([primaryP, fallbackP]);
-    return winner;
-  } finally {
-    // Best-effort cleanup. The losing request will still complete server-side
-    // but its response is discarded.
-    if (fallbackStarted) primaryCtrl.abort();
-  }
-}
+// `hedged` removed 2026-05-11. Its only callers (`getHeight` and
+// `getTokenPairs`) were stripped as part of the no-fallbacks pass —
+// hedged retries hide the real upstream-failure mode and obscure which
+// replica produced the answer. If you need cheap parallel fan-out across
+// equivalent sources, use `Promise.any`. If you need fail-fast with one
+// authoritative source, just call it directly and let the error bubble.
 
 // ============================================================================
 // alkanes_simulate — contract view calls
@@ -327,24 +288,23 @@ export async function getAddressMempoolTxs(
 }
 
 // ============================================================================
-// Block height — hedged over multiple sources
+// Block height
 // ============================================================================
 
 /**
  * Returns the current metashrew height for a network.
  *
- * Tries `metashrew_height` primary, `esplora_blocks::tip-height` after 2 s.
- * Matches the fallback cascade already in `queries/height.ts` but using
- * direct fetch instead of WASM-wrapped calls.
+ * Single upstream — `metashrew_height` against the proxy (which routes
+ * to /v6/subfrost on mainnet, gateway on other networks). No hedge with
+ * `esplora_blocks::tip-height`: per flex 2026-05-11 ("we should never
+ * have more than 1 way to do something") fallbacks just hide the real
+ * failure mode. If `metashrew_height` starts failing again, the proxy
+ * is the right place to add an explicit retry, not this client helper.
  */
 export async function getHeight(network: string, signal?: AbortSignal): Promise<number> {
   const url = subfrostRpcUrl(network);
-  return hedged(
-    (s) => jsonRpcCall<number | string>(url, 'metashrew_height', [], s).then(Number),
-    (s) => jsonRpcCall<number | string>(url, 'esplora_blocks::tip-height', [], s).then(Number),
-    2000,
-    signal,
-  );
+  const result = await jsonRpcCall<number | string>(url, 'metashrew_height', [], signal);
+  return Number(result);
 }
 
 // ============================================================================
@@ -526,53 +486,13 @@ export interface TokenPair {
   reserve1?: string;
 }
 
-/**
- * Fetch all token pairs discoverable from the app's own REST proxy.
- * Routes through `/api/rpc/{network}/get-all-token-pairs` (existing app endpoint).
- *
- * The upstream REST endpoint expects a body `{ factoryId: { block, tx } }`.
- * `factoryId` is passed as `"block:tx"` and split internally.
- *
- * Hedged with `getAllAmmPools` since that returns the same information in a
- * different shape. Normalized here so callers can `.pools` directly.
- */
-export async function getTokenPairs(
-  network: string,
-  factoryId: string,
-  signal?: AbortSignal,
-): Promise<Record<string, AmmPoolData>> {
-  const [block, tx] = factoryId.split(':');
-  // Primary: REST endpoint the app already maintains. Fast on subfrost networks.
-  const primary = async (s: AbortSignal) => {
-    const res = await fetch(`${getRpcUrl(network)}/get-all-token-pairs`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ factoryId: { block, tx } }),
-      signal: s,
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const json = await res.json();
-    // Normalize whatever shape the server returned into `ammdata.get_pools` format.
-    if (json?.pools) return json.pools as Record<string, AmmPoolData>;
-    if (json?.result?.pools) return json.result.pools as Record<string, AmmPoolData>;
-    if (Array.isArray(json?.data)) {
-      const out: Record<string, AmmPoolData> = {};
-      for (const pair of json.data) {
-        if (pair?.pool_id) out[pair.pool_id] = pair;
-      }
-      return out;
-    }
-    throw new Error('Unknown token-pairs response shape');
-  };
-
-  // Fallback: alkanode's mainnet dataset. Third-party — only useful on mainnet.
-  const fallback = async (s: AbortSignal) => {
-    const all = await getAllAmmPools(s);
-    return all.pools;
-  };
-
-  return hedged(primary, fallback, 2000, signal);
-}
+// Removed 2026-05-11: `getTokenPairs` had zero callers and used a hedged
+// fallback chain (REST proxy primary, alkanode dataset fallback) that
+// directly contradicts flex's "no fallbacks" rule. If you need pool
+// discovery from the canonical alkanode dataset, call `getAllAmmPools`
+// directly. If you need the per-network REST shape, route through the
+// `/api/rpc/{network}/get-all-token-pairs` proxy URL — there is no
+// app-wide use case for transparently switching between the two.
 
 // ============================================================================
 // BTC price + Alkane info — through existing Next.js API routes
