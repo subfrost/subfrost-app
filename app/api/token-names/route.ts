@@ -1,37 +1,35 @@
 /**
- * Token Names API — Proxies the data API's /get-alkanes endpoint
+ * Token Names API — Proxies the canon Espo /get-alkanes endpoint
  *
  * GET /api/token-names?network=<network>&limit=<limit>
  *
  * Returns a map of alkaneId → { name, symbol } for the top N tokens.
- * This proxy avoids CORS issues when fetching directly from subfrost API.
+ * This proxy avoids CORS issues when fetching directly from canon Espo.
  *
- * ## Env-configurable Espo upstreams (mainnet only)
+ * ## Routing policy (per flex, alkanes-rs maintainer, 2026-05-10)
  *
- * Both default to sensible values, override only when ops needs to flip
- * the active deployment without a code change. Examples:
+ * "All of the /v4/subfrost/* routes other than BTC pricing are espo routes.
+ *  They should be bypassed and go directly to espo."
  *
- *   ESPO_MAINNET_PRIMARY_URL   — primary base URL for /get-alkanes.
- *                                Default: https://mainnet.subfrost.io/v4/subfrost
- *                                Set to https://oyl.alkanode.com to use
- *                                alkanode as primary while subfrost's
- *                                hosted Espo is down.
- *   ESPO_MAINNET_FALLBACK_URL  — fallback used when the primary returns
- *                                non-2xx / times out. Default:
- *                                https://oyl.alkanode.com
- *                                Set empty string to disable fallback.
+ * Mainnet upstream: canon Espo on alkanode (oyl.alkanode.com). No fallback —
+ * falling back to subfrost.io would re-introduce the broken /v4/subfrost/*
+ * path this route exists to bypass (verified 2026-05-10: subfrost.io's
+ * /v4/subfrost/get-alkane-details returns 404 alkane_not_found for known
+ * mainnet alkanes).
  *
- * Non-mainnet networks (testnet/signet/regtest/etc) ignore these vars
- * since alkanode only hosts a mainnet Espo deployment.
+ * Override env var:
+ *   ESPO_MAINNET_PRIMARY_URL   — override mainnet upstream. Default alkanode.
+ *
+ * Non-mainnet networks (testnet/signet/regtest/etc) go through subfrost.io
+ * because alkanode hosts a mainnet Espo deployment only.
  */
 
 import { NextResponse } from 'next/server';
 
-const SUBFROST_MAINNET = 'https://mainnet.subfrost.io/v4/subfrost';
 const ALKANODE_OYL_MAINNET = 'https://oyl.alkanode.com';
 
 const RPC_ENDPOINTS: Record<string, string> = {
-  mainnet: process.env.ESPO_MAINNET_PRIMARY_URL || SUBFROST_MAINNET,
+  mainnet: process.env.ESPO_MAINNET_PRIMARY_URL || ALKANODE_OYL_MAINNET,
   testnet: 'https://testnet.subfrost.io/v4/subfrost',
   signet: 'https://signet.subfrost.io/v4/subfrost',
   regtest: 'https://regtest.subfrost.io/v4/subfrost',
@@ -41,22 +39,10 @@ const RPC_ENDPOINTS: Record<string, string> = {
   devnet: 'http://localhost:18888', // In-browser only
 };
 
-// Fallback Espo deployments hosted by alkanode — same OYL module + same REST
-// shape, so when the primary subfrost gateway has an Espo outage (verified
-// 2026-05-08, espo dev confirmed it's a Subfrost-side ops issue), the proxy
-// can degrade to this without any consumer-visible change. Mainnet only —
-// alkanode does not host testnet/signet/regtest Espo deployments.
-//
-// `ESPO_MAINNET_FALLBACK_URL=""` disables fallback entirely (single-upstream
-// mode). Any other value overrides the default alkanode URL.
-const fallbackEnv = process.env.ESPO_MAINNET_FALLBACK_URL;
-const FALLBACK_BASE_URLS: Record<string, string> = {};
-if (fallbackEnv === undefined) {
-  FALLBACK_BASE_URLS.mainnet = ALKANODE_OYL_MAINNET;
-} else if (fallbackEnv.length > 0) {
-  FALLBACK_BASE_URLS.mainnet = fallbackEnv;
-}
-// fallbackEnv === '' → no mainnet fallback (intentional opt-out)
+// No mainnet fallback (single-upstream by design). Falling back to subfrost.io
+// would re-introduce the broken /v4/subfrost/* path this route exists to
+// bypass. If alkanode goes down, override the primary via
+// ESPO_MAINNET_PRIMARY_URL instead of layering a fallback on top.
 
 /**
  * Well-known devnet token names — returned directly when network=devnet
@@ -108,10 +94,11 @@ export async function GET(request: Request) {
   }
 
   const baseUrl = RPC_ENDPOINTS[network] || RPC_ENDPOINTS.mainnet;
-  const fallbackBase = FALLBACK_BASE_URLS[network];
 
-  // Try primary; if it 502s / times out / errors, try the alkanode-hosted
-  // Espo as a fallback. Both expose the same `/get-alkanes` REST contract.
+  // Single upstream: canon Espo on alkanode for mainnet (no subfrost.io
+  // fallback — that's the route this proxy is bypassing). Other networks
+  // hit their respective subfrost.io espo deployment because alkanode hosts
+  // a mainnet espo only.
   const fetchAlkanes = async (base: string) => {
     const resp = await fetch(`${base}/get-alkanes`, {
       method: 'POST',
@@ -127,14 +114,7 @@ export async function GET(request: Request) {
   };
 
   try {
-    let response: Response;
-    try {
-      response = await fetchAlkanes(baseUrl);
-    } catch (primaryErr) {
-      if (!fallbackBase) throw primaryErr;
-      console.warn(`[token-names] primary upstream failed (${primaryErr instanceof Error ? primaryErr.message : 'unknown'}); falling back to ${fallbackBase}`);
-      response = await fetchAlkanes(fallbackBase);
-    }
+    const response = await fetchAlkanes(baseUrl);
 
     const data = await response.json();
     const tokens: any[] = data?.data?.tokens || [];

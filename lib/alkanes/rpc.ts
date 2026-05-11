@@ -22,18 +22,37 @@
  * - `api.alkanode.com/rpc` `ammdata.get_pools` → works for mainnet pool data. ✅
  */
 
-import { SUBFROST_API_URLS, getRpcUrl } from '@/utils/getConfig';
+import { getRpcUrl } from '@/utils/getConfig';
 
 // ============================================================================
 // Shared fetch helpers
 // ============================================================================
 
 /**
- * Resolves the subfrost JSON-RPC endpoint for a given network name.
- * Accepts the same network strings as `getRpcUrl` / `SUBFROST_API_URLS`.
+ * The single browser-facing JSON-RPC endpoint for a network.
+ *
+ * Per flex 2026-05-11 ("we should never have more than 1 way to do
+ * something"), every browser-side RPC call funnels through the
+ * same-origin Next.js proxy at /api/rpc/${network} regardless of method.
+ * The proxy is the only place that knows about subfrost.io's broken
+ * /v4/<token> metashrew-unwrap path, the /v6/subfrost stickiness for
+ * metashrew_view, and the canon Espo (alkanode) REST routing — letting
+ * each helper pick its own upstream resurrects the routing-bug parade
+ * we just deleted.
+ *
+ * History: this used to point straight at SUBFROST_API_URLS[network],
+ * which on mainnet is /v4/<token>. /v4 was returning
+ * `error sending request for url (http://metashrew-unwrap:8080/)` for
+ * `metashrew_height`, which broke the swap quote engine end-to-end:
+ *   simulateContract → getHeight → POST /v4 → JSON-RPC error →
+ *   throw → fetchLivePoolState returns null → usePoolStateLive returns
+ *   null → useSwapQuotes can't compute a quote → user sees "no quote".
+ * Routing through /api/rpc fixes it because the proxy sends
+ * `metashrew_height` to the gateway URL on mainnet (which works) and
+ * `metashrew_view` to /v6 (which is the fast sticky path).
  */
 function subfrostRpcUrl(network: string): string {
-  return SUBFROST_API_URLS[network] || SUBFROST_API_URLS.mainnet;
+  return getRpcUrl(network);
 }
 
 /**
@@ -401,6 +420,9 @@ export async function metashrewView(
   blockTag: string = 'latest',
   signal?: AbortSignal,
 ): Promise<string> {
+  // Single upstream — the same-origin /api/rpc proxy. The proxy already
+  // routes metashrew_view to /v6/subfrost on mainnet (sticky, fast) and
+  // to the gateway on other networks. See subfrostRpcUrl above.
   return jsonRpcCall<string>(
     subfrostRpcUrl(network),
     'metashrew_view',

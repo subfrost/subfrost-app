@@ -1,17 +1,30 @@
 /**
- * Token Details API — Proxies the data API's /get-alkane-details endpoint
+ * Token Details API — Proxies the canon Espo /get-alkane-details endpoint
  *
  * POST /api/token-details
  * Body: { alkaneIds: ["2:25720", "2:21219"], network?: string }
  *
- * Returns metadata for specific tokens not covered by the bulk /get-alkanes fetch.
- * This proxy avoids CORS issues when fetching directly from subfrost API.
+ * Returns metadata for specific tokens not covered by the bulk /get-alkanes
+ * fetch. This proxy avoids CORS issues when fetching directly from canon Espo.
+ *
+ * ## Routing policy (per flex, alkanes-rs maintainer, 2026-05-10)
+ *
+ * Mainnet PRIMARY: canon Espo on alkanode (oyl.alkanode.com) — verified
+ *   2026-05-10 to return real per-token name+symbol+holders+price for any
+ *   alkane id (e.g. 2:69 → name="FARTANE" symbol="H2S").
+ * Subfrost.io's /v4/subfrost/get-alkane-details was verified broken on
+ *   2026-05-10 (returns 404 alkane_not_found for known alkanes), which is
+ *   why this route stopped serving useful data on staging.
+ *
+ * Override with ESPO_MAINNET_PRIMARY_URL env var if alkanode goes down.
  */
 
 import { NextResponse } from 'next/server';
 
+const ALKANODE_OYL_MAINNET = 'https://oyl.alkanode.com';
+
 const RPC_ENDPOINTS: Record<string, string> = {
-  mainnet: 'https://mainnet.subfrost.io/v4/subfrost',
+  mainnet: process.env.ESPO_MAINNET_PRIMARY_URL || ALKANODE_OYL_MAINNET,
   testnet: 'https://testnet.subfrost.io/v4/subfrost',
   signet: 'https://signet.subfrost.io/v4/subfrost',
   regtest: 'https://regtest.subfrost.io/v4/subfrost',

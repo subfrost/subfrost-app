@@ -87,18 +87,31 @@ const BATCH_RPC_ENDPOINTS: Record<string, string> = {
   oylnet: 'https://regtest.subfrost.io/v4/jsonrpc',
 };
 
-// Fallback Espo REST host for mainnet — same OYL module contract as subfrost
-// (verified against /get-all-amm-tx-history, /get-all-pools-details, etc).
-// Used only for REST sub-path requests when the primary returns non-2xx, so
-// landing-page surfaces (Activity Feed, Trending Pair) survive Subfrost-side
-// Espo outages. Set `ESPO_MAINNET_FALLBACK_URL=""` to disable.
-const restFallbackEnv = process.env.ESPO_MAINNET_FALLBACK_URL;
-const REST_FALLBACK_BASE_URLS: Record<string, string> = {};
-if (restFallbackEnv === undefined) {
-  REST_FALLBACK_BASE_URLS.mainnet = 'https://oyl.alkanode.com';
-} else if (restFallbackEnv.length > 0) {
-  REST_FALLBACK_BASE_URLS.mainnet = restFallbackEnv;
-}
+// REST upstream for mainnet: canon Espo on alkanode. Per flex (alkanes-rs
+// maintainer, 2026-05-10):
+//   "All of the /v4/subfrost/* routes other than BTC pricing are espo routes.
+//    They should be bypassed and go directly to espo."
+//
+// Subfrost.io's /v4/subfrost/* hosting was verified broken on 2026-05-10
+// (404 alkane_not_found / 200-with-zero-pools for several REST endpoints),
+// which is why landing-page surfaces (Trending Pair, Markets TVL) stopped
+// showing real data on staging. We do NOT keep a subfrost.io fallback —
+// falling back to it would re-introduce that broken path.
+//
+// Override env: ESPO_MAINNET_PRIMARY_URL — pin a different mainnet upstream
+// (e.g. a backup alkanode mirror) if alkanode itself goes down.
+//
+// Note: this ONLY applies to REST sub-paths (e.g. /get-pool-details). The
+// JSON-RPC routing (metashrew_view, alkanes_*, esplora_*, bitcoin_*) is a
+// separate concern and stays on subfrost.io's gateway — see pickEndpoint
+// below. Splitting JSON-RPC primary is out of scope here because alkanode
+// hosts the espo REST contract but not the full subfrost JSON-RPC gateway.
+const ALKANODE_OYL_MAINNET = 'https://oyl.alkanode.com';
+const REST_PRIMARY_BASE_URLS: Record<string, string> = {};
+const restPrimaryEnv = process.env.ESPO_MAINNET_PRIMARY_URL;
+REST_PRIMARY_BASE_URLS.mainnet = restPrimaryEnv && restPrimaryEnv.length > 0
+  ? restPrimaryEnv
+  : ALKANODE_OYL_MAINNET;
 
 function pickEndpoint(body: any, network: string) {
   const isBatch = Array.isArray(body);
@@ -204,8 +217,14 @@ export async function POST(
           console.log(`[RPC Proxy] qubitcoin-regtest REST /${restPath.join('/')} → empty (no data API)`);
           return NextResponse.json({ statusCode: 200, data: [] });
         }
-        // REST sub-path: forward to backend base URL + rest path
-        const baseUrl = (RPC_ENDPOINTS[network] || RPC_ENDPOINTS.regtest).replace(/\/$/, '');
+        // REST sub-path: forward to canon Espo (alkanode on mainnet, per
+        // flex 2026-05-10) with subfrost.io as the configured fallback.
+        // For non-mainnet networks the primary stays on subfrost.io because
+        // alkanode hosts a mainnet espo deployment only.
+        const restPrimary = REST_PRIMARY_BASE_URLS[network]
+          || RPC_ENDPOINTS[network]
+          || RPC_ENDPOINTS.regtest;
+        const baseUrl = restPrimary.replace(/\/$/, '');
         restSubPath = restPath.join('/');
         targetUrl = `${baseUrl}/${restSubPath}`;
       } else {
@@ -311,36 +330,19 @@ export async function POST(
       signet: 'https://signet.subfrost.io/v4/jsonrpc',
     };
 
-    let response = await fetch(targetUrl, {
+    const response = await fetch(targetUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
 
-    // REST sub-path Espo fallback. When the primary upstream returns 5xx /
-    // non-JSON / connection error for a /get-* style request, retry against
-    // alkanode (or whatever ESPO_MAINNET_FALLBACK_URL is set to). JSON-RPC
-    // requests are unaffected — they have their own metashrew-unwrap
-    // fallback below and route to a different upstream.
-    const restFallbackBase = restSubPath ? REST_FALLBACK_BASE_URLS[network] : null;
-    if (restSubPath && restFallbackBase && !response.ok) {
-      const fallbackUrl = `${restFallbackBase.replace(/\/$/, '')}/${restSubPath}`;
-      console.warn(`[RPC Proxy] REST primary ${response.status} for /${restSubPath}; falling back to ${fallbackUrl}`);
-      try {
-        const fallbackResp = await fetch(fallbackUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-        });
-        if (fallbackResp.ok) {
-          response = fallbackResp;
-        } else {
-          console.warn(`[RPC Proxy] REST fallback also failed: ${fallbackResp.status}`);
-        }
-      } catch (fallbackErr) {
-        console.warn(`[RPC Proxy] REST fallback threw:`, fallbackErr);
-      }
-    }
+    // No REST sub-path fallback. The primary REST upstream (canon Espo on
+    // alkanode for mainnet, set in REST_PRIMARY_BASE_URLS above) is the
+    // single source of truth — falling back to subfrost.io would re-introduce
+    // the broken /v4/subfrost/* path this proxy exists to bypass per flex
+    // (alkanes-rs maintainer, 2026-05-10). The JSON-RPC metashrew-unwrap
+    // fallback below is unrelated and stays — that path is for the
+    // /v6/subfrost intermittent 408/502 retry on metashrew_* methods.
 
     // Read the response body once. Upstream is always JSON-RPC, but infrastructure
     // errors (nginx 502, rate limits, service unavailable) may return plain text or HTML.
@@ -394,22 +396,10 @@ export async function POST(
         console.warn(`[RPC Proxy] metashrew non-JSON fallback exhausted for ${body.method}; falling through to error response`);
       }
 
-      // For REST sub-paths, attempt the alkanode fallback as a last resort.
-      if (restSubPath && restFallbackBase) {
-        const fallbackUrl = `${restFallbackBase.replace(/\/$/, '')}/${restSubPath}`;
-        console.warn(`[RPC Proxy] REST primary returned non-JSON for /${restSubPath}; trying ${fallbackUrl}`);
-        try {
-          const fallbackResp = await fetch(fallbackUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body),
-          });
-          const fallbackText = await fallbackResp.text();
-          try {
-            return NextResponse.json(JSON.parse(fallbackText), { status: fallbackResp.status });
-          } catch { /* fall through to error response below */ }
-        } catch { /* fall through */ }
-      }
+      // No REST fallback. Per flex (alkanes-rs maintainer, 2026-05-10) the
+      // canon Espo (alkanode for mainnet) is the only upstream — falling
+      // back to subfrost.io would re-introduce the broken /v4/subfrost/*
+      // path this proxy exists to bypass.
       const snippet = responseText.slice(0, 200).replace(/<[^>]*>/g, '').trim(); // strip HTML tags
       console.error(`[RPC Proxy] Non-JSON upstream response (${response.status}) for ${method}: ${snippet}`);
       return NextResponse.json(
@@ -418,57 +408,12 @@ export async function POST(
       );
     }
 
-    // REST sub-path "200-with-empty" fallback. Subfrost espo intermittently
-    // returns successful HTTP 200 responses with empty data while it's
-    // catching up on indexing — but the alkanode mirror has the real data.
-    // The 5xx fallback above doesn't fire on 200, and consumers that don't
-    // implement their own emptiness check (which is most of them) silently
-    // shadow real data with empty data.
-    //
-    // Detect both common OYL-API empty shapes:
-    //   { data: { total: 0, ... } }         (paginated endpoints)
-    //   { data: [] }                         (list endpoints)
-    // For either, retry against the configured REST fallback (alkanode on
-    // mainnet) and use its response if it has more data than primary.
-    //
-    // Skipped if response is non-2xx or already-fallback'd (the 5xx path
-    // above already handled it) or if no REST fallback is configured.
-    if (
-      restSubPath &&
-      restFallbackBase &&
-      response.ok
-    ) {
-      const isEmpty = (parsed: any): boolean => {
-        const d = parsed?.data;
-        if (Array.isArray(d)) return d.length === 0;
-        if (typeof d?.total === 'number') return d.total === 0;
-        if (typeof d?.count === 'number') return d.count === 0;
-        return false;
-      };
-      if (isEmpty(data)) {
-        const fallbackUrl = `${restFallbackBase.replace(/\/$/, '')}/${restSubPath}`;
-        console.warn(`[RPC Proxy] REST primary returned empty for /${restSubPath} (likely indexer drift); checking ${fallbackUrl}`);
-        try {
-          const fallbackResp = await fetch(fallbackUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body),
-          });
-          if (fallbackResp.ok) {
-            const fallbackText = await fallbackResp.text();
-            try {
-              const fallbackParsed = JSON.parse(fallbackText);
-              if (!isEmpty(fallbackParsed)) {
-                console.warn(`[RPC Proxy] REST fallback ${fallbackUrl} returned non-empty data; using fallback`);
-                data = fallbackParsed;
-              }
-            } catch { /* fallback non-JSON; keep primary */ }
-          }
-        } catch (fallbackErr) {
-          console.warn(`[RPC Proxy] REST empty-fallback threw:`, fallbackErr);
-        }
-      }
-    }
+    // No REST sub-path "200-with-empty" fallback. Per flex (2026-05-10) the
+    // canon Espo (alkanode for mainnet) is the single source of truth — if
+    // it returns empty, the data is genuinely absent. Layering subfrost.io
+    // as a fallback would shadow real on-chain absence with stale-cache
+    // hits AND re-introduce the broken /v4/subfrost/* path this proxy is
+    // bypassing.
 
     // Retry on metashrew-unwrap errors — fallback to /v4/jsonrpc which routes correctly
     if (data?.error?.message?.includes('metashrew-unwrap') && network && FALLBACK_ENDPOINTS[network]) {
