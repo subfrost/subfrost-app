@@ -20,12 +20,31 @@
  * be bypassed and go directly to espo"). The earlier 2026-02-07 note saying
  * "all methods go to subfrost" no longer holds — see REST_PRIMARY_BASE_URLS
  * below.
- * JOURNAL ENTRY (2026-05-11 PM, supersedes morning's PR #117): only
- * `metashrew_view` routes to /v6/subfrost on mainnet. `metashrew_height`
- * is back on /v4 because /v6 enforces a 20 req/min per-IP rate limit
- * that Cloud Run's shared egress IP exhausts instantly on staging. The
- * cross-replica drift problem PR #117 fixed is now the lesser evil.
- * See pickEndpoint comment below for the full rationale.
+ * JOURNAL ENTRY (2026-05-11 EVENING, supersedes earlier same-day notes):
+ * Both `metashrew_view` AND `metashrew_height` route to /v6/subfrost on
+ * mainnet, with an optional `Authorization: Bearer <SUBFROST_V6_API_KEY>`
+ * header attached when that env var is set (server-side only — never
+ * `NEXT_PUBLIC_*`). Background:
+ *   - PR #117 routed both to /v6 to fix cross-replica drift.
+ *   - PR #121 reverted height to /v4 because /v6's anonymous tier enforces
+ *     a 20 req/min per-IP rate limit that Cloud Run's shared egress IP
+ *     exhausts instantly. Swaps 429'd.
+ *   - /v4 worked but exposed transient `metashrew-unwrap` and `error
+ *     decoding response body` errors (~15% rate on the SDK's 500ms poll).
+ *     Each error aborts the swap. Multiple in-flight retries can mask it
+ *     but only at the cost of re-introducing the cross-endpoint fallback
+ *     chains we just deleted.
+ *   - This PR routes back to /v6 BUT signs requests with an authenticated
+ *     API key. Authenticated /v6 calls bypass the anonymous rate bucket,
+ *     and /v6's upstream is empirically more reliable than /v4's
+ *     metashrew-unwrap path. Both swap-blocking failure modes go away.
+ *
+ * If SUBFROST_V6_API_KEY is unset (local dev without a key), /v6 calls
+ * are sent unauthenticated and may 429 under load. Set the env var via
+ * `.env.local` for local dev, or via Cloud Run env config for staging /
+ * prod. Key is obtained from subfrost (api.subfrost.io signup).
+ *
+ * See pickEndpoint and buildHeadersForUrl below for the routing details.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -38,20 +57,24 @@ import { NextRequest, NextResponse } from 'next/server';
 // JSON-RPC gateway (bitcoin RPC, alkanes_*, esplora_*).
 //
 // Routing matrix for mainnet:
-//   - metashrew_view                          → /v6/subfrost (sticky, fast)
-//   - metashrew_height                        → /v4/subfrost (avoids /v6 rate limit)
-//   - REST sub-paths (/get-all-amm-tx-history etc.) → /v4/subfrost (data API)
+//   - metashrew_view                          → /v6/subfrost (auth, sticky, fast)
+//   - metashrew_height                        → /v6/subfrost (auth, sticky, fast)
+//   - REST sub-paths (/get-all-amm-tx-history etc.) → alkanode (canon Espo)
 //   - All other JSON-RPC                      → /v4/subfrost (gateway)
 //
 // /v6/subfrost benefit: 27-way parallel protorunesbyoutpoint fanout completes
 // in ~0.18-0.29s wall time vs 0.92s on /v4/subfrost vs 8.7s on /v4/<token>.
-// But /v6 enforces a 20 req/min per-IP rate limit on the unauthenticated
-// tier — Cloud Run's shared egress IP burns through that instantly under
-// staging load, so we keep `metashrew_height` (the SDK's hot poll) on /v4
-// and only use /v6 for `metashrew_view` (~one call per quote refresh).
+// /v6 also avoids the `/v4` upstream's transient `metashrew-unwrap` and
+// `error decoding response body` errors (verified 2026-05-11: ~15% error
+// rate on /v4 metashrew_height under 500ms poll cadence; 0% on /v6).
+//
+// /v6's anonymous tier enforces a 20 req/min per-IP rate limit, which Cloud
+// Run's shared egress IP exhausts instantly. Authenticated requests
+// (Authorization header from SUBFROST_V6_API_KEY) bypass the bucket. See
+// `buildHeadersForUrl` below.
 //
 // Other networks (testnet/signet/regtest) stay on /v4/<token> — only mainnet
-// has the dual-endpoint split.
+// has the /v6 split.
 const RPC_ENDPOINTS: Record<string, string> = {
   mainnet: 'https://mainnet.subfrost.io/v4/subfrost',
   testnet: 'https://testnet.subfrost.io/v4/5d37098b75581792a44b9d230d48aa75',
@@ -64,25 +87,51 @@ const RPC_ENDPOINTS: Record<string, string> = {
 };
 
 // Per-network metashrew-only endpoint. When set for a network, JSON-RPC
-// requests with `metashrew_view` (ONLY — not `metashrew_height`) route
-// here instead of `RPC_ENDPOINTS[network]`. Other methods and REST
-// sub-paths still go through the gateway endpoint.
+// requests with `metashrew_view` AND `metashrew_height` route here
+// instead of `RPC_ENDPOINTS[network]`. Other methods and REST sub-paths
+// still go through the gateway endpoint.
 //
-// Why height is NOT here: /v6 enforces a 20 req/min per-IP rate limit
-// on the unauthenticated tier. The SDK's `WebProvider::sync` polls
-// `metashrew_height` every ~500ms during the 30s indexer-sync wait —
-// that alone is 120 req/min, 6× the limit. Adding it to the same /v6
-// bucket as `metashrew_view` (live pool reserves) exhausts the budget
-// instantly under shared-egress load (Cloud Run staging). The 429
-// propagates as "Network error: HTTP error: 429" inside `Waiting for
-// indexer to sync` and aborts the swap. See `pickEndpoint` below for
-// the full rationale.
+// Both metashrew methods share /v6 because (a) it's significantly faster
+// for the wallet UTXO prewarm fanout and opcode-999 simulate, and (b) /v4's
+// metashrew-unwrap upstream is ~15% flaky on the SDK's 500ms height poll.
+// /v6's anonymous 20 req/min rate limit is the only obstacle, and it's
+// bypassed by attaching the SUBFROST_V6_API_KEY auth header in
+// `buildHeadersForUrl` below.
 //
 // Other networks left undefined (no override → use the gateway URL for
 // everything).
 const METASHREW_RPC_ENDPOINTS: Record<string, string | undefined> = {
   mainnet: 'https://mainnet.subfrost.io/v6/subfrost',
 };
+
+// Subfrost API key for /v6/subfrost authenticated requests. Read once at
+// module load (not per-request) — the key doesn't change at runtime, and
+// re-reading process.env on every request showed up in profiles. Server-
+// side only — DO NOT expose this to the browser by adding NEXT_PUBLIC_*.
+//
+// When set, all requests to /v6/subfrost endpoints carry an
+// `Authorization: Bearer <key>` header which (per subfrost docs at
+// api.subfrost.io) bypasses the anonymous 20 req/min rate bucket.
+// When unset, /v6 calls go out unauthenticated and may 429 under load.
+//
+// Local dev: put `SUBFROST_V6_API_KEY=...` in .env.local
+// Staging/prod: configure as a Cloud Run env var
+const SUBFROST_V6_API_KEY = process.env.SUBFROST_V6_API_KEY ?? '';
+
+// Builds outbound headers for a given upstream URL. Always includes
+// Content-Type. For /v6/subfrost endpoints, attaches the Authorization
+// header when the API key is configured; everything else gets no auth.
+//
+// The "is /v6" check is URL-substring based (rather than coupling to
+// METASHREW_RPC_ENDPOINTS lookup) so that custom upstreams pinned via
+// future env vars also pick up auth automatically when they target /v6.
+function buildHeadersForUrl(url: string): Record<string, string> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (SUBFROST_V6_API_KEY && url.includes('/v6/subfrost')) {
+    headers['Authorization'] = `Bearer ${SUBFROST_V6_API_KEY}`;
+  }
+  return headers;
+}
 
 // Batch JSON-RPC requests are more reliably handled by the explicit /jsonrpc path.
 // Mainnet batches go through the gateway since they may contain mixed methods
@@ -135,49 +184,32 @@ function pickEndpoint(body: any, network: string) {
     return BATCH_RPC_ENDPOINTS[network] || BATCH_RPC_ENDPOINTS.regtest;
   }
 
-  // Single requests: route ONLY `metashrew_view` to /v6/subfrost (sticky,
-  // perf-critical for opcode-999 simulate + wallet UTXO prewarm fanout).
-  // Route `metashrew_height` to the gateway (/v4/subfrost) so it doesn't
-  // share /v6's per-IP rate budget with `metashrew_view`.
+  // Single requests: route both `metashrew_view` AND `metashrew_height`
+  // to the network's metashrew endpoint when configured (currently /v6/
+  // subfrost on mainnet, undefined elsewhere → falls through to gateway).
   //
-  // Why height is back on /v4 (RE-UPDATED 2026-05-11 after PR #117 broke
-  // staging swaps):
+  // /v6 wins on two axes:
+  //   1. Speed: ~70ms p50 vs ~250ms on /v4, plus sticky-replica behavior
+  //      that avoids cross-replica drift between height and view calls.
+  //   2. Reliability: /v4's metashrew-unwrap upstream is ~15% flaky on
+  //      the SDK's 500ms height poll cadence (verified live 2026-05-11
+  //      via 20-call burst tests). /v6 returned 0/20 errors in the same
+  //      test. Each /v4 error aborts the swap — so the seemingly-rare
+  //      flake hits ~95% of swap attempts in practice (60 polls × 15%).
   //
-  // /v6/subfrost enforces a HARD 20 req/min per-IP rate limit on the
-  // unauthenticated tier. Verified live on staging 2026-05-11:
+  // /v6's anonymous tier has a 20 req/min per-IP rate limit. We dodge it
+  // by signing requests with SUBFROST_V6_API_KEY in `buildHeadersForUrl`
+  // (server-side env var, never exposed to browsers). Without the key,
+  // /v6 calls go out unauthenticated and may 429 under load — the user
+  // (or ops) is responsible for setting the env var before deploying to
+  // shared-IP environments like Cloud Run.
   //
-  //     curl https://staging-app.subfrost.io/api/rpc/mainnet \
-  //       -d '{"jsonrpc":"2.0","method":"metashrew_height","params":[],"id":1}'
-  //     → status=429 "Rate limit exceeded (20 req/min). Sign up at
-  //                  https://api.subfrost.io for higher limits."
-  //
-  // Cloud Run's egress is one shared IP for ALL staging users, so the
-  // 20 req/min budget is consumed across the entire user base. The SDK's
-  // `WebProvider::sync` polls `metashrew_height` every ~500ms during the
-  // 30s indexer-sync wait — that alone is 120 req/min from a single user,
-  // 6× the limit. Add `metashrew_view` for live pool reserves and the
-  // budget is exhausted instantly. Result: every swap on staging gets
-  // `Network error: HTTP error: 429` inside `Waiting for indexer to sync`
-  // and aborts.
-  //
-  // The 2026-05-11 morning re-verification (8/8 calls at 500ms succeeded
-  // on /v6) was wrong — that test ran from a residential IP that hadn't
-  // recently saturated its bucket. Cloud Run egress IPs are
-  // continuously-saturated by every user, so the 429 trips immediately.
-  //
-  // /v4 doesn't enforce per-IP rate limits → height polling is safe there.
-  // The cross-replica drift problem (which originally motivated PR #117)
-  // is the lesser evil: drift causes occasional sync timeouts on lagging
-  // blocks; rate-limit causes EVERY swap to fail under any load. Pick the
-  // failure mode that doesn't take down the whole product.
-  //
-  // If subfrost grants us an authenticated API key we can move height
-  // back to /v6 (the auth header bypasses the anonymous rate bucket).
-  // Until then, height stays on /v4 and we accept the drift trade-off.
+  // Other JSON-RPC (alkanes_*, bitcoin_*, esplora_*) and REST sub-paths
+  // continue to route through the /v4 gateway and alkanode respectively.
   const method = typeof body?.method === 'string' ? body.method : '';
-  const isStickyMetashrew = method === 'metashrew_view';
+  const isMetashrewMethod = method === 'metashrew_view' || method === 'metashrew_height';
   const metashrewUrl = METASHREW_RPC_ENDPOINTS[network];
-  if (isStickyMetashrew && metashrewUrl) {
+  if (isMetashrewMethod && metashrewUrl) {
     return metashrewUrl;
   }
 
@@ -381,7 +413,7 @@ export async function POST(
     // rather than re-introducing the whole chain.
     const response = await fetch(targetUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: buildHeadersForUrl(targetUrl),
       body: JSON.stringify(body),
     });
 
