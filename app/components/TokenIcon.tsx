@@ -186,7 +186,7 @@ export default function TokenIcon({ symbol, id, iconUrl, size = 'md', className 
         key={currentPath}
         src={currentPath}
         alt={`${symbol} icon`}
-        className={`${sizeClass} rounded-full object-cover transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${isLoading ? 'opacity-0' : 'opacity-100'}`}
+        className={`${sizeClass} rounded-full object-cover ${isLoading ? 'opacity-0' : 'opacity-100'}`}
         onLoad={() => setIsLoading(false)}
         onError={handleError}
       />

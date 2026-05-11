@@ -71,7 +71,7 @@ function calculateApr(vol24hUsd: number, tvlUsd: number, feeRate: number = DEFAU
 /**
  * Build icon URL for a token
  */
-function getTokenIconUrl(tokenId: string, _network: string): string {
+export function getTokenIconUrl(tokenId: string, _network: string): string {
   const [block, tx] = tokenId.split(':');
   if (block && tx) {
     return `https://cdn.subfrost.io/alkanes/${block}_${tx}`;

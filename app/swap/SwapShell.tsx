@@ -18,7 +18,7 @@ import { usePendingTxs } from "@/hooks/usePendingTxs";
 import { useGlobalStore } from "@/stores/global";
 import { useFeeRate } from "@/hooks/useFeeRate";
 import { useBtcPrice } from "@/hooks/useBtcPrice";
-import { usePools } from "@/hooks/usePools";
+import { usePools, getTokenIconUrl } from "@/hooks/usePools";
 import { useAllPoolStats } from "@/hooks/usePoolData";
 import { pickPositive } from "@/lib/pools/mergeStats";
 import { useModalStore } from "@/stores/modals";
@@ -664,25 +664,8 @@ export default function SwapShell() {
       }
     });
 
-    // Also add tokens from user's wallet that aren't in pools yet
-    userCurrencies.forEach((currency: any) => {
-      const rawSym = currency.symbol || currency.name || currency.id;
-      if (!seen.has(currency.id) && shouldShowToken(currency.id, rawSym)) {
-        seen.add(currency.id);
-        // Resolve name now using tokenNamesMap (avoids showing numeric IDs)
-        const resolved = resolveTokenDisplay(currency.id, rawSym, currency.name || currency.symbol || currency.id, tokenNamesMap);
-        opts.push({
-          id: currency.id,
-          symbol: resolved.symbol,
-          name: resolved.name,
-          iconUrl: currency.iconUrl,
-          isAvailable: true,
-        });
-      }
-    });
-
     return opts;
-  }, [poolTokenMap, FRBTC_ALKANE_ID, BUSD_ALKANE_ID, protocolTokens, userCurrencies, tokenNamesMap, network, toToken, baseTokenIds]);
+  }, [poolTokenMap, FRBTC_ALKANE_ID, BUSD_ALKANE_ID, protocolTokens, network, toToken, baseTokenIds]);
 
   // Build TO options - show all tokens with pools (no alt-to-alt restriction)
   const toOptions: TokenMeta[] = useMemo(() => {
@@ -826,24 +809,8 @@ export default function SwapShell() {
       }
     });
 
-    // Also add tokens from user's wallet that have pools with FROM token
-    userCurrencies.forEach((currency: any) => {
-      const rawSym = currency.symbol || currency.name || currency.id;
-      if (!seen.has(currency.id) && shouldShowToken(currency.id, rawSym)) {
-        seen.add(currency.id);
-        const resolved = resolveTokenDisplay(currency.id, rawSym, currency.name || currency.symbol || currency.id, tokenNamesMap);
-        opts.push({
-          id: currency.id,
-          symbol: resolved.symbol,
-          name: resolved.name,
-          iconUrl: currency.iconUrl,
-          isAvailable: true,
-        });
-      }
-    });
-
     return opts;
-  }, [fromToken, poolTokenMap, FRBTC_ALKANE_ID, BUSD_ALKANE_ID, protocolTokens, userCurrencies, tokenNamesMap, baseTokenIds, markets, network]);
+  }, [fromToken, poolTokenMap, FRBTC_ALKANE_ID, BUSD_ALKANE_ID, protocolTokens, baseTokenIds, markets, network]);
 
   // walletBalances already declared above via useEnrichedWalletData
   // BTC balance from btcFast (instant) with enriched fallback
@@ -1824,7 +1791,7 @@ export default function SwapShell() {
         id: token.id,
         symbol: resolved.symbol,
         name: resolved.name,
-        iconUrl: token.id === 'btc' ? undefined : (token.iconUrl || currency?.iconUrl),
+        iconUrl: token.id === 'btc' ? undefined : (token.iconUrl || currency?.iconUrl || getTokenIconUrl(token.id, network)),
         balance: token.id === 'btc' ? String(btcBalanceSats ?? 0) : currency?.balance,
         price: getTokenPrice(token.id),
         isAvailable,
@@ -1832,7 +1799,7 @@ export default function SwapShell() {
     });
 
     return sortTokenOptions(options);
-  }, [fromOptions, idToUserCurrency, tokenNamesMap, walletAlkaneNames, btcBalanceSats, toToken, isAllowedPair, btcPrice]);
+  }, [fromOptions, idToUserCurrency, tokenNamesMap, walletAlkaneNames, btcBalanceSats, toToken, isAllowedPair, btcPrice, network]);
 
   const toTokenOptions = useMemo<TokenOption[]>(() => {
     const options = toOptions.map((token) => {
@@ -1848,7 +1815,7 @@ export default function SwapShell() {
         id: token.id,
         symbol: resolved.symbol,
         name: resolved.name,
-        iconUrl: token.id === 'btc' ? undefined : (token.iconUrl || currency?.iconUrl),
+        iconUrl: token.id === 'btc' ? undefined : (token.iconUrl || currency?.iconUrl || getTokenIconUrl(token.id, network)),
         balance: token.id === 'btc' ? String(btcBalanceSats ?? 0) : currency?.balance,
         price: getTokenPrice(token.id),
         isAvailable,
@@ -1856,7 +1823,7 @@ export default function SwapShell() {
     });
 
     return sortTokenOptions(options);
-  }, [toOptions, idToUserCurrency, tokenNamesMap, walletAlkaneNames, btcBalanceSats, fromToken, isAllowedPair, btcPrice]);
+  }, [toOptions, idToUserCurrency, tokenNamesMap, walletAlkaneNames, btcBalanceSats, fromToken, isAllowedPair, btcPrice, network]);
 
   // Pool token options - show all tokens that appear in any pool
   const poolTokenOptions = useMemo<TokenOption[]>(() => {
@@ -1920,7 +1887,7 @@ export default function SwapShell() {
           id: FRBTC_ALKANE_ID,
           symbol: 'frBTC',
           name: 'frBTC',
-          iconUrl: frbtcCurrency?.iconUrl,
+          iconUrl: getTokenIconUrl(FRBTC_ALKANE_ID, network),
           balance: frbtcCurrency?.balance,
           price: getTokenPrice(FRBTC_ALKANE_ID),
           isAvailable: frbtcIsAvailable,
@@ -1943,7 +1910,7 @@ export default function SwapShell() {
           id: BUSD_ALKANE_ID,
           symbol: busdToken?.symbol ?? defaultSymbol,
           name: busdToken?.name ?? defaultSymbol,
-          iconUrl: busdToken?.iconUrl || busdCurrency?.iconUrl,
+          iconUrl: busdToken?.iconUrl || getTokenIconUrl(BUSD_ALKANE_ID, network),
           balance: busdCurrency?.balance,
           price: getTokenPrice(BUSD_ALKANE_ID),
           isAvailable: busdIsAvailable,
@@ -1972,7 +1939,7 @@ export default function SwapShell() {
           id: poolToken.id,
           symbol: resolved.symbol,
           name: resolved.name,
-          iconUrl: poolToken.iconUrl || currency?.iconUrl,
+          iconUrl: poolToken.iconUrl || getTokenIconUrl(poolToken.id, network),
           balance: poolToken.id === 'btc' ? String(btcBalanceSats ?? 0) : currency?.balance,
           price: getTokenPrice(poolToken.id),
           isAvailable,
@@ -2004,7 +1971,7 @@ export default function SwapShell() {
           id: currency.id,
           symbol: resolved.symbol,
           name: resolved.name,
-          iconUrl: currency.iconUrl,
+          iconUrl: getTokenIconUrl(currency.id, network),
           balance: currency.balance,
           price: getTokenPrice(currency.id),
           isAvailable,

@@ -821,7 +821,7 @@ const zh: Record<string, string> = {
   'wallet.browserExtensionWallets': '浏览器扩展钱包',
   'wallet.newPassword': '新密码',
   'wallet.enterRecoveryPhrase': '输入您的 12 或 24 个单词的助记词',
-  'wallet.restoreMnemonicWarning': '警告：从其他提供商导入钱包将无法检测其中持有的 runes 或铭文。在本应用中进行的交易可能会销毁它们。如果您的钱包持有 runes 或铭文，我们建议改用浏览器扩展钱包。',
+  'wallet.runesInscriptionsWarning': '本应用不支持 runes 或铭文。使用持有这些资产的钱包可能会导致它们被销毁。',
   'wallet.createPassword': '创建密码',
   'wallet.restoring': '正在恢复...',
   'wallet.uploadKeystoreDesc': '上传之前导出的 JSON 密钥库文件以恢复您的钱包。',

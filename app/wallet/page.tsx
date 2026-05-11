@@ -156,24 +156,18 @@ export default function WalletDashboardPage() {
           </div>
         </div>
 
-        {/* Two columns on lg: [BTC → Alkanes] | [Tabbed Panel]. */}
-        {/* Left column is its own flex stack so BTC sits flush above Alkanes */}
-        {/* regardless of the tabs panel's height on the right. */}
-        {/* On mobile (stacked): Bitcoin Balance → Alkanes → Tabbed Panel via order classes */}
+        {/* Two columns on lg: [BTC → Tabbed Panel] | [Alkanes]. */}
+        {/* Left column is its own flex stack so BTC sits flush above the */}
+        {/* tabbed panel regardless of the Alkanes card's height on the right. */}
+        {/* On mobile (stacked): Bitcoin Balance → Tabbed Panel → Alkanes via order classes */}
         <div className="flex flex-col lg:grid lg:grid-cols-2 gap-6 flex-1 min-h-0">
-          {/* Left column on lg: BTC stacked above Alkanes with no row-gap */}
+          {/* Left column on lg: BTC stacked above Tabbed Panel with no row-gap */}
           <div className="contents lg:flex lg:flex-col lg:gap-6 lg:col-start-1 lg:row-start-1 min-h-0">
             <div className="order-1 lg:order-none">
               <BitcoinBalanceCard />
             </div>
             <div className="order-2 lg:order-none min-h-0">
-              <AlkanesBalancesCard onSendAlkane={(alkane) => { setSendAlkane(alkane); setShowSendModal(true); }} />
-            </div>
-          </div>
-
-          {/* Tabbed Panel - right column on lg, third on mobile */}
-          <div className="order-3 lg:order-none lg:col-start-2 lg:row-start-1 min-h-0">
-            <div className="rounded-2xl bg-[color:var(--sf-glass-bg)] p-3 sm:p-4 lg:p-4 shadow-[0_4px_20px_rgba(0,0,0,0.2)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)]">
+              <div className="rounded-2xl bg-[color:var(--sf-glass-bg)] p-3 sm:p-4 lg:p-4 shadow-[0_4px_20px_rgba(0,0,0,0.2)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)]">
               {/* Tab Navigation — compact on lg+ since panel is half-width */}
               <div className="border-b border-[color:var(--sf-outline)] mb-4 relative">
                 <div className="flex items-center gap-1 overflow-x-auto scrollbar-hide">
@@ -255,9 +249,14 @@ export default function WalletDashboardPage() {
                   </>
                 )}
               </div>
+              </div>
             </div>
           </div>
 
+          {/* Alkanes Balances - right column on lg, third on mobile */}
+          <div className="order-3 lg:order-none lg:col-start-2 lg:row-start-1 min-h-0">
+            <AlkanesBalancesCard onSendAlkane={(alkane) => { setSendAlkane(alkane); setShowSendModal(true); }} />
+          </div>
         </div>
       </div>
 
