@@ -3,8 +3,6 @@ export type TokenMeta = {
   symbol: string;
   name?: string;
   iconUrl?: string;
-  isAvailable?: boolean;
-  unavailableReason?: 'no_balance' | 'no_pool';
 };
 
 export type PoolSummary = {
