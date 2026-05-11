@@ -31,10 +31,12 @@ export function espoHeightQueryOptions(network: string, _provider?: WebProvider 
   return queryOptions({
     queryKey: queryKeys.height.espo(network),
     queryFn: async () => {
-      // Single SDK-mediated entry point — `rpc.getHeight()` hedges
-      // metashrew_height + esplora_blocks::tip-height internally and is
-      // the canonical fetch wrapper used everywhere in the app
-      // (lib/alkanes/rpc.ts).
+      // Single SDK-mediated entry point — `rpc.getHeight()` calls
+      // `metashrew_height` against the proxy (which routes mainnet to
+      // /v6/subfrost). No internal hedge or fallback (stripped 2026-05-11
+      // per flex's "no fallbacks" rule). Catch-and-return-0 below stays
+      // because HeightPoller treats 0 as "couldn't fetch, retry next
+      // tick", not as "tip is at block 0".
       try {
         return await rpcGetHeight(network);
       } catch {

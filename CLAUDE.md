@@ -255,7 +255,7 @@ Available helpers (canonical surface):
 - `getAddressUtxos(network, address)` — `esplora_address::utxo` (with error-sentinel guard).
 - `getAddressMempoolTxs(network, address)` — `esplora_address::txs:mempool`.
 - `getEsploraTx(network, txid)` — single transaction by id.
-- `getHeight(network)` — `metashrew_height` hedged with `esplora_blocks::tip-height`.
+- `getHeight(network)` — `metashrew_height` against the proxy. No hedge / fallback (stripped 2026-05-11 per flex's "no fallbacks" rule).
 - `broadcastTransaction(network, txHex)` — `esplora_tx::broadcast`.
 - `metashrewView(network, viewFn, hex, blockTag)` — generic raw-view passthrough for protobuf payloads (`simulate`, `protorunesbyaddress`).
 - `getAlkaneInfo(network, alkaneId)` / `getAlkaneInfoBatch(network, ids[])` — `/api/token-details`.
