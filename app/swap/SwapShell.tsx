@@ -177,13 +177,14 @@ export default function SwapShell() {
   const [isLPSelectorOpen, setIsLPSelectorOpen] = useState(false);
   const [removeAmount, setRemoveAmount] = useState<string>("");
 
-  // Live pool state for the selected LP position. Polls /get-pool-details every
-  // 5s and on every block (HeightPoller). Used to compute slippage-protected
-  // min amounts against the *current* indexer snapshot rather than the bulk
-  // markets cache (~30s aggregate). Only enabled once the user has typed an
-  // amount — no point polling while the form is idle.
+  // Live pool state for the selected LP position. Used to compute
+  // slippage-protected min amounts against the *current* indexer snapshot
+  // rather than the bulk markets cache (~30s aggregate). Enabled as soon as
+  // a position is selected so the expected-withdrawal amounts can render
+  // synchronously — `staleTime: Infinity` + HeightPoller invalidation keep
+  // traffic bounded to one fetch per pool per block.
   const removeLpLiveState = usePoolStateLive(selectedLPPosition?.id, {
-    enabled: !!selectedLPPosition && !!removeAmount && parseFloat(removeAmount) > 0,
+    enabled: !!selectedLPPosition,
   });
 
   // Multi-step swap flow state (BTC→Token, Token→BTC)
@@ -2110,13 +2111,13 @@ export default function SwapShell() {
   // against the current state-trie ratio rather than the cached one. Without
   // this, users typing in the AddLiquidity inputs see a stale paired value
   // and can hit `amountBMin` reverts even at moderate slippage when supply
-  // has drifted since the markets snapshot. Enabled only when at least one
-  // side has been typed — idle pair selection shouldn't trigger polling.
-  const addLpHasAmount =
-    (!!poolToken0Amount && parseFloat(poolToken0Amount) > 0) ||
-    (!!poolToken1Amount && parseFloat(poolToken1Amount) > 0);
+  // has drifted since the markets snapshot. Enabled as soon as a pair is
+  // matched — pre-fetching the reserves removes the ~500ms lag the user
+  // would otherwise see on the first amount keystroke (computePaired runs
+  // synchronously and returns null while the fetch is still in flight).
+  // `staleTime: Infinity` in usePoolStateLive prevents any extra traffic.
   const addLpLiveState = usePoolStateLive(matchedLpPool?.id, {
-    enabled: !!matchedLpPool && addLpHasAmount,
+    enabled: !!matchedLpPool,
   });
 
   // Auto-calculate the paired LP amount based on the matched pool's reserve
