@@ -20,11 +20,12 @@
  * be bypassed and go directly to espo"). The earlier 2026-02-07 note saying
  * "all methods go to subfrost" no longer holds — see REST_PRIMARY_BASE_URLS
  * below.
- * JOURNAL ENTRY (2026-05-11): Both `metashrew_view` AND `metashrew_height`
- * now route to /v6/subfrost on mainnet so they read the same replica's
- * indexer state. Earlier split (height on /v4) caused phantom multi-block
- * lag when /v4's replica fell behind /v6's — see pickEndpoint comment for
- * the full rationale and the rate-limit re-verification.
+ * JOURNAL ENTRY (2026-05-11 PM, supersedes morning's PR #117): only
+ * `metashrew_view` routes to /v6/subfrost on mainnet. `metashrew_height`
+ * is back on /v4 because /v6 enforces a 20 req/min per-IP rate limit
+ * that Cloud Run's shared egress IP exhausts instantly on staging. The
+ * cross-replica drift problem PR #117 fixed is now the lesser evil.
+ * See pickEndpoint comment below for the full rationale.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -37,14 +38,17 @@ import { NextRequest, NextResponse } from 'next/server';
 // JSON-RPC gateway (bitcoin RPC, alkanes_*, esplora_*).
 //
 // Routing matrix for mainnet:
-//   - metashrew_view, metashrew_height       → /v6/subfrost (sticky, ~30× faster)
+//   - metashrew_view                          → /v6/subfrost (sticky, fast)
+//   - metashrew_height                        → /v4/subfrost (avoids /v6 rate limit)
 //   - REST sub-paths (/get-all-amm-tx-history etc.) → /v4/subfrost (data API)
 //   - All other JSON-RPC                      → /v4/subfrost (gateway)
 //
 // /v6/subfrost benefit: 27-way parallel protorunesbyoutpoint fanout completes
 // in ~0.18-0.29s wall time vs 0.92s on /v4/subfrost vs 8.7s on /v4/<token>.
-// /v6/subfrost rate-limits aggressive bursts (HTTP 429) but the wallet cache's
-// fetchWithRetry handles those with [0, 500, 1500]ms backoff.
+// But /v6 enforces a 20 req/min per-IP rate limit on the unauthenticated
+// tier — Cloud Run's shared egress IP burns through that instantly under
+// staging load, so we keep `metashrew_height` (the SDK's hot poll) on /v4
+// and only use /v6 for `metashrew_view` (~one call per quote refresh).
 //
 // Other networks (testnet/signet/regtest) stay on /v4/<token> — only mainnet
 // has the dual-endpoint split.
@@ -60,21 +64,19 @@ const RPC_ENDPOINTS: Record<string, string> = {
 };
 
 // Per-network metashrew-only endpoint. When set for a network, JSON-RPC
-// requests with `metashrew_view` AND `metashrew_height` route here instead
-// of `RPC_ENDPOINTS[network]`. Other methods (`bitcoin_*`, `alkanes_*`,
-// `esplora_*`) and REST sub-paths still go through the gateway endpoint.
+// requests with `metashrew_view` (ONLY — not `metashrew_height`) route
+// here instead of `RPC_ENDPOINTS[network]`. Other methods and REST
+// sub-paths still go through the gateway endpoint.
 //
-// Both metashrew methods share the /v6 route because /v4 and /v6 route to
-// DIFFERENT subfrost replicas with independent indexer state — and /v4 has
-// been observed lagging /v6 by 5+ blocks under load. Routing height to /v4
-// while view stayed on /v6 made the SDK's sync gate see a phantom multi-
-// block lag and time out (948881 from /v4 vs 948886 from /v6 vs 948888
-// from bitcoind, observed 2026-05-11). Co-locating height and view on the
-// same replica eliminates the cross-replica drift.
-//
-// See `pickEndpoint` below for the full rationale (including why the
-// previously-feared /v6 rate-limit on the SDK's 500ms height poll was
-// re-verified to no longer fire).
+// Why height is NOT here: /v6 enforces a 20 req/min per-IP rate limit
+// on the unauthenticated tier. The SDK's `WebProvider::sync` polls
+// `metashrew_height` every ~500ms during the 30s indexer-sync wait —
+// that alone is 120 req/min, 6× the limit. Adding it to the same /v6
+// bucket as `metashrew_view` (live pool reserves) exhausts the budget
+// instantly under shared-egress load (Cloud Run staging). The 429
+// propagates as "Network error: HTTP error: 429" inside `Waiting for
+// indexer to sync` and aborts the swap. See `pickEndpoint` below for
+// the full rationale.
 //
 // Other networks left undefined (no override → use the gateway URL for
 // everything).
@@ -133,39 +135,49 @@ function pickEndpoint(body: any, network: string) {
     return BATCH_RPC_ENDPOINTS[network] || BATCH_RPC_ENDPOINTS.regtest;
   }
 
-  // Single requests: route both metashrew_view AND metashrew_height to the
-  // dedicated metashrew endpoint when the network has one configured.
+  // Single requests: route ONLY `metashrew_view` to /v6/subfrost (sticky,
+  // perf-critical for opcode-999 simulate + wallet UTXO prewarm fanout).
+  // Route `metashrew_height` to the gateway (/v4/subfrost) so it doesn't
+  // share /v6's per-IP rate budget with `metashrew_view`.
   //
-  // Why metashrew_height now goes to /v6 (UPDATED 2026-05-11):
-  // /v4/subfrost and /v6/subfrost route to DIFFERENT replicas with
-  // independent indexer state. Verified live 2026-05-11:
-  //   /v4 metashrew_height -> 948881
-  //   /v6 metashrew_height -> 948886  (5 blocks ahead of /v4)
-  //   bitcoind getblockcount -> 948888
-  // The /v4 replica was lagging the /v6 replica by 5 blocks, which made
-  // the SDK's sync gate see a 7-block lag (948888 - 948881) when the
-  // *real* lag against the fresher replica was only 2 blocks (948888 -
-  // 948886). The 2-block apparent lag would close in seconds; the
-  // 7-block apparent lag burned all 60 sync retries (~30s) and the swap
-  // aborted with "Indexer sync timed out".
+  // Why height is back on /v4 (RE-UPDATED 2026-05-11 after PR #117 broke
+  // staging swaps):
   //
-  // The earlier "DO NOT route metashrew_height to /v6" warning (commit
-  // 3d3b48eb) was based on /v6 returning HTTP 429 under the SDK's
-  // ~500ms poll cadence. Re-verified 2026-05-11 by hammering /v6 8 times
-  // at 500ms intervals: 8/8 succeeded with HTTP 200 in ~70ms each, no
-  // 429. Whatever rate-limit window /v6 used to enforce is gone (or
-  // raised), so the safety reason for keeping height on /v4 no longer
-  // applies — and /v4's stale-replica drift is now the bigger risk.
+  // /v6/subfrost enforces a HARD 20 req/min per-IP rate limit on the
+  // unauthenticated tier. Verified live on staging 2026-05-11:
   //
-  // If /v6 starts 429-ing the height poll again, the symptom is "Network
-  // error: HTTP error: 429" inside `Waiting for indexer to sync` — at
-  // that point split metashrew_height back to /v4 with an exponential
-  // backoff in the proxy, OR move only the height polling onto a
-  // dedicated low-cap endpoint.
+  //     curl https://staging-app.subfrost.io/api/rpc/mainnet \
+  //       -d '{"jsonrpc":"2.0","method":"metashrew_height","params":[],"id":1}'
+  //     → status=429 "Rate limit exceeded (20 req/min). Sign up at
+  //                  https://api.subfrost.io for higher limits."
+  //
+  // Cloud Run's egress is one shared IP for ALL staging users, so the
+  // 20 req/min budget is consumed across the entire user base. The SDK's
+  // `WebProvider::sync` polls `metashrew_height` every ~500ms during the
+  // 30s indexer-sync wait — that alone is 120 req/min from a single user,
+  // 6× the limit. Add `metashrew_view` for live pool reserves and the
+  // budget is exhausted instantly. Result: every swap on staging gets
+  // `Network error: HTTP error: 429` inside `Waiting for indexer to sync`
+  // and aborts.
+  //
+  // The 2026-05-11 morning re-verification (8/8 calls at 500ms succeeded
+  // on /v6) was wrong — that test ran from a residential IP that hadn't
+  // recently saturated its bucket. Cloud Run egress IPs are
+  // continuously-saturated by every user, so the 429 trips immediately.
+  //
+  // /v4 doesn't enforce per-IP rate limits → height polling is safe there.
+  // The cross-replica drift problem (which originally motivated PR #117)
+  // is the lesser evil: drift causes occasional sync timeouts on lagging
+  // blocks; rate-limit causes EVERY swap to fail under any load. Pick the
+  // failure mode that doesn't take down the whole product.
+  //
+  // If subfrost grants us an authenticated API key we can move height
+  // back to /v6 (the auth header bypasses the anonymous rate bucket).
+  // Until then, height stays on /v4 and we accept the drift trade-off.
   const method = typeof body?.method === 'string' ? body.method : '';
-  const isMetashrew = method === 'metashrew_view' || method === 'metashrew_height';
+  const isStickyMetashrew = method === 'metashrew_view';
   const metashrewUrl = METASHREW_RPC_ENDPOINTS[network];
-  if (isMetashrew && metashrewUrl) {
+  if (isStickyMetashrew && metashrewUrl) {
     return metashrewUrl;
   }
 
