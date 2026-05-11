@@ -52,22 +52,24 @@ const RPC_ENDPOINTS: Record<string, string> = {
 };
 
 // Per-network metashrew-only endpoint. When set for a network, JSON-RPC
-// requests with method `metashrew_view` route here instead of
-// `RPC_ENDPOINTS[network]` — that's the per-outpoint fanout used by the
-// wallet cache prewarm. Other methods (including `metashrew_height`,
-// `bitcoin_*`, `alkanes_*`, `esplora_*`) and REST sub-paths still go
-// through the gateway endpoint.
+// requests with `metashrew_view` AND `metashrew_height` route here instead
+// of `RPC_ENDPOINTS[network]`. Other methods (`bitcoin_*`, `alkanes_*`,
+// `esplora_*`) and REST sub-paths still go through the gateway endpoint.
 //
-// `metashrew_height` deliberately stays on the gateway (NOT here) because
-// the SDK's `WebProvider::sync` polls it every ~500ms while waiting for
-// the indexer to catch up — that polling rate trips /v6/subfrost's burst
-// rate limit and the swap aborts with HTTP 429. The gateway is slower per
-// call but doesn't rate-limit, which matters more for a poll loop than
-// for a single height check.
+// Both metashrew methods share the /v6 route because /v4 and /v6 route to
+// DIFFERENT subfrost replicas with independent indexer state — and /v4 has
+// been observed lagging /v6 by 5+ blocks under load. Routing height to /v4
+// while view stayed on /v6 made the SDK's sync gate see a phantom multi-
+// block lag and time out (948881 from /v4 vs 948886 from /v6 vs 948888
+// from bitcoind, observed 2026-05-11). Co-locating height and view on the
+// same replica eliminates the cross-replica drift.
 //
-// Mainnet uses /v6/subfrost which is metashrew-sticky and significantly faster
-// for the wallet cache prewarm fanout. Other networks left undefined (no
-// override → use the gateway URL for everything).
+// See `pickEndpoint` below for the full rationale (including why the
+// previously-feared /v6 rate-limit on the SDK's 500ms height poll was
+// re-verified to no longer fire).
+//
+// Other networks left undefined (no override → use the gateway URL for
+// everything).
 const METASHREW_RPC_ENDPOINTS: Record<string, string | undefined> = {
   mainnet: 'https://mainnet.subfrost.io/v6/subfrost',
 };
@@ -123,23 +125,39 @@ function pickEndpoint(body: any, network: string) {
     return BATCH_RPC_ENDPOINTS[network] || BATCH_RPC_ENDPOINTS.regtest;
   }
 
-  // Single requests: route metashrew_view to the dedicated metashrew endpoint
-  // when the network has one configured (the perf-critical fanout path).
-  // Everything else — including metashrew_height — routes to the gateway.
+  // Single requests: route both metashrew_view AND metashrew_height to the
+  // dedicated metashrew endpoint when the network has one configured.
   //
-  // metashrew_height EXCLUSION rationale (2026-05-10): the SDK's
-  // `WebProvider::sync` polls metashrew_height every ~500ms while waiting
-  // for the indexer to catch up to bitcoind (up to 60 attempts = 30s).
-  // /v6/subfrost rate-limits aggressive bursts (HTTP 429), and the SDK's
-  // poll loop trips that limit reliably during 1-block lag windows. The
-  // 429 propagates as "Network error: HTTP error: 429" and the swap
-  // aborts. The gateway URL doesn't rate-limit; metashrew_height is a
-  // cheap call there. So we keep the perf benefit on the heavy
-  // metashrew_view path while keeping sync polling reliable.
+  // Why metashrew_height now goes to /v6 (UPDATED 2026-05-11):
+  // /v4/subfrost and /v6/subfrost route to DIFFERENT replicas with
+  // independent indexer state. Verified live 2026-05-11:
+  //   /v4 metashrew_height -> 948881
+  //   /v6 metashrew_height -> 948886  (5 blocks ahead of /v4)
+  //   bitcoind getblockcount -> 948888
+  // The /v4 replica was lagging the /v6 replica by 5 blocks, which made
+  // the SDK's sync gate see a 7-block lag (948888 - 948881) when the
+  // *real* lag against the fresher replica was only 2 blocks (948888 -
+  // 948886). The 2-block apparent lag would close in seconds; the
+  // 7-block apparent lag burned all 60 sync retries (~30s) and the swap
+  // aborted with "Indexer sync timed out".
+  //
+  // The earlier "DO NOT route metashrew_height to /v6" warning (commit
+  // 3d3b48eb) was based on /v6 returning HTTP 429 under the SDK's
+  // ~500ms poll cadence. Re-verified 2026-05-11 by hammering /v6 8 times
+  // at 500ms intervals: 8/8 succeeded with HTTP 200 in ~70ms each, no
+  // 429. Whatever rate-limit window /v6 used to enforce is gone (or
+  // raised), so the safety reason for keeping height on /v4 no longer
+  // applies — and /v4's stale-replica drift is now the bigger risk.
+  //
+  // If /v6 starts 429-ing the height poll again, the symptom is "Network
+  // error: HTTP error: 429" inside `Waiting for indexer to sync` — at
+  // that point split metashrew_height back to /v4 with an exponential
+  // backoff in the proxy, OR move only the height polling onto a
+  // dedicated low-cap endpoint.
   const method = typeof body?.method === 'string' ? body.method : '';
-  const isStickyMetashrew = method === 'metashrew_view';
+  const isMetashrew = method === 'metashrew_view' || method === 'metashrew_height';
   const metashrewUrl = METASHREW_RPC_ENDPOINTS[network];
-  if (isStickyMetashrew && metashrewUrl) {
+  if (isMetashrew && metashrewUrl) {
     return metashrewUrl;
   }
 
