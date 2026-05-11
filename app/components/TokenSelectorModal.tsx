@@ -58,7 +58,8 @@ export type TokenOption = {
   iconUrl?: string;
   balance?: string;
   price?: number;
-  isAvailable?: boolean;
+  disabled?: boolean;
+  disabledReason?: string;
 };
 
 type Props = {
@@ -257,7 +258,7 @@ export default function TokenSelectorModal({
             <div className="space-y-1">
               {filteredTokens.map((token) => {
                 const isSelected = token.id === selectedTokenId;
-                const isAvailable = token.isAvailable !== false;
+                const isDisabled = token.disabled === true;
                 // Use proper alkane balance formatting with BigInt math
                 const formattedBalance = token.balance ? formatAlkaneBalance(token.balance) : null;
                 // For USD value calculation, parse the raw balance and divide by 1e8
@@ -269,9 +270,14 @@ export default function TokenSelectorModal({
                 return (
                   <button
                     key={token.id}
-                    onClick={() => handleSelect(token.id)}
+                    onClick={() => { if (!isDisabled) handleSelect(token.id); }}
+                    disabled={isDisabled}
+                    aria-disabled={isDisabled}
+                    title={isDisabled ? token.disabledReason : undefined}
                     className={`group relative w-full rounded-xl p-4 text-left shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none focus:outline-none ${
-                      isSelected
+                      isDisabled
+                        ? 'bg-[color:var(--sf-input-bg)]/40 opacity-40 cursor-not-allowed'
+                        : isSelected
                         ? 'bg-[color:var(--sf-primary)]/10 hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)]'
                         : 'bg-[color:var(--sf-input-bg)] hover:bg-[color:var(--sf-surface)]/60 hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)]'
                     }`}
@@ -283,14 +289,14 @@ export default function TokenSelectorModal({
                         iconUrl={token.iconUrl}
                         size="lg"
                         network={network}
-                        className="flex-shrink-0"
+                        className={`flex-shrink-0 ${isDisabled ? 'grayscale' : ''}`}
                       />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          <span className="font-bold text-[color:var(--sf-text)] group-hover:text-[color:var(--sf-primary)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none">
+                          <span className={`font-bold text-[color:var(--sf-text)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${isDisabled ? '' : 'group-hover:text-[color:var(--sf-primary)]'}`}>
                             {token.name || token.symbol}
                           </span>
-                          {isSelected && (
+                          {isSelected && !isDisabled && (
                             <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[color:var(--sf-primary)] text-white">
                               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                                 <path d="M20 6L9 17l-5-5" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
@@ -299,14 +305,9 @@ export default function TokenSelectorModal({
                           )}
                         </div>
                         <p className="text-xs font-medium text-[color:var(--sf-text)]/60 truncate">
-                          {token.id}
+                          {isDisabled && token.disabledReason ? token.disabledReason : token.id}
                         </p>
                       </div>
-                      {!isAvailable && (mode === 'from' || mode === 'to') && (
-                        <span className="text-xs font-medium text-[color:var(--sf-text)]/50">
-                          {t('tokenSelector.notAvailable')}
-                        </span>
-                      )}
                       <div className="flex flex-col items-end gap-0.5">
                         <span className="text-sm font-bold text-[color:var(--sf-text)]">
                           {formattedBalance || '0'}
