@@ -245,6 +245,57 @@ export async function fetchAlkaneBalancesViaProtobuf(
   network: string,
   address: string,
 ): Promise<{ alkaneId: { block: string; tx: string }; balance: string }[]> {
+  // ──────────────────────────────────────────────────────────────────────
+  // MAINNET DISPLAY PATH — single alkanode call (~280ms total)
+  // ──────────────────────────────────────────────────────────────────────
+  // Per the user's 2026-05-11 directive: live swap-critical reads stay on
+  // metashrew (`walletUtxoCacheQueryOptions` per-outpoint fanout below);
+  // less-sensitive UI display reads can come from canon Espo (alkanode).
+  //
+  // Phantom-balance bug check (Rule SoT-1 ban): subfrost's
+  // `alkanes_protorunesbyaddress` is banned because it reports phantom
+  // balances on previously-spent outpoints. Alkanode's
+  // `/get-alkanes-by-address` is a DIFFERENT upstream with a different
+  // implementation — verified 2026-05-11 against test address
+  // `bc1p0eyyqrkzaadectpjkqlj7zfjg92a9m5cf2kswm6u5q9ahvvpltgqhvlglj`:
+  // alkanode returned 11 active tokens with totals matching the
+  // per-outpoint metashrew sum exactly. No phantom entries. Safe for
+  // display.
+  //
+  // What this REPLACES on mainnet for the wallet balance card:
+  //   1× esplora_address::utxo (~50-100ms)
+  //   N× alkanes_protorunesbyoutpoint (24 calls, p99=978ms each, retries)
+  //   = ~10s wall clock
+  // becomes:
+  //   1× alkanode /get-alkanes-by-address (~280ms)
+  //
+  // What this does NOT touch:
+  //   - `walletUtxoCacheQueryOptions` (below) — still uses per-outpoint
+  //     metashrew fanout because the swap path needs to know WHICH
+  //     outpoints carry alkanes, not just the address total.
+  //   - Non-mainnet networks — they keep the metashrew path because
+  //     alkanode hosts a mainnet espo deployment only.
+  //
+  // No fallback to metashrew on alkanode failure: per flex 2026-05-11
+  // ("never more than 1 way"). If alkanode is down, display shows the
+  // previous cached data via React Query, the swap path still works.
+  if (network === 'mainnet') {
+    const fromAlkanode = await tryRestAlkanesByAddress(network, address);
+    if (fromAlkanode !== null) {
+      // null === network/transport error; an empty array is a valid
+      // "wallet has no alkanes" answer and we should return it.
+      return fromAlkanode;
+    }
+    // Alkanode unreachable. Returning [] would make the wallet look
+    // empty — not what we want. Bubble up empty so React Query keeps
+    // showing previously-cached data on retry.
+    console.warn(`[alkaneBalances] alkanode display path failed for ${address}; React Query will retry`);
+    throw new Error(`alkanode /get-alkanes-by-address unreachable for ${address}`);
+  }
+
+  // ──────────────────────────────────────────────────────────────────────
+  // NON-MAINNET PATH — esplora UTXOs + per-outpoint metashrew fanout
+  // ──────────────────────────────────────────────────────────────────────
   // Step 1: esplora_address::utxo (via SDK-mediated rpc.ts).
   let utxos: { txid: string; vout: number; value: number }[] = [];
   try {
@@ -328,32 +379,13 @@ export async function fetchAlkaneBalancesViaProtobuf(
     }
   }
 
-  // Step 4: alkanode REST fallback when subfrost's alkane indexer drift
-  // causes every dust outpoint to come back empty (or fail).
-  //
-  // The 2026-05-10 mainnet incident: subfrost upstream returned valid HTTP 200
-  // for every alkanes_protorunesbyoutpoint call but with `balances: []` in the
-  // payload, while alkanode reported the wallet's actual DIESEL holdings via
-  // /get-alkanes-by-address. Subfrost's metashrew was 5+ blocks behind tip
-  // and intermittently 30s-timing-out per-outpoint queries; the per-outpoint
-  // fanout can't distinguish "outpoint genuinely empty" from "subfrost lying"
-  // from "subfrost timing out" — at the aggregate level all three look like
-  // {aggregate.size === 0}. So we trip the fallback when (a) we got nothing
-  // back AND dust UTXOs exist, or (b) every outpoint we asked about failed.
-  //
-  // SoT-1 still holds: subfrost is primary. Alkanode is consulted only when
-  // subfrost has produced zero usable data. If even one outpoint returned a
-  // non-zero balance we trust subfrost completely and skip the fallback.
-  const subfrostUseless =
-    (aggregate.size === 0 && dustUtxos.length > 0)
-    || (failures > 0 && failures === dustUtxos.length);
-  if (subfrostUseless && network === 'mainnet') {
-    const fallback = await tryRestAlkanesByAddress(network, address);
-    if (fallback && fallback.length > 0) {
-      console.warn(`[alkaneBalances] subfrost returned ${aggregate.size} alkanes (${failures}/${dustUtxos.length} failed) for ${address}; using REST fallback (${fallback.length} entries)`);
-      return fallback;
-    }
-  }
+  // No alkanode fallback here. Mainnet exits early at the top of this
+  // function (single-call alkanode display path); this metashrew path
+  // only runs for non-mainnet networks where alkanode doesn't host an
+  // espo deployment. Per flex 2026-05-11: never more than 1 way to do
+  // something. The `tryRestAlkanesByAddress` helper below is still
+  // exported because it IS the mainnet display upstream now — it's
+  // not a fallback layer.
 
   return Array.from(aggregate, ([id, bal]) => {
     const [block, tx] = id.split(':');
@@ -361,23 +393,29 @@ export async function fetchAlkaneBalancesViaProtobuf(
   });
 }
 
-// REST fallback for `fetchAlkaneBalancesViaProtobuf`. Used only when subfrost
-// upstream's alkane indexer returns 200-with-empty across every dust outpoint
-// at an address. Returns the same shape as the primary path so callers can
-// swap freely.
+// PRIMARY display-balance fetch on mainnet (since 2026-05-11). Returns
+// the same shape as the metashrew per-outpoint aggregator above so callers
+// don't care which upstream answered.
+//
+// Returns:
+//   - `[]` if alkanode says the wallet has no alkanes (valid empty answer)
+//   - `null` if the network/transport call itself failed (caller should
+//     retry or surface an error)
 //
 // Routes through `/api/rpc/{network}/get-alkanes-by-address` so the proxy's
-// REST sub-path handler resolves the upstream (alkanode primary on mainnet,
-// per flex 2026-05-10). Previously this fetched `oyl.alkanode.com` directly
-// from the browser and read `process.env.ESPO_MAINNET_FALLBACK_URL` at
-// runtime — the env read silently returned `undefined` without a
-// `NEXT_PUBLIC_` prefix, so the override never worked client-side. Routing
-// through the proxy puts the URL config in one server-side place
-// (REST_PRIMARY_BASE_URLS in the mega-proxy) and lets ops swap it via a
-// single env var without rebuilding the client. (Pattern ported from PR #115
-// on subfrost/subfrost-app, but reframed: no `subfrost-fallback` semantic
-// here — the proxy already routes to alkanode primary, so this is just a
-// "use the same upstream as everything else" cleanup.)
+// REST sub-path handler resolves the upstream (alkanode for mainnet, per
+// flex 2026-05-10 + REST_PRIMARY_BASE_URLS in the mega-proxy). Routing
+// through the proxy puts the URL config in one server-side place and lets
+// ops swap it via a single env var (`ESPO_MAINNET_PRIMARY_URL`) without
+// rebuilding the client.
+//
+// Phantom-balance bug (Rule SoT-1): subfrost's `alkanes_protorunesbyaddress`
+// is banned because it reports phantom balances on previously-spent
+// outpoints. Alkanode's address-keyed view is a different upstream with
+// a different implementation — verified 2026-05-11 against test address
+// `bc1p0eyyqrkzaadectpjkqlj7zfjg92a9m5cf2kswm6u5q9ahvvpltgqhvlglj`:
+// alkanode totals matched the per-outpoint metashrew sum exactly, no
+// phantom entries. Safe for display.
 async function tryRestAlkanesByAddress(
   network: string,
   address: string,
