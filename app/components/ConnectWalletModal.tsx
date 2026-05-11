@@ -835,7 +835,7 @@ export default function ConnectWalletModal() {
           {view === 'restore-mnemonic' && (
             <div className="flex flex-col gap-4">
               <div className="rounded-xl bg-[color:var(--sf-info-yellow-bg)] p-4 shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-sm font-medium text-[color:var(--sf-info-yellow-text)]">
-                {t('wallet.restoreMnemonicWarning')}
+                {t('wallet.runesInscriptionsWarning')}
               </div>
               <div>
                 <label className="mb-2 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">{t('wallet.recoveryPhrase')}</label>
@@ -968,6 +968,9 @@ export default function ConnectWalletModal() {
 
           {view === 'browser-extension' && (
             <div className="flex flex-col gap-3">
+              <div className="rounded-xl bg-[color:var(--sf-info-yellow-bg)] p-4 shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-sm font-medium text-[color:var(--sf-info-yellow-text)]">
+                {t('wallet.runesInscriptionsWarning')}
+              </div>
               <div className="max-h-96 overflow-y-auto space-y-4 px-6 -mx-6">
                 {/* Enabled wallet IDs - only these wallets are fully supported */}
                 {(() => {

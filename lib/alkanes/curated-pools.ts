@@ -30,18 +30,23 @@
 import type { PoolsListItem } from '@/hooks/usePools';
 
 const FRBTC_ID = '32:0';
+const BUSD_ID = '2:56801';
 const MAINNET_FACTORY_ID = '4:65522';
 
 /**
- * Mainnet alkane id ↔ symbol/name + its direct frBTC pool. Each entry
- * pairs the buy-side token with a single pool that contains both that
- * token and frBTC, so the swap router resolves a one-hop path
- * automatically (BTC → wrap to frBTC → swap to target).
+ * Mainnet alkane id ↔ symbol/name + its direct pool. Each entry pairs
+ * the buy-side token with a single pool that contains both that token
+ * and a quote token (frBTC by default, or bUSD when `quoteTokenId` is
+ * set), so the swap router resolves a one-hop path automatically.
+ *
+ * For frBTC quote pools the route is BTC → wrap to frBTC → swap. For
+ * bUSD quote pools the user must already hold bUSD (or route through
+ * the bUSD/frBTC pool — `2:77222`).
  */
 export interface CuratedPool {
-  /** Pool id (block:tx) — must contain `tokenId` and frBTC (32:0). */
+  /** Pool id (block:tx) — must contain `tokenId` and the quote token. */
   poolId: string;
-  /** Alkane id of the non-frBTC token (the "counterparty" the user buys). */
+  /** Alkane id of the non-quote token (the "counterparty" the user buys). */
   tokenId: string;
   /** Display symbol. */
   symbol: string;
@@ -55,6 +60,15 @@ export interface CuratedPool {
    * without needing to call the pool contract).
    */
   lpTokenId?: string;
+  /**
+   * Alkane id of the quote token (token1 in the on-chain pool layout).
+   * Defaults to frBTC (`32:0`). Set to bUSD (`2:56801`) for USD-quoted pools.
+   */
+  quoteTokenId?: string;
+  /** Display symbol of the quote token. Defaults to `frBTC`. */
+  quoteSymbol?: string;
+  /** Display name of the quote token. Defaults to `frBTC`. */
+  quoteName?: string;
 }
 
 export const MAINNET_CURATED_POOLS: readonly CuratedPool[] = [
@@ -86,6 +100,53 @@ export const MAINNET_CURATED_POOLS: readonly CuratedPool[] = [
     name: 'GOLD DUST',
     decimals: 8,
   },
+  {
+    poolId: '2:77269',
+    tokenId: '2:68479',
+    symbol: 'TORTILLA',
+    name: 'TORTILLA',
+    decimals: 8,
+  },
+  {
+    poolId: '2:77222',
+    tokenId: BUSD_ID,
+    symbol: 'bUSD',
+    name: 'bUSD',
+    decimals: 8,
+  },
+  {
+    poolId: '2:68441',
+    tokenId: '2:0',
+    symbol: 'DIESEL',
+    name: 'DIESEL',
+    decimals: 8,
+    quoteTokenId: BUSD_ID,
+    quoteSymbol: 'bUSD',
+    quoteName: 'bUSD',
+    lpTokenId: '2:68441',
+  },
+  {
+    poolId: '2:68433',
+    tokenId: '2:16',
+    symbol: 'METHANE',
+    name: 'METHANE',
+    decimals: 8,
+    quoteTokenId: BUSD_ID,
+    quoteSymbol: 'bUSD',
+    quoteName: 'bUSD',
+    lpTokenId: '2:68433',
+  },
+  {
+    poolId: '2:68497',
+    tokenId: '2:69',
+    symbol: 'FARTANE',
+    name: 'FARTANE',
+    decimals: 8,
+    quoteTokenId: BUSD_ID,
+    quoteSymbol: 'bUSD',
+    quoteName: 'bUSD',
+    lpTokenId: '2:68497',
+  },
 ] as const;
 
 /**
@@ -104,20 +165,25 @@ export const MAINNET_CURATED_POOLS: readonly CuratedPool[] = [
  * (token1) at deployment. Verified via curl 2026-05-11.
  */
 export function getCuratedPoolsListItems(): PoolsListItem[] {
-  return MAINNET_CURATED_POOLS.map((p) => ({
-    id: p.poolId,
-    pairLabel: `${p.symbol} / frBTC LP`,
-    token0: {
-      id: p.tokenId,
-      symbol: p.symbol,
-      name: p.name,
-    },
-    token1: {
-      id: FRBTC_ID,
-      symbol: 'frBTC',
-      name: 'frBTC',
-    },
-  } as PoolsListItem));
+  return MAINNET_CURATED_POOLS.map((p) => {
+    const quoteId = p.quoteTokenId ?? FRBTC_ID;
+    const quoteSymbol = p.quoteSymbol ?? 'frBTC';
+    const quoteName = p.quoteName ?? 'frBTC';
+    return {
+      id: p.poolId,
+      pairLabel: `${p.symbol} / ${quoteSymbol} LP`,
+      token0: {
+        id: p.tokenId,
+        symbol: p.symbol,
+        name: p.name,
+      },
+      token1: {
+        id: quoteId,
+        symbol: quoteSymbol,
+        name: quoteName,
+      },
+    } as PoolsListItem;
+  });
 }
 
 /** Mainnet factory alkane id (the AMM router). */
