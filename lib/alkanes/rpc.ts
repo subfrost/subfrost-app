@@ -459,7 +459,14 @@ export interface AmmPoolsResponse {
   total: number;
 }
 
-const ALKANODE_RPC_URL = 'https://api.alkanode.com/rpc';
+// Override via `NEXT_PUBLIC_ESPO_RPC_URL` if alkanode is unreachable and an
+// alternate host with the same `ammdata.*` / `pizzafun.*` JSON-RPC contract is
+// available. Parallel to the server-side `ESPO_RPC_PRIMARY_URL` used by
+// `app/api/amm-volume/route.ts`; kept as a separate var because this one is
+// read in browser context and needs the `NEXT_PUBLIC_` prefix to be inlined.
+const ALKANODE_RPC_URL =
+  (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_ESPO_RPC_URL) ||
+  'https://api.alkanode.com/rpc';
 
 /**
  * Fetch all AMM pools from the alkanode data service.

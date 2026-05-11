@@ -274,6 +274,18 @@ Available helpers (canonical surface):
 
 When you next edit any of those files, swap the raw fetch for the corresponding `rpc.*` helper.
 
+### ⚠️ Mainnet metashrew routing — DO NOT MOVE `metashrew_height` ONTO /v6
+
+`app/api/rpc/[[...segments]]/route.ts` splits mainnet metashrew traffic by method:
+
+| Method | Endpoint | Why |
+|--------|----------|-----|
+| `metashrew_view` | `/v6/subfrost` (sticky, fast) | 12–30× faster on the wallet UTXO prewarm fanout (parallel `alkanes_protorunesbyoutpoint`). |
+| `metashrew_height` | `/v4/subfrost` (gateway) | /v6 rate-limits aggressive bursts. The SDK's `WebProvider::sync` polls `metashrew_height` every ~500ms for up to 30s while waiting for the indexer to catch up to bitcoind, and reliably trips /v6's burst limit (429 after ~7-8 calls in ~3.5s). The 429 propagates as "Network error: HTTP error: 429" and the swap aborts. /v4 doesn't rate-limit and the single-call latency penalty is negligible. |
+| Everything else (`alkanes_*`, `bitcoin_*`, `esplora_*`, REST sub-paths) | `/v4/subfrost` | /v6 only serves metashrew JSON-RPC. |
+
+DO NOT consolidate `metashrew_height` back onto /v6 for "consistency" — the perf benefit is zero (single trivial call, no fanout) and the cost is total swap failure during normal 1-block indexer-lag windows (which happen every ~10 minutes on mainnet). Verified 2026-05-10 (commit `3d3b48eb`).
+
 ### Indexer Sync — Proactive Probe in `alkanesExecuteTyped`
 
 `lib/alkanes/execute.ts:alkanesExecuteTyped` calls `provider.waitForIndexer()` before dispatching to `alkanesExecuteWithStrings` / `alkanesExecuteFull`. This catches the transient `metashrew_height < bitcoind_blockcount` window on mainnet (sometimes a block apart for ~10–30s) up-front, instead of letting the SDK's internal 30s timeout fire and bury the swap on "Building Transaction".

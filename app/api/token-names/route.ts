@@ -128,16 +128,41 @@ export async function GET(request: Request) {
 
   try {
     let response: Response;
+    let parsed: any;
     try {
       response = await fetchAlkanes(baseUrl);
+      parsed = await response.json();
     } catch (primaryErr) {
       if (!fallbackBase) throw primaryErr;
       console.warn(`[token-names] primary upstream failed (${primaryErr instanceof Error ? primaryErr.message : 'unknown'}); falling back to ${fallbackBase}`);
       response = await fetchAlkanes(fallbackBase);
+      parsed = await response.json();
     }
 
-    const data = await response.json();
-    const tokens: any[] = data?.data?.tokens || [];
+    let tokens: any[] = parsed?.data?.tokens || [];
+
+    // 200-with-empty fallback. Subfrost's /get-alkanes intermittently returns
+    // valid HTTP 200 with `data: { tokens: [] }` during indexer drift (same
+    // class as PRs #108/#111/#112/#113). The 4xx/5xx catch above doesn't fire
+    // on this shape — the upstream looks healthy, just empty. Retry against
+    // alkanode and use its response if it has tokens.
+    //
+    // Skipped when primary already IS the fallback base (no point checking
+    // alkanode twice) or when no fallback is configured.
+    if (fallbackBase && tokens.length === 0 && baseUrl !== fallbackBase) {
+      console.warn(`[token-names] primary returned 0 tokens (likely indexer drift); checking ${fallbackBase}`);
+      try {
+        const fallbackResp = await fetchAlkanes(fallbackBase);
+        const fallbackParsed = await fallbackResp.json();
+        const fallbackTokens: any[] = fallbackParsed?.data?.tokens || [];
+        if (fallbackTokens.length > tokens.length) {
+          console.warn(`[token-names] fallback returned ${fallbackTokens.length} tokens; using fallback data`);
+          tokens = fallbackTokens;
+        }
+      } catch (fallbackErr) {
+        console.warn(`[token-names] empty-fallback failed: ${fallbackErr instanceof Error ? fallbackErr.message : 'unknown'}`);
+      }
+    }
 
     // Build name map AND a parallel price map. Espo's /get-alkanes
     // returns priceUsd / busdPoolPriceInUsd / priceInSatoshi per token

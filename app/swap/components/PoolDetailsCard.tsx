@@ -14,7 +14,11 @@ type Props = {
   bare?: boolean;
 };
 
-const ALKANODE_RPC_URL = 'https://api.alkanode.com/rpc';
+// Same env knob as `lib/alkanes/rpc.ts` — overrides the alkanode JSON-RPC host
+// for the pizzafun namespace lookup. Falls back to the default alkanode URL.
+const ALKANODE_RPC_URL =
+  (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_ESPO_RPC_URL) ||
+  'https://api.alkanode.com/rpc';
 
 /**
  * Resolve the pizza.fun series ID (symbol) for a given alkane ID.
