@@ -322,9 +322,9 @@ export async function fetchAlkaneBalancesViaProtobuf(
   // subfrost has zero data. If even one outpoint produces a balance, we
   // trust subfrost completely and skip the fallback.
   if (aggregate.size === 0 && dustUtxos.length > 0 && network === 'mainnet') {
-    const fallback = await tryAlkanodeAlkaneBalances(address);
+    const fallback = await tryRestAlkanesByAddress(network, address);
     if (fallback && fallback.length > 0) {
-      console.warn(`[alkaneBalances] subfrost returned 0 alkanes for ${dustUtxos.length} dust UTXOs at ${address}; using alkanode fallback (${fallback.length} entries)`);
+      console.warn(`[alkaneBalances] subfrost returned 0 alkanes for ${dustUtxos.length} dust UTXOs at ${address}; using REST fallback (${fallback.length} entries)`);
       return fallback;
     }
   }
@@ -335,21 +335,23 @@ export async function fetchAlkaneBalancesViaProtobuf(
   });
 }
 
-// Alkanode REST fallback for `fetchAlkaneBalancesViaProtobuf`. Used only
-// when subfrost upstream's alkane indexer returns 200-with-empty across every
-// dust outpoint at an address. Returns the same shape as the primary path so
-// callers can swap freely.
+// REST fallback for `fetchAlkaneBalancesViaProtobuf`. Used only when subfrost
+// upstream's alkane indexer returns 200-with-empty across every dust outpoint
+// at an address. Returns the same shape as the primary path so callers can
+// swap freely.
 //
-// Set `ESPO_MAINNET_FALLBACK_URL=""` (env) to disable. Defaults to alkanode.
-async function tryAlkanodeAlkaneBalances(
+// Routes through `/api/rpc/{network}/get-alkanes-by-address` so the proxy's
+// 200-with-empty fallback chain (see `app/api/rpc/[[...segments]]/route.ts`)
+// can transparently fall back to `ESPO_MAINNET_FALLBACK_URL` (default
+// `https://oyl.alkanode.com`) when subfrost returns empty. This keeps the
+// fallback-host config server-side (single source of truth) and avoids a raw
+// browser → third-party fetch that depended on permissive CORS at alkanode.
+async function tryRestAlkanesByAddress(
+  network: string,
   address: string,
 ): Promise<{ alkaneId: { block: string; tx: string }; balance: string }[] | null> {
-  const fallbackBase = (typeof process !== 'undefined' && process.env?.ESPO_MAINNET_FALLBACK_URL !== undefined)
-    ? process.env.ESPO_MAINNET_FALLBACK_URL
-    : 'https://oyl.alkanode.com';
-  if (!fallbackBase) return null;
   try {
-    const resp = await fetch(`${fallbackBase.replace(/\/$/, '')}/get-alkanes-by-address`, {
+    const resp = await fetch(`/api/rpc/${network}/get-alkanes-by-address`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ address }),
@@ -368,7 +370,7 @@ async function tryAlkanodeAlkaneBalances(
       })
       .filter((x): x is { alkaneId: { block: string; tx: string }; balance: string } => x !== null);
   } catch (err) {
-    console.warn('[alkaneBalances] alkanode fallback threw:', err);
+    console.warn('[alkaneBalances] REST fallback threw:', err);
     return null;
   }
 }
@@ -549,7 +551,7 @@ export function walletUtxoCacheQueryOptions(deps: WalletUtxoCacheDeps) {
       // consulted only when subfrost has zero data.
       if (alkaneMap.size === 0 && dustUtxos.length > 0 && deps.network === 'mainnet') {
         const fallbackByAddress = await Promise.all(
-          addresses.map((addr) => tryAlkanodeAlkaneBalances(addr).then((res) => ({ addr, res }))),
+          addresses.map((addr) => tryRestAlkanesByAddress(deps.network, addr).then((res) => ({ addr, res }))),
         );
         const totalFallbackEntries = fallbackByAddress.reduce(
           (sum, { res }) => sum + (res?.length ?? 0),
@@ -557,9 +559,9 @@ export function walletUtxoCacheQueryOptions(deps: WalletUtxoCacheDeps) {
         );
         if (totalFallbackEntries > 0) {
           console.warn(
-            `[walletUtxoCache] subfrost returned 0 alkanes for ${dustUtxos.length} dust UTXOs; using alkanode fallback (${totalFallbackEntries} entries across ${fallbackByAddress.length} addresses)`,
+            `[walletUtxoCache] subfrost returned 0 alkanes for ${dustUtxos.length} dust UTXOs; using REST fallback (${totalFallbackEntries} entries across ${fallbackByAddress.length} addresses)`,
           );
-          // Credit each address's alkanode balances to the first dust UTXO
+          // Credit each address's fallback balances to the first dust UTXO
           // belonging to that address. The SDK's selector treats the cache
           // as a hint about where balances live; the on-chain truth is
           // resolved at submit time, so any dust UTXO is a valid hint.
