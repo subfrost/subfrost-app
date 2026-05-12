@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { Copy, Check, X } from 'lucide-react';
 import QRCode from '@/app/components/QRCode';
 import { useWallet } from '@/context/WalletContext';
 import { useTranslation } from '@/hooks/useTranslation';
+import SfPopup, { type SfPopupHandle } from '@/app/components/SfPopup';
 
 interface ReceiveModalProps {
   isOpen: boolean;
@@ -16,6 +17,8 @@ export default function ReceiveModal({ isOpen, onClose }: ReceiveModalProps) {
   const { account } = useWallet() as any;
   const [copied, setCopied] = useState(false);
   const qrSize = 169; // ~56% of original 300
+  const popupRef = useRef<SfPopupHandle>(null);
+  const handleClose = () => popupRef.current?.close();
 
   const hasSegwit = !!account?.nativeSegwit?.address;
   const hasTaproot = !!account?.taproot?.address;
@@ -30,8 +33,6 @@ export default function ReceiveModal({ isOpen, onClose }: ReceiveModalProps) {
   const displayAddress = effectiveMode === 'taproot'
     ? account?.taproot?.address
     : account?.nativeSegwit?.address;
-
-  if (!isOpen) return null;
 
   const copyAddress = async () => {
     if (!displayAddress) return;
@@ -49,8 +50,14 @@ export default function ReceiveModal({ isOpen, onClose }: ReceiveModalProps) {
   const showToggle = hasSegwit && hasTaproot;
 
   return (
-    <div className="sf-popup-overlay p-4" onClick={onClose}>
-      <div className="sf-popup w-full max-w-md max-h-[90vh]" onClick={e => e.stopPropagation()}>
+    <SfPopup
+      ref={popupRef}
+      isOpen={isOpen}
+      onClose={onClose}
+      overlayClassName="p-4"
+      panelClassName="w-full max-w-md max-h-[90vh]"
+      trackHeight
+    >
         {/* Header */}
         <div className="bg-[color:var(--sf-panel-bg)] px-6 py-5 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
           <div className="flex items-center justify-between">
@@ -58,7 +65,7 @@ export default function ReceiveModal({ isOpen, onClose }: ReceiveModalProps) {
               {isTaproot ? t('receive.titleAssets') : t('receive.title')}
             </h2>
             <button
-              onClick={onClose}
+              onClick={handleClose}
               className="flex h-8 w-8 items-center justify-center rounded-lg bg-[color:var(--sf-input-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-[color:var(--sf-text)]/70 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)] hover:text-[color:var(--sf-text)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] focus:outline-none"
               aria-label="Close"
             >
@@ -130,8 +137,6 @@ export default function ReceiveModal({ isOpen, onClose }: ReceiveModalProps) {
           </div>
 
         </div>
-
-      </div>
-    </div>
+    </SfPopup>
   );
 }
