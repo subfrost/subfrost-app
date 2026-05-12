@@ -36,7 +36,7 @@ describe('useSwapMutation: splitTransactions plumbing', () => {
   const src = read('useSwapMutation.ts');
 
   it('reads splitTransactions from the mutation payload', () => {
-    expect(src).toMatch(/splitTransactions:\s*\(swapData as any\)\.splitTransactions/);
+    expect(src).toMatch(/const\s+wantsSplit\s*=\s*\(swapData as any\)\.splitTransactions\s*===\s*true/);
   });
 
   it('forwards splitTransactions to alkanesExecuteTyped', () => {
@@ -46,16 +46,24 @@ describe('useSwapMutation: splitTransactions plumbing', () => {
     // Either shape is acceptable as long as `splitTransactions` is part
     // of the options object the SDK is called with.
     const inlineForm =
-      /provider\.alkanesExecuteTyped\(\{[\s\S]*?splitTransactions:\s*\(swapData as any\)\.splitTransactions[\s\S]*?\}\)/;
+      /provider\.alkanesExecuteTyped\(\{[\s\S]*?splitTransactions:\s*(?:\(swapData as any\)\.splitTransactions\s*===\s*true|wantsSplit)[\s\S]*?\}\)/;
     const factoryForm =
-      /buildExecuteOpts\s*=\s*\(\)\s*=>\s*\(\{[\s\S]*?splitTransactions:\s*\(swapData as any\)\.splitTransactions[\s\S]*?\}\)[\s\S]*?provider\.alkanesExecuteTyped\(\s*buildExecuteOpts\(\)/;
+      /buildExecuteOpts\s*=\s*\(\)\s*=>\s*\(\{[\s\S]*?splitTransactions:\s*(?:\(swapData as any\)\.splitTransactions\s*===\s*true|wantsSplit)[\s\S]*?\}\)[\s\S]*?provider\.alkanesExecuteTyped\(\s*buildExecuteOpts\(\)/;
     expect(inlineForm.test(src) || factoryForm.test(src)).toBe(true);
   });
 
   it('uses === true so missing/undefined flag is treated as false', () => {
     // The intent is "opt-in only"; reading via `=== true` prevents
     // truthy-but-not-true values from accidentally enabling split mode.
-    expect(src).toMatch(/splitTransactions:\s*\(swapData as any\)\.splitTransactions\s*===\s*true/);
+    expect(src).toMatch(/const\s+wantsSplit\s*=\s*\(swapData as any\)\.splitTransactions\s*===\s*true/);
+  });
+
+  it('forces SDK auto-confirm when split mode is requested', () => {
+    // Rust's execute_split path needs SDK-side signing/broadcast so Tx A can
+    // enter mempool before Tx B is built. The browser unsigned-PSBT branch is
+    // single-tx only.
+    expect(src).toMatch(/const\s+useAutoConfirm\s*=\s*isKeystoreWallet\s*\|\|\s*wantsSplit/);
+    expect(src).toMatch(/autoConfirm:\s*useAutoConfirm/);
   });
 });
 

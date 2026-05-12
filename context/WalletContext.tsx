@@ -1114,23 +1114,20 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
   }, []);
 
   // Disconnect (lock) wallet - works for both keystore and browser wallets
-  const disconnect = useCallback(async () => {
+  const disconnect = useCallback(() => {
     // Mark explicit disconnect so the devnet auto-connect effect doesn't
     // immediately re-create the boot wallet. Cleared on network change.
     userDisconnectedRef.current = true;
+
+    const walletToDisconnect = browserWallet;
+    const connector = getWalletConnector();
 
     // Clear keystore session
     sessionStorage.removeItem(STORAGE_KEYS.SESSION_MNEMONIC);
     setWallet(null);
 
-    // Clear browser wallet connection
-    if (browserWallet) {
-      try {
-        await browserWallet.disconnect();
-      } catch (error) {
-        console.warn('[WalletContext] Failed to disconnect browser wallet:', error);
-      }
-    }
+    // Clear app-visible browser wallet state immediately. Some extension
+    // disconnect APIs can hang, and that must not make the UI stay connected.
     setBrowserWallet(null);
     setBrowserWalletAddresses(null);
     setWalletAdapter(null); // Clear SDK wallet adapter
@@ -1138,16 +1135,18 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
     localStorage.removeItem(STORAGE_KEYS.WALLET_TYPE);
     localStorage.removeItem(STORAGE_KEYS.BROWSER_WALLET_ADDRESSES);
 
-    // Disconnect the WalletConnector
-    const connector = getWalletConnector();
-    try {
-      await connector.disconnect();
-    } catch (error) {
-      // Ignore disconnect errors
-    }
-
     setWalletType(null);
     setIsConnectModalOpen(false);
+
+    if (walletToDisconnect) {
+      void Promise.resolve(walletToDisconnect.disconnect()).catch((error) => {
+        console.warn('[WalletContext] Failed to disconnect browser wallet:', error);
+      });
+    }
+
+    void Promise.resolve(connector.disconnect()).catch(() => {
+      // Ignore connector disconnect errors.
+    });
   }, [browserWallet, getWalletConnector]);
 
   // Detect installed browser wallets

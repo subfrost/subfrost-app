@@ -424,6 +424,22 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
   const isPosition = (alkane: { symbol: string; name: string; alkaneId?: string }) =>
     isLpToken(alkane) || isStakedPosition(alkane);
   const isNft = (balance: string) => BigInt(balance) === BigInt(1);
+  const isSendNft = (alkane: { balance: string; symbol: string; name: string; alkaneId?: string }) =>
+    isNft(alkane.balance) && !isPosition(alkane);
+
+  const getAlkaneSendAmountBaseUnits = (alkane: AlkaneAsset): bigint | null => {
+    if (isSendNft(alkane)) return 1n;
+
+    const amountFloat = parseFloat(amount);
+    if (isNaN(amountFloat) || amountFloat <= 0) return null;
+
+    const decimals = alkane.decimals || 8;
+    return BigInt(Math.floor(amountFloat * Math.pow(10, decimals)));
+  };
+
+  const getAlkaneSendDisplayAmount = (alkane: AlkaneAsset): string => {
+    return isSendNft(alkane) ? '1' : amount;
+  };
 
   // Load frozen UTXOs from localStorage
   const getFrozenUtxos = (): Set<string> => {
@@ -576,15 +592,13 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
           return;
         }
 
-        const amountFloat = parseFloat(amount);
-        if (isNaN(amountFloat) || amountFloat <= 0) {
+        const amountBaseUnits = getAlkaneSendAmountBaseUnits(selectedAlkane);
+        if (amountBaseUnits === null || amountBaseUnits <= 0n) {
           setError(t('send.invalidAmount'));
           return;
         }
 
-        // Convert to base units and check balance
-        const decimals = selectedAlkane.decimals || 8;
-        const amountBaseUnits = BigInt(Math.floor(amountFloat * Math.pow(10, decimals)));
+        // Convert to base units and check balance. NFTs always send their single base unit.
         const balanceBaseUnits = BigInt(selectedAlkane.balance);
 
         if (amountBaseUnits > balanceBaseUnits) {
@@ -833,11 +847,9 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
 
       if (!validateAddress(recipientAddress)) throw new Error(t('send.invalidAddress'));
 
-      const decimals = selectedAlkane.decimals || 8;
-      const amountFloat = parseFloat(amount);
-      if (isNaN(amountFloat) || amountFloat <= 0) throw new Error(t('send.invalidAmount'));
+      const amountBaseUnits = getAlkaneSendAmountBaseUnits(selectedAlkane);
+      if (amountBaseUnits === null || amountBaseUnits <= 0n) throw new Error(t('send.invalidAmount'));
 
-      const amountBaseUnits = BigInt(Math.floor(amountFloat * Math.pow(10, decimals)));
       const balanceBaseUnits = BigInt(selectedAlkane.balance);
       if (amountBaseUnits > balanceBaseUnits) {
         throw new Error(t('send.insufficientBalanceDetailed', {
@@ -851,7 +863,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
         const approved = await requestConfirmation({
           type: 'send',
           title: t('send.confirmAlkaneSend'),
-          fromAmount: amount,
+          fromAmount: getAlkaneSendDisplayAmount(selectedAlkane),
           fromSymbol: selectedAlkane.symbol || 'ALKANE',
           recipient: recipientAddress,
           feeRate: feeRate,
@@ -1070,7 +1082,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
         {/* Alkane Balances */}
         {balances.alkanes.length > 0 ? (
           <div>
-            <label className="block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/60 mb-2">
+            <label className="block mt-[25px] mb-[20px] text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/60">
               <span className="flex items-center gap-1.5">
                 <Coins size={14} />
                 {t('send.selectAlkanes')}
@@ -1226,22 +1238,27 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
 
         {(() => {
           const selected = selectedAlkaneId ? balances.alkanes.find(a => a.alkaneId === selectedAlkaneId) : null;
+          const selectedIsNft = selected ? isSendNft(selected) : false;
           return (
             <div>
-              <label className="block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/60 mb-2">
-                {t('send.amountAlkanes')}
-              </label>
-              <input
-                type="number"
-                step="any"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                placeholder="0"
-                disabled={!selected}
-                className="w-full px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-[color:var(--sf-text)] outline-none focus:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none disabled:opacity-50 disabled:cursor-not-allowed"
-              />
+              {!selectedIsNft && (
+                <>
+                  <label className="block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/60 mb-2">
+                    {t('send.amountAlkanes')}
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    placeholder="0"
+                    disabled={!selected}
+                    className="w-full px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-[color:var(--sf-text)] outline-none focus:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none disabled:opacity-50 disabled:cursor-not-allowed"
+                  />
+                </>
+              )}
               {selected && (
-                <div className="mt-1 text-xs text-[color:var(--sf-text)]/60">
+                <div className={`${selectedIsNft ? 'mt-0' : 'mt-1'} text-xs text-[color:var(--sf-text)]/60`}>
                   {t('send.available')} {formatAlkaneBalance(selected.balance, selected.decimals, selected)} {selected.name}
                 </div>
               )}
@@ -1299,7 +1316,11 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
       <div className="flex gap-3">
         <button
           onClick={() => { if (!isProcessing) { handleNext(); } }}
-          disabled={!selectedAlkaneId || !amount || isProcessing}
+          disabled={(() => {
+            if (!selectedAlkaneId || isProcessing) return true;
+            const selected = balances.alkanes.find(a => a.alkaneId === selectedAlkaneId);
+            return selected ? !isSendNft(selected) && !amount : true;
+          })()}
           className={`flex-1 px-4 py-3 rounded-xl shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none font-bold uppercase tracking-wide disabled:opacity-50 disabled:cursor-not-allowed bg-[color:var(--sf-primary)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] text-white`}
         >
           {isProcessing ? (

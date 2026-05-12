@@ -397,13 +397,20 @@ export function useSwapMutation() {
         // The retry-on-error block below remains as a safety net for the
         // case where the indexer takes longer than waitForIndexer's own
         // internal budget.
+        const wantsSplit = (swapData as any).splitTransactions === true;
+        const useAutoConfirm = isKeystoreWallet || wantsSplit;
+
         const buildExecuteOpts = () => ({
           txContext,
           // Support overrides for atomic wrap+swap (SwapShell passes custom protostones/addresses)
           inputRequirements: (swapData as any).overrideInputRequirements || inputRequirements,
           protostones: (swapData as any).overrideProtostones || protostone,
           feeRate: swapData.feeRate,
-          autoConfirm: isKeystoreWallet,
+          // Split-tx mode is implemented inside alkanes-rs execute_full. The
+          // browser unsigned-PSBT path cannot broadcast the parent wrap tx
+          // before building the child execute tx, so opt into SDK-side
+          // signing/broadcasting whenever the caller requests split mode.
+          autoConfirm: useAutoConfirm,
           toAddresses: (swapData as any).overrideToAddresses || toAddresses,
           network,
           // Pre-warmed UTXO snapshot. alkanesExecuteTyped derives clean
@@ -420,7 +427,7 @@ export function useSwapMutation() {
           // the SDK's hand-maintained index.d.ts hasn't surfaced the prop on
           // alkanesExecuteTyped's param type yet. Cast `as any` until the SDK
           // d.ts is regenerated; the runtime path is unchanged.
-          splitTransactions: (swapData as any).splitTransactions === true,
+          splitTransactions: wantsSplit,
         });
 
         const isIndexerSyncError = (e: unknown): boolean => {

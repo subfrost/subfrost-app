@@ -210,35 +210,62 @@ export default function SplashScreen() {
     >
       <div
         style={{
-          width: 200,
-          height: 2,
-          background: 'rgba(91,156,255,0.12)',
-          borderRadius: 1,
-          overflow: 'hidden',
+          width: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          textAlign: 'center',
         }}
       >
         <div
-          id="sf-splash-bar"
+          aria-label="SUBFROST"
           style={{
-            height: '100%',
-            width: '0%',
-            background: 'linear-gradient(90deg, #3a6fd8, #5b9cff, #c7e0fe)',
+            width: 200,
+            marginBottom: 18,
+            color: '#FFFFFF',
+            fontFamily: "Satoshi, 'Satoshi', Arial, Helvetica, sans-serif",
+            fontSize: 30,
+            fontWeight: 700,
+            letterSpacing: '0.05em',
+            lineHeight: 1,
+            textAlign: 'center',
+          }}
+        >
+          SUBFROST
+        </div>
+        <div
+          style={{
+            width: 200,
+            height: 2,
+            background: 'rgba(91,156,255,0.12)',
             borderRadius: 1,
-            transition: 'width 0.3s ease',
+            overflow: 'hidden',
+          }}
+        >
+          <div
+            id="sf-splash-bar"
+            style={{
+              height: '100%',
+              width: '0%',
+              background: 'linear-gradient(90deg, #3a6fd8, #5b9cff, #c7e0fe)',
+              borderRadius: 1,
+              transition: 'width 0.3s ease',
+            }}
+          />
+        </div>
+        <div
+          id="sf-splash-pct"
+          style={{
+            marginTop: 10,
+            fontSize: 10,
+            fontWeight: 700,
+            fontFamily: 'inherit',
+            color: 'rgba(91,156,255,1)',
+            letterSpacing: 3,
+            textAlign: 'center',
           }}
         />
       </div>
-      <div
-        id="sf-splash-pct"
-        style={{
-          marginTop: 10,
-          fontSize: 10,
-          fontWeight: 700,
-          fontFamily: '"Courier New", Courier, monospace',
-          color: 'rgba(91,156,255,1)',
-          letterSpacing: 3,
-        }}
-      />
     </div>
   );
 }

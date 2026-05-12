@@ -260,6 +260,13 @@ export default function AlkanesBalancesCard({
     ) : value;
   };
 
+  const formatFuelAmount = (amount: number): string => {
+    return amount.toLocaleString(undefined, {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2,
+    });
+  };
+
   if (error) {
     return (
       <div className={embedded ? '' : 'h-full rounded-2xl bg-[color:var(--sf-glass-bg)] p-6 shadow-[0_4px_20px_rgba(0,0,0,0.2)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)]'}>
@@ -328,7 +335,7 @@ export default function AlkanesBalancesCard({
               <div>
                 <div className="text-sm text-[color:var(--sf-text)]/60 mb-1">{t('balances.fuelAllocation')}</div>
                 <div className="text-lg sm:text-xl font-bold text-[color:var(--sf-text)]">
-                  {fuelAllocation.amount.toLocaleString()} FUEL
+                  {formatFuelAmount(fuelAllocation.amount)} FUEL
                 </div>
               </div>
             </div>

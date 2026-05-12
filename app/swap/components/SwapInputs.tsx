@@ -12,7 +12,6 @@ import ActivateBridge from "./ActivateBridge";
 import BridgeDepositFlow from "./BridgeDepositFlow";
 import type { BridgeDirection } from "./BridgeDepositFlow";
 import { useTranslation } from "@/hooks/useTranslation";
-import { useDemoGate } from "@/hooks/useDemoGate";
 
 type BridgeStep = 1 | 2 | 3 | 4 | 5;
 
@@ -71,7 +70,6 @@ export default function SwapInputs({
   const { theme } = useTheme();
   const { openTokenSelector } = useModalStore();
   const { t } = useTranslation();
-  const isDemoGated = useDemoGate();
 
   // Apply i18n defaults for balance texts
   const resolvedFromBalanceText = fromBalanceText ?? t("swap.noBalance");
@@ -88,7 +86,6 @@ export default function SwapInputs({
   const [ethAddressFocused, setEthAddressFocused] = useState(false);
 
   // Bridge state
-  const [showSwapComingSoon, setShowSwapComingSoon] = useState(false);
   const [bridgeActive, setBridgeActive] = useState(false);
   const [bridgeStep, setBridgeStep] = useState<BridgeStep>(1);
   const [completedSteps, setCompletedSteps] = useState<BridgeStep[]>([]);
@@ -103,23 +100,28 @@ export default function SwapInputs({
   // Deposit address for cross-chain swaps
   const DEPOSIT_ADDRESS = "0x59f57b84d6742acdaa56e9da1c770898e4a270b6";
 
+  const fromAmountNumber = parseFloat(fromAmount);
+  const toAmountNumber = parseFloat(toAmount);
+  const hasValidFromAmount = Number.isFinite(fromAmountNumber) && fromAmountNumber > 0;
+  const hasValidToAmount = Number.isFinite(toAmountNumber) && toAmountNumber > 0;
+
   // For testing: allow cross-chain swap button to work even without full pricing
   const canSwapCrossChain =
     isConnected &&
+    !!from &&
+    !!to &&
     isFromBridgeToken &&
-    !!fromAmount &&
-    parseFloat(fromAmount) > 0;
+    hasValidFromAmount;
   const canSwap =
     isConnected &&
-    !!fromAmount &&
-    !!toAmount &&
-    isFinite(parseFloat(fromAmount)) &&
-    isFinite(parseFloat(toAmount)) &&
-    parseFloat(fromAmount) > 0 &&
-    parseFloat(toAmount) > 0;
+    !!from &&
+    !!to &&
+    hasValidFromAmount &&
+    hasValidToAmount;
 
   // Enable button for cross-chain FROM tokens even without full quote
   const isButtonEnabled = canSwap || canSwapCrossChain;
+  const isCtaDisabled = isSwapping || (isConnected && !isButtonEnabled);
 
   const ctaText = isConnected
     ? isToBridgeToken || isFromBridgeToken
@@ -128,6 +130,8 @@ export default function SwapInputs({
     : t("swap.connectWallet");
 
   const onCtaClick = () => {
+    if (isCtaDisabled) return;
+
     if (!isConnected) {
       onConnectModalOpenChange(true);
       return;
@@ -584,9 +588,9 @@ export default function SwapInputs({
       >
         <button
           type="button"
-          disabled={isSwapping}
+          disabled={isCtaDisabled}
           onClick={() => {
-            if (isSwapping) return;
+            if (isCtaDisabled) return;
 
             if (!isConnected) {
               onConnectModalOpenChange(true);
@@ -598,19 +602,12 @@ export default function SwapInputs({
               setShowBridgeFlow(true);
               return;
             }
-            if (!isDemoGated || isBridgeSwap) {
-              onSwapClick();
-              return;
-            }
-            if (!showSwapComingSoon) {
-              setShowSwapComingSoon(true);
-              setTimeout(() => setShowSwapComingSoon(false), 1000);
-            }
+            onSwapClick();
           }}
           className={`h-12 w-full rounded-xl font-bold text-sm uppercase tracking-wider transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none focus:outline-none ${
             isSwapping
               ? "bg-[color:var(--sf-primary)]/60 text-white/80 cursor-wait"
-              : isConnected && isDemoGated && !isFromBridgeToken && !isToBridgeToken
+              : isConnected && !isButtonEnabled
               ? "bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)]/30 cursor-not-allowed"
               : "bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] text-white shadow-[0_4px_16px_rgba(0,0,0,0.3)] hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98]"
           }`}
@@ -623,8 +620,6 @@ export default function SwapInputs({
               </svg>
               Building Transaction...
             </span>
-          ) : showSwapComingSoon ? (
-            <span className="animate-pulse">{t("badge.comingSoon")}</span>
           ) : !isConnected ? (
             t("swap.connectWallet")
           ) : isCrossChainPair ? (

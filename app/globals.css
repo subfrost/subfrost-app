@@ -1017,6 +1017,20 @@ input[type="number"] {
   opacity: 0.9;
 }
 
+.wallet-section-dropdown {
+  display: none;
+}
+
+@media (max-width: 550px) {
+  .wallet-section-tabs {
+    display: none;
+  }
+
+  .wallet-section-dropdown {
+    display: block;
+  }
+}
+
 /* --- sf-tab-underline-btn ----------------------------------
    Underline-style tab button. Text-only with a primary-colour
    bottom bar on the active item. No pill background.

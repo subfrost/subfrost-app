@@ -45,6 +45,7 @@ import { useTokenNames, resolveTokenDisplay } from "@/hooks/useTokenNames";
 import { useRemoveLiquidityMutation } from "@/hooks/useRemoveLiquidityMutation";
 import { useLPPositions } from "@/hooks/useLPPositions";
 import { useTranslation } from '@/hooks/useTranslation';
+import { useDemoGate } from '@/hooks/useDemoGate';
 import { KNOWN_TOKENS } from "@/lib/alkanes-client";
 import { useSearchParams } from "next/navigation";
 
@@ -94,6 +95,7 @@ function getBridgeRoute(from: string, to: string): string {
 export default function SwapShell() {
   const { t } = useTranslation();
   const searchParams = useSearchParams();
+  const isDemoGated = useDemoGate();
 
   // Markets from API: all pools sorted by TVL desc
   const { data: poolsData, isLoading: isLoadingPools } = usePools({ sortBy: 'tvl', order: 'desc' });
@@ -145,6 +147,7 @@ export default function SwapShell() {
   // re-clicking the same row re-syncs the inputs in LimitOrderPanel.
   const [limitSelectedOrder, setLimitSelectedOrder] = useState<SelectedOrder | undefined>();
   const handleOrderbookSelect = (order: SelectedOrder) => {
+    if (isDemoGated) return;
     setLimitSelectedOrder(order);
     setOrderType('limit');
   };
@@ -152,6 +155,7 @@ export default function SwapShell() {
   useEffect(() => {
     setDesktopLeftView(orderType === 'limit' ? 'orderbook' : 'chart');
   }, [orderType]);
+  const visibleDesktopLeftView = isDemoGated ? 'chart' : desktopLeftView;
 
   // Liquidity mode state
   const [liquidityMode, setLiquidityMode] = useState<'provide' | 'remove'>('provide');
@@ -2489,6 +2493,7 @@ export default function SwapShell() {
               }}
               orderType={orderType}
               onOrderTypeChange={setOrderType}
+              hideLimit={isDemoGated}
             />
 
             {/* Transaction Stepper - shows during multi-step swaps */}
@@ -2512,33 +2517,37 @@ export default function SwapShell() {
         <div className="hidden lg:flex lg:col-span-7 lg:order-1 sf-card flex-col h-full overflow-hidden relative" style={{ minHeight: '450px' }}>
           <div className="flex-1 min-h-0 relative">
             {/* Both panels stay mounted so the chart iframe doesn't reload when toggling. */}
-            <div className={`absolute inset-0 ${desktopLeftView === 'chart' ? '' : 'invisible pointer-events-none'}`}>
+            <div className={`absolute inset-0 ${visibleDesktopLeftView === 'chart' ? '' : 'invisible pointer-events-none'}`}>
               <PoolDetailsCard pool={chartPool} chartTokenId={chartTokenId} isWrapPair={!chartPool && (isWrapPair || isUnwrapPair || isWrapZecPair || isUnwrapZecPair || isWrapEthPair || isUnwrapEthPair)} bare />
             </div>
-            <div className={`absolute inset-0 ${desktopLeftView === 'orderbook' ? '' : 'invisible pointer-events-none'}`}>
-              <Suspense fallback={<div className="h-full bg-[color:var(--sf-primary)]/5 rounded-xl animate-pulse" />}>
-                <OrderbookPanel
-                  baseToken={fromToken?.id || '2:0'}
-                  quoteToken={toToken?.id || '32:0'}
-                  onOrderSelect={handleOrderbookSelect}
-                  bare
-                />
-              </Suspense>
-            </div>
+            {!isDemoGated && (
+              <div className={`absolute inset-0 ${visibleDesktopLeftView === 'orderbook' ? '' : 'invisible pointer-events-none'}`}>
+                <Suspense fallback={<div className="h-full bg-[color:var(--sf-primary)]/5 rounded-xl animate-pulse" />}>
+                  <OrderbookPanel
+                    baseToken={fromToken?.id || '2:0'}
+                    quoteToken={toToken?.id || '32:0'}
+                    onOrderSelect={handleOrderbookSelect}
+                    bare
+                  />
+                </Suspense>
+              </div>
+            )}
           </div>
           <div className="absolute top-0 right-0 flex items-center justify-end gap-2 p-3 pb-0 z-10 pointer-events-none">
             <button
               onClick={() => setDesktopLeftView('chart')}
-              className={`sf-tab-btn pointer-events-auto ${desktopLeftView === 'chart' ? 'sf-tab-btn--active' : ''}`}
+              className={`sf-tab-btn pointer-events-auto ${visibleDesktopLeftView === 'chart' ? 'sf-tab-btn--active' : ''}`}
             >
               {t('swap.chart')}
             </button>
-            <button
-              onClick={() => setDesktopLeftView('orderbook')}
-              className={`sf-tab-btn pointer-events-auto ${desktopLeftView === 'orderbook' ? 'sf-tab-btn--active' : ''}`}
-            >
-              {t('swap.orderBook')}
-            </button>
+            {!isDemoGated && (
+              <button
+                onClick={() => setDesktopLeftView('orderbook')}
+                className={`sf-tab-btn pointer-events-auto ${visibleDesktopLeftView === 'orderbook' ? 'sf-tab-btn--active' : ''}`}
+              >
+                {t('swap.orderBook')}
+              </button>
+            )}
           </div>
         </div>
 
@@ -2551,6 +2560,7 @@ export default function SwapShell() {
             baseTokenId={fromToken?.id || '2:0'}
             quoteTokenId={toToken?.id || '32:0'}
             onOrderSelect={handleOrderbookSelect}
+            hideOrderbook={isDemoGated}
           />
         </div>
       </div>
@@ -2563,6 +2573,7 @@ export default function SwapShell() {
         quoteTokenId={toToken?.id || '32:0'}
         poolId={chartPool?.id}
         isWrapPair={isWrapPair || isUnwrapPair}
+        hideOpenOrders={isDemoGated}
         onAddLiquidity={(pair) => {
           if (pair.token0Id) {
             setPoolToken0({ id: pair.token0Id, symbol: pair.token0Symbol, name: pair.token0Symbol });
