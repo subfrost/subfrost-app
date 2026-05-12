@@ -415,7 +415,16 @@ export type TxContext = {
   feeSourceAddresses: string[];
   /** Where BTC change goes. Segwit when available, otherwise the primary single address. Keystore: taproot. */
   btcChangeAddress: string;
-  /** Where unwanted alkane change goes. Always the taproot address (alkanes are P2TR). */
+  /**
+   * Where unwanted alkane change goes. Prefers taproot (Subfrost convention)
+   * but accepts ANY address type the wallet exposes. The protorune indexer
+   * (reference/alkanes-rs/crates/protorune/src/lib.rs) attributes alkane
+   * tokens to any non-OP_RETURN output regardless of script type, so
+   * single-address segwit-only wallets (UniSat/OKX in Native SegWit mode)
+   * receive alkane change at their bc1q address. Verified against
+   * subfrost-alkanes/alkanes/fr-btc/src/lib.rs — no taproot constraint on
+   * the user-side recipient.
+   */
   alkanesChangeAddress: string;
   /** Whether SDK should reserve taproot UTXOs for alkanes only and source BTC fees from segwit. True only for browser-dual wallets. */
   shouldProtectTaproot: boolean;
@@ -953,9 +962,12 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       // for alkanes on dual-address wallets. Falls back to whatever single
       // address exists.
       btcChangeAddress: segwit || primary,
-      // Alkane change always goes to taproot (alkanes are P2TR). Single-
-      // address segwit-only wallets fall back to that address — there's
-      // nowhere else to send it.
+      // Prefer taproot (Subfrost convention) but fall back to whatever the
+      // wallet exposes. The indexer is type-agnostic — see
+      // protorune/src/lib.rs OP_RETURN-only check. Single-address
+      // segwit-only wallets (UniSat/OKX in Native SegWit mode) get their
+      // alkane change at their bc1q address; this is functional, just
+      // breaks the convention.
       alkanesChangeAddress: taproot || primary,
       // Only meaningful when there's a separate segwit address to source
       // BTC fees from. Single-address wallets must spend taproot UTXOs for
@@ -1751,20 +1763,31 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
         const pubKey = result?.publicKey;
         if (!addr) throw new Error('No address returned from OKX');
 
+        // OKX is single-address — it returns whatever address type the user
+        // selected in the extension. Route to the correct slot:
+        //   bc1p* / tb1p* / bcrt1p* → taproot
+        //   bc1q* / tb1q* / bcrt1q* → nativeSegwit (P2WPKH)
+        //   3.../2... (P2SH-P2WPKH) → nativeSegwit
+        //   1.../m.../n... (P2PKH) → nativeSegwit
+        //
+        // Investigation (subfrost-alkanes/alkanes/fr-btc/src/lib.rs):
+        // wrap/unwrap/bridge contracts copy the user's scriptPubKey verbatim
+        // from `tx.output[pointer]` into Payment.output — no address-type
+        // check anywhere on the user side. The off-chain FROST signer
+        // settles to whatever scriptPubKey is recorded. Alkane attribution
+        // (protorune indexer) accepts any non-OP_RETURN output. The
+        // previous taproot-only refusal was a frontend convention only.
         const isTaproot = addr.startsWith('bc1p') || addr.startsWith('tb1p') || addr.startsWith('bcrt1p');
-        if (!isTaproot) {
-          throw new Error(
-            'OKX is in Native Segwit / Nested Segwit mode. Subfrost requires Taproot — ' +
-            'alkanes (DIESEL, frBTC, LP tokens, etc.) only live at P2TR addresses. ' +
-            'Open OKX → Switch Address Type → Taproot, then reconnect.'
-          );
+        if (isTaproot) {
+          additionalAddresses.taproot = { address: addr, publicKey: pubKey };
+        } else {
+          additionalAddresses.nativeSegwit = { address: addr, publicKey: pubKey };
         }
-        additionalAddresses.taproot = { address: addr, publicKey: pubKey };
 
         connected = new (ConnectedWallet as any)(walletInfo, okxProvider, {
           address: addr,
           publicKey: pubKey,
-          addressType: 'p2tr',
+          addressType: isTaproot ? 'p2tr' : 'p2wpkh',
         });
       } else if (walletId === 'unisat') {
         // Unisat exposes window.unisat with requestAccounts(), getPublicKey(), signPsbt()
@@ -1841,20 +1864,20 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
         let pubKey: string | undefined;
         try { pubKey = await unisatProvider.getPublicKey(); } catch {}
 
+        // UniSat is single-address — same routing as OKX above. Any address
+        // type the user has selected in the extension is accepted and
+        // routed to the correct slot.
         const isTaproot = addr.startsWith('bc1p') || addr.startsWith('tb1p') || addr.startsWith('bcrt1p');
-        if (!isTaproot) {
-          throw new Error(
-            'UniSat is in Native Segwit / Nested Segwit / Legacy mode. Subfrost requires Taproot — ' +
-            'alkanes (DIESEL, frBTC, LP tokens, etc.) only live at P2TR addresses. ' +
-            'Open UniSat → Settings → Address Type → Taproot (P2TR), then reconnect.'
-          );
+        if (isTaproot) {
+          additionalAddresses.taproot = { address: addr, publicKey: pubKey };
+        } else {
+          additionalAddresses.nativeSegwit = { address: addr, publicKey: pubKey };
         }
-        additionalAddresses.taproot = { address: addr, publicKey: pubKey };
 
         connected = new (ConnectedWallet as any)(walletInfo, unisatProvider, {
           address: addr,
           publicKey: pubKey,
-          addressType: 'p2tr',
+          addressType: isTaproot ? 'p2tr' : 'p2wpkh',
         });
       } else {
         // For other wallets, use the standard connector

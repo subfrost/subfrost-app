@@ -254,7 +254,7 @@ export function useUnwrapMutation() {
           const result = patchInputsOnly({
             psbtBase64,
             network: btcNetwork,
-            taprootAddress: taprootAddress!,
+            taprootAddress,
             segwitAddress,
             paymentPubkeyHex: account?.nativeSegwit?.pubkey,
           });

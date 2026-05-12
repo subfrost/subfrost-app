@@ -92,7 +92,7 @@ export function useUnwrapZecMutation() {
           const patchResult = patchInputsOnly({
             psbtBase64,
             network: btcNetwork,
-            taprootAddress: taprootAddress!,
+            taprootAddress,
             segwitAddress,
             paymentPubkeyHex: account?.nativeSegwit?.pubkey,
           });

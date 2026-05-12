@@ -66,9 +66,14 @@ export function useWrapEthMutation() {
       const protostone = buildWrapEthProtostone({ frethId: FRETH_ALKANE_ID });
       const inputRequirements = `B:${wrapAmountSats}:v0`;
 
+      // Recipient = whichever address the wallet exposes. Frontend-side
+      // taproot was a Subfrost convention, not a contract requirement.
       const userTaprootAddress = account?.taproot?.address;
       const userSegwitAddress = account?.nativeSegwit?.address;
-      if (!userTaprootAddress) throw new Error('No taproot address available');
+      const userRecipientAddress = userTaprootAddress || userSegwitAddress;
+      if (!userRecipientAddress) {
+        throw new Error('No wallet address available — please reconnect');
+      }
 
       const btcNetwork = getBitcoinNetwork(network);
       const signerAddress = getFrethSignerAddress(network);
@@ -78,9 +83,9 @@ export function useWrapEthMutation() {
 
       const isBrowserWallet = walletType === 'browser';
       // toAddresses: [signer (BTC), user (frETH)] — same layout as BTC wrap.
-      const toAddresses = [signerAddress, userTaprootAddress];
+      const toAddresses = [signerAddress, userRecipientAddress];
 
-      console.log('[WRAP-ETH] signer:', signerAddress, 'user:', userTaprootAddress);
+      console.log('[WRAP-ETH] signer:', signerAddress, 'user:', userRecipientAddress);
 
       const result = await provider.alkanesExecuteTyped({
         txContext,

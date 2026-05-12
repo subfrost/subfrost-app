@@ -525,13 +525,9 @@ export function useSwapMutation() {
           // ============================================================================
           let finalPsbtBase64 = psbtBase64;
           if (isBrowserWallet) {
-            if (!taprootAddress) {
-              throw new Error(
-                'Connected wallet has no taproot address. Switch your wallet ' +
-                'extension to Taproot (P2TR) mode and reconnect — alkanes only ' +
-                'live at P2TR addresses.'
-              );
-            }
+            // patchInputsOnly tolerates missing taprootAddress now —
+            // P2TR-input patches no-op, segwit witnessUtxo and Xverse
+            // P2SH-P2WPKH redeemScript injection still happen.
             const result = patchInputsOnly({
               psbtBase64,
               network: btcNetwork,
