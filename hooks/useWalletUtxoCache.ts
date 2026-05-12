@@ -3,7 +3,10 @@
  *
  * What it is: a single TanStack Query, invalidated by HeightPoller on
  * every block-tip change, that owns the wallet's UTXO snapshot plus
- * `alkanes_protorunesbyoutpoint` results for every dust UTXO. Mounted
+ * per-outpoint alkane balance sheets. In ESPO mode this is one batched
+ * `essentials.get_address_spendable_outpoints` call to Alkanode; in
+ * Metashrew mode it falls back to `alkanes_protorunesbyoutpoint` for
+ * every dust UTXO. Mounted
  * eagerly when the wallet connects via `<WalletStatePrewarmer/>` in
  * providers.tsx — by the time the user clicks Swap, the data is
  * already in cache and PSBT construction is synchronous.

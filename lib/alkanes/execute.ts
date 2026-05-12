@@ -139,7 +139,7 @@ export async function alkanesExecuteTyped(
   // is the user-visible "click → wallet popup" delay.
   if (!options.payment_utxos && params.cachedUtxos?.length) {
     const clean = params.cachedUtxos
-      .filter((u) => (u.alkanes?.length ?? 0) === 0 && u.value > 1000)
+      .filter((u) => (u.alkanes?.length ?? 0) === 0 && (u.runes?.length ?? 0) === 0 && u.value > 1000)
       .map((u) => ({ txid: u.txid, vout: u.vout, value: u.value }));
     if (clean.length > 0) {
       options.payment_utxos = clean;
@@ -175,16 +175,18 @@ export async function alkanesExecuteTyped(
       const btcNetwork = getBitcoinNetwork(params.network ?? 'mainnet');
       let alkaneAsserted = 0;
       const prefetched = params.cachedUtxos.map((u) => {
-        // Derive scriptPubKey from address — pure compute, no RPC.
-        // Falls through to the slow path on per-UTXO derivation failure
-        // (defensive: never let a bad address abort the whole execute).
-        if (!u.address) return null;
-        let scriptPubKeyHex: string;
-        try {
-          const script = bitcoin.address.toOutputScript(u.address, btcNetwork);
-          scriptPubKeyHex = Buffer.from(script).toString('hex');
-        } catch {
-          return null;
+        let scriptPubKeyHex = u.scriptPubKeyHex;
+        if (!scriptPubKeyHex) {
+          // Derive scriptPubKey from address — pure compute, no RPC.
+          // Falls through to the slow path on per-UTXO derivation failure
+          // (defensive: never let a bad address abort the whole execute).
+          if (!u.address) return null;
+          try {
+            const script = bitcoin.address.toOutputScript(u.address, btcNetwork);
+            scriptPubKeyHex = Buffer.from(script).toString('hex');
+          } catch {
+            return null;
+          }
         }
         const alkanesAsserted = (u.alkanes ?? []).map((a) => ({
           block: a.block,

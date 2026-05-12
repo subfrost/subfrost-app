@@ -72,6 +72,8 @@ export interface AlkanesExecuteTypedParams {
     vout: number;
     value: number;
     address?: string;
+    scriptPubKeyHex?: string;
+    runes?: unknown[];
     alkanes?: Array<{ block: number; tx: number; amount: bigint }>;
   }>;
   /** Network name — used to reliably detect devnet (instead of URL sniffing). */

@@ -187,7 +187,7 @@ const zh: Record<string, string> = {
   'receive.copyAddress': '\u590d\u5236\u5730\u5740',
 
   // Wallet Dashboard
-  'walletDash.title': '\u94b1\u5305\u4eea\u8868\u76d8',
+  'walletDash.title': '\u60a8\u7684\u6295\u8d44\u7ec4\u5408',
   'walletDash.balances': '\u4f59\u989d',
   'walletDash.transactionHistory': '\u4ea4\u6613\u5386\u53f2',
   'walletDash.utxos': 'UTXO Management',
@@ -203,6 +203,8 @@ const zh: Record<string, string> = {
 
   // Balances Panel
   'balances.bitcoinBalance': '\u6bd4\u7279\u5e01\u4f59\u989d',
+  'balances.estimatedTotalValue': '\u9884\u4f30\u603b\u4ef7\u503c',
+  'balances.estimatedTotalValueTooltip': '\u8fd9\u662f\u60a8\u6240\u6709\u8d44\u4ea7\u7684\u7d2f\u8ba1\u9884\u4f30\u4ef7\u503c\uff08\u4e0d\u5305\u542b Orbitals\uff09',
   'balances.spendableBtc': '\u53ef\u82b1\u8d39 BTC',
   'balances.unspendable': '\u4e0d\u53ef\u82b1\u8d39\uff08\u542b\u8d44\u4ea7\uff09',
   'balances.nativeSegwit': 'Native SegWit (P2WPKH)',
@@ -217,7 +219,7 @@ const zh: Record<string, string> = {
   'balances.protoruneHint': 'Protorune \u8d44\u4ea7\uff08\u5982 Alkanes\uff09\u68c0\u6d4b\u5230\u540e\u5c06\u663e\u793a\u5728\u6b64\u5904',
   'balances.noInscription': '\u672a\u627e\u5230\u94ed\u6587\u8d44\u4ea7',
   'balances.inscriptionHint': '\u94ed\u6587\u8d44\u4ea7\uff08\u5982 BRC20\uff09\u68c0\u6d4b\u5230\u540e\u5c06\u663e\u793a\u5728\u6b64\u5904',
-  'balances.tabTokens': '\u4ee3\u5e01',
+  'balances.tabTokens': '\u8d44\u4ea7',
   'balances.tabNfts': 'NFTs',
   'balances.tabPositions': '\u4ed3\u4f4d',
   'balances.tabFuel': 'FUEL',

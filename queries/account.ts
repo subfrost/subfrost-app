@@ -24,6 +24,7 @@ import {
   getAlkaneInfoBatch,
   getProtorunesByOutpoint,
 } from '@/lib/alkanes/rpc';
+import { getAlkanesDataSource } from '@/lib/alkanes/dataSource';
 import type { CurrencyPriceInfoResponse } from '@/types/alkanes';
 
 type WebProvider = import('@alkanes/ts-sdk/wasm').WebProvider;
@@ -478,6 +479,11 @@ export interface CachedUtxo {
   value: number;
   /** Owning address — useful for wallets with both segwit + taproot. */
   address: string;
+  scriptPubKeyHex?: string;
+  blockHeight?: number | null;
+  confirmations?: number;
+  coinbase?: boolean;
+  runes?: unknown[];
   /** Per-alkane amounts on this outpoint. Empty for non-dust BTC UTXOs. */
   alkanes: Array<{ block: number; tx: number; amount: bigint }>;
 }
@@ -514,6 +520,194 @@ const EMPTY_UTXO_CACHE: WalletUtxoCache = {
   height: 0,
 };
 
+const ESPO_PRICE_SCALE = 10_000_000_000_000_000;
+
+function parseEspoScaledUsd(value: unknown): number | undefined {
+  const raw = typeof value === 'string' ? value : typeof value === 'number' ? String(value) : '';
+  if (!raw || !/^\d+$/.test(raw)) return undefined;
+  const scaled = Number(raw);
+  if (!Number.isFinite(scaled) || scaled <= 0) return undefined;
+  return scaled / ESPO_PRICE_SCALE;
+}
+
+async function fetchEspoUsdPricesFrom10mCandles(
+  network: string,
+  alkaneIds: string[],
+): Promise<Map<string, number>> {
+  const uniqueIds = [...new Set(alkaneIds)].filter((id) => id && id !== '32:0');
+  const prices = new Map<string, number>();
+  if (uniqueIds.length === 0) return prices;
+
+  const requests = uniqueIds.map((id, index) => ({
+    jsonrpc: '2.0',
+    id: `wallet-usd-price-${index}`,
+    method: 'ammdata.get_candles',
+    params: {
+      pool: `${id}-usd`,
+      timeframe: '10m',
+      side: 'base',
+      limit: 1,
+      page: 1,
+    },
+  }));
+
+  try {
+    const res = await fetch(`/api/rpc/${network}/espo`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(requests),
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!res.ok) return prices;
+
+    const json = await res.json();
+    const envelopes: any[] = Array.isArray(json) ? json : [json];
+    const byId = new Map(envelopes.map((item) => [String(item?.id), item]));
+
+    for (let i = 0; i < requests.length; i++) {
+      const envelope = byId.get(String(requests[i].id));
+      const result = envelope?.result;
+      const candle = Array.isArray(result?.candles) ? result.candles[0] : null;
+      if (result?.ok !== true || !candle) continue;
+      const price = parseEspoScaledUsd(candle.close);
+      if (price !== undefined) prices.set(uniqueIds[i], price);
+    }
+  } catch (err) {
+    console.warn('[alkaneBalances] ESPO USD candle batch failed:', err);
+  }
+
+  return prices;
+}
+
+function buildWalletUtxoCache(utxos: CachedUtxo[], height: number): WalletUtxoCache {
+  const deduped = new Map<string, CachedUtxo>();
+  for (const u of utxos) {
+    deduped.set(`${u.txid}:${u.vout}`, u);
+  }
+
+  const byOutpoint = new Map<string, CachedUtxo>();
+  const byAlkane = new Map<string, CachedUtxo[]>();
+  const balances = new Map<string, bigint>();
+  const all = Array.from(deduped.values());
+  for (const u of all) {
+    byOutpoint.set(`${u.txid}:${u.vout}`, u);
+    for (const a of u.alkanes) {
+      const id = `${a.block}:${a.tx}`;
+      if (!byAlkane.has(id)) byAlkane.set(id, []);
+      byAlkane.get(id)!.push(u);
+      balances.set(id, (balances.get(id) ?? 0n) + a.amount);
+    }
+  }
+
+  return { utxos: all, byOutpoint, byAlkane, balances, height };
+}
+
+function parseEspoOutpoint(raw: unknown): { txid: string; vout: number } | null {
+  if (typeof raw === 'string') {
+    const [txid, voutRaw] = raw.split(':');
+    const vout = Number(voutRaw);
+    return txid && Number.isFinite(vout) ? { txid, vout } : null;
+  }
+
+  const obj = raw as any;
+  const txid = String(obj?.txid ?? obj?.tx_id ?? obj?.transaction_id ?? '');
+  const vout = Number(obj?.vout ?? obj?.index ?? obj?.n);
+  return txid && Number.isFinite(vout) ? { txid, vout } : null;
+}
+
+function parseEspoAlkanes(raw: any): Array<{ block: number; tx: number; amount: bigint }> {
+  const entries: any[] = Array.isArray(raw?.alkanes) ? raw.alkanes : [];
+  return entries
+    .map((entry: any) => {
+      const id = String(entry?.alkane ?? entry?.alkaneId ?? entry?.alkane_id ?? entry?.id ?? '');
+      const [blockRaw, txRaw] = id.split(':');
+      const block = Number(entry?.block ?? entry?.alkaneId?.block ?? blockRaw);
+      const tx = Number(entry?.tx ?? entry?.alkaneId?.tx ?? txRaw);
+      const amount = BigInt(String(entry?.amount ?? entry?.balance ?? 0));
+      if (!Number.isFinite(block) || !Number.isFinite(tx) || amount === 0n) return null;
+      return { block, tx, amount };
+    })
+    .filter((x): x is { block: number; tx: number; amount: bigint } => x !== null);
+}
+
+function normalizeEspoSpendableOutpoint(raw: any, address: string): CachedUtxo | null {
+  const parsed = parseEspoOutpoint(raw?.outpoint ?? raw);
+  if (!parsed) return null;
+
+  const value = Number(raw?.value ?? raw?.sats ?? raw?.amount ?? raw?.txout?.value ?? 0);
+  if (!Number.isFinite(value)) return null;
+
+  return {
+    txid: parsed.txid,
+    vout: parsed.vout,
+    value,
+    address,
+    scriptPubKeyHex: typeof raw?.script_pubkey_hex === 'string' ? raw.script_pubkey_hex : undefined,
+    blockHeight: raw?.block_height ?? null,
+    confirmations: Number(raw?.confirmations ?? 0),
+    coinbase: Boolean(raw?.coinbase),
+    runes: Array.isArray(raw?.runes) ? raw.runes : [],
+    alkanes: parseEspoAlkanes(raw),
+  };
+}
+
+async function fetchWalletUtxoCacheViaEspo(network: string, addresses: string[]): Promise<WalletUtxoCache> {
+  const requests = addresses.map((address, index) => ({
+    jsonrpc: '2.0',
+    id: `wallet-spendable-${index}`,
+    method: 'essentials.get_address_spendable_outpoints',
+    params: {
+      address,
+      omit_raw_tx: true,
+    },
+  }));
+
+  const res = await fetch(`/api/rpc/${network}/espo`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(requests),
+    signal: AbortSignal.timeout(20_000),
+  });
+  if (!res.ok) throw new Error(`essentials.get_address_spendable_outpoints batch ${res.status}`);
+
+  const json = await res.json();
+  const envelopes: any[] = Array.isArray(json) ? json : [json];
+  const byId = new Map(envelopes.map((item) => [String(item?.id), item]));
+
+  const utxos: CachedUtxo[] = [];
+  let height = 0;
+  for (const request of requests) {
+    const envelope = byId.get(String(request.id));
+    if (!envelope) throw new Error(`missing ESPO batch response for ${request.id}`);
+    if (envelope.error) {
+      throw new Error(
+        `essentials.get_address_spendable_outpoints failed: ${envelope.error.message ?? envelope.error.code ?? 'rpc error'}`,
+      );
+    }
+
+    const result = envelope.result;
+    if (result?.ok === false) {
+      throw new Error(
+        `essentials.get_address_spendable_outpoints failed: ${result.error ?? 'rpc error'}`,
+      );
+    }
+
+    const outpoints = Array.isArray(result?.outpoints)
+      ? result.outpoints
+      : Array.isArray(result)
+        ? result
+        : [];
+    const address = request.params.address;
+    height = Math.max(height, Number(result?.height ?? 0) || 0);
+    for (const raw of outpoints) {
+      const utxo = normalizeEspoSpendableOutpoint(raw, address);
+      if (utxo) utxos.push(utxo);
+    }
+  }
+
+  return buildWalletUtxoCache(utxos, height);
+}
+
 export function walletUtxoCacheQueryOptions(deps: WalletUtxoCacheDeps) {
   const addresses: string[] = [];
   if (deps.account?.nativeSegwit?.address) addresses.push(deps.account.nativeSegwit.address);
@@ -536,6 +730,10 @@ export function walletUtxoCacheQueryOptions(deps: WalletUtxoCacheDeps) {
     retryDelay: (attempt: number) => Math.min(1000 * 2 ** attempt, 10_000),
     placeholderData: EMPTY_UTXO_CACHE,
     queryFn: async () => {
+      if (getAlkanesDataSource(deps.network) === 'espo') {
+        return fetchWalletUtxoCacheViaEspo(deps.network, addresses);
+      }
+
       // Step 1: pull UTXOs for both addresses in parallel.
       const utxoArrays = await Promise.all(
         addresses.map(async (addr) => {
@@ -671,7 +869,6 @@ export function walletUtxoCacheQueryOptions(deps: WalletUtxoCacheDeps) {
         }
       }
 
-      // Step 3: assemble lookups.
       const utxos: CachedUtxo[] = allUtxos.map((u) => ({
         txid: u.txid,
         vout: u.vout,
@@ -679,20 +876,7 @@ export function walletUtxoCacheQueryOptions(deps: WalletUtxoCacheDeps) {
         address: u.address,
         alkanes: alkaneMap.get(`${u.txid}:${u.vout}`) ?? [],
       }));
-      const byOutpoint = new Map<string, CachedUtxo>();
-      const byAlkane = new Map<string, CachedUtxo[]>();
-      const balances = new Map<string, bigint>();
-      for (const u of utxos) {
-        byOutpoint.set(`${u.txid}:${u.vout}`, u);
-        for (const a of u.alkanes) {
-          const id = `${a.block}:${a.tx}`;
-          if (!byAlkane.has(id)) byAlkane.set(id, []);
-          byAlkane.get(id)!.push(u);
-          balances.set(id, (balances.get(id) ?? 0n) + a.amount);
-        }
-      }
-
-      return { utxos, byOutpoint, byAlkane, balances, height: 0 };
+      return buildWalletUtxoCache(utxos, 0);
     },
   });
 }
@@ -1334,6 +1518,20 @@ export function alkaneBalanceQueryOptions(deps: AlkaneBalanceDeps) {
           if (info.name && entry.name === `Token ${id}`) entry.name = info.name;
           if (info.symbol && !entry.symbol) entry.symbol = info.symbol;
           if (info.decimals != null) entry.decimals = info.decimals;
+        }
+      }
+
+      if (getAlkanesDataSource(deps.network) === 'espo') {
+        const priceIds = [...alkaneMap.entries()]
+          .filter(([id, entry]) => id !== '32:0' && !(entry.priceUsd > 0))
+          .map(([id]) => id);
+        const espoUsdPrices = await fetchEspoUsdPricesFrom10mCandles(
+          deps.network || 'mainnet',
+          priceIds,
+        );
+        for (const [id, priceUsd] of espoUsdPrices) {
+          const entry = alkaneMap.get(id);
+          if (entry) entry.priceUsd = priceUsd;
         }
       }
 

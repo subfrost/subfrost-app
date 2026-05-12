@@ -186,7 +186,7 @@ const en: Record<string, string> = {
   'receive.copyAddress': 'Copy address',
 
   // Wallet Dashboard
-  'walletDash.title': 'Wallet Dashboard',
+  'walletDash.title': 'Your Portfolio',
   'walletDash.balances': 'Balances',
   'walletDash.transactionHistory': 'Transaction History',
   'walletDash.utxos': 'UTXO Management',
@@ -202,6 +202,8 @@ const en: Record<string, string> = {
 
   // Balances Panel
   'balances.bitcoinBalance': 'Bitcoin Balance',
+  'balances.estimatedTotalValue': 'Est. Total Value',
+  'balances.estimatedTotalValueTooltip': 'This is the cumulative estimated value of all your assets (excluding orbitals)',
   'balances.spendableBtc': 'Spendable BTC',
   'balances.unspendable': 'Unspendable (with Assets)',
   'balances.nativeSegwit': 'Native SegWit (P2WPKH)',
@@ -216,7 +218,7 @@ const en: Record<string, string> = {
   'balances.protoruneHint': 'Protorune assets (like Alkanes) will appear here once detected',
   'balances.noInscription': 'Coming Soon',
   'balances.inscriptionHint': '',
-  'balances.tabTokens': 'Tokens',
+  'balances.tabTokens': 'Assets',
   'balances.tabNfts': 'NFTs',
   'balances.tabPositions': 'Positions',
   'balances.tabFuel': 'FUEL',

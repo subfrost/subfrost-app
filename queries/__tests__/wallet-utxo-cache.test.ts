@@ -45,6 +45,14 @@ describe('walletUtxoCacheQueryOptions', () => {
     expect(fn).toMatch(/Promise\.all/);
   });
 
+  it('has an ESPO batch path for the prewarmer', () => {
+    expect(SRC).toMatch(/getAlkanesDataSource/);
+    expect(SRC).toMatch(/fetchWalletUtxoCacheViaEspo/);
+    expect(SRC).toMatch(/essentials\.get_address_spendable_outpoints/);
+    expect(SRC).toMatch(/JSON\.stringify\(requests\)/);
+    expect(SRC).toMatch(/\/api\/rpc\/\$\{network\}\/espo/);
+  });
+
   it('does NOT touch protorunesbyaddress', () => {
     const fn =
       SRC.match(/export function walletUtxoCacheQueryOptions[\s\S]*?\n\}\n/)?.[0] ?? '';

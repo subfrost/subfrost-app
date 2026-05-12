@@ -975,7 +975,7 @@ input[type="number"] {
 .sf-tab-group {
   display: inline-flex;
   align-items: center;
-  gap: 0.25rem;
+  gap: 0.5rem;
   padding: 0.25rem;
   border-radius: 0.5rem;
 }

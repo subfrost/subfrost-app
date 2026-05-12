@@ -1,35 +1,35 @@
 'use client';
 
-import { useState } from 'react';
-import { useWallet } from '@/context/WalletContext';
+import { useMemo, useState } from 'react';
 import { useBtcPrice } from '@/hooks/useBtcPrice';
 import { useEnrichedWalletData } from '@/hooks/useEnrichedWalletData';
+import { usePools } from '@/hooks/usePools';
 import { usePendingTxs } from '@/hooks/usePendingTxs';
-import { RefreshCw, ExternalLink, Send, QrCode } from 'lucide-react';
+import { HelpCircle, RefreshCw, Send, QrCode, Settings } from 'lucide-react';
 import { useTranslation } from '@/hooks/useTranslation';
 
 type BitcoinBalanceCardProps = {
   onSend?: () => void;
   onReceive?: () => void;
+  onSettings?: () => void;
+  settingsActive?: boolean;
 };
 
-export default function BitcoinBalanceCard({ onSend, onReceive }: BitcoinBalanceCardProps) {
-  const { account } = useWallet() as any;
-  // Single source of truth for BTC price — see queries/market.ts (subpricer
-  // primary, rpc.ts + coingecko fallbacks). Returns 0 when no source resolves.
+export default function BitcoinBalanceCard({ onSend, onReceive, onSettings, settingsActive = false }: BitcoinBalanceCardProps) {
   const { data: btcPriceUsd = 0 } = useBtcPrice();
   const { t } = useTranslation();
-  const { balances, btcFast, isBtcFastLoading, isBtcLoading, error, refreshBtcFast } = useEnrichedWalletData();
+  const { balances, btcFast, isBtcFastLoading, error, refreshBtcFast } = useEnrichedWalletData();
+  const { data: poolsData } = usePools();
   const { btcDelta: pendingBtcDelta } = usePendingTxs();
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
     try {
-      await Promise.all([
-        refreshBtcFast(),
-        new Promise(resolve => setTimeout(resolve, 300))
-      ]);
+      void refreshBtcFast().catch((err) => {
+        console.warn('[BitcoinBalanceCard] refreshBtcFast failed:', err);
+      });
+      await new Promise(resolve => setTimeout(resolve, 700));
     } finally {
       setIsRefreshing(false);
     }
@@ -45,40 +45,94 @@ export default function BitcoinBalanceCard({ onSend, onReceive }: BitcoinBalance
     return (btc * btcPriceUsd).toFixed(2);
   };
 
-  // btcFast: wallet API (instant) or esplora. Fallback to enriched lua data.
   const hasFast = btcFast && btcFast.total > 0;
   const hasEnriched = balances.bitcoin.total > 0;
-  // No data from either source = still loading (even if individual isLoading is false)
-  const isLoadingData = (!hasFast && !hasEnriched) || isRefreshing;
-
-  const isDualAddress = !!account?.nativeSegwit?.address && !!account?.taproot?.address;
+  const isLoadingData = (!btcFast && isBtcFastLoading) || isRefreshing;
 
   let spendable: number;
-  let p2wpkh: number;
-  let p2tr: number;
   let pendingIn: number;
 
   if (hasFast) {
-    // Wallet API / esplora — spendable balance
-    p2wpkh = btcFast.p2wpkh;
-    p2tr = btcFast.p2tr;
-    spendable = isDualAddress ? p2wpkh : btcFast.total;
+    spendable = btcFast.total;
     pendingIn = btcFast.pendingIn;
   } else if (hasEnriched) {
-    // Lua enriched — fallback
-    p2wpkh = balances.bitcoin.p2wpkh;
-    p2tr = balances.bitcoin.p2tr;
-    spendable = isDualAddress ? p2wpkh : balances.bitcoin.total;
+    spendable = balances.bitcoin.total;
     pendingIn = balances.bitcoin.pendingTotal;
   } else {
-    p2wpkh = 0;
-    p2tr = 0;
     spendable = 0;
     pendingIn = 0;
   }
 
   const totalBTC = formatBTC(spendable);
-  const totalUSD = btcPriceUsd ? formatUSD(spendable) : null;
+  const btcUsdValue = btcPriceUsd ? Number(formatUSD(spendable) ?? 0) : 0;
+  const derivedPrices = useMemo(() => {
+    const prices = new Map<string, number>();
+    if (!btcPriceUsd || !poolsData?.items) return prices;
+    prices.set('32:0', btcPriceUsd);
+    for (const pool of poolsData.items) {
+      const r0 = Number(pool.token0Amount || '0');
+      const r1 = Number(pool.token1Amount || '0');
+      if (r0 <= 0 || r1 <= 0) continue;
+      const t0 = pool.token0.id;
+      const t1 = pool.token1.id;
+      if (prices.has(t1) && !prices.has(t0)) {
+        prices.set(t0, (r1 / r0) * prices.get(t1)!);
+      } else if (prices.has(t0) && !prices.has(t1)) {
+        prices.set(t1, (r0 / r1) * prices.get(t0)!);
+      }
+    }
+    return prices;
+  }, [poolsData, btcPriceUsd]);
+  const poolMap = useMemo(() => {
+    const map = new Map<string, { token0Id: string; token1Id: string; token0Amount: string; token1Amount: string; lpTotalSupply: string }>();
+    for (const pool of poolsData?.items ?? []) {
+      map.set(pool.id, {
+        token0Id: pool.token0.id,
+        token1Id: pool.token1.id,
+        token0Amount: pool.token0Amount || '0',
+        token1Amount: pool.token1Amount || '0',
+        lpTotalSupply: pool.lpTotalSupply || '0',
+      });
+    }
+    return map;
+  }, [poolsData]);
+  const alkaneUsdValue = balances.alkanes.reduce((sum, alkane) => {
+    try {
+      if (BigInt(alkane.balance) === 1n) return sum;
+    } catch {
+      return sum;
+    }
+    const balanceFloat = Number(BigInt(alkane.balance)) / Math.pow(10, alkane.decimals || 8);
+    if (!Number.isFinite(balanceFloat) || balanceFloat <= 0) return sum;
+    if (alkane.priceUsd && alkane.priceUsd > 0) return sum + balanceFloat * alkane.priceUsd;
+    if ((alkane.symbol === 'frBTC' || alkane.alkaneId === '32:0') && btcPriceUsd) {
+      return sum + balanceFloat * btcPriceUsd;
+    }
+    if (alkane.priceInSatoshi && alkane.priceInSatoshi > 0 && btcPriceUsd) {
+      return sum + balanceFloat * (alkane.priceInSatoshi / 1e8) * btcPriceUsd;
+    }
+    const derived = derivedPrices.get(alkane.alkaneId);
+    if (derived && derived > 0) return sum + balanceFloat * derived;
+    const pool = poolMap.get(alkane.alkaneId);
+    if (pool) {
+      const p0 = derivedPrices.get(pool.token0Id);
+      const p1 = derivedPrices.get(pool.token1Id);
+      const totalSupply = Number(pool.lpTotalSupply);
+      if (p0 && p1 && totalSupply > 0) {
+        const r0 = Number(pool.token0Amount) / 1e8;
+        const r1 = Number(pool.token1Amount) / 1e8;
+        return sum + (Number(BigInt(alkane.balance)) / totalSupply) * (r0 * p0 + r1 * p1);
+      }
+    }
+    return sum;
+  }, 0);
+  const totalEstimatedUsd = btcUsdValue + alkaneUsdValue;
+  const totalEstimatedBTC = btcPriceUsd && totalEstimatedUsd > 0
+    ? (totalEstimatedUsd / btcPriceUsd).toFixed(8)
+    : totalBTC;
+  const totalUSD = btcPriceUsd
+    ? totalEstimatedUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    : null;
 
   const showValue = (value: string) => {
     return isLoadingData ? (
@@ -103,31 +157,60 @@ export default function BitcoinBalanceCard({ onSend, onReceive }: BitcoinBalance
   }
 
   return (
-    <div className="h-full rounded-2xl bg-[color:var(--sf-glass-bg)] p-6 shadow-[0_4px_20px_rgba(0,0,0,0.2)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)]">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-4">
+    <div className="relative h-full overflow-hidden rounded-2xl bg-[color:var(--sf-glass-bg)] p-6 shadow-[0_4px_20px_rgba(0,0,0,0.2)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)]">
+      <img
+        src="/brand/snowflake-mark.svg"
+        alt=""
+        aria-hidden="true"
+        className="pointer-events-none absolute -right-16 top-[58%] h-96 w-96 -translate-y-1/2 rotate-12 opacity-[0.2]"
+      />
+      <div className="relative z-30 flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
-          <img src="/tokens/btc-white.svg" alt="" className="h-10 w-10 shrink-0" aria-hidden="true" />
-          <h3 className="text-lg font-bold text-[color:var(--sf-text)]">{t('balances.bitcoinBalance')}</h3>
+          <h3 className="flex items-center gap-2 text-lg font-bold text-[color:var(--sf-text)]">
+            {t('balances.estimatedTotalValue')}
+            <span className="group relative inline-flex">
+              <HelpCircle size={15} className="text-[color:var(--sf-text)]/50" aria-hidden="true" />
+              <span className="pointer-events-none absolute left-1/2 top-full z-[100] mt-2 w-64 -translate-x-1/2 rounded-lg bg-[color:var(--sf-panel-opaque)] px-3 py-2 text-xs font-medium text-[color:var(--sf-text)] opacity-0 shadow-[0_8px_24px_rgba(0,0,0,0.35)] transition-opacity group-hover:opacity-100">
+                {t('balances.estimatedTotalValueTooltip')}
+              </span>
+            </span>
+          </h3>
         </div>
-        <button
-          onClick={handleRefresh}
-          disabled={isLoadingData}
-          className="p-1.5 rounded-lg hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]/80 disabled:opacity-50 shrink-0"
-          title="Refresh balances"
-        >
-          <RefreshCw size={16} className={isLoadingData ? 'animate-spin' : ''} />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={handleRefresh}
+            disabled={isLoadingData}
+            className="p-1.5 rounded-lg hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]/80 disabled:opacity-50 shrink-0"
+            title="Refresh balances"
+          >
+            <RefreshCw size={16} className={isLoadingData ? 'animate-spin' : ''} />
+          </button>
+          {onSettings && (
+            <button
+              onClick={onSettings}
+              className={`p-1.5 rounded-lg transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none shrink-0 ${
+                settingsActive
+                  ? 'text-[color:var(--sf-primary)] bg-[color:var(--sf-primary)]/10'
+                  : 'text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]/80 hover:bg-[color:var(--sf-primary)]/10'
+              }`}
+              title={t('header.settings')}
+            >
+              <Settings size={16} />
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Spendable Balance */}
-      <div className="mb-4">
-        <div className="text-xl font-bold text-[color:var(--sf-text)]">{showValue(`${totalBTC} BTC`)}</div>
+      <div className="relative z-10">
+        <div className="flex items-center gap-2 text-xl font-bold text-[color:var(--sf-text)]">
+          <img src="/tokens/btc-white.svg" alt="" className="h-9 w-9 shrink-0" aria-hidden="true" />
+          <span className="font-bold">{showValue(`${totalEstimatedBTC} BTC`)}</span>
+        </div>
         <div className="text-sm text-[color:var(--sf-text)]/60 mt-1">
           {isLoadingData ? (
             <span>{t('balances.loading')}</span>
           ) : (
-            `$${totalUSD || '0.00'} USD`
+            `≈ $${totalUSD || '0.00'} USD`
           )}
         </div>
         {!isLoadingData && pendingIn > 0 && (
@@ -136,19 +219,13 @@ export default function BitcoinBalanceCard({ onSend, onReceive }: BitcoinBalance
           </div>
         )}
         {pendingBtcDelta !== 0n && (() => {
-          // Signed pending overlay from broadcast txs we've made (the
-          // pending-tx store is a superset of indexer-reported pending
-          // because indexers can lag broadcast). For outgoing txs this
-          // is negative (we lost sats); for incoming-only this is
-          // positive. Distinct from `pendingIn` above which is the
-          // address-level mempool API.
           const sats = Number(pendingBtcDelta);
-          const sign = sats < 0 ? '−' : '+';
+          const sign = sats < 0 ? '-' : '+';
           const abs = Math.abs(sats);
           return (
             <div
               className="text-xs text-amber-300/80 mt-1"
-              title="Pending mempool delta from your recent broadcasts — overlays confirmed balance until block-tip"
+              title="Pending mempool delta from your recent broadcasts - overlays confirmed balance until block-tip"
             >
               {sign}{formatBTC(abs)} BTC pending
             </div>
@@ -168,7 +245,7 @@ export default function BitcoinBalanceCard({ onSend, onReceive }: BitcoinBalance
           {onReceive && (
             <button
               onClick={onReceive}
-              className="px-4 md:px-6 py-2 rounded-md bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)] text-sm font-bold uppercase tracking-wide shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:bg-[color:var(--sf-surface)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none flex items-center gap-2"
+              className="px-4 md:px-6 py-2 rounded-md bg-[color:var(--sf-panel-opaque)] text-[color:var(--sf-text)] text-sm font-bold uppercase tracking-wide shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:bg-[color:var(--sf-surface)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none flex items-center gap-2"
             >
               <QrCode size={16} />
               {t('walletDash.receive')}
@@ -176,44 +253,6 @@ export default function BitcoinBalanceCard({ onSend, onReceive }: BitcoinBalance
           )}
         </div>
       </div>
-
-      {/* Address Breakdown — only show when wallet has both address types */}
-      {isDualAddress && (
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-4 border-t border-[color:var(--sf-outline)]">
-        {account?.nativeSegwit?.address && (
-          <a
-            href={`https://mempool.space/address/${account.nativeSegwit.address}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="rounded-lg bg-[color-mix(in_oklab,var(--sf-primary)_5%,transparent)] p-3 hover:brightness-110 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none cursor-pointer flex items-center justify-between"
-          >
-            <div>
-              <div className="text-xs text-[color:var(--sf-info-green-title)] mb-1">Native SegWit</div>
-              <div className="text-sm text-white">
-                {showValue(`${formatBTC(p2wpkh)} BTC`)}
-              </div>
-            </div>
-            <ExternalLink size={16} className="text-white/70 shrink-0" />
-          </a>
-        )}
-        {account?.taproot?.address && (
-          <a
-            href={`https://mempool.space/address/${account.taproot.address}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="rounded-lg bg-[color-mix(in_oklab,var(--sf-primary)_5%,transparent)] p-3 hover:brightness-110 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none cursor-pointer flex items-center justify-between"
-          >
-            <div>
-              <div className="text-xs text-[color:var(--sf-info-yellow-title)] mb-1">{t('balances.taproot')}</div>
-              <div className="text-sm text-white">
-                {showValue(`${formatBTC(p2tr)} BTC`)}
-              </div>
-            </div>
-            <ExternalLink size={16} className="text-white/70 shrink-0" />
-          </a>
-        )}
-      </div>
-      )}
     </div>
   );
 }

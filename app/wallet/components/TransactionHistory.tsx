@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect, useImperativeHandle, forwardRef, useCallback, useMemo } from 'react';
+import { useState, useRef, useEffect, useImperativeHandle, forwardRef, useMemo } from 'react';
 import { useWallet } from '@/context/WalletContext';
 import { useTransactionHistory, type AlkaneTraceSummary } from '@/hooks/useTransactionHistory';
 import { usePendingTxs } from '@/hooks/usePendingTxs';
@@ -159,7 +159,7 @@ const TransactionHistory = forwardRef<TransactionHistoryHandle>(function Transac
   const { data: summaryDisplayMap } = useTokenDisplayMap(summaryAlkaneIds);
 
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const loadMoreRef = useRef<HTMLDivElement>(null);
 
   // Speed-up modal state. We index pending tx hexes by txid so a
   // click on the "Speed Up" button can hand the right hex to the
@@ -174,20 +174,20 @@ const TransactionHistory = forwardRef<TransactionHistoryHandle>(function Transac
   } | null>(null);
 
   // Infinite scroll — load next page when scrolled near bottom
-  const handleScroll = useCallback(() => {
-    const el = scrollRef.current;
-    if (!el || !hasMore || isLoadingMore) return;
-    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 60) {
-      loadMore();
-    }
-  }, [hasMore, isLoadingMore, loadMore]);
-
   useEffect(() => {
-    const el = scrollRef.current;
+    const el = loadMoreRef.current;
     if (!el) return;
-    el.addEventListener('scroll', handleScroll, { passive: true });
-    return () => el.removeEventListener('scroll', handleScroll);
-  }, [handleScroll]);
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && hasMore && !isLoadingMore) {
+          loadMore();
+        }
+      },
+      { rootMargin: '160px 0px' },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [hasMore, isLoadingMore, loadMore]);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -229,7 +229,7 @@ const TransactionHistory = forwardRef<TransactionHistoryHandle>(function Transac
 
   return (
     <div>
-      <div ref={scrollRef} className="space-y-2 max-h-[228px] overflow-y-auto pr-1 no-scrollbar">
+      <div className="space-y-2">
         {transactions.length > 0 ? (
           <>
             {transactions.map((tx) => (
@@ -309,6 +309,7 @@ const TransactionHistory = forwardRef<TransactionHistoryHandle>(function Transac
             </div>
           </div>
         )}
+        <div ref={loadMoreRef} className="h-px" />
       </div>
       {speedUpFor && (
         <SpeedUpModal

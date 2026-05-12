@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo, useEffect, useRef } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useWallet } from '@/context/WalletContext';
 import { useBtcPrice } from '@/hooks/useBtcPrice';
@@ -13,24 +14,39 @@ import { useTranslation } from '@/hooks/useTranslation';
 import { usePositionMetadata, isEnrichablePosition } from '@/hooks/usePositionMetadata';
 import { useFuelAllocation } from '@/hooks/useFuelAllocation';
 import { saveSwapIntent } from '@/app/swap/swapPair';
-import type { TokenMeta } from '@/app/swap/types';
 
 import type { AlkaneAsset } from '@/hooks/useEnrichedWalletData';
 
 const FRBTC_ID = '32:0';
 const DIESEL_ID = '2:0';
+const BITCOIN_ASSET_ID = 'BTC';
+export type AlkaneBalanceFilter = 'tokens' | 'nfts' | 'positions' | 'fuel';
 
 interface AlkanesBalancesCardProps {
   onSendAlkane?: (alkane: AlkaneAsset) => void;
+  onSendBitcoin?: () => void;
+  embedded?: boolean;
+  hideHeader?: boolean;
+  hideTabs?: boolean;
+  filter?: AlkaneBalanceFilter;
+  onFilterChange?: (filter: AlkaneBalanceFilter) => void;
 }
 
-export default function AlkanesBalancesCard({ onSendAlkane }: AlkanesBalancesCardProps) {
+export default function AlkanesBalancesCard({
+  onSendAlkane,
+  onSendBitcoin,
+  embedded = false,
+  hideHeader = false,
+  hideTabs = false,
+  filter,
+  onFilterChange,
+}: AlkanesBalancesCardProps) {
   const { network } = useWallet() as any;
   // Single source of truth for BTC price (queries/market.ts).
   const { data: btcPriceUsd = 0 } = useBtcPrice();
   const { t } = useTranslation();
   const router = useRouter();
-  const { balances, isAlkanesLoading, error, refreshAlkanes } = useEnrichedWalletData();
+  const { balances, btcFast, isAlkanesLoading, error, refreshAlkanes } = useEnrichedWalletData();
   const { data: poolsData } = usePools();
   const { alkaneDeltas: pendingAlkaneDeltas, pendingTxs } = usePendingTxs();
 
@@ -61,7 +77,9 @@ export default function AlkanesBalancesCard({ onSendAlkane }: AlkanesBalancesCar
   const fuelAllocation = useFuelAllocation();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [expandedAlkaneId, setExpandedAlkaneId] = useState<string | null>(null);
-  const [alkaneFilter, setAlkaneFilter] = useState<'tokens' | 'nfts' | 'positions' | 'fuel'>('tokens');
+  const [internalAlkaneFilter, setInternalAlkaneFilter] = useState<AlkaneBalanceFilter>('tokens');
+  const alkaneFilter = filter ?? internalAlkaneFilter;
+  const setAlkaneFilter = onFilterChange ?? setInternalAlkaneFilter;
   // hasAutoRefreshed: removed in 2026-05-04 along with the auto-retry useEffect.
 
   const poolMap = useMemo(() => {
@@ -101,13 +119,43 @@ export default function AlkanesBalancesCard({ onSendAlkane }: AlkanesBalancesCar
     return prices;
   }, [poolsData, btcPriceUsd]);
 
+  const btcSats = btcFast && btcFast.total > 0 ? btcFast.total : balances.bitcoin.total;
+  const bitcoinAsset: AlkaneAsset = {
+    alkaneId: BITCOIN_ASSET_ID,
+    balance: String(btcSats),
+    decimals: 8,
+    symbol: 'BTC',
+    name: 'Bitcoin',
+    priceUsd: btcPriceUsd || undefined,
+  };
+
+  const isBitcoinAsset = (alkane: { alkaneId?: string; symbol?: string }) =>
+    alkane.alkaneId === BITCOIN_ASSET_ID || alkane.symbol === 'BTC';
+
+  const getUsdValue = (alkane: AlkaneAsset): number => {
+    const decimals = alkane.decimals || 8;
+    const balanceFloat = Number(BigInt(alkane.balance)) / Math.pow(10, decimals);
+    if (!Number.isFinite(balanceFloat) || balanceFloat <= 0) return 0;
+    if (isBitcoinAsset(alkane) && btcPriceUsd) return balanceFloat * btcPriceUsd;
+    if (alkane.priceUsd && alkane.priceUsd > 0) return balanceFloat * alkane.priceUsd;
+    if ((alkane.symbol === 'frBTC' || alkane.alkaneId === FRBTC_ID) && btcPriceUsd) {
+      return balanceFloat * btcPriceUsd;
+    }
+    if (alkane.priceInSatoshi && alkane.priceInSatoshi > 0 && btcPriceUsd) {
+      return balanceFloat * (alkane.priceInSatoshi / 1e8) * btcPriceUsd;
+    }
+    const derived = derivedPrices.get(alkane.alkaneId);
+    if (derived && derived > 0) return balanceFloat * derived;
+    return 0;
+  };
+
   const handleRefresh = async () => {
     setIsRefreshing(true);
     try {
-      await Promise.all([
-        refreshAlkanes(),
-        new Promise(resolve => setTimeout(resolve, 500))
-      ]);
+      void refreshAlkanes().catch((err) => {
+        console.warn('[AlkanesBalancesCard] refreshAlkanes failed:', err);
+      });
+      await new Promise(resolve => setTimeout(resolve, 700));
     } finally {
       setIsRefreshing(false);
     }
@@ -115,23 +163,14 @@ export default function AlkanesBalancesCard({ onSendAlkane }: AlkanesBalancesCar
 
   const isLoadingData = isAlkanesLoading || isRefreshing;
 
-  // Click "Swap" under a token row → hand off a swap pair to /swap.
-  // Pair convention: clicked token → frBTC. If the user clicks frBTC itself,
-  // pair is frBTC → DIESEL so the selectors aren't both frBTC.
-  const handleSwapToken = (alkane: AlkaneAsset) => {
-    const tokenMeta: TokenMeta = {
-      id: alkane.alkaneId,
-      symbol: alkane.symbol || alkane.alkaneId,
-      name: alkane.name || alkane.symbol || alkane.alkaneId,
-    };
-    const frbtcMeta: TokenMeta = { id: FRBTC_ID, symbol: 'frBTC', name: 'frBTC' };
-    const dieselMeta: TokenMeta = { id: DIESEL_ID, symbol: 'DIESEL', name: 'DIESEL' };
+  // Swap links use the public /swap query-param contract, matching OYL:
+  // /swap?from=2:0&to=btc
+  const getSwapHref = (alkane: AlkaneAsset) => {
+    if (isBitcoinAsset(alkane)) return `/swap?from=btc&to=${DIESEL_ID}`;
     const isFrbtc = alkane.alkaneId === FRBTC_ID || alkane.symbol === 'frBTC';
-    const intent = isFrbtc
-      ? { kind: 'swap' as const, from: frbtcMeta, to: dieselMeta }
-      : { kind: 'swap' as const, from: tokenMeta, to: frbtcMeta };
-    saveSwapIntent(intent);
-    router.push('/swap');
+    const from = encodeURIComponent(isFrbtc ? FRBTC_ID : alkane.alkaneId);
+    const to = encodeURIComponent(isFrbtc ? DIESEL_ID : 'btc');
+    return `/swap?from=${from}&to=${to}`;
   };
 
   // Click "Remove" under an LP position row → open /swap with the liquidity
@@ -186,6 +225,9 @@ export default function AlkanesBalancesCard({ onSendAlkane }: AlkanesBalancesCar
 
   const formatAlkaneBalance = (balance: string, decimals: number = 8, alkane?: { symbol: string; name: string; alkaneId?: string }): string => {
     const value = BigInt(balance);
+    if (alkane && isBitcoinAsset(alkane)) {
+      return `${(Number(value) / 1e8).toFixed(8)} BTC`;
+    }
     if (value === BigInt(1)) {
       if (alkane && alkane.alkaneId && isEnrichablePosition(alkane) && positionMeta?.[alkane.alkaneId]) {
         const meta = positionMeta[alkane.alkaneId];
@@ -220,7 +262,7 @@ export default function AlkanesBalancesCard({ onSendAlkane }: AlkanesBalancesCar
 
   if (error) {
     return (
-      <div className="h-full rounded-2xl bg-[color:var(--sf-glass-bg)] p-6 shadow-[0_4px_20px_rgba(0,0,0,0.2)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)]">
+      <div className={embedded ? '' : 'h-full rounded-2xl bg-[color:var(--sf-glass-bg)] p-6 shadow-[0_4px_20px_rgba(0,0,0,0.2)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)]'}>
         <div className="flex flex-col items-center justify-center py-12">
           <div className="text-red-400 mb-4">{error}</div>
           <button
@@ -235,42 +277,45 @@ export default function AlkanesBalancesCard({ onSendAlkane }: AlkanesBalancesCar
   }
 
   return (
-    <div className="h-full rounded-2xl bg-[color:var(--sf-glass-bg)] p-6 shadow-[0_4px_20px_rgba(0,0,0,0.2)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)] flex flex-col" style={{ maxHeight: alkaneFilter === 'nfts' ? '720px' : '600px' }}>
-      {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-3">
-          <img src="/tokens/diesel-white.svg" alt="" className="h-7 w-7 shrink-0" aria-hidden="true" />
-          <h3 className="text-lg font-bold text-[color:var(--sf-text)]">{t('balances.protoruneAssets')}</h3>
-        </div>
-        <button
-          onClick={handleRefresh}
-          disabled={isLoadingData}
-          className="p-1.5 rounded-lg hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]/80 disabled:opacity-50 shrink-0"
-          title="Refresh balances"
-        >
-          <RefreshCw size={16} className={isLoadingData ? 'animate-spin' : ''} />
-        </button>
-      </div>
-
-      {/* Tokens / Positions / NFTs / FUEL tabs (FUEL only shown to allocated wallets) */}
-      <div className="flex gap-4 mb-4 border-b border-[color:var(--sf-outline)]">
-        {((['tokens', 'positions', 'nfts', ...(fuelAllocation.isEligible ? ['fuel'] : [])] as const) as readonly ('tokens' | 'positions' | 'nfts' | 'fuel')[]).map((tab) => (
+    <div
+      className={embedded
+        ? 'flex flex-col min-h-0'
+        : 'h-full rounded-2xl bg-[color:var(--sf-glass-bg)] p-6 shadow-[0_4px_20px_rgba(0,0,0,0.2)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)] flex flex-col'}
+      style={embedded ? undefined : { maxHeight: alkaneFilter === 'nfts' ? '720px' : '600px' }}
+    >
+      {!embedded && !hideHeader && (
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <img src="/tokens/diesel-white.svg" alt="" className="h-7 w-7 shrink-0" aria-hidden="true" />
+            <h3 className="text-lg font-bold text-[color:var(--sf-text)]">{t('balances.protoruneAssets')}</h3>
+          </div>
           <button
-            key={tab}
-            onClick={() => setAlkaneFilter(tab)}
-            className={`pb-3 px-1 text-sm font-semibold ${
-              alkaneFilter === tab
-                ? 'text-[color:var(--sf-primary)] border-b-2 border-[color:var(--sf-primary)]'
-                : 'text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]'
-            }`}
+            onClick={handleRefresh}
+            disabled={isLoadingData}
+            className="p-1.5 rounded-lg hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]/80 disabled:opacity-50 shrink-0"
+            title="Refresh balances"
           >
-            {tab === 'tokens' ? t('balances.tabTokens')
-              : tab === 'nfts' ? t('balances.tabNfts')
-              : tab === 'fuel' ? t('balances.tabFuel')
-              : t('balances.tabPositions')}
+            <RefreshCw size={16} className={isLoadingData ? 'animate-spin' : ''} />
           </button>
-        ))}
-      </div>
+        </div>
+      )}
+
+      {!hideTabs && (
+        <div className="sf-tab-group mb-4">
+          {((['tokens', 'positions', 'nfts', ...(fuelAllocation.isEligible ? ['fuel'] : [])] as const) as readonly AlkaneBalanceFilter[]).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setAlkaneFilter(tab)}
+              className={`sf-tab-btn ${alkaneFilter === tab ? 'sf-tab-btn--active' : ''}`}
+            >
+              {tab === 'tokens' ? t('balances.tabTokens')
+                : tab === 'nfts' ? t('balances.tabNfts')
+                : tab === 'fuel' ? t('balances.tabFuel')
+                : t('balances.tabPositions')}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* FUEL allocation tab — visible only to wallets on the allocation list */}
       {alkaneFilter === 'fuel' ? (
@@ -287,7 +332,7 @@ export default function AlkanesBalancesCard({ onSendAlkane }: AlkanesBalancesCar
                 </div>
               </div>
             </div>
-            <div className="mt-4 pt-4 border-t border-amber-500/20">
+            <div className="mt-4 p-4 border-t border-amber-500/20">
               <p className="text-xs text-[color:var(--sf-text)]/60 leading-relaxed">
                 {t('balances.fuelNote')}
               </p>
@@ -312,14 +357,27 @@ export default function AlkanesBalancesCard({ onSendAlkane }: AlkanesBalancesCar
             name: poolMatch ? `${poolMatch.token0Symbol}/${poolMatch.token1Symbol} LP` : id,
           } as AlkaneAsset);
         }
-        const merged = [...balances.alkanes, ...ghostAlkanes];
+        const merged = alkaneFilter === 'tokens'
+          ? [bitcoinAsset, ...balances.alkanes, ...ghostAlkanes]
+          : [...balances.alkanes, ...ghostAlkanes];
 
         let filtered = merged.filter((a) => {
           if (alkaneFilter === 'positions') return isPosition(a);
           if (alkaneFilter === 'nfts') return isNft(a.balance) && !isPosition(a);
-          return !isNft(a.balance) && !isPosition(a);
+          return isBitcoinAsset(a) || (!isNft(a.balance) && !isPosition(a));
         });
         // Token sort handled by query (frBTC → DIESEL → USD value → block:tx)
+        if (alkaneFilter === 'tokens') {
+          filtered = [...filtered].sort((a, b) => {
+            if (isBitcoinAsset(a)) return -1;
+            if (isBitcoinAsset(b)) return 1;
+            const usdDelta = getUsdValue(b) - getUsdValue(a);
+            if (usdDelta !== 0) return usdDelta;
+            const [aBlock, aTx] = a.alkaneId.split(':').map(Number);
+            const [bBlock, bTx] = b.alkaneId.split(':').map(Number);
+            return aBlock !== bBlock ? aBlock - bBlock : aTx - bTx;
+          });
+        }
         if (alkaneFilter === 'positions') {
           filtered = [...filtered].sort((a, b) => {
             const aIsLp = isLpToken(a) ? 0 : 1;
@@ -404,8 +462,8 @@ export default function AlkanesBalancesCard({ onSendAlkane }: AlkanesBalancesCar
                         }
                         return <TokenIcon symbol={alkane.symbol} id={alkane.alkaneId} size="md" network={network} />;
                       })()}
-                      <div className="min-w-0">
-                        <div className="font-medium text-sm text-[color:var(--sf-text)] truncate">
+                      <div className="min-w-0 [&>div:last-child]:text-xs">
+                        <div className="font-bold text-sm text-[color:var(--sf-text)] truncate">
                           {(() => {
                             const pool = poolMap.get(alkane.alkaneId);
                             if (pool) return `${pool.token0Symbol}/${pool.token1Symbol} LP`;
@@ -416,7 +474,9 @@ export default function AlkanesBalancesCard({ onSendAlkane }: AlkanesBalancesCar
                             return alkane.name;
                           })()}
                         </div>
-                        <div className="text-[10px] text-[color:var(--sf-text)]/40 truncate">{alkane.symbol ? `${alkane.symbol} · ` : ''}{alkane.alkaneId}</div>
+                        <div className="text-[10px] text-[color:var(--sf-text)]/40 truncate">
+                          {isBitcoinAsset(alkane) ? BITCOIN_ASSET_ID : `${alkane.symbol ? `${alkane.symbol} · ` : ''}${alkane.alkaneId}`}
+                        </div>
                       </div>
                     </div>
                     <div className="text-right shrink-0 ml-2">
@@ -447,10 +507,10 @@ export default function AlkanesBalancesCard({ onSendAlkane }: AlkanesBalancesCar
                         const decimals = alkane.decimals || 8;
                         const balanceFloat = Number(BigInt(alkane.balance)) / Math.pow(10, decimals);
                         const formatUsdValue = (usd: number) => (
-                          <div className="text-[10px] text-[color:var(--sf-text)]/60">
+                          <div className="text-xs text-[color:var(--sf-text)]/60">
                             ${usd < 0.01 ? '<0.01' : usd > 999.99
                               ? Math.round(usd).toLocaleString()
-                              : usd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              : usd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
                           </div>
                         );
                         if (alkane.priceUsd && alkane.priceUsd > 0) {
@@ -486,8 +546,28 @@ export default function AlkanesBalancesCard({ onSendAlkane }: AlkanesBalancesCar
                     </div>
                   </div>
                   {isExpanded && (
-                    <div className="flex gap-2 px-3 pb-3">
-                      {isLpToken(alkane) ? (
+                    <div className="flex gap-2 p-3">
+                      {isBitcoinAsset(alkane) ? (
+                        <>
+                          <button
+                            data-testid="send-button"
+                            onClick={(e) => { e.stopPropagation(); onSendBitcoin?.(); }}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[color:var(--sf-primary)] text-white text-xs font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
+                          >
+                            <Send size={16} />
+                            {t('walletDash.send')}
+                          </button>
+                          <Link
+                            href={getSwapHref(alkane)}
+                            data-testid="swap-button"
+                            onClick={(e) => { e.stopPropagation(); }}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[color:var(--sf-primary)] text-white text-xs font-bold uppercase tracking-wide no-underline hover:no-underline shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
+                          >
+                            <ArrowLeftRight size={16} />
+                            {t('walletDash.swap')}
+                          </Link>
+                        </>
+                      ) : isLpToken(alkane) ? (
                         <>
                           <button
                             data-testid="send-button"
@@ -534,14 +614,15 @@ export default function AlkanesBalancesCard({ onSendAlkane }: AlkanesBalancesCar
                             <Send size={16} />
                             {t('walletDash.send')}
                           </button>
-                          <button
+                          <Link
+                            href={getSwapHref(alkane)}
                             data-testid="swap-button"
-                            onClick={(e) => { e.stopPropagation(); handleSwapToken(alkane); }}
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[color:var(--sf-primary)] text-white text-xs font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
+                            onClick={(e) => { e.stopPropagation(); }}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[color:var(--sf-primary)] text-white text-xs font-bold uppercase tracking-wide no-underline hover:no-underline shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
                           >
                             <ArrowLeftRight size={16} />
                             {t('walletDash.swap')}
-                          </button>
+                          </Link>
                         </>
                       )}
                     </div>

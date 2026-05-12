@@ -46,6 +46,7 @@ import { useRemoveLiquidityMutation } from "@/hooks/useRemoveLiquidityMutation";
 import { useLPPositions } from "@/hooks/useLPPositions";
 import { useTranslation } from '@/hooks/useTranslation';
 import { KNOWN_TOKENS } from "@/lib/alkanes-client";
+import { useSearchParams } from "next/navigation";
 
 // New unified layout components
 import TradeForm, { type OrderType } from "./components/TradeForm";
@@ -92,6 +93,7 @@ function getBridgeRoute(from: string, to: string): string {
 
 export default function SwapShell() {
   const { t } = useTranslation();
+  const searchParams = useSearchParams();
 
   // Markets from API: all pools sorted by TVL desc
   const { data: poolsData, isLoading: isLoadingPools } = usePools({ sortBy: 'tvl', order: 'desc' });
@@ -371,6 +373,20 @@ export default function SwapShell() {
   // Loads independently of usePools, ensuring names are available even if pools fail.
   const { data: tokenNamesMap } = useTokenNames();
 
+  // Build a map from alkane ID to authoritative name/symbol from wallet data.
+  // This is the same data source used by the wallet balance panel.
+  const walletAlkaneNames = useMemo(() => {
+    const map = new Map<string, { name: string; symbol: string }>();
+    if (walletBalances?.alkanes) {
+      for (const alkane of walletBalances.alkanes) {
+        if (alkane.name || alkane.symbol) {
+          map.set(alkane.alkaneId, { name: alkane.name || '', symbol: alkane.symbol || '' });
+        }
+      }
+    }
+    return map;
+  }, [walletBalances?.alkanes]);
+
   // Build a map from tokenId to token metadata from pools data (has correct symbols)
   // Enriches numeric-named tokens using the standalone tokenNamesMap (most reliable source)
   const poolTokenMap = useMemo(() => {
@@ -446,6 +462,84 @@ export default function SwapShell() {
   //   Phase 2 (refined): Once volume stats arrive, re-pick trending if we used the TVL fallback.
   const trendingPoolInitializedRef = useRef(false);
   const usedSessionRef = useRef(false);
+  const usedQueryParamsRef = useRef(false);
+  const queryParamsAppliedKeyRef = useRef<string | null>(null);
+  const queryFromParam = searchParams.get('from')?.trim();
+  const queryToParam = searchParams.get('to')?.trim();
+  const queryPairKey = queryFromParam && queryToParam ? `${queryFromParam}->${queryToParam}` : null;
+
+  const normalizeSwapTokenId = (value: string) => {
+    const normalized = value.trim();
+    return normalized.toLowerCase() === 'btc' ? 'btc' : normalized;
+  };
+
+  const makeUrlTokenMeta = (id: string): TokenMeta => {
+    if (id === 'btc') return { id: 'btc', symbol: 'BTC', name: 'BTC' };
+
+    const pooled = poolTokenMap.get(id);
+    if (pooled) return pooled;
+
+    const wallet = idToUserCurrency.get(id);
+    const rawSymbol = wallet?.symbol || wallet?.name || id;
+    const rawName = wallet?.name || wallet?.symbol || id;
+    const resolved = resolveTokenDisplay(id, rawSymbol, rawName, tokenNamesMap, idToUserCurrency, walletAlkaneNames);
+    return {
+      id,
+      symbol: resolved.symbol,
+      name: resolved.name,
+      iconUrl: getTokenIconUrl(id, network),
+    };
+  };
+
+  useEffect(() => {
+    if (!queryPairKey || !queryFromParam || !queryToParam) return;
+
+    const fromId = normalizeSwapTokenId(queryFromParam);
+    const toId = normalizeSwapTokenId(queryToParam);
+    if (!fromId || !toId || fromId === toId) return;
+
+    const from = makeUrlTokenMeta(fromId);
+    const to = makeUrlTokenMeta(toId);
+    const toPoolId = (id: string) => id === 'btc' ? FRBTC_ALKANE_ID : id;
+    const fromPoolId = toPoolId(from.id);
+    const destPoolId = toPoolId(to.id);
+    const matchingPool = markets.find(
+      (p) =>
+        (p.token0.id === fromPoolId && p.token1.id === destPoolId) ||
+        (p.token0.id === destPoolId && p.token1.id === fromPoolId)
+    );
+
+    if (queryParamsAppliedKeyRef.current === queryPairKey) {
+      if (matchingPool && selectedPool?.id !== matchingPool.id) {
+        setSelectedPool(matchingPool);
+      }
+      return;
+    }
+
+    setFromToken(from);
+    setToToken(to);
+    setSelectedPool(matchingPool);
+    setFromAmount("");
+    setToAmount("");
+    setDirection('sell');
+    setOrderType('market');
+    usedQueryParamsRef.current = true;
+    usedSessionRef.current = true;
+    trendingPoolInitializedRef.current = true;
+    queryParamsAppliedKeyRef.current = queryPairKey;
+  }, [
+    queryPairKey,
+    queryFromParam,
+    queryToParam,
+    FRBTC_ALKANE_ID,
+    markets,
+    poolTokenMap,
+    idToUserCurrency,
+    tokenNamesMap,
+    walletAlkaneNames,
+    network,
+    selectedPool?.id,
+  ]);
 
   // Immediately consume any one-shot saved intent (set by HomeMarketsButton or
   // the wallet dashboard token/position rows). No fallback to BTC/USDC or
@@ -457,7 +551,7 @@ export default function SwapShell() {
   // it against `lpPositions` once that hook has data.
   const sessionRestoredRef = useRef(false);
   const pendingPositionIdRef = useRef<string | null>(null);
-  if (!sessionRestoredRef.current && !fromToken && !toToken) {
+  if (!usedQueryParamsRef.current && !sessionRestoredRef.current && !fromToken && !toToken) {
     const intent = consumeSwapIntent();
     if (intent?.kind === 'swap') {
       setFromToken(intent.from);
@@ -825,20 +919,6 @@ export default function SwapShell() {
     if (walletBalances?.alkanes) {
       for (const alkane of walletBalances.alkanes) {
         map.set(alkane.alkaneId, alkane.balance);
-      }
-    }
-    return map;
-  }, [walletBalances?.alkanes]);
-
-  // Build a map from alkane ID to authoritative name/symbol from wallet data.
-  // This is the same data source used by the wallet balance panel (proven working).
-  const walletAlkaneNames = useMemo(() => {
-    const map = new Map<string, { name: string; symbol: string }>();
-    if (walletBalances?.alkanes) {
-      for (const alkane of walletBalances.alkanes) {
-        if (alkane.name || alkane.symbol) {
-          map.set(alkane.alkaneId, { name: alkane.name || '', symbol: alkane.symbol || '' });
-        }
       }
     }
     return map;

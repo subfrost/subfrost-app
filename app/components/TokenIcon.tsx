@@ -53,7 +53,7 @@ export default function TokenIcon({ symbol, id, iconUrl, size = 'md', className 
     }
 
     // Priority 2: Special handling for BTC
-    if (symbolLower === 'btc' || id === 'btc') {
+    if (symbolLower === 'btc' || id?.toLowerCase() === 'btc') {
       paths.push('/tokens/btc.svg');
       return paths;
     }
