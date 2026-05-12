@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { ExternalLink, Image as ImageIcon, FileText, Code, AlertCircle } from 'lucide-react';
 import { getConfig } from '@/utils/getConfig';
@@ -42,11 +42,7 @@ export default function InscriptionRenderer({
   const config = getConfig(network || 'mainnet');
   const blockExplorerUrl = config.BLOCK_EXPLORER_URL_BTC;
 
-  useEffect(() => {
-    loadInscription();
-  }, [inscriptionId, provider]);
-
-  const loadInscription = async () => {
+  const loadInscription = useCallback(async () => {
     if (!provider) return;
 
     setLoading(true);
@@ -86,7 +82,11 @@ export default function InscriptionRenderer({
     } finally {
       setLoading(false);
     }
-  };
+  }, [provider, inscriptionId, blockExplorerUrl, config.API_URL]);
+
+  useEffect(() => {
+    loadInscription();
+  }, [loadInscription]);
 
   const renderContent = () => {
     if (!contentUrl) return null;

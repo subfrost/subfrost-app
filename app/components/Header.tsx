@@ -17,7 +17,6 @@ import { useDemoGate } from "@/hooks/useDemoGate";
 
 export default function Header() {
   const {
-    connected,
     isConnected,
     address,
     onConnectModalOpenChange,
@@ -25,7 +24,7 @@ export default function Header() {
     account,
     browserWallet,
     walletType,
-  } = useWallet() as any;
+  } = useWallet();
   const { theme } = useTheme();
   const { t } = useTranslation();
   const isDemoGated = useDemoGate();
@@ -39,8 +38,7 @@ export default function Header() {
   const menuCloseTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const swapMenuCloseTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const truncate = (a: string) => (a ? `${a.slice(0, 6)}…${a.slice(-4)}` : "");
-  const walletConnected =
-    typeof connected === "boolean" ? connected : isConnected;
+  const walletConnected = isConnected;
   // Wallet icon: browser wallet icon from SDK/constants, keystore gets a generic key icon
   const walletIcon = walletType === 'browser' ? (browserWallet?.info?.icon || null) : null;
   const isDualAddress = !!account?.nativeSegwit?.address && !!account?.taproot?.address;
@@ -175,13 +173,13 @@ export default function Header() {
                         </div>
                         <div className="flex items-center justify-between gap-2">
                           <span className="text-sm font-medium text-[color:var(--sf-text)]">
-                            {truncate(account.nativeSegwit.address)}
+                            {truncate(account.nativeSegwit!.address)}
                           </span>
                           <button
                             type="button"
                             onClick={() =>
                               copyToClipboard(
-                                account.nativeSegwit.address,
+                                account.nativeSegwit!.address,
                                 "segwit",
                               )
                             }
@@ -204,13 +202,13 @@ export default function Header() {
                         </div>
                         <div className="flex items-center justify-between gap-2">
                           <span className="text-sm font-medium text-[color:var(--sf-text)]">
-                            {truncate(account.taproot.address)}
+                            {truncate(account.taproot!.address)}
                           </span>
                           <button
                             type="button"
                             onClick={() =>
                               copyToClipboard(
-                                account.taproot.address,
+                                account.taproot!.address,
                                 "taproot",
                               )
                             }
@@ -296,7 +294,7 @@ export default function Header() {
               width={180}
               height={24}
               priority
-              className=" hover:opacity-80 h-8 w-auto sf-wordmark"
+              className="hover:opacity-80 h-8 w-auto sf-wordmark"
             />
           </a>
 
@@ -423,13 +421,13 @@ export default function Header() {
                         </div>
                         <div className="flex items-center justify-between gap-2">
                           <span className="text-sm font-medium text-[color:var(--sf-text)]">
-                            {truncate(account.nativeSegwit.address)}
+                            {truncate(account.nativeSegwit!.address)}
                           </span>
                           <button
                             type="button"
                             onClick={() =>
                               copyToClipboard(
-                                account.nativeSegwit.address,
+                                account.nativeSegwit!.address,
                                 "segwit",
                               )
                             }
@@ -452,13 +450,13 @@ export default function Header() {
                         </div>
                         <div className="flex items-center justify-between gap-2">
                           <span className="text-sm font-medium text-[color:var(--sf-text)]">
-                            {truncate(account.taproot.address)}
+                            {truncate(account.taproot!.address)}
                           </span>
                           <button
                             type="button"
                             onClick={() =>
                               copyToClipboard(
-                                account.taproot.address,
+                                account.taproot!.address,
                                 "taproot",
                               )
                             }

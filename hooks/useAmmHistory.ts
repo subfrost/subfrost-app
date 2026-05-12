@@ -313,7 +313,14 @@ export function useInfiniteAmmTxHistory({
           signal: AbortSignal.timeout(10000),
           body: JSON.stringify(body),
         });
-        if (!resp.ok) throw new Error(`AMM history HTTP ${resp.status}`);
+        if (!resp.ok) {
+          // 5xx = infrastructure outage (e.g. regtest.subfrost.io 502). Degrade silently.
+          // 4xx = misconfiguration — worth a warning.
+          if (resp.status < 500) {
+            console.warn(`[useAmmHistory] ${resp.status} from AMM history endpoint`);
+          }
+          return { items: [], nextPage: undefined, total: 0 };
+        }
         const result = await resp.json();
 
         const payload = result?.data ?? result;

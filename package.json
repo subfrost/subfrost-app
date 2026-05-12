@@ -63,7 +63,7 @@
     "bitcoinjs-message": "^2.2.0",
     "ecpair": "^3.0.1",
     "ioredis": "^5.9.3",
-    "lightweight-charts": "^5.1.0",
+    "lightweight-charts": "^5.2.0",
     "lucide-react": "^0.556.0",
     "mathjs": "^15.1.1",
     "next": "^16.1.6",

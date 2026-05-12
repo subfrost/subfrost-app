@@ -1,22 +1,22 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { ChevronRight } from 'lucide-react';
 import { useTranslation } from '@/hooks/useTranslation';
 import { AVAILABLE_VAULTS } from '@/app/vaults/constants';
 
+const VAULT_NAME_KEYS: Record<string, string> = {
+  'yv-frbtc': 'vault.yvfrbtc',
+  've-diesel': 'vault.veDiesel',
+  've-ordi': 'vault.veOrdi',
+  've-usd': 'vault.veUsd',
+  'dx-btc': 'vault.dxBtc',
+};
+
+const fireVault = AVAILABLE_VAULTS.find(v => v.id === 've-diesel');
+
 export default function VaultTiles() {
   const { t } = useTranslation();
-  const router = useRouter();
-  const VAULT_NAME_KEYS: Record<string, string> = {
-    'yv-frbtc': 'vault.yvfrbtc',
-    've-diesel': 'vault.veDiesel',
-    've-ordi': 'vault.veOrdi',
-    've-usd': 'vault.veUsd',
-    'dx-btc': 'vault.dxBtc',
-  };
-  const fireVault = AVAILABLE_VAULTS.find(v => v.id === 've-diesel');
 
   return (
     <div className="sf-card h-full">
@@ -26,7 +26,6 @@ export default function VaultTiles() {
       <div className="p-4 flex flex-col gap-3">
         {fireVault && (
           <Link
-            key={fireVault.id}
             href={`/vaults?vault=${fireVault.id}`}
             className="sf-tile p-5 focus:outline-none"
           >
@@ -60,18 +59,16 @@ export default function VaultTiles() {
             </div>
           </Link>
         )}
-        <button
-          onClick={() => router.push('/vaults')}
+        <Link
+          href="/vaults"
           className="sf-tab-btn flex w-full items-center justify-between px-3 py-2 text-left"
         >
           <span className="text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]">
             Other Vaults
           </span>
           <ChevronRight size={14} className="text-[color:var(--sf-text)]/60" />
-        </button>
+        </Link>
       </div>
     </div>
   );
 }
-
-
