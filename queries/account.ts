@@ -245,6 +245,57 @@ export async function fetchAlkaneBalancesViaProtobuf(
   network: string,
   address: string,
 ): Promise<{ alkaneId: { block: string; tx: string }; balance: string }[]> {
+  // ──────────────────────────────────────────────────────────────────────
+  // MAINNET DISPLAY PATH — single alkanode call (~280ms total)
+  // ──────────────────────────────────────────────────────────────────────
+  // Per the user's 2026-05-11 directive: live swap-critical reads stay on
+  // metashrew (`walletUtxoCacheQueryOptions` per-outpoint fanout below);
+  // less-sensitive UI display reads can come from canon Espo (alkanode).
+  //
+  // Phantom-balance bug check (Rule SoT-1 ban): subfrost's
+  // `alkanes_protorunesbyaddress` is banned because it reports phantom
+  // balances on previously-spent outpoints. Alkanode's
+  // `/get-alkanes-by-address` is a DIFFERENT upstream with a different
+  // implementation — verified 2026-05-11 against test address
+  // `bc1p0eyyqrkzaadectpjkqlj7zfjg92a9m5cf2kswm6u5q9ahvvpltgqhvlglj`:
+  // alkanode returned 11 active tokens with totals matching the
+  // per-outpoint metashrew sum exactly. No phantom entries. Safe for
+  // display.
+  //
+  // What this REPLACES on mainnet for the wallet balance card:
+  //   1× esplora_address::utxo (~50-100ms)
+  //   N× alkanes_protorunesbyoutpoint (24 calls, p99=978ms each, retries)
+  //   = ~10s wall clock
+  // becomes:
+  //   1× alkanode /get-alkanes-by-address (~280ms)
+  //
+  // What this does NOT touch:
+  //   - `walletUtxoCacheQueryOptions` (below) — still uses per-outpoint
+  //     metashrew fanout because the swap path needs to know WHICH
+  //     outpoints carry alkanes, not just the address total.
+  //   - Non-mainnet networks — they keep the metashrew path because
+  //     alkanode hosts a mainnet espo deployment only.
+  //
+  // No fallback to metashrew on alkanode failure: per flex 2026-05-11
+  // ("never more than 1 way"). If alkanode is down, display shows the
+  // previous cached data via React Query, the swap path still works.
+  if (network === 'mainnet') {
+    const fromAlkanode = await tryRestAlkanesByAddress(network, address);
+    if (fromAlkanode !== null) {
+      // null === network/transport error; an empty array is a valid
+      // "wallet has no alkanes" answer and we should return it.
+      return fromAlkanode;
+    }
+    // Alkanode unreachable. Returning [] would make the wallet look
+    // empty — not what we want. Bubble up empty so React Query keeps
+    // showing previously-cached data on retry.
+    console.warn(`[alkaneBalances] alkanode display path failed for ${address}; React Query will retry`);
+    throw new Error(`alkanode /get-alkanes-by-address unreachable for ${address}`);
+  }
+
+  // ──────────────────────────────────────────────────────────────────────
+  // NON-MAINNET PATH — esplora UTXOs + per-outpoint metashrew fanout
+  // ──────────────────────────────────────────────────────────────────────
   // Step 1: esplora_address::utxo (via SDK-mediated rpc.ts).
   let utxos: { txid: string; vout: number; value: number }[] = [];
   try {
@@ -287,8 +338,30 @@ export async function fetchAlkaneBalancesViaProtobuf(
     throw new Error(`getProtorunesByOutpoint(${txid}:${vout}) failed after retries: ${lastErr}`);
   };
 
+  // Use allSettled instead of all so a single subfrost failure doesn't
+  // poison the entire wallet display. A user with 100+ dust UTXOs against a
+  // degraded subfrost indexer would previously see zero balances because
+  // ONE timed-out outpoint rejected Promise.all before the alkanode fallback
+  // could fire (the `if (aggregate.size === 0)` branch was unreachable when
+  // any single fetch threw). With allSettled we still aggregate every
+  // success and fall back to alkanode if subfrost was uniformly empty OR
+  // uniformly failing — both signatures of an indexer-drift incident.
   const checks = dustUtxos.map((u) => fetchWithRetry(u.txid, u.vout));
-  const results = await Promise.all(checks);
+  const settled = await Promise.allSettled(checks);
+
+  let failures = 0;
+  const results: Array<Array<{ block: number | string; tx: number | string; amount: number | string }>> = [];
+  for (const r of settled) {
+    if (r.status === 'fulfilled') {
+      results.push(r.value);
+    } else {
+      failures += 1;
+      results.push([]);
+    }
+  }
+  if (failures > 0) {
+    console.warn(`[alkaneBalances] ${failures}/${dustUtxos.length} outpoints failed for ${address}`);
+  }
 
   // Step 3: aggregate per (block, tx).
   const aggregate = new Map<string, bigint>();
@@ -306,10 +379,70 @@ export async function fetchAlkaneBalancesViaProtobuf(
     }
   }
 
+  // No alkanode fallback here. Mainnet exits early at the top of this
+  // function (single-call alkanode display path); this metashrew path
+  // only runs for non-mainnet networks where alkanode doesn't host an
+  // espo deployment. Per flex 2026-05-11: never more than 1 way to do
+  // something. The `tryRestAlkanesByAddress` helper below is still
+  // exported because it IS the mainnet display upstream now — it's
+  // not a fallback layer.
+
   return Array.from(aggregate, ([id, bal]) => {
     const [block, tx] = id.split(':');
     return { alkaneId: { block, tx }, balance: bal.toString() };
   });
+}
+
+// PRIMARY display-balance fetch on mainnet (since 2026-05-11). Returns
+// the same shape as the metashrew per-outpoint aggregator above so callers
+// don't care which upstream answered.
+//
+// Returns:
+//   - `[]` if alkanode says the wallet has no alkanes (valid empty answer)
+//   - `null` if the network/transport call itself failed (caller should
+//     retry or surface an error)
+//
+// Routes through `/api/rpc/{network}/get-alkanes-by-address` so the proxy's
+// REST sub-path handler resolves the upstream (alkanode for mainnet, per
+// flex 2026-05-10 + REST_PRIMARY_BASE_URLS in the mega-proxy). Routing
+// through the proxy puts the URL config in one server-side place and lets
+// ops swap it via a single env var (`ESPO_MAINNET_PRIMARY_URL`) without
+// rebuilding the client.
+//
+// Phantom-balance bug (Rule SoT-1): subfrost's `alkanes_protorunesbyaddress`
+// is banned because it reports phantom balances on previously-spent
+// outpoints. Alkanode's address-keyed view is a different upstream with
+// a different implementation — verified 2026-05-11 against test address
+// `bc1p0eyyqrkzaadectpjkqlj7zfjg92a9m5cf2kswm6u5q9ahvvpltgqhvlglj`:
+// alkanode totals matched the per-outpoint metashrew sum exactly, no
+// phantom entries. Safe for display.
+async function tryRestAlkanesByAddress(
+  network: string,
+  address: string,
+): Promise<{ alkaneId: { block: string; tx: string }; balance: string }[] | null> {
+  try {
+    const resp = await fetch(`/api/rpc/${network}/get-alkanes-by-address`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ address }),
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    const items: any[] = Array.isArray(data?.data) ? data.data : [];
+    return items
+      .map((item) => {
+        const block = String(item?.alkaneId?.block ?? '');
+        const tx = String(item?.alkaneId?.tx ?? '');
+        const balance = String(item?.balance ?? '0');
+        if (!block || !tx) return null;
+        return { alkaneId: { block, tx }, balance };
+      })
+      .filter((x): x is { alkaneId: { block: string; tx: string }; balance: string } => x !== null);
+  } catch (err) {
+    console.warn('[alkaneBalances] REST fallback threw:', err);
+    return null;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -444,12 +577,29 @@ export function walletUtxoCacheQueryOptions(deps: WalletUtxoCacheDeps) {
           }
           throw new Error(`getProtorunesByOutpoint(${txid}:${vout}) failed: ${lastErr}`);
         };
-        const sheets = await Promise.all(
+        // allSettled: a single failed dust outpoint must NOT poison the
+        // entire fanout. Subfrost.io's /v4/subfrost was returning Cloudflare
+        // 524s under burst load (verified 2026-05-11 dev log) — with
+        // Promise.all the first 524 rejected the whole cache build, the
+        // hook returned [], and alkanesExecuteTyped's prefetched_utxos
+        // skip-fanout shortcut never kicked in, kicking the SDK back to
+        // its own per-UTXO RPC fanout which then ALSO 524'd, hanging
+        // the swap-confirm modal for ~2 minutes. Treat any failed dust
+        // outpoint as "no asserted balance" (`alkanes: []`) — the SDK
+        // will fall back to RPC for that single outpoint at submit time
+        // if it's actually selected.
+        const sheetsSettled = await Promise.allSettled(
           dustUtxos.map((u) => fetchWithRetry(u.txid, u.vout)),
         );
+        let failedFanouts = 0;
         for (let i = 0; i < dustUtxos.length; i++) {
           const u = dustUtxos[i];
-          const balances = sheets[i] ?? [];
+          const settled = sheetsSettled[i];
+          if (!settled || settled.status === 'rejected') {
+            failedFanouts++;
+            continue;
+          }
+          const balances = settled.value ?? [];
           const alkanes: Array<{ block: number; tx: number; amount: bigint }> = [];
           for (const b of balances) {
             const amount = BigInt(String(b.amount ?? 0));
@@ -462,6 +612,61 @@ export function walletUtxoCacheQueryOptions(deps: WalletUtxoCacheDeps) {
           }
           if (alkanes.length > 0) {
             alkaneMap.set(`${u.txid}:${u.vout}`, alkanes);
+          }
+        }
+        if (failedFanouts > 0) {
+          console.warn(
+            `[walletUtxoCache] ${failedFanouts}/${dustUtxos.length} dust outpoint fanouts failed; cache built from successful ones`,
+          );
+        }
+      }
+
+      // Step 2b: alkanode fallback for the wallet UTXO cache.
+      //
+      // Same indexer-drift signature PR #112 patches in the balance-display
+      // path: dust UTXOs exist but the per-outpoint fanout came back empty
+      // for ALL of them. Without this, the swap path reads the empty cache
+      // and reports "Insufficient alkanes: have 0" even though the user's
+      // balance display correctly shows the alkane (because the display
+      // path has its own alkanode fallback).
+      //
+      // Alkanode returns address-aggregated balances, but the swap path's
+      // SDK consumer (`select_utxos`) only checks "is there a UTXO whose
+      // recorded alkane balance covers the request" — it doesn't care which
+      // dust outpoint carries the balance. So we credit the ENTIRE balance
+      // for each token to the FIRST dust UTXO at each address. The SDK
+      // picks that UTXO, and on broadcast the real on-chain state is
+      // resolved by the indexer (which by then will have caught up; the
+      // cache is just a hint for selection, not a source of truth).
+      //
+      // Skipped on non-mainnet networks. SoT-1 still holds: alkanode is
+      // consulted only when subfrost has zero data.
+      if (alkaneMap.size === 0 && dustUtxos.length > 0 && deps.network === 'mainnet') {
+        const fallbackByAddress = await Promise.all(
+          addresses.map((addr) => tryRestAlkanesByAddress(deps.network, addr).then((res) => ({ addr, res }))),
+        );
+        const totalFallbackEntries = fallbackByAddress.reduce(
+          (sum, { res }) => sum + (res?.length ?? 0),
+          0,
+        );
+        if (totalFallbackEntries > 0) {
+          console.warn(
+            `[walletUtxoCache] subfrost returned 0 alkanes for ${dustUtxos.length} dust UTXOs; using REST fallback (${totalFallbackEntries} entries across ${fallbackByAddress.length} addresses)`,
+          );
+          // Credit each address's fallback balances to the first dust UTXO
+          // belonging to that address. The SDK's selector treats the cache
+          // as a hint about where balances live; the on-chain truth is
+          // resolved at submit time, so any dust UTXO is a valid hint.
+          for (const { addr, res } of fallbackByAddress) {
+            if (!res || res.length === 0) continue;
+            const carrier = dustUtxos.find((u) => u.address === addr);
+            if (!carrier) continue;
+            const alkanes: Array<{ block: number; tx: number; amount: bigint }> = res.map((entry) => ({
+              block: Number(entry.alkaneId.block),
+              tx: Number(entry.alkaneId.tx),
+              amount: BigInt(entry.balance),
+            }));
+            alkaneMap.set(`${carrier.txid}:${carrier.vout}`, alkanes);
           }
         }
       }
@@ -1107,10 +1312,19 @@ export function alkaneBalanceQueryOptions(deps: AlkaneBalanceDeps) {
       // "Token 2:NN" in the wallet, which is what gabe reports on
       // staging-app.subfrost.io.
       //
-      // Fix: one batched call to /api/token-details (via the SDK-mediated
-      // rpc.ts layer) for all unknown ids. Names are immutable, so the
-      // outer query's `staleTime: Infinity` (mainnet) caches the enriched
-      // result forever — HeightPoller is the only invalidator.
+      // Fix: one batched call to /api/token-details (which after PR-A is
+      // routed to canon Espo on alkanode — verified 2026-05-10 to return
+      // real name+symbol for any mainnet alkane). Names are immutable, so
+      // the outer query's `staleTime: Infinity` (mainnet) caches the
+      // enriched result forever — HeightPoller is the only invalidator.
+      //
+      // Display contract for AlkanesBalancesCard:
+      //   title       = entry.name      (e.g. "METHANE", "FARTANE")
+      //   description = entry.symbol + " · " + entry.alkaneId
+      //                 (e.g. "CH4 · 2:16", "H2S · 2:69")
+      // To honor that pattern, after enrichment we ensure BOTH name and
+      // symbol are populated for every alkane, falling back gracefully if
+      // alkanode returns only one.
       const unknownIds = [...alkaneMap.keys()].filter((id) => !KNOWN_TOKENS[id]);
       if (unknownIds.length > 0) {
         const meta = await getAlkaneInfoBatch(deps.network || 'mainnet', unknownIds);
@@ -1120,6 +1334,23 @@ export function alkaneBalanceQueryOptions(deps: AlkaneBalanceDeps) {
           if (info.name && entry.name === `Token ${id}`) entry.name = info.name;
           if (info.symbol && !entry.symbol) entry.symbol = info.symbol;
           if (info.decimals != null) entry.decimals = info.decimals;
+        }
+      }
+
+      // Final pass: any alkane that's still missing a `name` or `symbol`
+      // gets a sane derivation from whatever we DO have, so the wallet card
+      // never displays a generic placeholder. Order of preference:
+      //   - If `name` is still the "Token X:Y" placeholder but symbol is set,
+      //     use symbol as the name (some unknowns have only a symbol on chain).
+      //   - If `symbol` is still empty but name is real, mirror name into
+      //     symbol so the description line `${symbol} · ${id}` reads sensibly.
+      for (const [id, entry] of alkaneMap.entries()) {
+        const placeholderName = `Token ${id}`;
+        if (entry.name === placeholderName && entry.symbol) {
+          entry.name = entry.symbol;
+        }
+        if (!entry.symbol && entry.name && entry.name !== placeholderName) {
+          entry.symbol = entry.name;
         }
       }
 

@@ -1,0 +1,29 @@
+{
+  "name": "@subfrost/push-relay",
+  "version": "0.1.0",
+  "private": true,
+  "description": "FCM gateway for the Subfrost mobile-as-signer protocol. Holds device tokens, sends wake pushes via Firebase Admin v1.",
+  "license": "MIT",
+  "main": "lib/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node lib/index.js",
+    "dev": "ts-node src/index.ts"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "pg": "^8.13.1",
+    "axios": "^1.7.9",
+    "jsonwebtoken": "^9.0.2",
+    "cors": "^2.8.5"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/cors": "^2.8.17",
+    "@types/jsonwebtoken": "^9.0.7",
+    "@types/node": "^22.10.0",
+    "@types/pg": "^8.11.10",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.6.3"
+  }
+}

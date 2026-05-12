@@ -1,16 +1,35 @@
 /**
- * Token Names API — Proxies the data API's /get-alkanes endpoint
+ * Token Names API — Proxies the canon Espo /get-alkanes endpoint
  *
  * GET /api/token-names?network=<network>&limit=<limit>
  *
  * Returns a map of alkaneId → { name, symbol } for the top N tokens.
- * This proxy avoids CORS issues when fetching directly from subfrost API.
+ * This proxy avoids CORS issues when fetching directly from canon Espo.
+ *
+ * ## Routing policy (per flex, alkanes-rs maintainer, 2026-05-10)
+ *
+ * "All of the /v4/subfrost/* routes other than BTC pricing are espo routes.
+ *  They should be bypassed and go directly to espo."
+ *
+ * Mainnet upstream: canon Espo on alkanode (oyl.alkanode.com). No fallback —
+ * falling back to subfrost.io would re-introduce the broken /v4/subfrost/*
+ * path this route exists to bypass (verified 2026-05-10: subfrost.io's
+ * /v4/subfrost/get-alkane-details returns 404 alkane_not_found for known
+ * mainnet alkanes).
+ *
+ * Override env var:
+ *   ESPO_MAINNET_PRIMARY_URL   — override mainnet upstream. Default alkanode.
+ *
+ * Non-mainnet networks (testnet/signet/regtest/etc) go through subfrost.io
+ * because alkanode hosts a mainnet Espo deployment only.
  */
 
 import { NextResponse } from 'next/server';
 
+const ALKANODE_OYL_MAINNET = 'https://oyl.alkanode.com';
+
 const RPC_ENDPOINTS: Record<string, string> = {
-  mainnet: 'https://mainnet.subfrost.io/v4/subfrost',
+  mainnet: process.env.ESPO_MAINNET_PRIMARY_URL || ALKANODE_OYL_MAINNET,
   testnet: 'https://testnet.subfrost.io/v4/subfrost',
   signet: 'https://signet.subfrost.io/v4/subfrost',
   regtest: 'https://regtest.subfrost.io/v4/subfrost',
@@ -19,6 +38,11 @@ const RPC_ENDPOINTS: Record<string, string> = {
   oylnet: 'https://regtest.subfrost.io/v4/subfrost',
   devnet: 'http://localhost:18888', // In-browser only
 };
+
+// No mainnet fallback (single-upstream by design). Falling back to subfrost.io
+// would re-introduce the broken /v4/subfrost/* path this route exists to
+// bypass. If alkanode goes down, override the primary via
+// ESPO_MAINNET_PRIMARY_URL instead of layering a fallback on top.
 
 /**
  * Well-known devnet token names — returned directly when network=devnet
@@ -71,32 +95,65 @@ export async function GET(request: Request) {
 
   const baseUrl = RPC_ENDPOINTS[network] || RPC_ENDPOINTS.mainnet;
 
-  try {
-    const response = await fetch(`${baseUrl}/get-alkanes`, {
+  // Single upstream: canon Espo on alkanode for mainnet (no subfrost.io
+  // fallback — that's the route this proxy is bypassing). Other networks
+  // hit their respective subfrost.io espo deployment because alkanode hosts
+  // a mainnet espo only.
+  const fetchAlkanes = async (base: string) => {
+    const resp = await fetch(`${base}/get-alkanes`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ limit, offset: 0 }),
       signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
       cache: 'no-store',
     });
-
-    if (!response.ok) {
-      throw new Error(`Data API failed: ${response.status}`);
+    if (!resp.ok) {
+      throw new Error(`Data API failed: ${resp.status} (${base})`);
     }
+    return resp;
+  };
+
+  try {
+    const response = await fetchAlkanes(baseUrl);
 
     const data = await response.json();
     const tokens: any[] = data?.data?.tokens || [];
 
-    // Build a flat map: alkaneId → { name, symbol }
+    // Build name map AND a parallel price map. Espo's /get-alkanes
+    // returns priceUsd / busdPoolPriceInUsd / priceInSatoshi per token
+    // (same fields as /get-alkanes-by-address). Without this, the swap
+    // UI's USD-equivalent display falls through to derived-from-pool-TVL
+    // and shows $0.00 whenever the user doesn't already hold the token
+    // and the pools query hasn't populated TVL yet.
+    //
+    // frBTC special-case: espo derives priceUsd from the bUSD/frBTC pool
+    // which isn't peg-arbitraged, so its implied price drifts from BTC.
+    // Skip it here and let consumers fall back to the live BTC price.
     const names: Record<string, { name: string; symbol: string }> = {};
+    const prices: Record<string, { priceUsd?: number; priceInSatoshi?: number }> = {};
     for (const token of tokens) {
-      const alkaneId = `${token.id?.block || 0}:${token.id?.tx || 0}`;
-      if (alkaneId && (token.name || token.symbol)) {
+      const block = token.id?.block ?? 0;
+      const tx = token.id?.tx ?? 0;
+      const alkaneId = `${block}:${tx}`;
+      if (!alkaneId) continue;
+      if (token.name || token.symbol) {
         names[alkaneId] = { name: token.name || '', symbol: token.symbol || '' };
+      }
+      const isFrbtc = alkaneId === '32:0';
+      const rawUsd = isFrbtc ? undefined : (token.priceUsd ?? token.busdPoolPriceInUsd);
+      const rawSats = token.priceInSatoshi;
+      const priceUsd = typeof rawUsd === 'number' && rawUsd > 0
+        ? rawUsd
+        : (typeof rawUsd === 'string' && Number(rawUsd) > 0 ? Number(rawUsd) : undefined);
+      const priceInSatoshi = typeof rawSats === 'number' && rawSats > 0
+        ? rawSats
+        : (typeof rawSats === 'string' && Number(rawSats) > 0 ? Number(rawSats) : undefined);
+      if (priceUsd !== undefined || priceInSatoshi !== undefined) {
+        prices[alkaneId] = { priceUsd, priceInSatoshi };
       }
     }
 
-    const payload = { names, count: Object.keys(names).length };
+    const payload = { names, prices, count: Object.keys(names).length };
     const entry: CacheEntry = { data: payload, timestamp: now };
     fresh.set(cacheKey, entry);
     lastGood.set(cacheKey, entry);

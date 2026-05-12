@@ -14,16 +14,69 @@
  *
  * JOURNAL ENTRY (2026-01-28): Created for CORS workaround.
  * JOURNAL ENTRY (2026-02-06): Consolidated into single optional catch-all.
- * JOURNAL ENTRY (2026-02-07): Removed alkanode/Espo routing. All methods go
- * to subfrost endpoints. Pool data, token info, and heights are fetched via
- * the @alkanes/ts-sdk bindings or alkanes_simulate on subfrost RPC.
+ * JOURNAL ENTRY (2026-05-10, supersedes 2026-02-07): REST sub-paths route
+ * to canon Espo on alkanode for mainnet (per flex: "All of the
+ * /v4/subfrost/* routes other than BTC pricing are espo routes. They should
+ * be bypassed and go directly to espo"). The earlier 2026-02-07 note saying
+ * "all methods go to subfrost" no longer holds — see REST_PRIMARY_BASE_URLS
+ * below.
+ * JOURNAL ENTRY (2026-05-11 EVENING, supersedes earlier same-day notes):
+ * Both `metashrew_view` AND `metashrew_height` route to /v6/subfrost on
+ * mainnet, with an optional `Authorization: Bearer <SUBFROST_V6_API_KEY>`
+ * header attached when that env var is set (server-side only — never
+ * `NEXT_PUBLIC_*`). Background:
+ *   - PR #117 routed both to /v6 to fix cross-replica drift.
+ *   - PR #121 reverted height to /v4 because /v6's anonymous tier enforces
+ *     a 20 req/min per-IP rate limit that Cloud Run's shared egress IP
+ *     exhausts instantly. Swaps 429'd.
+ *   - /v4 worked but exposed transient `metashrew-unwrap` and `error
+ *     decoding response body` errors (~15% rate on the SDK's 500ms poll).
+ *     Each error aborts the swap. Multiple in-flight retries can mask it
+ *     but only at the cost of re-introducing the cross-endpoint fallback
+ *     chains we just deleted.
+ *   - This PR routes back to /v6 BUT signs requests with an authenticated
+ *     API key. Authenticated /v6 calls bypass the anonymous rate bucket,
+ *     and /v6's upstream is empirically more reliable than /v4's
+ *     metashrew-unwrap path. Both swap-blocking failure modes go away.
+ *
+ * If SUBFROST_V6_API_KEY is unset (local dev without a key), /v6 calls
+ * are sent unauthenticated and may 429 under load. Set the env var via
+ * `.env.local` for local dev, or via Cloud Run env config for staging /
+ * prod. Key is obtained from subfrost (api.subfrost.io signup).
+ *
+ * See pickEndpoint and buildHeadersForUrl below for the routing details.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 
-// All RPC endpoints point to subfrost infrastructure
+// All RPC endpoints point to subfrost infrastructure.
+//
+// JOURNAL ENTRY (2026-05-10): mainnet dual-routes by method.
+// Per @flex: /v6/subfrost is JSON-RPC-only with sticky metashrew (perf),
+// while /v4/subfrost handles legacy REST sub-paths + the rest of the
+// JSON-RPC gateway (bitcoin RPC, alkanes_*, esplora_*).
+//
+// Routing matrix for mainnet:
+//   - metashrew_view                          → /v6/subfrost (auth, sticky, fast)
+//   - metashrew_height                        → /v6/subfrost (auth, sticky, fast)
+//   - REST sub-paths (/get-all-amm-tx-history etc.) → alkanode (canon Espo)
+//   - All other JSON-RPC                      → /v4/subfrost (gateway)
+//
+// /v6/subfrost benefit: 27-way parallel protorunesbyoutpoint fanout completes
+// in ~0.18-0.29s wall time vs 0.92s on /v4/subfrost vs 8.7s on /v4/<token>.
+// /v6 also avoids the `/v4` upstream's transient `metashrew-unwrap` and
+// `error decoding response body` errors (verified 2026-05-11: ~15% error
+// rate on /v4 metashrew_height under 500ms poll cadence; 0% on /v6).
+//
+// /v6's anonymous tier enforces a 20 req/min per-IP rate limit, which Cloud
+// Run's shared egress IP exhausts instantly. Authenticated requests
+// (Authorization header from SUBFROST_V6_API_KEY) bypass the bucket. See
+// `buildHeadersForUrl` below.
+//
+// Other networks (testnet/signet/regtest) stay on /v4/<token> — only mainnet
+// has the /v6 split.
 const RPC_ENDPOINTS: Record<string, string> = {
-  mainnet: 'https://mainnet.subfrost.io/v4/5d37098b75581792a44b9d230d48aa75',
+  mainnet: 'https://mainnet.subfrost.io/v4/subfrost',
   testnet: 'https://testnet.subfrost.io/v4/5d37098b75581792a44b9d230d48aa75',
   signet: 'https://signet.subfrost.io/v4/5d37098b75581792a44b9d230d48aa75',
   regtest: 'https://regtest.subfrost.io/v4/5d37098b75581792a44b9d230d48aa75',
@@ -33,9 +86,59 @@ const RPC_ENDPOINTS: Record<string, string> = {
   oylnet: 'https://regtest.subfrost.io/v4/5d37098b75581792a44b9d230d48aa75',
 };
 
-// Batch JSON-RPC requests are more reliably handled by the explicit /jsonrpc path
+// Per-network metashrew-only endpoint. When set for a network, JSON-RPC
+// requests with `metashrew_view` AND `metashrew_height` route here
+// instead of `RPC_ENDPOINTS[network]`. Other methods and REST sub-paths
+// still go through the gateway endpoint.
+//
+// Both metashrew methods share /v6 because (a) it's significantly faster
+// for the wallet UTXO prewarm fanout and opcode-999 simulate, and (b) /v4's
+// metashrew-unwrap upstream is ~15% flaky on the SDK's 500ms height poll.
+// /v6's anonymous 20 req/min rate limit is the only obstacle, and it's
+// bypassed by attaching the SUBFROST_V6_API_KEY auth header in
+// `buildHeadersForUrl` below.
+//
+// Other networks left undefined (no override → use the gateway URL for
+// everything).
+const METASHREW_RPC_ENDPOINTS: Record<string, string | undefined> = {
+  mainnet: 'https://mainnet.subfrost.io/v6/subfrost',
+};
+
+// Subfrost API key for /v6/subfrost authenticated requests. Read once at
+// module load (not per-request) — the key doesn't change at runtime, and
+// re-reading process.env on every request showed up in profiles. Server-
+// side only — DO NOT expose this to the browser by adding NEXT_PUBLIC_*.
+//
+// When set, all requests to /v6/subfrost endpoints carry an
+// `Authorization: Bearer <key>` header which (per subfrost docs at
+// api.subfrost.io) bypasses the anonymous 20 req/min rate bucket.
+// When unset, /v6 calls go out unauthenticated and may 429 under load.
+//
+// Local dev: put `SUBFROST_V6_API_KEY=...` in .env.local
+// Staging/prod: configure as a Cloud Run env var
+const SUBFROST_V6_API_KEY = process.env.SUBFROST_V6_API_KEY ?? '';
+
+// Builds outbound headers for a given upstream URL. Always includes
+// Content-Type. For /v6/subfrost endpoints, attaches the Authorization
+// header when the API key is configured; everything else gets no auth.
+//
+// The "is /v6" check is URL-substring based (rather than coupling to
+// METASHREW_RPC_ENDPOINTS lookup) so that custom upstreams pinned via
+// future env vars also pick up auth automatically when they target /v6.
+function buildHeadersForUrl(url: string): Record<string, string> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (SUBFROST_V6_API_KEY && url.includes('/v6/subfrost')) {
+    headers['Authorization'] = `Bearer ${SUBFROST_V6_API_KEY}`;
+  }
+  return headers;
+}
+
+// Batch JSON-RPC requests are more reliably handled by the explicit /jsonrpc path.
+// Mainnet batches go through the gateway since they may contain mixed methods
+// (a future enhancement could split batches by method, but isn't worth the
+// complexity until profiling shows it matters).
 const BATCH_RPC_ENDPOINTS: Record<string, string> = {
-  mainnet: 'https://mainnet.subfrost.io/v4/jsonrpc',
+  mainnet: 'https://mainnet.subfrost.io/v4/subfrost',
   testnet: 'https://testnet.subfrost.io/v4/jsonrpc',
   signet: 'https://signet.subfrost.io/v4/jsonrpc',
   regtest: 'https://regtest.subfrost.io/v4/jsonrpc',
@@ -45,11 +148,72 @@ const BATCH_RPC_ENDPOINTS: Record<string, string> = {
   oylnet: 'https://regtest.subfrost.io/v4/jsonrpc',
 };
 
+// REST upstream for mainnet: canon Espo on alkanode. Per flex (alkanes-rs
+// maintainer, 2026-05-10):
+//   "All of the /v4/subfrost/* routes other than BTC pricing are espo routes.
+//    They should be bypassed and go directly to espo."
+//
+// Subfrost.io's /v4/subfrost/* hosting was verified broken on 2026-05-10
+// (404 alkane_not_found / 200-with-zero-pools for several REST endpoints),
+// which is why landing-page surfaces (Trending Pair, Markets TVL) stopped
+// showing real data on staging. We do NOT keep a subfrost.io fallback —
+// falling back to it would re-introduce that broken path.
+//
+// Override env: ESPO_MAINNET_PRIMARY_URL — pin a different mainnet upstream
+// (e.g. a backup alkanode mirror) if alkanode itself goes down.
+//
+// Note: this ONLY applies to REST sub-paths (e.g. /get-pool-details). The
+// JSON-RPC routing (metashrew_view, alkanes_*, esplora_*, bitcoin_*) is a
+// separate concern and stays on subfrost.io's gateway — see pickEndpoint
+// below. Splitting JSON-RPC primary is out of scope here because alkanode
+// hosts the espo REST contract but not the full subfrost JSON-RPC gateway.
+const ALKANODE_OYL_MAINNET = 'https://oyl.alkanode.com';
+const REST_PRIMARY_BASE_URLS: Record<string, string> = {};
+const restPrimaryEnv = process.env.ESPO_MAINNET_PRIMARY_URL;
+REST_PRIMARY_BASE_URLS.mainnet = restPrimaryEnv && restPrimaryEnv.length > 0
+  ? restPrimaryEnv
+  : ALKANODE_OYL_MAINNET;
+
 function pickEndpoint(body: any, network: string) {
   const isBatch = Array.isArray(body);
-  const single = RPC_ENDPOINTS[network] || RPC_ENDPOINTS.regtest;
-  const batch = BATCH_RPC_ENDPOINTS[network] || BATCH_RPC_ENDPOINTS.regtest;
-  return isBatch ? batch : single;
+
+  // Batch requests don't get method-level routing — they may contain mixed
+  // methods, and splitting batches client-side is more complexity than the
+  // perf delta justifies. Use the gateway endpoint for batches.
+  if (isBatch) {
+    return BATCH_RPC_ENDPOINTS[network] || BATCH_RPC_ENDPOINTS.regtest;
+  }
+
+  // Single requests: route both `metashrew_view` AND `metashrew_height`
+  // to the network's metashrew endpoint when configured (currently /v6/
+  // subfrost on mainnet, undefined elsewhere → falls through to gateway).
+  //
+  // /v6 wins on two axes:
+  //   1. Speed: ~70ms p50 vs ~250ms on /v4, plus sticky-replica behavior
+  //      that avoids cross-replica drift between height and view calls.
+  //   2. Reliability: /v4's metashrew-unwrap upstream is ~15% flaky on
+  //      the SDK's 500ms height poll cadence (verified live 2026-05-11
+  //      via 20-call burst tests). /v6 returned 0/20 errors in the same
+  //      test. Each /v4 error aborts the swap — so the seemingly-rare
+  //      flake hits ~95% of swap attempts in practice (60 polls × 15%).
+  //
+  // /v6's anonymous tier has a 20 req/min per-IP rate limit. We dodge it
+  // by signing requests with SUBFROST_V6_API_KEY in `buildHeadersForUrl`
+  // (server-side env var, never exposed to browsers). Without the key,
+  // /v6 calls go out unauthenticated and may 429 under load — the user
+  // (or ops) is responsible for setting the env var before deploying to
+  // shared-IP environments like Cloud Run.
+  //
+  // Other JSON-RPC (alkanes_*, bitcoin_*, esplora_*) and REST sub-paths
+  // continue to route through the /v4 gateway and alkanode respectively.
+  const method = typeof body?.method === 'string' ? body.method : '';
+  const isMetashrewMethod = method === 'metashrew_view' || method === 'metashrew_height';
+  const metashrewUrl = METASHREW_RPC_ENDPOINTS[network];
+  if (isMetashrewMethod && metashrewUrl) {
+    return metashrewUrl;
+  }
+
+  return RPC_ENDPOINTS[network] || RPC_ENDPOINTS.regtest;
 }
 
 export async function POST(
@@ -118,8 +282,16 @@ export async function POST(
           console.log(`[RPC Proxy] qubitcoin-regtest REST /${restPath.join('/')} → empty (no data API)`);
           return NextResponse.json({ statusCode: 200, data: [] });
         }
-        // REST sub-path: forward to backend base URL + rest path
-        const baseUrl = (RPC_ENDPOINTS[network] || RPC_ENDPOINTS.regtest).replace(/\/$/, '');
+        // REST sub-path: forward to canon Espo (alkanode on mainnet, per
+        // flex 2026-05-10). NO subfrost.io fallback — falling back would
+        // re-introduce the broken /v4/subfrost/* path this proxy exists to
+        // bypass. For non-mainnet networks the primary stays on
+        // subfrost.io because alkanode hosts a mainnet espo deployment
+        // only.
+        const restPrimary = REST_PRIMARY_BASE_URLS[network]
+          || RPC_ENDPOINTS[network]
+          || RPC_ENDPOINTS.regtest;
+        const baseUrl = restPrimary.replace(/\/$/, '');
         targetUrl = `${baseUrl}/${restPath.join('/')}`;
       } else {
         // Plain JSON-RPC
@@ -214,51 +386,53 @@ export async function POST(
     const method = Array.isArray(body) ? 'batch' : body?.method;
     console.log(`[RPC Proxy] ${method} -> ${targetUrl}`);
 
-    // Fallback endpoint for mainnet when primary hits metashrew-unwrap errors
-    const FALLBACK_ENDPOINTS: Record<string, string> = {
-      mainnet: 'https://mainnet.subfrost.io/v4/jsonrpc',
-      testnet: 'https://testnet.subfrost.io/v4/jsonrpc',
-      signet: 'https://signet.subfrost.io/v4/jsonrpc',
-    };
-
-    let response = await fetch(targetUrl, {
+    // Single upstream, no fallbacks. Per flex 2026-05-11: "OK lets remove
+    // all fallbacks everywhere. We should never have more than 1 way to do
+    // something." This used to carry four fallback chains: a metashrew /v6
+    // → /v4-gateway retry on non-JSON, a metashrew-unwrap → /v4/jsonrpc
+    // retry, a metashrew /v6 → /v4-gateway retry on rate-limit / JSON-RPC
+    // error, and a 2-attempt server-side retry for alkanes_*. All deleted
+    // because:
+    //
+    //   1. The "metashrew-unwrap" routing error on /v4/<token> motivated
+    //      the JSON-RPC fallback. Today (PR #117) `metashrew_height` and
+    //      `metashrew_view` both route to /v6 which doesn't have that
+    //      error class. The /v4 unwrap failure mode is no longer reachable
+    //      from this proxy.
+    //   2. The /v6 rate-limit fallback assumed /v6 would 429 the SDK's
+    //      500ms poll. Re-verified 2026-05-11: 8/8 requests succeeded at
+    //      that cadence, no 429. Whatever rate-limit window /v6 used to
+    //      enforce is gone or raised.
+    //   3. The alkanes_* server-side retry was masking transient subfrost
+    //      flakes that the client-side cache (with Promise.allSettled in
+    //      queries/account.ts:walletUtxoCacheQueryOptions) already
+    //      tolerates per-outpoint. Doubling up just delayed the surface.
+    //
+    // If subfrost regresses to needing one of these again, re-add the
+    // SPECIFIC fallback (with the failure-mode evidence in the comment)
+    // rather than re-introducing the whole chain.
+    const response = await fetch(targetUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: buildHeadersForUrl(targetUrl),
       body: JSON.stringify(body),
     });
 
-    // Read the response body once. Upstream is always JSON-RPC, but infrastructure
-    // errors (nginx 502, rate limits, service unavailable) may return plain text or HTML.
-    let responseText = await response.text();
+    // Read the response body once. Upstream is always JSON-RPC, but
+    // infrastructure errors (nginx 502, rate limits, service unavailable)
+    // may return plain text or HTML.
+    const responseText = await response.text();
     let data;
     try {
       data = JSON.parse(responseText);
     } catch {
-      // Non-JSON response — this is an infrastructure error, not a JSON-RPC response.
-      // Common causes: nginx "upstream request failed", rate limit HTML pages, 502/503 errors.
-      const snippet = responseText.slice(0, 200).replace(/<[^>]*>/g, '').trim(); // strip HTML tags
+      // Non-JSON response — propagate as a JSON-RPC error. No retry, no
+      // fallback (see header comment above).
+      const snippet = responseText.slice(0, 200).replace(/<[^>]*>/g, '').trim();
       console.error(`[RPC Proxy] Non-JSON upstream response (${response.status}) for ${method}: ${snippet}`);
       return NextResponse.json(
         { jsonrpc: '2.0', error: { code: -32603, message: `Upstream error (${response.status}): ${snippet}` }, id: body?.id ?? null },
         { status: 502 }
       );
-    }
-
-    // Retry on metashrew-unwrap errors — fallback to /v4/jsonrpc which routes correctly
-    if (data?.error?.message?.includes('metashrew-unwrap') && network && FALLBACK_ENDPOINTS[network]) {
-      console.log(`[RPC Proxy] metashrew-unwrap error, retrying via fallback: ${FALLBACK_ENDPOINTS[network]}`);
-      try {
-        const fallbackResp = await fetch(FALLBACK_ENDPOINTS[network], {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-        });
-        const fallbackText = await fallbackResp.text();
-        const fallbackData = JSON.parse(fallbackText);
-        if (!fallbackData?.error) {
-          data = fallbackData;
-        }
-      } catch { /* fallback failed, use original error */ }
     }
 
     // Non-200 status with valid JSON body — forward the JSON-RPC error as-is

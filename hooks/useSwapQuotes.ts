@@ -30,7 +30,7 @@
  * @see useAlkanesTokenPairs.ts - Pool data fetching
  * @see constants/index.ts - Documentation on factory vs pool opcodes
  */
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import BigNumber from 'bignumber.js';
 import { useDebounce } from 'use-debounce';
@@ -142,6 +142,9 @@ async function calculateSwapPrice(
   const amountInAlks = toAlks(amount);
   const amountNumeric = parseFloat(amount);
   if (!amount || !Number.isFinite(amountNumeric) || amountNumeric === 0) {
+    // poolId carried so a click-without-amount doesn't trigger the
+    // "swapFailedPoolNotFound" toast — the pool was found, the user
+    // just hasn't typed an amount yet.
     return {
       direction,
       inputAmount: amount,
@@ -154,6 +157,7 @@ async function calculateSwapPrice(
       displaySellAmount: '0',
       displayMinimumReceived: '0',
       displayMaximumSent: '0',
+      poolId: (() => { const [b, t] = pool.id.split(':'); return { block: b, tx: t }; })(),
     } as SwapQuote;
   }
 
@@ -170,7 +174,10 @@ async function calculateSwapPrice(
   //
   // If `liveState` isn't available yet (in-flight, errored, or disabled),
   // return a zero quote so the UI can show "Loading…" / disable the
-  // swap button. Anything else is silently wrong.
+  // swap button. The early-return MUST still carry `poolId` so the
+  // SwapShell click handler's `quote.poolId` guard doesn't spuriously
+  // surface "swapFailedPoolNotFound" — we found the pool, the live
+  // reserves are just still in flight.
   if (!liveState) {
     return {
       direction,
@@ -185,6 +192,7 @@ async function calculateSwapPrice(
       displayMinimumReceived: '0',
       displayMaximumSent: '0',
       reservesUnavailable: true,
+      poolId: (() => { const [b, t] = pool.id.split(':'); return { block: b, tx: t }; })(),
     } as SwapQuote;
   }
   // Chain-aware reserves: replay our pending swaps targeting this
@@ -311,12 +319,37 @@ export function useSwapQuotes(
     );
   }, [sellPairs, sellCurrencyId, buyCurrencyId]);
 
-  // Live reserves for the direct pool. Only polls while the user has typed an
-  // amount (avoids background traffic when the swap form is idle). HeightPoller
-  // also invalidates this on every new block.
-  const hasAmount = !!debouncedAmount && parseFloat(debouncedAmount) > 0;
+  // DIAGNOSTIC 2026-05-11: trace what the engine is seeing when no quote
+  // populates. This logs once per change in the lookup state — not on every
+  // render — so the console isn't spammed.
+  useEffect(() => {
+    if (!poolsData?.items) return;
+    if (!sellCurrencyId || !buyCurrencyId) return;
+    const sellMatch = sellPairs?.length ?? 0;
+    const buyMatch = buyPairs?.length ?? 0;
+    if (directPool) {
+      console.log(
+        `[useSwapQuotes] direct pool found: id=${directPool.id} ` +
+        `token0=${directPool.token0.id} token1=${directPool.token1.id} ` +
+        `(looking for sellId=${sellCurrencyId} buyId=${buyCurrencyId})`,
+      );
+    } else {
+      const head = poolsData.items.slice(0, 5).map(p => `${p.id}[${p.token0.id}/${p.token1.id}]`);
+      console.warn(
+        `[useSwapQuotes] direct pool NOT FOUND for sellId=${sellCurrencyId} buyId=${buyCurrencyId}; ` +
+        `sellPairs=${sellMatch} buyPairs=${buyMatch} totalPools=${poolsData.items.length}; ` +
+        `first5 = ${head.join(', ')}`,
+      );
+    }
+  }, [poolsData, sellPairs, buyPairs, sellCurrencyId, buyCurrencyId, directPool]);
+
+  // Live reserves for the direct pool. Pre-fetched as soon as a pair is
+  // matched — removes the ~500ms lag on the first amount keystroke
+  // (the quote pipeline runs synchronously and returns null while the
+  // first fetch is in flight). `staleTime: Infinity` in usePoolStateLive
+  // means no extra traffic; HeightPoller invalidates on every new block.
   const liveDirect = usePoolStateLive(directPool?.id, {
-    enabled: !!directPool && hasAmount,
+    enabled: !!directPool,
   });
   const liveReserve0 = liveDirect.data?.reserve0;
   const liveReserve1 = liveDirect.data?.reserve1;

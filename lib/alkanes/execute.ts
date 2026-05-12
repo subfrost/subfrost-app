@@ -55,7 +55,8 @@
  * handle_message() returns Err on revert → atomic.commit() never called → rollback.
  */
 
-import { parseMaxVoutFromProtostones, extractPsbtBase64 } from './helpers';
+import * as bitcoin from 'bitcoinjs-lib';
+import { parseMaxVoutFromProtostones, extractPsbtBase64, getBitcoinNetwork } from './helpers';
 import type { AlkanesExecuteTypedParams } from './types';
 
 type WebProvider = import('@alkanes/ts-sdk/wasm').WebProvider;
@@ -146,6 +147,75 @@ export async function alkanesExecuteTyped(
     }
   }
 
+  // PERF: prefetched_utxos — caller-supplied (outpoint, value, scriptPubKey,
+  // alkanes) map that the SDK consumes inside:
+  //   - `validate_transaction` / `build_psbt_and_fee`: skip per-UTXO
+  //     `getrawtransaction` roundtrips (PR #256).
+  //   - `select_utxos` per-outpoint `protorunesbyoutpoint` fanout
+  //     (mainnet 2026-05-09: 40s on 36-dust-UTXO wallet, second-pass
+  //     extension built on top of #256).
+  // Required by the alkanes-rs change in https://github.com/kungfuflex/alkanes-rs/pull/256
+  // and its second-pass alkanes extension; ignored by older SDKs since the
+  // fields are `#[serde(default)]` Rust-side.
+  //
+  // Every cached UTXO contributes — not just clean BTC carriers. The SDK's
+  // hot loops iterate the FULL selected set (including alkane-bearing dust
+  // and inscribed UTXOs), so anything we cache here saves a roundtrip.
+  //
+  // `alkanes` field semantics (load-bearing, mirrors Rust `Option<Vec<_>>`):
+  //   - `[]`        → Rust `Some(vec![])` → "asserted clean — do not query."
+  //   - `[{...}]`   → Rust `Some([...])`   → authoritative balances.
+  //   - omitted     → Rust `None`          → fall back to RPC for this outpoint.
+  // Every UTXO returned by the wallet UTXO cache is fully covered (dust gets
+  // a populated balance sheet, non-dust gets `[]`), so we always emit `Some`.
+  if (params.cachedUtxos?.length) {
+    try {
+      const btcNetwork = getBitcoinNetwork(params.network ?? 'mainnet');
+      let alkaneAsserted = 0;
+      const prefetched = params.cachedUtxos.map((u) => {
+        // Derive scriptPubKey from address — pure compute, no RPC.
+        // Falls through to the slow path on per-UTXO derivation failure
+        // (defensive: never let a bad address abort the whole execute).
+        if (!u.address) return null;
+        let scriptPubKeyHex: string;
+        try {
+          const script = bitcoin.address.toOutputScript(u.address, btcNetwork);
+          scriptPubKeyHex = Buffer.from(script).toString('hex');
+        } catch {
+          return null;
+        }
+        const alkanesAsserted = (u.alkanes ?? []).map((a) => ({
+          block: a.block,
+          tx: a.tx,
+          amount: a.amount.toString(),
+        }));
+        if (alkanesAsserted.length > 0) alkaneAsserted++;
+        return {
+          outpoint: `${u.txid}:${u.vout}`,
+          value: u.value,
+          script_pubkey_hex: scriptPubKeyHex,
+          alkanes: alkanesAsserted, // [] = "asserted clean" (NOT undefined)
+        };
+      }).filter((x): x is {
+        outpoint: string;
+        value: number;
+        script_pubkey_hex: string;
+        alkanes: Array<{ block: number; tx: number; amount: string }>;
+      } => x !== null);
+      if (prefetched.length > 0) {
+        options.prefetched_utxos = prefetched;
+        console.log(
+          `[alkanesExecuteTyped] prefetched_utxos: ${prefetched.length} TxOuts ` +
+          `(${alkaneAsserted} with alkane assertion) from wallet cache ` +
+          `(skips ~${prefetched.length * 2} getrawtransaction + ` +
+          `${prefetched.length} protorunesbyoutpoint roundtrips)`,
+        );
+      }
+    } catch (e) {
+      console.warn('[alkanesExecuteTyped] failed to build prefetched_utxos:', e);
+    }
+  }
+
   const toAddressesJson = JSON.stringify(toAddresses);
   const optionsJson = JSON.stringify(options);
 
@@ -155,24 +225,50 @@ export async function alkanesExecuteTyped(
   console.log('[alkanesExecuteTyped] fee_rate:', params.feeRate);
   console.log('[alkanesExecuteTyped] options:', optionsJson);
 
-  // Proactive indexer-sync probe (2026-05-04, fixes "Indexer sync timed out").
+  // Indexer-aware UTXO height filter (2026-05-10, replaces global lag wait).
   //
-  // alkanesExecuteWithStrings / alkanesExecuteFull internally call
-  // `webprovider_waitForIndexer` before broadcast and time out at 30s if
-  // metashrew_height < bitcoind_blockcount. On mainnet the gateway is
-  // sometimes one block apart for ~10–30s; the timeout buries the swap on
-  // "Building Transaction" forever. The elegant pattern (97b1aec2 — "fix:
-  // update @alkanes/ts-sdk with indexer sync fix") is to probe the
-  // SDK's sync primitive ourselves first so a transient gap becomes a
-  // short pre-flight wait instead of a deep failure. Catching here in the
-  // central wrapper covers swap / wrap / unwrap / send / addLiquidity in
-  // one place — no per-hook duplication.
-  try {
-    if (typeof (provider as any).waitForIndexer === 'function') {
-      await (provider as any).waitForIndexer();
+  // Fetch the alkanes indexer's current height and pass it as
+  // `max_indexed_height` so the SDK's `select_utxos` skips any confirmed
+  // UTXO whose creating block is above this height (metashrew can't yet
+  // read its alkane balance sheet). Alkane balance sheets are immutable
+  // per-outpoint, so any UTXO at height ≤ max_indexed_height is safe.
+  //
+  // Why this beats waiting for full sync:
+  //   - esplora indexes new blocks ~immediately; metashrew takes longer
+  //     because it re-runs every protostone in the block.
+  //   - Steady-state on mainnet has esplora 1–2 blocks ahead of metashrew.
+  //     Waiting for `lag === 0` would stall every mutation for several
+  //     minutes after each block lands.
+  //   - With this filter we just don't pick UTXOs above metashrew's view —
+  //     correctness preserved without the wait.
+  //
+  // On local networks (devnet/regtest) we skip this probe — the user
+  // mines manually and selecting UTXOs above metashrew's height is fine.
+  if (!options.max_indexed_height) {
+    try {
+      const rpcUrl =
+        (typeof window !== 'undefined' &&
+          ((provider as any).sandshrew_rpc_url?.() || null)) ||
+        null;
+      if (rpcUrl && !rpcUrl.includes('localhost:18888')) {
+        const res = await fetch(rpcUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'metashrew_height', params: [] }),
+        });
+        if (res.ok) {
+          const json = await res.json();
+          const r = json?.result;
+          const h = typeof r === 'string' ? parseInt(r, 10) : Number(r);
+          if (Number.isFinite(h) && h > 0) {
+            options.max_indexed_height = h;
+            console.log(`[alkanesExecuteTyped] max_indexed_height=${h} (per-UTXO indexer filter)`);
+          }
+        }
+      }
+    } catch (probeErr) {
+      console.warn('[alkanesExecuteTyped] metashrew_height probe failed, continuing without filter:', probeErr);
     }
-  } catch (syncErr) {
-    console.warn('[alkanesExecuteTyped] proactive waitForIndexer failed, continuing:', syncErr);
   }
 
   // On devnet, use alkanesExecuteFull which handles signing + mining internally.

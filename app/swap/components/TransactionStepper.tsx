@@ -21,7 +21,7 @@
 import React from 'react';
 import { useTranslation } from '@/hooks/useTranslation';
 
-export type StepStatus = 'pending' | 'loading' | 'confirming' | 'complete' | 'error';
+export type StepStatus = 'pending' | 'loading' | 'confirming' | 'indexing' | 'complete' | 'error';
 
 export interface TransactionStep {
   /** Human-readable step label */
@@ -184,6 +184,12 @@ function StepRow({
             </div>
           )}
 
+          {step.status === 'indexing' && (
+            <span className="text-xs text-[color:var(--sf-text)]/60">
+              {t('swap.indexing') || 'Indexing…'}
+            </span>
+          )}
+
           {step.status === 'complete' && step.detail && (
             <span className="text-xs text-green-500/80">{step.detail}</span>
           )}
@@ -240,6 +246,7 @@ function StatusIcon({ status }: { status: StepStatus }) {
 
     case 'loading':
     case 'confirming':
+    case 'indexing':
       return (
         <div className="w-5 h-5 rounded-full border-2 border-[color:var(--sf-primary)] border-t-transparent animate-spin" />
       );

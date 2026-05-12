@@ -4,6 +4,7 @@ import { useMemo } from 'react';
 import Link from 'next/link';
 import { usePools } from '@/hooks/usePools';
 import { useAllPoolStats } from '@/hooks/usePoolData';
+import { pickPositive } from '@/lib/pools/mergeStats';
 import TokenIcon from '@/app/components/TokenIcon';
 import HomeMarketsButton from '@/app/components/HomeMarketsButton';
 import { useTranslation } from '@/hooks/useTranslation';
@@ -60,14 +61,18 @@ export default function TrendingPairs() {
       }
     }
 
-    // Merge stats with pools (usePools already provides TVL/volume from OYL Alkanode)
+    // Merge stats with pools (usePools already provides TVL/volume from OYL Alkanode).
+    // pickPositive (not `||`) so a `0` from the primary source doesn't
+    // short-circuit the stats overlay — the user-reported staging symptom
+    // (DIESEL/frBTC TVL=$0 → wrong trending pair selected) was caused by
+    // that exact bug. See lib/pools/mergeStats.ts header for context.
     const enrichedPools = filtered.map(p => {
       const stats = statsMap.get(p.id);
       return {
         ...p,
-        tvlUsd: p.tvlUsd || stats?.tvlUsd || 0,
-        vol24hUsd: p.vol24hUsd || stats?.volume24hUsd || 0,
-        vol30dUsd: p.vol30dUsd || stats?.volume30dUsd || 0,
+        tvlUsd: pickPositive(p.tvlUsd, stats?.tvlUsd),
+        vol24hUsd: pickPositive(p.vol24hUsd, stats?.volume24hUsd),
+        vol30dUsd: pickPositive(p.vol30dUsd, stats?.volume30dUsd),
       };
     });
 

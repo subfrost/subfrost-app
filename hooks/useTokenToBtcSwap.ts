@@ -24,11 +24,18 @@ import { useSwapMutation } from '@/hooks/useSwapMutation';
 import { useUnwrapMutation } from '@/hooks/useUnwrapMutation';
 import { useGlobalStore } from '@/stores/global';
 import { getConfig, getRpcUrl } from '@/utils/getConfig';
-import { getEsploraTx } from '@/lib/alkanes/rpc';
+import { getEsploraTx, getHeight } from '@/lib/alkanes/rpc';
 import type { OperationType } from '@/app/components/SwapSuccessNotification';
 
 export interface TokenToBtcSwapProgress {
-  type: 'swapping' | 'swap-confirming' | 'unwrapping' | 'complete' | 'error';
+  type:
+    | 'swapping'
+    | 'swap-confirming'
+    | 'unwrapping'
+    | 'unwrap-confirming'
+    | 'unwrap-indexing'
+    | 'complete'
+    | 'error';
   txId?: string;
   attempt?: number;
   maxAttempts?: number;
@@ -195,6 +202,9 @@ export function useTokenToBtcSwap() {
         throw new Error('Unwrap step failed — no transaction ID returned');
       }
 
+      const unwrapTxId = unwrapRes.transactionId;
+      params.onNotify(unwrapTxId, 'unwrap', 'Step 2/2');
+
       // Devnet: mine a block to confirm the unwrap so BTC balance updates.
       if (network === 'devnet' && address) {
         try {
@@ -208,8 +218,75 @@ export function useTokenToBtcSwap() {
         }
       }
 
-      params.onProgress({ type: 'complete', swapTxId, unwrapTxId: unwrapRes.transactionId });
-      params.onNotify(unwrapRes.transactionId, 'unwrap', 'Step 2/2');
+      // ---------------------------------------------------------------------
+      // Poll until the unwrap tx confirms. Mirrors the swap-confirming loop
+      // above. Without this the UI flips from "Broadcasting" to "Complete"
+      // the instant `broadcastTransaction` resolves — even though the tx is
+      // still in mempool. The user sees a fake-fast "complete" for the swap
+      // leg followed by a fake-stuck "Broadcasting" for the unwrap leg, when
+      // really both legs go through the same confirm-then-done path.
+      // Devnet skips polling — the manual mine above already confirmed it.
+      // ---------------------------------------------------------------------
+      if (network !== 'devnet') {
+        const pollInterval = isRegtest ? 1500 : 15000;
+        const maxPollAttempts = isRegtest ? 20 : 120;
+        let unwrapConfirmed = false;
+        let confirmationHeight: number | undefined;
+
+        for (let attempt = 0; attempt < maxPollAttempts; attempt++) {
+          params.onProgress({
+            type: 'unwrap-confirming',
+            txId: unwrapTxId,
+            attempt: attempt + 1,
+            maxAttempts: maxPollAttempts,
+            swapTxId,
+          });
+          await new Promise(resolve => setTimeout(resolve, pollInterval));
+          try {
+            const tx = await getEsploraTx(network!, unwrapTxId);
+            if (tx?.status?.confirmed) {
+              unwrapConfirmed = true;
+              confirmationHeight = tx.status.block_height;
+              break;
+            }
+          } catch {
+            // polling RPC error — keep retrying
+          }
+        }
+
+        if (!unwrapConfirmed) {
+          // Soft failure: the unwrap is broadcast and will eventually confirm.
+          // Don't throw — the user's frBTC is already burned and BTC is owed
+          // to them by the protocol. Just stop polling and mark complete so
+          // the UI doesn't hang forever on slow blocks.
+          console.warn('[useTokenToBtcSwap] Unwrap tx did not confirm within poll window; marking complete anyway:', unwrapTxId);
+        }
+
+        // -------------------------------------------------------------------
+        // Indexing beat — confirmed in a block but metashrew may still be
+        // catching up. Without this, the UI ticks ✓ but balances haven't
+        // refreshed yet, leaving the user wondering "did it actually finish?"
+        // We poll metashrew_height until it >= the confirmation block.
+        // Bounded short (max ~30s on mainnet) so a slow indexer doesn't hang
+        // the modal — balance queries will catch up via HeightPoller.
+        // -------------------------------------------------------------------
+        if (unwrapConfirmed && confirmationHeight) {
+          const indexPollInterval = isRegtest ? 1000 : 3000;
+          const maxIndexPolls = isRegtest ? 10 : 10;
+          for (let attempt = 0; attempt < maxIndexPolls; attempt++) {
+            params.onProgress({ type: 'unwrap-indexing', txId: unwrapTxId, swapTxId });
+            try {
+              const h = await getHeight(network!);
+              if (h >= confirmationHeight) break;
+            } catch {
+              // ignore — keep polling
+            }
+            await new Promise(resolve => setTimeout(resolve, indexPollInterval));
+          }
+        }
+      }
+
+      params.onProgress({ type: 'complete', swapTxId, unwrapTxId });
 
       return { swapTxId, unwrapTxId: unwrapRes.transactionId };
     },

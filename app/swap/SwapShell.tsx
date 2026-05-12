@@ -14,11 +14,13 @@ import { getConfig, getRpcUrl } from "@/utils/getConfig";
 // useSellableCurrencies removed — used alkanes_protorunesbyaddress (30s).
 // Now reuses walletBalances.alkanes from useEnrichedWalletData (~1s, already cached).
 import { useEnrichedWalletData } from "@/hooks/useEnrichedWalletData";
+import { usePendingTxs } from "@/hooks/usePendingTxs";
 import { useGlobalStore } from "@/stores/global";
 import { useFeeRate } from "@/hooks/useFeeRate";
 import { useBtcPrice } from "@/hooks/useBtcPrice";
-import { usePools } from "@/hooks/usePools";
+import { usePools, getTokenIconUrl } from "@/hooks/usePools";
 import { useAllPoolStats } from "@/hooks/usePoolData";
+import { pickPositive } from "@/lib/pools/mergeStats";
 import { useModalStore } from "@/stores/modals";
 import BigNumber from 'bignumber.js';
 import { useWrapMutation } from "@/hooks/useWrapMutation";
@@ -35,6 +37,7 @@ import { useAddLiquidityMutation } from "@/hooks/useAddLiquidityMutation";
 import { useAtomicWrapSwapMutation } from "@/hooks/useAtomicWrapSwapMutation";
 import { useAtomicWrapAddLiquidityMutation } from "@/hooks/useAtomicWrapAddLiquidityMutation";
 import { useTokenToBtcSwap } from "@/hooks/useTokenToBtcSwap";
+import { getEsploraTx, getHeight } from "@/lib/alkanes/rpc";
 import { useMatchedLpPool } from "@/hooks/useMatchedLpPool";
 import { usePoolStateLive } from "@/hooks/usePoolStateLive";
 import { computePairedLpAmount, computeRemoveLiquidityMinAmounts } from "@/lib/alkanes/liquidity-math";
@@ -67,8 +70,10 @@ type SwapFlowStep =
   | { type: 'wrap-confirming'; txId: string; attempt: number; maxAttempts: number }
   | { type: 'swapping' }
   | { type: 'swap-confirming'; txId: string; attempt: number; maxAttempts: number }
+  | { type: 'swap-indexing'; txId: string; wrapTxId?: string }
   | { type: 'unwrapping' }
-  | { type: 'unwrap-confirming'; txId: string; attempt: number; maxAttempts: number }
+  | { type: 'unwrap-confirming'; txId: string; attempt: number; maxAttempts: number; swapTxId?: string }
+  | { type: 'unwrap-indexing'; txId: string; swapTxId?: string }
   | { type: 'complete'; wrapTxId?: string; swapTxId?: string; unwrapTxId?: string }
   | { type: 'error'; step: 'wrap' | 'swap' | 'unwrap'; message: string; wrapTxId?: string; swapTxId?: string };
 
@@ -109,14 +114,20 @@ export default function SwapShell() {
     return basePools.map(pool => {
       const stats = statsMap.get(pool.id);
 
+      // pickPositive (not `||`) so a `0` from the primary `pool` doesn't
+      // short-circuit the stats overlay. Same rationale as TrendingPairs —
+      // see lib/pools/mergeStats.ts header. The token0/token1 split keeps
+      // its existing fallback to `pool.tvlUsd / 2` for symmetry, but uses
+      // pickPositive on the merged tvl too.
+      const mergedTvl = pickPositive(pool.tvlUsd, stats?.tvlUsd);
       return {
         ...pool,
-        tvlUsd: pool.tvlUsd || stats?.tvlUsd || 0,
-        token0TvlUsd: pool.token0TvlUsd || stats?.tvlToken0 || (pool.tvlUsd || 0) / 2,
-        token1TvlUsd: pool.token1TvlUsd || stats?.tvlToken1 || (pool.tvlUsd || 0) / 2,
-        vol24hUsd: pool.vol24hUsd || stats?.volume24hUsd || 0,
-        vol30dUsd: pool.vol30dUsd || stats?.volume30dUsd || 0,
-        apr: pool.apr || stats?.apr || 0,
+        tvlUsd: mergedTvl,
+        token0TvlUsd: pickPositive(pool.token0TvlUsd, stats?.tvlToken0, mergedTvl / 2),
+        token1TvlUsd: pickPositive(pool.token1TvlUsd, stats?.tvlToken1, mergedTvl / 2),
+        vol24hUsd: pickPositive(pool.vol24hUsd, stats?.volume24hUsd),
+        vol30dUsd: pickPositive(pool.vol30dUsd, stats?.volume30dUsd),
+        apr: pickPositive(pool.apr, stats?.apr),
       } as PoolSummary;
     });
   }, [poolsData?.items, poolStats]);
@@ -166,18 +177,93 @@ export default function SwapShell() {
   const [isLPSelectorOpen, setIsLPSelectorOpen] = useState(false);
   const [removeAmount, setRemoveAmount] = useState<string>("");
 
-  // Live pool state for the selected LP position. Polls /get-pool-details every
-  // 5s and on every block (HeightPoller). Used to compute slippage-protected
-  // min amounts against the *current* indexer snapshot rather than the bulk
-  // markets cache (~30s aggregate). Only enabled once the user has typed an
-  // amount — no point polling while the form is idle.
+  // Live pool state for the selected LP position. Used to compute
+  // slippage-protected min amounts against the *current* indexer snapshot
+  // rather than the bulk markets cache (~30s aggregate). Enabled as soon as
+  // a position is selected so the expected-withdrawal amounts can render
+  // synchronously — `staleTime: Infinity` + HeightPoller invalidation keep
+  // traffic bounded to one fetch per pool per block.
   const removeLpLiveState = usePoolStateLive(selectedLPPosition?.id, {
-    enabled: !!selectedLPPosition && !!removeAmount && parseFloat(removeAmount) > 0,
+    enabled: !!selectedLPPosition,
   });
 
   // Multi-step swap flow state (BTC→Token, Token→BTC)
   // JOURNAL (2026-03-15): Added to track progress and show TransactionStepper UI
   const [swapFlowStep, setSwapFlowStep] = useState<SwapFlowStep>({ type: 'idle' });
+
+  // Bundle-progress tracking for the BTC→Token atomic split-tx (CPFP)
+  // flow. The SDK builds and broadcasts Tx A (wrap) and Tx B (execute)
+  // sequentially inside one `executeAtomicSwap` call — during that
+  // window the JS side has no signal that Tx A is already in mempool
+  // and the stepper would otherwise show Step 2 as "Broadcasting…" for
+  // the entire 1-30s the SDK takes to broadcast both.
+  //
+  // We poll `usePendingTxs` (which merges IDB + WASM-side mempool) and
+  // count how many of *our* pending txs were added since the swap
+  // started. The atomic await is still the source of truth for
+  // success/error; the polling just upgrades the visible state from
+  // "Broadcasting…" to "Awaiting confirmation…" the moment Tx A lands
+  // in mempool, and again when Tx B does. CPFP guarantees they confirm
+  // in the same block, so a separate per-tx confirmation poll isn't
+  // useful here.
+  const { pendingTxs } = usePendingTxs();
+  const bundleStartCountRef = useRef<number | null>(null);
+
+  // Watch the pending count while a BTC→Token atomic swap is in flight.
+  // Count goes from baseline to baseline+1 (Tx A in mempool) → upgrade
+  // Step 1 to "confirming". From baseline+1 to baseline+2 (Tx B in
+  // mempool) → upgrade Step 2 to "confirming" too. The atomic await
+  // resolving will overwrite to 'complete'.
+  //
+  // The gate accepts both 'swapping' (initial) and 'wrap-confirming'
+  // (after we've already detected Tx A) so the second-tx detection
+  // can still fire. 'swap-confirming' / 'complete' / 'error' /
+  // 'idle' all stop the loop.
+  useEffect(() => {
+    // Clear the baseline when we leave the watched window so the
+    // count delta from a previous swap can't leak into the next.
+    if (
+      swapFlowStep.type === 'idle' ||
+      swapFlowStep.type === 'complete' ||
+      swapFlowStep.type === 'error'
+    ) {
+      bundleStartCountRef.current = null;
+      return;
+    }
+    if (
+      swapFlowStep.type !== 'swapping' &&
+      swapFlowStep.type !== 'wrap-confirming'
+    ) return;
+    if (bundleStartCountRef.current == null) return;
+    const newlyPending = pendingTxs.length - bundleStartCountRef.current;
+    if (newlyPending >= 2) {
+      // Both Tx A and Tx B are in our mempool view. CPFP-chained, will
+      // confirm together. Upgrade to swap-confirming so the stepper's
+      // Step 2 stops claiming "Broadcasting…" and shows "Awaiting
+      // confirmation…" instead.
+      const lastTwo = pendingTxs.slice(-2);
+      setSwapFlowStep({
+        type: 'swap-confirming',
+        txId: lastTwo[1]?.txid ?? lastTwo[0]?.txid ?? '',
+        attempt: 1,
+        // Bound the visible progress bar to mainnet block target. We
+        // don't actually wait this long — the next state transition
+        // (to 'complete') happens when executeAtomicSwap resolves.
+        maxAttempts: 60,
+      });
+    } else if (newlyPending >= 1) {
+      // Tx A is in mempool. Surface that to the user — still in the
+      // 'wrap-confirming' shape so Step 1 turns into a confirming
+      // indicator while Step 2 stays "loading" until Tx B lands.
+      const last = pendingTxs[pendingTxs.length - 1];
+      setSwapFlowStep({
+        type: 'wrap-confirming',
+        txId: last?.txid ?? '',
+        attempt: 1,
+        maxAttempts: 60,
+      });
+    }
+  }, [pendingTxs, swapFlowStep.type]);
 
   // LP positions from wallet (real data from useLPPositions hook)
   const { positions: lpPositions, isLoading: isLoadingLPPositions } = useLPPositions();
@@ -579,25 +665,8 @@ export default function SwapShell() {
       }
     });
 
-    // Also add tokens from user's wallet that aren't in pools yet
-    userCurrencies.forEach((currency: any) => {
-      const rawSym = currency.symbol || currency.name || currency.id;
-      if (!seen.has(currency.id) && shouldShowToken(currency.id, rawSym)) {
-        seen.add(currency.id);
-        // Resolve name now using tokenNamesMap (avoids showing numeric IDs)
-        const resolved = resolveTokenDisplay(currency.id, rawSym, currency.name || currency.symbol || currency.id, tokenNamesMap);
-        opts.push({
-          id: currency.id,
-          symbol: resolved.symbol,
-          name: resolved.name,
-          iconUrl: currency.iconUrl,
-          isAvailable: true,
-        });
-      }
-    });
-
     return opts;
-  }, [poolTokenMap, FRBTC_ALKANE_ID, BUSD_ALKANE_ID, protocolTokens, userCurrencies, tokenNamesMap, network, toToken, baseTokenIds]);
+  }, [poolTokenMap, FRBTC_ALKANE_ID, BUSD_ALKANE_ID, protocolTokens, network, toToken, baseTokenIds]);
 
   // Build TO options - show all tokens with pools (no alt-to-alt restriction)
   const toOptions: TokenMeta[] = useMemo(() => {
@@ -741,24 +810,8 @@ export default function SwapShell() {
       }
     });
 
-    // Also add tokens from user's wallet that have pools with FROM token
-    userCurrencies.forEach((currency: any) => {
-      const rawSym = currency.symbol || currency.name || currency.id;
-      if (!seen.has(currency.id) && shouldShowToken(currency.id, rawSym)) {
-        seen.add(currency.id);
-        const resolved = resolveTokenDisplay(currency.id, rawSym, currency.name || currency.symbol || currency.id, tokenNamesMap);
-        opts.push({
-          id: currency.id,
-          symbol: resolved.symbol,
-          name: resolved.name,
-          iconUrl: currency.iconUrl,
-          isAvailable: true,
-        });
-      }
-    });
-
     return opts;
-  }, [fromToken, poolTokenMap, FRBTC_ALKANE_ID, BUSD_ALKANE_ID, protocolTokens, userCurrencies, tokenNamesMap, baseTokenIds, markets, network]);
+  }, [fromToken, poolTokenMap, FRBTC_ALKANE_ID, BUSD_ALKANE_ID, protocolTokens, baseTokenIds, markets, network]);
 
   // walletBalances already declared above via useEnrichedWalletData
   // BTC balance from btcFast (instant) with enriched fallback
@@ -848,18 +901,18 @@ export default function SwapShell() {
   // Get price for any token (from user currencies or derive from pools)
   const getTokenPrice = (tokenId?: string): number | undefined => {
     if (!tokenId) return undefined;
-    
+
     // Handle BTC price separately
     if (tokenId === 'btc') {
       return btcPrice;
     }
-    
+
     // Check user currencies first (most reliable)
     const cur = idToUserCurrency.get(tokenId);
     if (cur?.priceUsd && cur.priceUsd > 0) {
       return cur.priceUsd;
     }
-    
+
     // For frBTC, use BTC price
     if (tokenId === FRBTC_ALKANE_ID) {
       return btcPrice;
@@ -868,6 +921,19 @@ export default function SwapShell() {
     // For bUSD and USDT, assume $1
     if (tokenId === BUSD_ALKANE_ID || tokenId === 'usdt') {
       return 1.0;
+    }
+
+    // Espo's global price catalog (`/get-alkanes` priceUsd) — works without
+    // a wallet connection AND without depending on the pools query landing
+    // first. Without this, swap inputs for tokens the user doesn't already
+    // hold show $0.00 in the precious window between page load and the
+    // pool-TVL derivation populating.
+    const meta = tokenNamesMap?.get(tokenId);
+    if (meta?.priceUsd && meta.priceUsd > 0) {
+      return meta.priceUsd;
+    }
+    if (meta?.priceInSatoshi && meta.priceInSatoshi > 0 && btcPrice && btcPrice > 0) {
+      return (meta.priceInSatoshi / 1e8) * btcPrice;
     }
 
     // Fallback: derive from pool TVL — works without a wallet connection.
@@ -949,10 +1015,11 @@ export default function SwapShell() {
           label: `${t('swap.step1Wrap') || 'Step 1: Wrap BTC → frBTC'}`,
           status: step.type === 'wrapping' ? 'loading'
                 : step.type === 'wrap-confirming' ? 'confirming'
-                : (step.type === 'swapping' || step.type === 'swap-confirming' || step.type === 'complete') ? 'complete'
+                : (step.type === 'swapping' || step.type === 'swap-confirming' || step.type === 'swap-indexing' || step.type === 'complete') ? 'complete'
                 : step.type === 'error' && step.step === 'wrap' ? 'error'
                 : 'pending',
           txId: step.type === 'wrap-confirming' ? step.txId
+              : step.type === 'swap-indexing' ? step.wrapTxId
               : step.type === 'complete' ? step.wrapTxId
               : step.type === 'error' ? step.wrapTxId
               : undefined,
@@ -964,10 +1031,12 @@ export default function SwapShell() {
           label: `${t('swap.step2Swap') || 'Step 2: Swap frBTC →'} ${toToken?.symbol || 'Token'}`,
           status: step.type === 'swapping' ? 'loading'
                 : step.type === 'swap-confirming' ? 'confirming'
+                : step.type === 'swap-indexing' ? 'indexing'
                 : step.type === 'complete' ? 'complete'
                 : step.type === 'error' && step.step === 'swap' ? 'error'
                 : 'pending',
           txId: step.type === 'swap-confirming' ? step.txId
+              : step.type === 'swap-indexing' ? step.txId
               : step.type === 'complete' ? step.swapTxId
               : step.type === 'error' ? step.swapTxId
               : undefined,
@@ -977,7 +1046,7 @@ export default function SwapShell() {
         },
       ];
       const currentIdx = step.type === 'wrapping' || step.type === 'wrap-confirming' ? 0
-                       : step.type === 'swapping' || step.type === 'swap-confirming' ? 1
+                       : step.type === 'swapping' || step.type === 'swap-confirming' || step.type === 'swap-indexing' ? 1
                        : step.type === 'complete' ? 1
                        : step.type === 'error' ? (step.step === 'wrap' ? 0 : 1)
                        : 0;
@@ -991,10 +1060,12 @@ export default function SwapShell() {
           label: `${t('swap.step1Swap') || 'Step 1: Swap'} ${fromToken?.symbol || 'Token'} → frBTC`,
           status: step.type === 'swapping' ? 'loading'
                 : step.type === 'swap-confirming' ? 'confirming'
-                : (step.type === 'unwrapping' || step.type === 'unwrap-confirming' || step.type === 'complete') ? 'complete'
+                : (step.type === 'unwrapping' || step.type === 'unwrap-confirming' || step.type === 'unwrap-indexing' || step.type === 'complete') ? 'complete'
                 : step.type === 'error' && step.step === 'swap' ? 'error'
                 : 'pending',
           txId: step.type === 'swap-confirming' ? step.txId
+              : step.type === 'unwrap-confirming' ? step.swapTxId
+              : step.type === 'unwrap-indexing' ? step.swapTxId
               : step.type === 'complete' ? step.swapTxId
               : step.type === 'error' ? step.swapTxId
               : undefined,
@@ -1006,10 +1077,12 @@ export default function SwapShell() {
           label: `${t('swap.step2Unwrap') || 'Step 2: Unwrap frBTC → BTC'}`,
           status: step.type === 'unwrapping' ? 'loading'
                 : step.type === 'unwrap-confirming' ? 'confirming'
+                : step.type === 'unwrap-indexing' ? 'indexing'
                 : step.type === 'complete' ? 'complete'
                 : step.type === 'error' && step.step === 'unwrap' ? 'error'
                 : 'pending',
           txId: step.type === 'unwrap-confirming' ? step.txId
+              : step.type === 'unwrap-indexing' ? step.txId
               : step.type === 'complete' ? step.unwrapTxId
               : undefined,
           pollingAttempt: step.type === 'unwrap-confirming' ? step.attempt : undefined,
@@ -1018,7 +1091,7 @@ export default function SwapShell() {
         },
       ];
       const currentIdx = step.type === 'swapping' || step.type === 'swap-confirming' ? 0
-                       : step.type === 'unwrapping' || step.type === 'unwrap-confirming' ? 1
+                       : step.type === 'unwrapping' || step.type === 'unwrap-confirming' || step.type === 'unwrap-indexing' ? 1
                        : step.type === 'complete' ? 1
                        : step.type === 'error' ? (step.step === 'swap' ? 0 : 1)
                        : 0;
@@ -1205,6 +1278,11 @@ export default function SwapShell() {
       }
 
       try {
+        // Snapshot pending-tx count so the bundle progress effect can
+        // detect deltas (Tx A → +1, Tx A+B → +2) and upgrade Step 1/2
+        // to 'confirming' as the SDK broadcasts them. See the
+        // bundleStartCountRef effect above.
+        bundleStartCountRef.current = pendingTxs.length;
         setSwapFlowStep({ type: 'swapping' });
         const result = await executeAtomicSwap({
           btcAmount: fromAmount,
@@ -1218,10 +1296,77 @@ export default function SwapShell() {
         });
 
         if (result?.success && result.transactionId) {
-          setSwapFlowStep({ type: 'complete', swapTxId: result.transactionId });
-          showNotification(result.transactionId, 'swap');
-          setTimeout(() => refreshWalletData(), 2000);
-          setTimeout(() => setSwapFlowStep({ type: 'idle' }), 5000);
+          const swapTxId = result.transactionId;
+          // splitTransactions=true returns wrapTxId (parent) + transactionId
+          // (child/reveal). CPFP-anchored, so they confirm together; we still
+          // poll the swap (child) tx because it's the one the user cares about
+          // — the wrap step gets ✓ from the same confirmation.
+          const wrapTxId = (result as any).wrapTxId as string | undefined;
+          showNotification(swapTxId, 'swap');
+
+          // Devnet/regtest skip polling — useAtomicWrapSwapMutation auto-mines.
+          const isLocal = ['devnet', 'regtest-local', 'qubitcoin-regtest'].includes(network ?? '');
+          const isRegtestRemote = ['regtest', 'subfrost-regtest'].includes(network ?? '');
+          if (isLocal) {
+            setSwapFlowStep({ type: 'complete', swapTxId, wrapTxId });
+            setTimeout(() => refreshWalletData(), 2000);
+            setTimeout(() => setSwapFlowStep({ type: 'idle' }), 5000);
+          } else {
+            // Confirmation poll. "Broadcasting" was misleading post-broadcast:
+            // both txs are in mempool, CPFP is anchored, but the UI used to
+            // jump straight from "Broadcasting" → ✓ when broadcast resolved.
+            // Now we explicitly show "Waiting for confirmation" until the
+            // block lands, matching what the Token→BTC flow does.
+            const pollInterval = isRegtestRemote ? 1500 : 15000;
+            const maxPollAttempts = isRegtestRemote ? 20 : 120;
+            let confirmed = false;
+            let confirmationHeight: number | undefined;
+            for (let attempt = 0; attempt < maxPollAttempts; attempt++) {
+              setSwapFlowStep({
+                type: 'swap-confirming',
+                txId: swapTxId,
+                attempt: attempt + 1,
+                maxAttempts: maxPollAttempts,
+              });
+              await new Promise(resolve => setTimeout(resolve, pollInterval));
+              try {
+                const tx = await getEsploraTx(network!, swapTxId);
+                if (tx?.status?.confirmed) {
+                  confirmed = true;
+                  confirmationHeight = tx.status.block_height;
+                  break;
+                }
+              } catch {
+                // polling RPC error — keep retrying
+              }
+            }
+            if (!confirmed) {
+              console.warn('[SWAP] BTC → Token swap did not confirm within poll window; marking complete:', swapTxId);
+            }
+
+            // Indexing beat — block landed but metashrew may still be
+            // catching up; balances won't refresh until metashrew_height
+            // reaches the confirmation block. Bounded short so a slow
+            // indexer doesn't hang the modal.
+            if (confirmed && confirmationHeight) {
+              const indexPollInterval = isRegtestRemote ? 1000 : 3000;
+              const maxIndexPolls = 10;
+              for (let attempt = 0; attempt < maxIndexPolls; attempt++) {
+                setSwapFlowStep({ type: 'swap-indexing', txId: swapTxId, wrapTxId });
+                try {
+                  const h = await getHeight(network!);
+                  if (h >= confirmationHeight) break;
+                } catch {
+                  // ignore — keep polling
+                }
+                await new Promise(resolve => setTimeout(resolve, indexPollInterval));
+              }
+            }
+
+            setSwapFlowStep({ type: 'complete', swapTxId, wrapTxId });
+            setTimeout(() => refreshWalletData(), 2000);
+            setTimeout(() => setSwapFlowStep({ type: 'idle' }), 5000);
+          }
         } else {
           setSwapFlowStep({ type: 'error', step: 'swap', message: 'No transaction ID returned' });
         }
@@ -1307,7 +1452,17 @@ export default function SwapShell() {
     }
 
     // Default AMM swap (frBTC/DIESEL or other alkane pairs)
-    if (!quote) return;
+    // DIAGNOSTIC 2026-05-11: log when click is silently dropped because the
+    // quote engine hasn't produced a quote yet. Symptom: user reports "click
+    // does nothing, no logs, hangs forever" — the quote was still computing
+    // when they clicked, the function returned silently, and there was no
+    // user-visible signal of why. Should be replaced with a real CTA-disable
+    // (`!quote` should grey out the button until the quote is ready).
+    if (!quote) {
+      console.warn('[SWAP] handleSwap fired but quote is undefined — quote still computing or failed. fromToken:', fromToken, 'toToken:', toToken, 'fromAmount:', fromAmount, 'toAmount:', toAmount, 'isCalculating:', isCalculating);
+      showSwapError(t('errors.poolNotFound'));
+      return;
+    }
 
     // Validate that we have either a poolId (direct swap) or a route (multi-hop swap).
     // Multi-hop swaps use the factory's opcode 13 with a token path, not a single poolId.
@@ -1637,7 +1792,7 @@ export default function SwapShell() {
         id: token.id,
         symbol: resolved.symbol,
         name: resolved.name,
-        iconUrl: token.id === 'btc' ? undefined : (token.iconUrl || currency?.iconUrl),
+        iconUrl: token.id === 'btc' ? undefined : (token.iconUrl || currency?.iconUrl || getTokenIconUrl(token.id, network)),
         balance: token.id === 'btc' ? String(btcBalanceSats ?? 0) : currency?.balance,
         price: getTokenPrice(token.id),
         isAvailable,
@@ -1645,7 +1800,7 @@ export default function SwapShell() {
     });
 
     return sortTokenOptions(options);
-  }, [fromOptions, idToUserCurrency, tokenNamesMap, walletAlkaneNames, btcBalanceSats, toToken, isAllowedPair, btcPrice]);
+  }, [fromOptions, idToUserCurrency, tokenNamesMap, walletAlkaneNames, btcBalanceSats, toToken, isAllowedPair, btcPrice, network]);
 
   const toTokenOptions = useMemo<TokenOption[]>(() => {
     const options = toOptions.map((token) => {
@@ -1661,7 +1816,7 @@ export default function SwapShell() {
         id: token.id,
         symbol: resolved.symbol,
         name: resolved.name,
-        iconUrl: token.id === 'btc' ? undefined : (token.iconUrl || currency?.iconUrl),
+        iconUrl: token.id === 'btc' ? undefined : (token.iconUrl || currency?.iconUrl || getTokenIconUrl(token.id, network)),
         balance: token.id === 'btc' ? String(btcBalanceSats ?? 0) : currency?.balance,
         price: getTokenPrice(token.id),
         isAvailable,
@@ -1669,7 +1824,7 @@ export default function SwapShell() {
     });
 
     return sortTokenOptions(options);
-  }, [toOptions, idToUserCurrency, tokenNamesMap, walletAlkaneNames, btcBalanceSats, fromToken, isAllowedPair, btcPrice]);
+  }, [toOptions, idToUserCurrency, tokenNamesMap, walletAlkaneNames, btcBalanceSats, fromToken, isAllowedPair, btcPrice, network]);
 
   // Pool token options - show all tokens that appear in any pool
   const poolTokenOptions = useMemo<TokenOption[]>(() => {
@@ -1733,7 +1888,7 @@ export default function SwapShell() {
           id: FRBTC_ALKANE_ID,
           symbol: 'frBTC',
           name: 'frBTC',
-          iconUrl: frbtcCurrency?.iconUrl,
+          iconUrl: getTokenIconUrl(FRBTC_ALKANE_ID, network),
           balance: frbtcCurrency?.balance,
           price: getTokenPrice(FRBTC_ALKANE_ID),
           isAvailable: frbtcIsAvailable,
@@ -1756,7 +1911,7 @@ export default function SwapShell() {
           id: BUSD_ALKANE_ID,
           symbol: busdToken?.symbol ?? defaultSymbol,
           name: busdToken?.name ?? defaultSymbol,
-          iconUrl: busdToken?.iconUrl || busdCurrency?.iconUrl,
+          iconUrl: busdToken?.iconUrl || getTokenIconUrl(BUSD_ALKANE_ID, network),
           balance: busdCurrency?.balance,
           price: getTokenPrice(BUSD_ALKANE_ID),
           isAvailable: busdIsAvailable,
@@ -1785,7 +1940,7 @@ export default function SwapShell() {
           id: poolToken.id,
           symbol: resolved.symbol,
           name: resolved.name,
-          iconUrl: poolToken.iconUrl || currency?.iconUrl,
+          iconUrl: poolToken.iconUrl || getTokenIconUrl(poolToken.id, network),
           balance: poolToken.id === 'btc' ? String(btcBalanceSats ?? 0) : currency?.balance,
           price: getTokenPrice(poolToken.id),
           isAvailable,
@@ -1817,7 +1972,7 @@ export default function SwapShell() {
           id: currency.id,
           symbol: resolved.symbol,
           name: resolved.name,
-          iconUrl: currency.iconUrl,
+          iconUrl: getTokenIconUrl(currency.id, network),
           balance: currency.balance,
           price: getTokenPrice(currency.id),
           isAvailable,
@@ -1956,13 +2111,13 @@ export default function SwapShell() {
   // against the current state-trie ratio rather than the cached one. Without
   // this, users typing in the AddLiquidity inputs see a stale paired value
   // and can hit `amountBMin` reverts even at moderate slippage when supply
-  // has drifted since the markets snapshot. Enabled only when at least one
-  // side has been typed — idle pair selection shouldn't trigger polling.
-  const addLpHasAmount =
-    (!!poolToken0Amount && parseFloat(poolToken0Amount) > 0) ||
-    (!!poolToken1Amount && parseFloat(poolToken1Amount) > 0);
+  // has drifted since the markets snapshot. Enabled as soon as a pair is
+  // matched — pre-fetching the reserves removes the ~500ms lag the user
+  // would otherwise see on the first amount keystroke (computePaired runs
+  // synchronously and returns null while the fetch is still in flight).
+  // `staleTime: Infinity` in usePoolStateLive prevents any extra traffic.
   const addLpLiveState = usePoolStateLive(matchedLpPool?.id, {
-    enabled: !!matchedLpPool && addLpHasAmount,
+    enabled: !!matchedLpPool,
   });
 
   // Auto-calculate the paired LP amount based on the matched pool's reserve

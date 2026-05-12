@@ -25,10 +25,17 @@ export type FrbtcPremiumData = {
 // Re-export token display type
 export type TokenDisplay = { id: string; name?: string; symbol?: string };
 
-// Hardcoded fallbacks for well-known tokens
+// Hardcoded canonical names. Checked before espo so protocol-canonical
+// alkanes (genesis tokens, etc.) resolve instantly and don't fall through to
+// the raw-id fallback when espo has no metadata for them.
 const KNOWN_TOKENS: Record<string, TokenDisplay> = {
   btc: { id: 'btc', name: 'Bitcoin', symbol: 'BTC' },
   frbtc: { id: 'frbtc', name: 'frBTC', symbol: 'frBTC' },
+  '32:0': { id: '32:0', name: 'frBTC', symbol: 'frBTC' },
+  '2:0': { id: '2:0', name: 'DIESEL', symbol: 'DIESEL' },
+  '2:56801': { id: '2:56801', name: 'bUSD', symbol: 'bUSD' },
+  '2:68479': { id: '2:68479', name: 'TORTILLA', symbol: 'TORTILLA' },
+  '2:69': { id: '2:69', name: 'FARTANE', symbol: 'FARTANE' },
 };
 
 // ---------------------------------------------------------------------------
@@ -266,7 +273,10 @@ async function fetchAlkaneNamesBatch(
     if (r.name) {
       map[r.id] = { id: r.id, name: r.name, symbol: r.symbol };
     } else {
-      map[r.id] = { id: r.id };
+      // Espo returned no metadata. Fall back to the raw id so consumers'
+      // `name/symbol` checks resolve and the UI renders something instead of
+      // looping on a skeleton forever (see ActivityFeed pairLoaded gate).
+      map[r.id] = { id: r.id, name: r.id, symbol: r.id };
     }
   }
 

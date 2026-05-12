@@ -152,10 +152,8 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import BigNumber from 'bignumber.js';
 import { useWallet } from '@/context/WalletContext';
 import { useSandshrewProvider } from '@/hooks/useSandshrewProvider';
-import { useWalletUtxoCache, useSyncStatus } from '@/hooks/useWalletUtxoCache';
+import { useWalletUtxoCache } from '@/hooks/useWalletUtxoCache';
 import { useTransactionConfirm } from '@/context/TransactionConfirmContext';
-import { useIndexerSync } from '@/context/IndexerSyncContext';
-import { waitForIndexerSync } from '@/lib/alkanes/waitForIndexerSync';
 import { getConfig } from '@/utils/getConfig';
 import { getTokenSymbol } from '@/lib/alkanes-client';
 import { FRBTC_WRAP_FEE_PER_1000 } from '@/constants/alkanes';
@@ -232,14 +230,11 @@ export function useSwapMutation() {
   const provider = useSandshrewProvider();
   const queryClient = useQueryClient();
   const { requestConfirmation } = useTransactionConfirm();
-  const indexerSync = useIndexerSync();
   const { FRBTC_ALKANE_ID, ALKANE_FACTORY_ID } = getConfig(network);
   // Pre-warmed UTXO snapshot — passed into alkanesExecuteTyped so the
   // SDK skips its internal BTC-fee fanout. Per-click latency win on
   // wallets with many UTXOs (user-reported, 2026-05-05).
   const utxoCache = useWalletUtxoCache();
-  const syncStatus = useSyncStatus();
-
   // Fetch dynamic frBTC wrap/unwrap fees
   const { data: premiumData } = useFrbtcPremium();
   const wrapFee = premiumData?.wrapFeePerThousand ?? FRBTC_WRAP_FEE_PER_1000;
@@ -251,21 +246,6 @@ export function useSwapMutation() {
         console.error('[useSwapMutation] ❌ Wallet not connected');
         throw new Error('Wallet not connected');
       }
-      // Sync gate — refuse to submit while metashrew is behind bitcoind.
-      // Skipped on local devnet/regtest where the user mines blocks.
-      const isLocalNetwork = ['devnet', 'regtest-local', 'qubitcoin-regtest'].includes(network ?? '');
-      if (!isLocalNetwork && syncStatus.metashrewHeight > 0 && !syncStatus.inSync) {
-        indexerSync.start('Preparing swap');
-        try {
-          await waitForIndexerSync({
-            network: network ?? 'mainnet',
-            onProgress: (p) => indexerSync.update(p),
-          });
-        } finally {
-          indexerSync.finish();
-        }
-      }
-
       // Ensure browser wallet session is active before building PSBT
       if (walletType === 'browser') {
         const { ensureWalletSession } = await import('@/lib/wallet/browserWalletSigning');
@@ -472,16 +452,25 @@ export function useSwapMutation() {
 
 
 
-        // Check if SDK auto-completed the transaction
+        // Check if SDK auto-completed the transaction.
+        //
+        // splitTransactions=true returns an EnhancedExecuteResult with both
+        // `wrap_txid` (parent CPFP-payable tx) and `reveal_txid` (child).
+        // Surface both so the UI stepper can label and confirm-poll each leg
+        // independently — without this, callers only see `reveal_txid` and
+        // lose track of the wrap leg entirely.
         if (result?.txid || result?.reveal_txid) {
           const txId = result.txid || result.reveal_txid;
+          const wrapTxId = result.wrap_txid || result.split_txid;
           return {
             success: true,
             transactionId: txId,
+            wrapTxId: wrapTxId || undefined,
             frbtcUnwrapTxId: undefined,
           } as {
             success: boolean;
             transactionId?: string;
+            wrapTxId?: string;
             frbtcUnwrapTxId?: string;
           };
         }
@@ -753,10 +742,12 @@ export function useSwapMutation() {
           return {
             success: true,
             transactionId: broadcastTxid || txid,
+            wrapTxId: undefined,
             frbtcUnwrapTxId: undefined,
           } as {
             success: boolean;
             transactionId?: string;
+            wrapTxId?: string;
             frbtcUnwrapTxId?: string;
           };
         }
@@ -764,13 +755,16 @@ export function useSwapMutation() {
         // Check if execution completed directly
         if (result?.complete) {
           const txId = result.complete?.reveal_txid || result.complete?.commit_txid;
+          const wrapTxId = result.complete?.wrap_txid || result.complete?.split_txid;
           return {
             success: true,
             transactionId: txId,
+            wrapTxId: wrapTxId || undefined,
             frbtcUnwrapTxId: undefined,
           } as {
             success: boolean;
             transactionId?: string;
+            wrapTxId?: string;
             frbtcUnwrapTxId?: string;
           };
         }

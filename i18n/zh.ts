@@ -323,6 +323,11 @@ const zh: Record<string, string> = {
   'settings.passwordRequired': '\u5bc6\u7801\u4e0d\u80fd\u4e3a\u7a7a',
   'settings.noKeystore': '\u672a\u627e\u5230\u5bc6\u94a5\u5e93',
   'settings.invalidPassword': '\u5bc6\u7801\u65e0\u6548\u6216\u89e3\u5bc6\u5931\u8d25',
+  'settings.advancedOptions': '\u9ad8\u7ea7\u9009\u9879',
+  'settings.ignoreOrdinals': '\u5ffd\u7565\u94ed\u6587',
+  'settings.ignoreRunes': '\u5ffd\u7565 Runes',
+  'settings.ignoreOrdinalsDescription': 'Subfrost \u4e0d\u7d22\u5f15\u94ed\u6587\u3002\u8bf7\u52ff\u5728\u672c\u5e94\u7528\u4e2d\u4f7f\u7528\u6301\u6709\u94ed\u6587\u7684\u94b1\u5305 \u2014 \u5b83\u4eec\u53ef\u80fd\u5728\u4ea4\u6613\u4e2d\u4f5c\u4e3a\u624b\u7eed\u8d39\u88ab\u9500\u6bc1\u3002',
+  'settings.ignoreRunesDescription': 'Subfrost \u4e0d\u7d22\u5f15 Runes\u3002\u8bf7\u52ff\u5728\u672c\u5e94\u7528\u4e2d\u4f7f\u7528\u6301\u6709 Runes \u7684\u94b1\u5305 \u2014 \u5b83\u4eec\u53ef\u80fd\u5728\u4ea4\u6613\u4e2d\u4f5c\u4e3a\u624b\u7eed\u8d39\u88ab\u9500\u6bc1\u3002',
 
   // Vaults
   'vaults.title': 'Defi \u91d1\u5e93\uff08\u9884\u89c8\uff09',
@@ -816,7 +821,7 @@ const zh: Record<string, string> = {
   'wallet.browserExtensionWallets': '浏览器扩展钱包',
   'wallet.newPassword': '新密码',
   'wallet.enterRecoveryPhrase': '输入您的 12 或 24 个单词的助记词',
-  'wallet.restoreMnemonicWarning': '警告：从其他提供商导入钱包将无法检测其中持有的 runes 或铭文。在本应用中进行的交易可能会销毁它们。如果您的钱包持有 runes 或铭文，我们建议改用浏览器扩展钱包。',
+  'wallet.runesInscriptionsWarning': '本应用不支持 runes 或铭文。使用持有这些资产的钱包可能会导致它们被销毁。',
   'wallet.createPassword': '创建密码',
   'wallet.restoring': '正在恢复...',
   'wallet.uploadKeystoreDesc': '上传之前导出的 JSON 密钥库文件以恢复您的钱包。',

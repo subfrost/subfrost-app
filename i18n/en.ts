@@ -327,10 +327,10 @@ const en: Record<string, string> = {
   'settings.noKeystore': 'No keystore found',
   'settings.invalidPassword': 'Invalid password or decryption failed',
   'settings.advancedOptions': 'Advanced Options',
-  'settings.ignoreOrdinals': 'Ignore Ordinals',
+  'settings.ignoreOrdinals': 'Ignore Inscriptions',
   'settings.ignoreRunes': 'Ignore Runes',
-  'settings.ignoreOrdinalsDescription': 'Treat all UTXOs as spendable, ignoring any inscriptions. Disable this to protect inscription-bearing UTXOs from being spent.',
-  'settings.ignoreRunesDescription': 'Treat all UTXOs as spendable, ignoring any runes. Disable this to protect rune-bearing UTXOs from being spent.',
+  'settings.ignoreOrdinalsDescription': 'Subfrost does not index inscriptions. Do not use a wallet that holds inscriptions with this app — they may be burned as fees during transactions.',
+  'settings.ignoreRunesDescription': 'Subfrost does not index runes. Do not use a wallet that holds runes with this app — they may be burned as fees during transactions.',
 
   // Vaults
   'vaults.title': 'Defi Vaults (Preview)',
@@ -824,7 +824,7 @@ const en: Record<string, string> = {
   'wallet.browserExtensionWallets': 'Browser Extension Wallets',
   'wallet.newPassword': 'New Password',
   'wallet.enterRecoveryPhrase': 'Enter your 12 or 24 word recovery phrase',
-  'wallet.restoreMnemonicWarning': 'Warning: Importing a wallet from another provider will not detect runes or inscriptions held in it. Transactions made on this app may burn them. If your wallet holds runes or inscriptions, we recommend using a browser extension wallet instead.',
+  'wallet.runesInscriptionsWarning': 'This app does not support runes or inscriptions. Using a wallet that holds these assets may result in them being burned.',
   'wallet.createPassword': 'Create a password',
   'wallet.restoring': 'Restoring...',
   'wallet.uploadKeystoreDesc': 'Upload a previously exported JSON keystore file to restore your wallet.',
