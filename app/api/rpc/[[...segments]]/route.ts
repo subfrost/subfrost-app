@@ -86,23 +86,21 @@ const RPC_ENDPOINTS: Record<string, string> = {
   oylnet: 'https://regtest.subfrost.io/v4/5d37098b75581792a44b9d230d48aa75',
 };
 
-// Per-network metashrew-only endpoint. When set for a network, JSON-RPC
-// requests with `metashrew_view` AND `metashrew_height` route here
-// instead of `RPC_ENDPOINTS[network]`. Other methods and REST sub-paths
-// still go through the gateway endpoint.
+// Per-network metashrew-only endpoint override.
 //
-// Both metashrew methods share /v6 because (a) it's significantly faster
-// for the wallet UTXO prewarm fanout and opcode-999 simulate, and (b) /v4's
-// metashrew-unwrap upstream is ~15% flaky on the SDK's 500ms height poll.
-// /v6's anonymous 20 req/min rate limit is the only obstacle, and it's
-// bypassed by attaching the SUBFROST_V6_API_KEY auth header in
-// `buildHeadersForUrl` below.
+// 2026-05-11: emptied. Per flex (alkanes-rs maintainer) the load-balanced
+// metashrew upgrades that previously only lived behind /v6/subfrost were
+// rolled out to /v4/subfrost — so the entire RPC surface (alkanes_*,
+// esplora_*, metashrew_view, metashrew_height) is now answered by /v4 with
+// no flap. The /v6 anonymous tier still enforces a 20 req/min rate limit
+// (which we used to side-step with SUBFROST_V6_API_KEY), and flex plans to
+// remove /v6 entirely as redundant. Routing every method through one
+// endpoint also avoids the cross-replica height-vs-view drift PR #117 was
+// chasing.
 //
-// Other networks left undefined (no override → use the gateway URL for
-// everything).
-const METASHREW_RPC_ENDPOINTS: Record<string, string | undefined> = {
-  mainnet: 'https://mainnet.subfrost.io/v6/subfrost',
-};
+// To re-enable a per-method metashrew split (e.g. if /v6 comes back as a
+// dedicated CDN-fronted view-only tier), add `mainnet: '<url>'` back here.
+const METASHREW_RPC_ENDPOINTS: Record<string, string | undefined> = {};
 
 // Subfrost API key for /v6/subfrost authenticated requests. Read once at
 // module load (not per-request) — the key doesn't change at runtime, and

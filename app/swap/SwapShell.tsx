@@ -1547,9 +1547,10 @@ export default function SwapShell() {
     const isAtomicWrapAdd = btcOnSide0 || btcOnSide1;
 
     try {
-      const poolId = selectedPool?.id
+      // Pool id must follow the liquidity-tab pair, not the chart tab.
+      const poolId = matchedLpPool?.id
         ? (() => {
-            const [block, tx] = selectedPool.id.split(':').map(Number);
+            const [block, tx] = matchedLpPool.id.split(':').map(Number);
             return { block, tx };
           })()
         : undefined;
