@@ -47,6 +47,8 @@ export interface AlkanesExecuteTypedParams {
    *  - 'burn': spend inscribed UTXOs without protection (destroys inscriptions)
    */
   ordinalsStrategy?: 'exclude' | 'preserve' | 'burn';
+  /** Selects the SDK's UTXO data source. App default is `espo`. */
+  utxoSource?: 'metashrew' | 'espo';
   /** Protect taproot UTXOs from being spent for BTC fees (default: true).
    *  When true, taproot UTXOs are only used for alkane token spending.
    *  Set to false for single-address wallets (UniSat, OKX) where taproot is the only address.

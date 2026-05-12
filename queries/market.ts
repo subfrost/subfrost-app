@@ -243,40 +243,38 @@ async function fetchAlkaneNamesBatch(
 
   const rpcUrl = `/api/rpc/${network || 'mainnet'}/espo`;
 
-  const results = await Promise.all(
-    alkaneIds.map(async (id) => {
-      try {
-        const resp = await fetch(rpcUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          signal: AbortSignal.timeout(5000),
-          body: JSON.stringify({
-            jsonrpc: '2.0', id: 1,
-            method: 'essentials.get_alkane_info',
-            params: { alkane: id },
-          }),
-        });
-        const json = await resp.json();
-        const data = json?.result;
-        if (data?.name) {
-          const name = (data.name as string).replace('SUBFROST BTC', 'frBTC');
-          return { id, name, symbol: data.symbol || '' };
-        }
-        return { id, name: undefined as string | undefined, symbol: '' };
-      } catch {
-        return { id, name: undefined as string | undefined, symbol: '' };
-      }
-    }),
-  );
+  try {
+    const request = alkaneIds.map((id, index) => ({
+      jsonrpc: '2.0',
+      id: index + 1,
+      method: 'essentials.get_alkane_info',
+      params: { alkane: id },
+    }));
+    const resp = await fetch(rpcUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(5000),
+      body: JSON.stringify(request),
+    });
+    const json = await resp.json();
+    const responses = Array.isArray(json) ? json : [];
+    const byId = new Map<number, any>();
+    for (const item of responses) {
+      if (typeof item?.id === 'number') byId.set(item.id, item);
+    }
 
-  for (const r of results) {
-    if (r.name) {
-      map[r.id] = { id: r.id, name: r.name, symbol: r.symbol };
-    } else {
-      // Espo returned no metadata. Fall back to the raw id so consumers'
-      // `name/symbol` checks resolve and the UI renders something instead of
-      // looping on a skeleton forever (see ActivityFeed pairLoaded gate).
-      map[r.id] = { id: r.id, name: r.id, symbol: r.id };
+    for (const [index, id] of alkaneIds.entries()) {
+      const data = byId.get(index + 1)?.result;
+      if (data?.name) {
+        const name = (data.name as string).replace('SUBFROST BTC', 'frBTC');
+        map[id] = { id, name, symbol: data.symbol || '' };
+      } else {
+        map[id] = { id, name: id, symbol: id };
+      }
+    }
+  } catch {
+    for (const id of alkaneIds) {
+      map[id] = { id, name: id, symbol: id };
     }
   }
 

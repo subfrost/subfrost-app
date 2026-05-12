@@ -58,6 +58,7 @@
 import * as bitcoin from 'bitcoinjs-lib';
 import { parseMaxVoutFromProtostones, extractPsbtBase64, getBitcoinNetwork } from './helpers';
 import type { AlkanesExecuteTypedParams } from './types';
+import { getAlkanesDataSource } from './dataSource';
 
 type WebProvider = import('@alkanes/ts-sdk/wasm').WebProvider;
 
@@ -93,6 +94,7 @@ export async function alkanesExecuteTyped(
     params.changeAddress ?? params.txContext?.btcChangeAddress ?? 'p2wpkh:0';
   options.alkanes_change_address =
     params.alkanesChangeAddress ?? params.txContext?.alkanesChangeAddress ?? 'p2tr:0';
+  options.utxo_source = params.utxoSource ?? getAlkanesDataSource(params.network);
 
   if (params.traceEnabled !== undefined) options.trace_enabled = params.traceEnabled;
   if (params.mineEnabled !== undefined) options.mine_enabled = params.mineEnabled;
@@ -216,15 +218,6 @@ export async function alkanesExecuteTyped(
     }
   }
 
-  const toAddressesJson = JSON.stringify(toAddresses);
-  const optionsJson = JSON.stringify(options);
-
-  console.log('[alkanesExecuteTyped] to_addresses:', toAddressesJson);
-  console.log('[alkanesExecuteTyped] input_requirements:', params.inputRequirements);
-  console.log('[alkanesExecuteTyped] protostones:', params.protostones);
-  console.log('[alkanesExecuteTyped] fee_rate:', params.feeRate);
-  console.log('[alkanesExecuteTyped] options:', optionsJson);
-
   // Indexer-aware UTXO height filter (2026-05-10, replaces global lag wait).
   //
   // Fetch the alkanes indexer's current height and pass it as
@@ -244,7 +237,7 @@ export async function alkanesExecuteTyped(
   //
   // On local networks (devnet/regtest) we skip this probe — the user
   // mines manually and selecting UTXOs above metashrew's height is fine.
-  if (!options.max_indexed_height) {
+  if (!options.max_indexed_height && options.utxo_source !== 'espo') {
     try {
       const rpcUrl =
         (typeof window !== 'undefined' &&
@@ -270,6 +263,15 @@ export async function alkanesExecuteTyped(
       console.warn('[alkanesExecuteTyped] metashrew_height probe failed, continuing without filter:', probeErr);
     }
   }
+
+  const toAddressesJson = JSON.stringify(toAddresses);
+  const optionsJson = JSON.stringify(options);
+
+  console.log('[alkanesExecuteTyped] to_addresses:', toAddressesJson);
+  console.log('[alkanesExecuteTyped] input_requirements:', params.inputRequirements);
+  console.log('[alkanesExecuteTyped] protostones:', params.protostones);
+  console.log('[alkanesExecuteTyped] fee_rate:', params.feeRate);
+  console.log('[alkanesExecuteTyped] options:', optionsJson);
 
   // On devnet, use alkanesExecuteFull which handles signing + mining internally.
   // alkanesExecuteWithStrings relies on the SDK's data API for UTXO discovery,

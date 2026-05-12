@@ -116,8 +116,9 @@ describe('WalletDashboardPage (page.tsx)', () => {
     expect(src).toMatch(/initialAlkane=\{sendAlkane\}/);
   });
 
-  it('renders BitcoinBalanceCard without props', () => {
-    expect(src).toMatch(/<BitcoinBalanceCard\s*\/>/);
+  it('passes Send and Receive handlers to BitcoinBalanceCard', () => {
+    expect(src).toMatch(/<BitcoinBalanceCard[\s\S]*?onSend=\{\(\)\s*=>\s*setShowSendModal\(true\)\}/);
+    expect(src).toMatch(/onReceive=\{\(\)\s*=>\s*setShowReceiveModal\(true\)\}/);
   });
 
   it('has a transaction history refresh button with RefreshCw icon', () => {
@@ -372,9 +373,10 @@ describe('TransactionHistory', () => {
     expect(src).toMatch(/espo\.sh\/tx/);
   });
 
-  it('shows alkanes badge for transactions with protostones', () => {
-    expect(src).toMatch(/tx\.hasProtostones/);
-    expect(src).toMatch(/Zap/);
+  it('renders alkane transaction summaries without the old alkane badge', () => {
+    expect(src).toMatch(/AlkaneTraceSummaries/);
+    expect(src).toMatch(/tx\.alkaneSummaries/);
+    expect(src).not.toMatch(/txHistory\.alkanes/);
   });
 
   it('has refresh capability', () => {

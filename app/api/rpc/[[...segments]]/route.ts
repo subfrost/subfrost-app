@@ -168,6 +168,8 @@ const BATCH_RPC_ENDPOINTS: Record<string, string> = {
 // below. Splitting JSON-RPC primary is out of scope here because alkanode
 // hosts the espo REST contract but not the full subfrost JSON-RPC gateway.
 const ALKANODE_OYL_MAINNET = 'https://oyl.alkanode.com';
+const ALKANODE_JSONRPC_MAINNET =
+  process.env.ESPO_MAINNET_JSONRPC_URL || 'https://api.alkanode.com/rpc';
 const REST_PRIMARY_BASE_URLS: Record<string, string> = {};
 const restPrimaryEnv = process.env.ESPO_MAINNET_PRIMARY_URL;
 REST_PRIMARY_BASE_URLS.mainnet = restPrimaryEnv && restPrimaryEnv.length > 0
@@ -225,7 +227,7 @@ export async function POST(
     const body = await request.json();
 
     let network: string;
-    let targetUrl: string;
+    let targetUrl = '';
 
     // Qubitcoin-regtest service URLs (VPN-only, from env)
     const QBC_HOST = process.env.QUBITCOIN_REGTEST_HOST || '127.0.0.1';
@@ -243,7 +245,11 @@ export async function POST(
       network = networkSegment;
 
       if (restPath.length > 0) {
-        if (networkSegment === 'qubitcoin-regtest') {
+        if (restPath[0] === 'espo') {
+          targetUrl = networkSegment === 'mainnet'
+            ? ALKANODE_JSONRPC_MAINNET
+            : `${(RPC_ENDPOINTS[networkSegment] || RPC_ENDPOINTS.regtest).replace(/\/$/, '')}/espo`;
+        } else if (networkSegment === 'qubitcoin-regtest') {
           // Route /espo sub-path to espo JSON-RPC on server
           if (restPath[0] === 'espo') {
             const espoUrl = QBC_ESPO + '/rpc';
@@ -288,11 +294,13 @@ export async function POST(
         // bypass. For non-mainnet networks the primary stays on
         // subfrost.io because alkanode hosts a mainnet espo deployment
         // only.
-        const restPrimary = REST_PRIMARY_BASE_URLS[network]
-          || RPC_ENDPOINTS[network]
-          || RPC_ENDPOINTS.regtest;
-        const baseUrl = restPrimary.replace(/\/$/, '');
-        targetUrl = `${baseUrl}/${restPath.join('/')}`;
+        if (!targetUrl) {
+          const restPrimary = REST_PRIMARY_BASE_URLS[network]
+            || RPC_ENDPOINTS[network]
+            || RPC_ENDPOINTS.regtest;
+          const baseUrl = restPrimary.replace(/\/$/, '');
+          targetUrl = `${baseUrl}/${restPath.join('/')}`;
+        }
       } else {
         // Plain JSON-RPC
         targetUrl = pickEndpoint(body, network);
@@ -382,8 +390,11 @@ export async function POST(
       }
     }
 
-    // Log for debugging
-    const method = Array.isArray(body) ? 'batch' : body?.method;
+    // Log for debugging. For JSON-RPC batches, include method names so the
+    // dev server clearly shows one outbound request carrying multiple calls.
+    const method = Array.isArray(body)
+      ? `batch[${body.map((item: any) => item?.method).filter(Boolean).join(', ')}]`
+      : body?.method;
     console.log(`[RPC Proxy] ${method} -> ${targetUrl}`);
 
     // Single upstream, no fallbacks. Per flex 2026-05-11: "OK lets remove

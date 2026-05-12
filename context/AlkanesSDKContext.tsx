@@ -94,11 +94,15 @@ const NETWORK_TO_PROVIDER: Record<Network, string> = {
   devnet: 'subfrost-regtest', // Devnet uses regtest params, fetch interceptor routes to in-process
 };
 
+const MAINNET_ESPO_RPC_URL =
+  process.env.NEXT_PUBLIC_ESPO_RPC_URL || 'https://api.alkanode.com/rpc';
+
 // Direct URL configurations for each network (used in production or server-side)
 const DIRECT_NETWORK_CONFIG: Record<Network, Record<string, string> | undefined> = {
   mainnet: {
     jsonrpc_url: 'https://mainnet.subfrost.io/v4/subfrost',
     data_api_url: 'https://mainnet.subfrost.io/v4/subfrost',
+    espo_rpc_url: MAINNET_ESPO_RPC_URL,
   },
   testnet: {
     jsonrpc_url: 'https://testnet.subfrost.io/v4/subfrost',
@@ -158,6 +162,7 @@ const getNetworkConfig = (network: Network): Record<string, string> | undefined 
     return {
       jsonrpc_url: proxyUrl,
       data_api_url: proxyUrl,
+      ...(network === 'mainnet' ? { espo_rpc_url: `${proxyUrl}/espo` } : {}),
     };
   }
 

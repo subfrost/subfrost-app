@@ -220,7 +220,7 @@ export default function AlkanesBalancesCard({ onSendAlkane }: AlkanesBalancesCar
 
   if (error) {
     return (
-      <div className="rounded-2xl bg-[color:var(--sf-glass-bg)] p-6 shadow-[0_4px_20px_rgba(0,0,0,0.2)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)]">
+      <div className="h-full rounded-2xl bg-[color:var(--sf-glass-bg)] p-6 shadow-[0_4px_20px_rgba(0,0,0,0.2)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)]">
         <div className="flex flex-col items-center justify-center py-12">
           <div className="text-red-400 mb-4">{error}</div>
           <button
@@ -235,13 +235,11 @@ export default function AlkanesBalancesCard({ onSendAlkane }: AlkanesBalancesCar
   }
 
   return (
-    <div className="rounded-2xl bg-[color:var(--sf-glass-bg)] p-6 shadow-[0_4px_20px_rgba(0,0,0,0.2)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)] flex flex-col" style={{ maxHeight: alkaneFilter === 'nfts' ? '720px' : '600px' }}>
+    <div className="h-full rounded-2xl bg-[color:var(--sf-glass-bg)] p-6 shadow-[0_4px_20px_rgba(0,0,0,0.2)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)] flex flex-col" style={{ maxHeight: alkaneFilter === 'nfts' ? '720px' : '600px' }}>
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-blue-500/20 border border-blue-500/30">
-            <svg xmlns="http://www.w3.org/2000/svg" width={20} height={20} fill="currentColor" viewBox="0 0 256 256" className="text-blue-400"><path d="M184,89.57V84c0-25.08-37.83-44-88-44S8,58.92,8,84v40c0,20.89,26.25,37.49,64,42.46V172c0,25.08,37.83,44,88,44s88-18.92,88-44V132C248,111.3,222.58,94.68,184,89.57ZM232,132c0,13.22-30.79,28-72,28-3.73,0-7.43-.13-11.08-.37C170.49,151.77,184,139,184,124V105.74C213.87,110.19,232,122.27,232,132ZM72,150.25V126.46A183.74,183.74,0,0,0,96,128a183.74,183.74,0,0,0,24-1.54v23.79A163,163,0,0,1,96,152,163,163,0,0,1,72,150.25Zm96-40.32V124c0,8.39-12.41,17.4-32,22.87V123.5C148.91,120.37,159.84,115.71,168,109.93ZM96,56c41.21,0,72,14.78,72,28s-30.79,28-72,28S24,97.22,24,84,54.79,56,96,56ZM24,124V109.93c8.16,5.78,19.09,10.44,32,13.57v23.37C36.41,141.4,24,132.39,24,124Zm64,48v-4.17c2.63.1,5.29.17,8,.17,3.88,0,7.67-.13,11.39-.35A121.92,121.92,0,0,0,120,171.41v23.46C100.41,189.4,88,180.39,88,172Zm48,26.25V174.4a179.48,179.48,0,0,0,24,1.6,183.74,183.74,0,0,0,24-1.54v23.79a165.45,165.45,0,0,1-48,0Zm64-3.38V171.5c12.91-3.13,23.84-7.79,32-13.57V172C232,180.39,219.59,189.4,200,194.87Z"></path></svg>
-          </div>
+          <img src="/tokens/diesel-white.svg" alt="" className="h-7 w-7 shrink-0" aria-hidden="true" />
           <h3 className="text-lg font-bold text-[color:var(--sf-text)]">{t('balances.protoruneAssets')}</h3>
         </div>
         <button
@@ -280,7 +278,7 @@ export default function AlkanesBalancesCard({ onSendAlkane }: AlkanesBalancesCar
           <div className="rounded-lg bg-[color:var(--sf-primary)]/5 p-4">
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-lg bg-amber-500/20 border border-amber-500/30">
-                <Flame size={20} className="text-amber-400" />
+                <Flame size={16} className="text-amber-400" />
               </div>
               <div>
                 <div className="text-sm text-[color:var(--sf-text)]/60 mb-1">{t('balances.fuelAllocation')}</div>
@@ -496,7 +494,7 @@ export default function AlkanesBalancesCard({ onSendAlkane }: AlkanesBalancesCar
                             onClick={(e) => { e.stopPropagation(); onSendAlkane?.(alkane); }}
                             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[color:var(--sf-primary)] text-white text-xs font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
                           >
-                            <Send size={12} />
+                            <Send size={16} />
                             {t('walletDash.send')}
                           </button>
                           <button
@@ -504,7 +502,7 @@ export default function AlkanesBalancesCard({ onSendAlkane }: AlkanesBalancesCar
                             onClick={(e) => { e.stopPropagation(); handleRemoveLiquidity(alkane); }}
                             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[color:var(--sf-primary)] text-white text-xs font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
                           >
-                            <ArrowUpFromLine size={12} />
+                            <ArrowUpFromLine size={16} />
                             {t('walletDash.remove')}
                           </button>
                         </>
@@ -515,14 +513,14 @@ export default function AlkanesBalancesCard({ onSendAlkane }: AlkanesBalancesCar
                             onClick={(e) => { e.stopPropagation(); onSendAlkane?.(alkane); }}
                             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[color:var(--sf-primary)] text-white text-xs font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
                           >
-                            <Send size={12} />
+                            <Send size={16} />
                             {t('walletDash.send')}
                           </button>
                           <button
                             disabled
                             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)]/30 text-xs font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] cursor-not-allowed"
                           >
-                            <ArrowLeftRight size={12} />
+                            <ArrowLeftRight size={16} />
                             {t('walletDash.swap')}
                           </button>
                         </>
@@ -533,7 +531,7 @@ export default function AlkanesBalancesCard({ onSendAlkane }: AlkanesBalancesCar
                             onClick={(e) => { e.stopPropagation(); onSendAlkane?.(alkane); }}
                             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[color:var(--sf-primary)] text-white text-xs font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
                           >
-                            <Send size={12} />
+                            <Send size={16} />
                             {t('walletDash.send')}
                           </button>
                           <button
@@ -541,7 +539,7 @@ export default function AlkanesBalancesCard({ onSendAlkane }: AlkanesBalancesCar
                             onClick={(e) => { e.stopPropagation(); handleSwapToken(alkane); }}
                             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[color:var(--sf-primary)] text-white text-xs font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
                           >
-                            <ArrowLeftRight size={12} />
+                            <ArrowLeftRight size={16} />
                             {t('walletDash.swap')}
                           </button>
                         </>
@@ -662,7 +660,7 @@ function NftCard({ alkane, isExpanded, network, onToggle, onSend, t }: {
             onClick={(e) => { e.stopPropagation(); onSend(); }}
             className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg bg-[color:var(--sf-primary)] text-white text-xs font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
           >
-            <Send size={12} />
+            <Send size={16} />
             {t('walletDash.send')}
           </button>
         ) : (

@@ -5,10 +5,15 @@ import { useWallet } from '@/context/WalletContext';
 import { useBtcPrice } from '@/hooks/useBtcPrice';
 import { useEnrichedWalletData } from '@/hooks/useEnrichedWalletData';
 import { usePendingTxs } from '@/hooks/usePendingTxs';
-import { RefreshCw, ExternalLink } from 'lucide-react';
+import { RefreshCw, ExternalLink, Send, QrCode } from 'lucide-react';
 import { useTranslation } from '@/hooks/useTranslation';
 
-export default function BitcoinBalanceCard() {
+type BitcoinBalanceCardProps = {
+  onSend?: () => void;
+  onReceive?: () => void;
+};
+
+export default function BitcoinBalanceCard({ onSend, onReceive }: BitcoinBalanceCardProps) {
   const { account } = useWallet() as any;
   // Single source of truth for BTC price — see queries/market.ts (subpricer
   // primary, rpc.ts + coingecko fallbacks). Returns 0 when no source resolves.
@@ -83,7 +88,7 @@ export default function BitcoinBalanceCard() {
 
   if (error) {
     return (
-      <div className="rounded-2xl bg-[color:var(--sf-glass-bg)] p-6 shadow-[0_4px_20px_rgba(0,0,0,0.2)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)]">
+      <div className="h-full rounded-2xl bg-[color:var(--sf-glass-bg)] p-6 shadow-[0_4px_20px_rgba(0,0,0,0.2)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)]">
         <div className="flex flex-col items-center justify-center py-12">
           <div className="text-red-400 mb-4">{error}</div>
           <button
@@ -98,13 +103,11 @@ export default function BitcoinBalanceCard() {
   }
 
   return (
-    <div className="rounded-2xl bg-[color:var(--sf-glass-bg)] p-6 shadow-[0_4px_20px_rgba(0,0,0,0.2)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)]">
+    <div className="h-full rounded-2xl bg-[color:var(--sf-glass-bg)] p-6 shadow-[0_4px_20px_rgba(0,0,0,0.2)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)]">
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-orange-500/20 border border-orange-500/30">
-            <svg xmlns="http://www.w3.org/2000/svg" width={20} height={20} fill="currentColor" viewBox="0 0 256 256" className="text-orange-400"><path d="M178.48,115.7A44,44,0,0,0,152,40.19V24a8,8,0,0,0-16,0V40H120V24a8,8,0,0,0-16,0V40H72a8,8,0,0,0,0,16h8V192H72a8,8,0,0,0,0,16h32v16a8,8,0,0,0,16,0V208h16v16a8,8,0,0,0,16,0V208h8a48,48,0,0,0,18.48-92.3ZM176,84a28,28,0,0,1-28,28H96V56h52A28,28,0,0,1,176,84ZM160,192H96V128h64a32,32,0,0,1,0,64Z"></path></svg>
-          </div>
+          <img src="/tokens/btc-white.svg" alt="" className="h-10 w-10 shrink-0" aria-hidden="true" />
           <h3 className="text-lg font-bold text-[color:var(--sf-text)]">{t('balances.bitcoinBalance')}</h3>
         </div>
         <button
@@ -151,6 +154,27 @@ export default function BitcoinBalanceCard() {
             </div>
           );
         })()}
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          {onSend && (
+            <button
+              data-testid="bitcoin-card-send-button"
+              onClick={onSend}
+              className="px-4 md:px-6 py-2 rounded-md bg-[color:var(--sf-primary)] text-white text-sm font-bold uppercase tracking-wide shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-lg transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none flex items-center gap-2"
+            >
+              <Send size={16} />
+              {t('walletDash.send')}
+            </button>
+          )}
+          {onReceive && (
+            <button
+              onClick={onReceive}
+              className="px-4 md:px-6 py-2 rounded-md bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)] text-sm font-bold uppercase tracking-wide shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:bg-[color:var(--sf-surface)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none flex items-center gap-2"
+            >
+              <QrCode size={16} />
+              {t('walletDash.receive')}
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Address Breakdown — only show when wallet has both address types */}
@@ -161,15 +185,15 @@ export default function BitcoinBalanceCard() {
             href={`https://mempool.space/address/${account.nativeSegwit.address}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="rounded-lg bg-[color:var(--sf-info-green-bg)] border border-[color:var(--sf-info-green-border)] p-3 hover:brightness-110 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none cursor-pointer flex items-center justify-between"
+            className="rounded-lg bg-[color-mix(in_oklab,var(--sf-primary)_5%,transparent)] p-3 hover:brightness-110 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none cursor-pointer flex items-center justify-between"
           >
             <div>
               <div className="text-xs text-[color:var(--sf-info-green-title)] mb-1">Native SegWit</div>
-              <div className="text-sm text-[color:var(--sf-info-green-text)]">
+              <div className="text-sm text-white">
                 {showValue(`${formatBTC(p2wpkh)} BTC`)}
               </div>
             </div>
-            <ExternalLink size={12} className="text-[color:var(--sf-info-green-text)]/60 shrink-0" />
+            <ExternalLink size={16} className="text-white/70 shrink-0" />
           </a>
         )}
         {account?.taproot?.address && (
@@ -177,15 +201,15 @@ export default function BitcoinBalanceCard() {
             href={`https://mempool.space/address/${account.taproot.address}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="rounded-lg bg-[color:var(--sf-info-yellow-bg)] border border-[color:var(--sf-info-yellow-border)] p-3 hover:brightness-110 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none cursor-pointer flex items-center justify-between"
+            className="rounded-lg bg-[color-mix(in_oklab,var(--sf-primary)_5%,transparent)] p-3 hover:brightness-110 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none cursor-pointer flex items-center justify-between"
           >
             <div>
               <div className="text-xs text-[color:var(--sf-info-yellow-title)] mb-1">{t('balances.taproot')}</div>
-              <div className="text-sm text-[color:var(--sf-info-yellow-text)]">
+              <div className="text-sm text-white">
                 {showValue(`${formatBTC(p2tr)} BTC`)}
               </div>
             </div>
-            <ExternalLink size={12} className="text-[color:var(--sf-info-yellow-text)]/60 shrink-0" />
+            <ExternalLink size={16} className="text-white/70 shrink-0" />
           </a>
         )}
       </div>

@@ -4,9 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "next dev",
-    "dev:turbo": "next dev --turbopack",
-    "build": "prisma generate && next build",
+    "prepare:local-sdk": "node scripts/prepare-local-alkanes-sdk.mjs",
+    "dev": "npm run prepare:local-sdk && next dev",
+    "dev:turbo": "npm run prepare:local-sdk && next dev --turbopack",
+    "build": "npm run prepare:local-sdk && prisma generate && next build",
     "postinstall": "prisma generate",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
@@ -78,7 +79,6 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",
-    "@qubitcoin/sdk": "link:vendor/@qubitcoin/sdk",
     "@scure/base": "^2.0.0",
     "@tailwindcss/postcss": "^4.2.1",
     "@testing-library/dom": "^10.4.1",

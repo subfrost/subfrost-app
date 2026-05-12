@@ -34,6 +34,7 @@ type Props = {
   toBalanceText?: string;
   fromFiatText?: string; // e.g., "$0.00"
   toFiatText?: string;
+  isQuoteLoading?: boolean;
   onMaxFrom?: () => void; // optional Max action
   onPercentFrom?: (percent: number) => void; // optional percentage action (0.25, 0.5, 0.75)
   summary?: React.ReactNode;
@@ -59,6 +60,7 @@ export default function SwapInputs({
   toBalanceText,
   fromFiatText = "$0.00",
   toFiatText = "$0.00",
+  isQuoteLoading = false,
   onMaxFrom,
   onPercentFrom,
   summary,
@@ -493,16 +495,23 @@ export default function SwapInputs({
 
             {/* Input - full width */}
             <div className="pr-32">
-              <NumberField
-                ref={toInputRef}
-                placeholder={"0.00"}
-                align="left"
-                value={toAmount}
-                onChange={onChangeToAmount}
-                onFocus={() => setToFocused(true)}
-                onBlur={() => setToFocused(false)}
-                className={toAmount ? '' : '!text-[color:var(--sf-text)]/40'}
-              />
+              <div className="relative h-11 w-full">
+                <NumberField
+                  ref={toInputRef}
+                  placeholder=""
+                  align="left"
+                  value={toAmount}
+                  onChange={onChangeToAmount}
+                  onFocus={() => setToFocused(true)}
+                  onBlur={() => setToFocused(false)}
+                  className={isQuoteLoading ? "opacity-0 pointer-events-none" : ""}
+                />
+                {isQuoteLoading && (
+                  <div className="pointer-events-none absolute inset-0 flex items-center">
+                    <div className="h-8 w-28 animate-pulse rounded-lg bg-[color:var(--sf-text)]/10" />
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Fiat value + Balance on same row */}

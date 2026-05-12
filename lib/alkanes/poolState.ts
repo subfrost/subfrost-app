@@ -22,6 +22,7 @@
  */
 import { getRpcUrl } from '@/utils/getConfig';
 import { simulateContract, extractField3Data, parseU128LE } from '@/lib/fujin/rpc';
+import { getAlkanesDataSource, type AlkanesDataSource } from '@/lib/alkanes/dataSource';
 
 export interface LivePoolState {
   poolId: string;
@@ -31,6 +32,100 @@ export interface LivePoolState {
   reserve1: string;
   totalSupply: string;
   name: string;
+}
+
+async function espoRpcBatch<T extends any[]>(
+  network: string,
+  calls: Array<{ method: string; params: Record<string, unknown> }>,
+): Promise<T> {
+  const request = calls.map((call, index) => ({
+    jsonrpc: '2.0',
+    id: index + 1,
+    method: call.method,
+    params: call.params,
+  }));
+
+  const res = await fetch(`/api/rpc/${network || 'mainnet'}/espo`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    signal: AbortSignal.timeout(10_000),
+    body: JSON.stringify(request),
+  });
+  if (!res.ok) throw new Error(`Espo batch HTTP ${res.status}`);
+
+  const json = await res.json();
+  if (!Array.isArray(json)) throw new Error('Espo batch returned non-array response');
+
+  const byId = new Map<number, any>();
+  for (const item of json) {
+    if (item?.error) {
+      throw new Error(`Espo batch id=${item.id}: ${item.error?.message ?? JSON.stringify(item.error)}`);
+    }
+    if (typeof item?.id === 'number') byId.set(item.id, item.result);
+  }
+
+  return request.map((item) => byId.get(item.id)) as T;
+}
+
+function parseOkStringField(payload: any, field: string, method: string): string {
+  if (!payload?.ok) throw new Error(`${method} returned not-ok: ${payload?.error ?? 'unknown'}`);
+  const value = payload[field];
+  if (value == null) throw new Error(`${method} missing ${field}`);
+  return String(value);
+}
+
+/**
+ * Espo-backed pool state. Reserves are the balances held by the pool alkane:
+ *   reserve0 = balance(owner=poolId, alkane=token0Id)
+ *   reserve1 = balance(owner=poolId, alkane=token1Id)
+ * LP supply comes from the pool alkane's circulating supply.
+ */
+export async function fetchEspoPoolState(
+  network: string,
+  poolId: string,
+  token0Id: string,
+  token1Id: string,
+): Promise<LivePoolState | null> {
+  if (!poolId || !token0Id || !token1Id) return null;
+
+  try {
+    const [reserve0Resp, reserve1Resp, supplyResp, selfBalanceResp] = await espoRpcBatch<
+      [any, any, any, any]
+    >(network, [
+      {
+        method: 'essentials.get_alkane_balance_metashrew',
+        params: { owner: poolId, alkane: token0Id },
+      },
+      {
+        method: 'essentials.get_alkane_balance_metashrew',
+        params: { owner: poolId, alkane: token1Id },
+      },
+      {
+        method: 'essentials.get_circulating_supply',
+        params: { alkane: poolId },
+      },
+      {
+        method: 'essentials.get_alkane_balance_metashrew',
+        params: { owner: poolId, alkane: poolId },
+      },
+    ]);
+    const circulatingSupply = BigInt(parseOkStringField(supplyResp, 'supply', 'essentials.get_circulating_supply'));
+    const selfBalance = BigInt(parseOkStringField(selfBalanceResp, 'balance', 'essentials.get_alkane_balance_metashrew'));
+    const spendableLpSupply = circulatingSupply > selfBalance ? circulatingSupply - selfBalance : 0n;
+
+    return {
+      poolId,
+      token0Id,
+      token1Id,
+      reserve0: parseOkStringField(reserve0Resp, 'balance', 'essentials.get_alkane_balance_metashrew'),
+      reserve1: parseOkStringField(reserve1Resp, 'balance', 'essentials.get_alkane_balance_metashrew'),
+      totalSupply: spendableLpSupply.toString(),
+      name: `${token0Id}/${token1Id}`,
+    };
+  } catch (err) {
+    console.warn('[poolState] espo reserve fetch failed:', err);
+    return null;
+  }
 }
 
 /** Parse a u32 (little-endian) from a hex string at a hex-character offset. */
@@ -115,4 +210,23 @@ export async function fetchLivePoolState(
     totalSupply: totalSupply.toString(),
     name,
   };
+}
+
+export async function fetchPoolStateFromDataSource(
+  network: string,
+  factoryId: string,
+  poolId: string,
+  token0Id?: string,
+  token1Id?: string,
+  source: AlkanesDataSource = getAlkanesDataSource(network),
+): Promise<LivePoolState | null> {
+  if (source === 'espo') {
+    if (!token0Id || !token1Id) {
+      console.warn('[poolState] espo source requires token ids for pool', poolId);
+      return null;
+    }
+    return fetchEspoPoolState(network, poolId, token0Id, token1Id);
+  }
+
+  return fetchLivePoolState(network, factoryId, poolId);
 }

@@ -184,6 +184,8 @@ export default function SwapShell() {
   // amount — no point polling while the form is idle.
   const removeLpLiveState = usePoolStateLive(selectedLPPosition?.id, {
     enabled: !!selectedLPPosition && !!removeAmount && parseFloat(removeAmount) > 0,
+    token0Id: selectedLPPosition?.token0Id,
+    token1Id: selectedLPPosition?.token1Id,
   });
 
   // Multi-step swap flow state (BTC→Token, Token→BTC)
@@ -1502,11 +1504,31 @@ export default function SwapShell() {
   useEffect(() => {
     if (!quote) return;
     if (direction === 'sell') {
+      if (
+        !fromAmount ||
+        !Number.isFinite(parseFloat(fromAmount)) ||
+        parseFloat(fromAmount) <= 0 ||
+        quote.reservesUnavailable ||
+        quote.inputAmount !== fromAmount
+      ) {
+        setToAmount(prev => (prev === '' ? prev : ''));
+        return;
+      }
       setToAmount(quote.displayBuyAmount);
     } else {
+      if (
+        !toAmount ||
+        !Number.isFinite(parseFloat(toAmount)) ||
+        parseFloat(toAmount) <= 0 ||
+        quote.reservesUnavailable ||
+        quote.inputAmount !== toAmount
+      ) {
+        setFromAmount(prev => (prev === '' ? prev : ''));
+        return;
+      }
       setFromAmount(quote.displaySellAmount);
     }
-  }, [quote?.displayBuyAmount, quote?.displaySellAmount, direction]);
+  }, [quote, quote?.displayBuyAmount, quote?.displaySellAmount, quote?.inputAmount, direction, fromAmount, toAmount]);
 
   const tokenOptions = useMemo<TokenMeta[]>(() => {
     if (selectedPool) return [selectedPool.token0, selectedPool.token1];
@@ -2117,6 +2139,8 @@ export default function SwapShell() {
     (!!poolToken1Amount && parseFloat(poolToken1Amount) > 0);
   const addLpLiveState = usePoolStateLive(matchedLpPool?.id, {
     enabled: !!matchedLpPool && addLpHasAmount,
+    token0Id: matchedLpPool?.token0.id,
+    token1Id: matchedLpPool?.token1.id,
   });
 
   // Auto-calculate the paired LP amount based on the matched pool's reserve
@@ -2298,6 +2322,16 @@ export default function SwapShell() {
                 toBalanceText: formatBalance(toToken?.id),
                 fromFiatText: calculateUsdValue(fromToken?.id, fromAmount),
                 toFiatText: calculateUsdValue(toToken?.id, toAmount),
+                isQuoteLoading:
+                  direction === 'sell' &&
+                  !!fromAmount &&
+                  Number.isFinite(parseFloat(fromAmount)) &&
+                  parseFloat(fromAmount) > 0 &&
+                  !!toToken &&
+                  (!!isCalculating ||
+                    !quote ||
+                    quote.inputAmount !== fromAmount ||
+                    !!quote.reservesUnavailable),
                 calculateUsdValue,
                 onMaxFrom: fromToken ? handleMaxFrom : undefined,
                 onPercentFrom: fromToken ? handlePercentFrom : undefined,
