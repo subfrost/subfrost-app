@@ -165,6 +165,8 @@ describe('AlkanesBalancesCard', () => {
   it('shows available and mempool amounts from the spendable alkane view', () => {
     expect(src).toMatch(/spendableByAlkane/);
     expect(src).toMatch(/getAvailabilityBreakdown/);
+    expect(src).toMatch(/balance:\s*String\(btcTotalSats\)/);
+    expect(src).toMatch(/mempoolRaw:\s*BigInt\(Math\.max\(0,\s*btcMempoolSats\)\)/);
     expect(src).toContain('available:');
     expect(src).toContain('mempool:');
   });

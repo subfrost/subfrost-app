@@ -162,7 +162,7 @@ export default function BitcoinBalanceCard({ onSend, onReceive, onSettings, sett
         src="/brand/balance-snowflake-mark.svg"
         alt=""
         aria-hidden="true"
-        className="balance-total-snowflake pointer-events-none absolute -right-16 top-[58%] h-96 w-96 -translate-y-1/2 rotate-12 opacity-[0.08]"
+        className="balance-total-snowflake pointer-events-none absolute -right-16 top-[58%] h-96 w-96 opacity-[0.08]"
       />
       <div className="relative z-30 flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">

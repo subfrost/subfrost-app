@@ -174,8 +174,11 @@ describe('useEnrichedWalletData', () => {
   // --- Query options plumbing (queries/account.ts) ---
 
   describe('enrichedWalletQueryOptions (queries/account.ts)', () => {
-    it('collects addresses from both nativeSegwit and taproot', () => {
+    it('collects nativeSegwit, payment, payer, and taproot addresses', () => {
+      expect(querySrc).toContain('getWalletBalanceAddresses');
       expect(querySrc).toContain('account?.nativeSegwit?.address');
+      expect(querySrc).toContain('account?.paymentAddress');
+      expect(querySrc).toContain('account?.payerAddress');
       expect(querySrc).toContain('account?.taproot?.address');
     });
 
@@ -289,8 +292,9 @@ describe('useDemoGate', () => {
     expect(src).not.toContain('network === "mainnet"');
   });
 
-  it('DEMO_MODE_ENABLED reads from NEXT_PUBLIC_DEMO_MODE env var', () => {
-    expect(demoSrc).toContain("process.env.NEXT_PUBLIC_DEMO_MODE === '0'");
+  it('DEMO_MODE_ENABLED reads from NEXT_PUBLIC_DEMO_MODE constant', () => {
+    expect(demoSrc).toContain("import { NEXT_PUBLIC_DEMO_MODE } from '@/constants'");
+    expect(demoSrc).toContain('NEXT_PUBLIC_DEMO_MODE === 0');
   });
 });
 

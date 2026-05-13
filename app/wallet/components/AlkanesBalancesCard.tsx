@@ -3,7 +3,6 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useQuery } from '@tanstack/react-query';
 import { useWallet } from '@/context/WalletContext';
 import { useBtcPrice } from '@/hooks/useBtcPrice';
 import { useEnrichedWalletData } from '@/hooks/useEnrichedWalletData';
@@ -42,7 +41,7 @@ export default function AlkanesBalancesCard({
   filter,
   onFilterChange,
 }: AlkanesBalancesCardProps) {
-  const { account, network } = useWallet() as any;
+  const { network } = useWallet() as any;
   // Single source of truth for BTC price (queries/market.ts).
   const { data: btcPriceUsd = 0 } = useBtcPrice();
   const { t } = useTranslation();
@@ -89,32 +88,6 @@ export default function AlkanesBalancesCard({
   const [internalAlkaneFilter, setInternalAlkaneFilter] = useState<AlkaneBalanceFilter>('tokens');
   const alkaneFilter = filter ?? internalAlkaneFilter;
   const setAlkaneFilter = onFilterChange ?? setInternalAlkaneFilter;
-  // hasAutoRefreshed: removed in 2026-05-04 along with the auto-retry useEffect.
-  const btcAddresses = useMemo(() => {
-    const addresses: string[] = [];
-    if (account?.nativeSegwit?.address) addresses.push(account.nativeSegwit.address);
-    if (account?.taproot?.address) addresses.push(account.taproot.address);
-    return addresses;
-  }, [account]);
-  const btcAddressKey = useMemo(() => btcAddresses.slice().sort().join(','), [btcAddresses]);
-  const { data: confirmedBtcSats } = useQuery({
-    queryKey: ['wallet-btc-address-balance', network || 'mainnet', btcAddressKey],
-    enabled: btcAddresses.length > 0,
-    staleTime: 30_000,
-    retry: 2,
-    queryFn: async () => {
-      const totals = await Promise.all(btcAddresses.map(async (address) => {
-        const res = await fetch(`/api/esplora/address/${encodeURIComponent(address)}?network=${encodeURIComponent(network || 'mainnet')}`);
-        if (!res.ok) throw new Error(`BTC address stats failed: ${res.status}`);
-        const data = await res.json();
-        const funded = Number(data?.chain_stats?.funded_txo_sum ?? 0);
-        const spent = Number(data?.chain_stats?.spent_txo_sum ?? 0);
-        return Math.max(0, funded - spent);
-      }));
-      return totals.reduce((sum, value) => sum + value, 0);
-    },
-  });
-
   const poolMap = useMemo(() => {
     const map = new Map<string, { token0Symbol: string; token1Symbol: string; token0Id: string; token1Id: string; token0Amount: string; token1Amount: string; lpTotalSupply: string }>();
     if (poolsData?.items) {
@@ -152,12 +125,16 @@ export default function AlkanesBalancesCard({
     return prices;
   }, [poolsData, btcPriceUsd]);
 
-  const btcAvailableSats = btcFast && btcFast.total > 0 ? btcFast.total : balances.bitcoin.spendable || balances.bitcoin.total;
-  const btcConfirmedSats = confirmedBtcSats ?? btcAvailableSats;
-  const btcMempoolSats = Math.max(0, btcConfirmedSats - btcAvailableSats);
+  const btcMempoolSats = btcFast?.pendingIn ?? balances.bitcoin.pendingTotal ?? 0;
+  const btcAvailableSats = btcFast && btcFast.total > 0
+    ? Math.max(0, btcFast.total - btcMempoolSats)
+    : balances.bitcoin.spendable || balances.bitcoin.total;
+  const btcTotalSats = btcFast && btcFast.total > 0
+    ? btcFast.total
+    : btcAvailableSats + btcMempoolSats;
   const bitcoinAsset: AlkaneAsset = {
     alkaneId: BITCOIN_ASSET_ID,
-    balance: String(btcConfirmedSats),
+    balance: String(btcTotalSats),
     decimals: 8,
     symbol: 'BTC',
     name: 'Bitcoin',

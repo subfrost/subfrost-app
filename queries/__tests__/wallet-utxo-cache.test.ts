@@ -26,6 +26,14 @@ describe('walletUtxoCacheQueryOptions', () => {
     expect(SRC).toMatch(/export function walletUtxoCacheQueryOptions/);
   });
 
+  it('uses the shared wallet balance address collector so payment addresses are included', () => {
+    expect(SRC).toMatch(/export function getWalletBalanceAddresses/);
+    expect(SRC).toMatch(/export function getWalletBtcBalanceAddresses/);
+    expect(SRC).toMatch(/account\?\.paymentAddress/);
+    expect(SRC).toMatch(/account\?\.payerAddress/);
+    expect(SRC).toMatch(/const addresses = getWalletBalanceAddresses\(deps\.account\)/);
+  });
+
   it('uses staleTime: Infinity (HeightPoller-only invalidation)', () => {
     const fn =
       SRC.match(/export function walletUtxoCacheQueryOptions[\s\S]*?\n\}\n/)?.[0] ?? '';

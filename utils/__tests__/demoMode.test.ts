@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
+import { NEXT_PUBLIC_DEMO_MODE } from '@/constants';
 
 describe('demoMode', () => {
   const originalEnv = process.env.NEXT_PUBLIC_DEMO_MODE;
@@ -14,16 +15,20 @@ describe('demoMode', () => {
     vi.resetModules();
   });
 
-  it('DEMO_MODE_ENABLED is false when env var is "1"', async () => {
-    process.env.NEXT_PUBLIC_DEMO_MODE = '1';
-    const { DEMO_MODE_ENABLED } = await import('../demoMode');
-    expect(DEMO_MODE_ENABLED).toBe(false);
+  it('NEXT_PUBLIC_DEMO_MODE is pinned to 0 in constants', () => {
+    expect(NEXT_PUBLIC_DEMO_MODE).toBe(0);
   });
 
-  it('DEMO_MODE_ENABLED is false when env var is unset', async () => {
+  it('DEMO_MODE_ENABLED ignores env var "1"', async () => {
+    process.env.NEXT_PUBLIC_DEMO_MODE = '1';
+    const { DEMO_MODE_ENABLED } = await import('../demoMode');
+    expect(DEMO_MODE_ENABLED).toBe(true);
+  });
+
+  it('DEMO_MODE_ENABLED ignores an unset env var', async () => {
     delete process.env.NEXT_PUBLIC_DEMO_MODE;
     const { DEMO_MODE_ENABLED } = await import('../demoMode');
-    expect(DEMO_MODE_ENABLED).toBe(false);
+    expect(DEMO_MODE_ENABLED).toBe(true);
   });
 
   it('DEMO_MODE_ENABLED is true when env var is "0"', async () => {
@@ -32,15 +37,15 @@ describe('demoMode', () => {
     expect(DEMO_MODE_ENABLED).toBe(true);
   });
 
-  it('DEMO_MODE_ENABLED is false when env var is empty string', async () => {
+  it('DEMO_MODE_ENABLED ignores an empty env var', async () => {
     process.env.NEXT_PUBLIC_DEMO_MODE = '';
     const { DEMO_MODE_ENABLED } = await import('../demoMode');
-    expect(DEMO_MODE_ENABLED).toBe(false);
+    expect(DEMO_MODE_ENABLED).toBe(true);
   });
 
-  it('DEMO_MODE_ENABLED is false when env var is "true" (only "0" activates)', async () => {
+  it('DEMO_MODE_ENABLED ignores env var "true"', async () => {
     process.env.NEXT_PUBLIC_DEMO_MODE = 'true';
     const { DEMO_MODE_ENABLED } = await import('../demoMode');
-    expect(DEMO_MODE_ENABLED).toBe(false);
+    expect(DEMO_MODE_ENABLED).toBe(true);
   });
 });
