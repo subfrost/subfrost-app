@@ -30,6 +30,44 @@ import type { CurrencyPriceInfoResponse } from '@/types/alkanes';
 
 type WebProvider = import('@alkanes/ts-sdk/wasm').WebProvider;
 
+type WalletBalanceAccount = {
+  nativeSegwit?: { address?: string };
+  taproot?: { address?: string };
+  paymentAddress?: string;
+  payerAddress?: string;
+  payment?: { address?: string };
+} | null | undefined;
+
+export function getWalletBalanceAddresses(account: WalletBalanceAccount): string[] {
+  const addresses = [
+    account?.nativeSegwit?.address,
+    account?.paymentAddress,
+    account?.payerAddress,
+    account?.payment?.address,
+    account?.taproot?.address,
+  ].filter((address): address is string => typeof address === 'string' && address.length > 0);
+
+  return Array.from(new Set(addresses));
+}
+
+export function getWalletBtcBalanceAddresses(account: WalletBalanceAccount): string[] {
+  const paymentAddresses = [
+    account?.nativeSegwit?.address,
+    account?.paymentAddress,
+    account?.payerAddress,
+    account?.payment?.address,
+  ].filter((address): address is string => typeof address === 'string' && address.length > 0);
+
+  const uniquePaymentAddresses = Array.from(new Set(paymentAddresses));
+  if (uniquePaymentAddresses.length > 0) return uniquePaymentAddresses;
+
+  return account?.taproot?.address ? [account.taproot.address] : [];
+}
+
+function isWalletTaprootAddress(account: WalletBalanceAccount, address: string): boolean {
+  return address === account?.taproot?.address;
+}
+
 // ---------------------------------------------------------------------------
 // Protobuf-based alkane balance fetching (ported from fuboku-app)
 // Works directly with metashrew_view RPC — no REST layer needed.
@@ -745,9 +783,7 @@ async function fetchWalletUtxoCacheViaEspo(network: string, addresses: string[])
 }
 
 export function walletUtxoCacheQueryOptions(deps: WalletUtxoCacheDeps) {
-  const addresses: string[] = [];
-  if (deps.account?.nativeSegwit?.address) addresses.push(deps.account.nativeSegwit.address);
-  if (deps.account?.taproot?.address) addresses.push(deps.account.taproot.address);
+  const addresses = getWalletBalanceAddresses(deps.account);
   const addressKey = addresses.sort().join(',');
 
   return queryOptions<WalletUtxoCache>({
@@ -1036,6 +1072,12 @@ export interface BtcBalanceFast {
   pendingOut: number;
 }
 
+function isConfirmedUtxo(raw: any): boolean {
+  if (typeof raw?.status?.confirmed === 'boolean') return raw.status.confirmed;
+  if (Number(raw?.confirmations ?? 0) > 0) return true;
+  return Number(raw?.status?.block_height ?? raw?.block_height ?? raw?.height ?? 0) > 0;
+}
+
 async function fetchAddressBalance(rpcPath: string, address: string) {
   // Use esplora_address::utxo (proven working in codebase) and sum values
   const response = await fetch(rpcPath, {
@@ -1051,8 +1093,17 @@ async function fetchAddressBalance(rpcPath: string, address: string) {
   });
   const json = await response.json();
   const utxos = json.result;
-  if (!Array.isArray(utxos)) return 0;
-  return utxos.reduce((sum: number, u: any) => sum + getUtxoValueSats(u), 0);
+  if (!Array.isArray(utxos)) return { confirmed: 0, mempool: 0, total: 0 };
+
+  let confirmed = 0;
+  let mempool = 0;
+  for (const utxo of utxos) {
+    const value = getUtxoValueSats(utxo);
+    if (isConfirmedUtxo(utxo)) confirmed += value;
+    else mempool += value;
+  }
+
+  return { confirmed, mempool, total: confirmed + mempool };
 }
 
 const BTC_BALANCE_CACHE_KEY = 'subfrost_btc_balance_cache';
@@ -1067,6 +1118,8 @@ function getCachedBtcBalance(network: string, addressKey: string): BtcBalanceFas
     if (cached?.network !== network || cached?.addressKey !== addressKey) return undefined;
     const balance = cached.balance as Partial<BtcBalanceFast> | undefined;
     if (!balance) return undefined;
+    if (typeof balance.pendingIn !== 'number') balance.pendingIn = 0;
+    if (typeof balance.pendingOut !== 'number') balance.pendingOut = 0;
     // Backfill `spendable` for entries written before the field existed —
     // `addressKey` is segwit,taproot sorted; "dual" means two distinct addrs.
     if (typeof balance.spendable !== 'number') {
@@ -1092,9 +1145,7 @@ function cacheBtcBalance(network: string, addressKey: string, balance: BtcBalanc
 }
 
 export function btcBalanceFastQueryOptions(deps: BtcBalanceFastDeps) {
-  const addresses: string[] = [];
-  if (deps.account?.nativeSegwit?.address) addresses.push(deps.account.nativeSegwit.address);
-  if (deps.account?.taproot?.address) addresses.push(deps.account.taproot.address);
+  const addresses = getWalletBtcBalanceAddresses(deps.account);
   const addressKey = addresses.sort().join(',');
 
   const isLocal = ['devnet', 'regtest-local', 'qubitcoin-regtest'].includes(deps.network);
@@ -1105,7 +1156,6 @@ export function btcBalanceFastQueryOptions(deps: BtcBalanceFastDeps) {
   return queryOptions<BtcBalanceFast>({
     queryKey: queryKeys.account.btcBalanceFast(deps.network, addressKey, deps.walletType),
     enabled:
-      getAlkanesDataSource(deps.network) !== 'espo' &&
       !!deps.account &&
       deps.isConnected &&
       addresses.length > 0,
@@ -1123,22 +1173,28 @@ export function btcBalanceFastQueryOptions(deps: BtcBalanceFastDeps) {
 
       const results = await Promise.all(addresses.map(addr => fetchAddressBalance(rpcPath, addr)));
 
-      let p2wpkh = 0, p2tr = 0;
+      let p2wpkh = 0, p2tr = 0, confirmedP2wpkh = 0, confirmedP2tr = 0, pendingIn = 0;
       for (let i = 0; i < addresses.length; i++) {
-        if (addresses[i] === deps.account.nativeSegwit?.address) p2wpkh = results[i];
-        if (addresses[i] === deps.account.taproot?.address) p2tr = results[i];
+        const result = results[i];
+        pendingIn += result.mempool;
+        if (isWalletTaprootAddress(deps.account, addresses[i])) {
+          p2tr += result.total;
+          confirmedP2tr += result.confirmed;
+        } else {
+          p2wpkh += result.total;
+          confirmedP2wpkh += result.confirmed;
+        }
       }
 
       // Mirrors `txContext.shouldProtectTaproot` from WalletContext + the
-      // existing Header.tsx display logic: dual-address wallets only spend
-      // segwit for BTC fees; single-address (incl. keystore) spend the one
-      // populated address.
-      const segwitAddr = deps.account?.nativeSegwit?.address;
+      // existing Header.tsx display logic: wallets with a payer/payment
+      // address use that BTC address; taproot is counted only when it is the
+      // actual BTC/payment address exposed by the wallet.
       const taprootAddr = deps.account?.taproot?.address;
-      const isDualAddress = !!segwitAddr && !!taprootAddr && segwitAddr !== taprootAddr;
-      const spendable = isDualAddress ? p2wpkh : p2wpkh + p2tr;
+      const hasPaymentAddress = addresses.some((address) => address !== taprootAddr);
+      const spendable = hasPaymentAddress ? confirmedP2wpkh : confirmedP2wpkh + confirmedP2tr;
 
-      const balance: BtcBalanceFast = { p2wpkh, p2tr, total: p2wpkh + p2tr, spendable, pendingIn: 0, pendingOut: 0 };
+      const balance: BtcBalanceFast = { p2wpkh, p2tr, total: p2wpkh + p2tr, spendable, pendingIn, pendingOut: 0 };
       cacheBtcBalance(deps.network, addressKey, balance);
       return balance;
     },
@@ -1158,9 +1214,7 @@ interface EnrichedWalletDeps {
 }
 
 export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
-  const addresses: string[] = [];
-  if (deps.account?.nativeSegwit?.address) addresses.push(deps.account.nativeSegwit.address);
-  if (deps.account?.taproot?.address) addresses.push(deps.account.taproot.address);
+  const addresses = getWalletBtcBalanceAddresses(deps.account);
   const addressKey = addresses.sort().join(',');
 
   // Debug: log wallet state for balance queries
@@ -1332,8 +1386,8 @@ export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
 
       for (const { address, data } of enrichedResults) {
         if (!data) continue;
-        const isP2WPKH = address === deps.account.nativeSegwit?.address;
-        const isP2TR = address === deps.account.taproot?.address;
+        const isP2TR = isWalletTaprootAddress(deps.account, address);
+        const isP2WPKH = !isP2TR;
 
         const processUtxo = (utxo: any, isConfirmed: boolean, isSpendable: boolean) => {
           const [txid, voutStr] = (utxo.outpoint || ':').split(':');
@@ -1395,8 +1449,8 @@ export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
       let pendingOutgoingP2tr = 0;
       let pendingOutgoingTotal = 0;
       for (const { address, spent } of mempoolSpentResults) {
-        if (address === deps.account.nativeSegwit?.address) pendingOutgoingP2wpkh += spent;
-        else if (address === deps.account.taproot?.address) pendingOutgoingP2tr += spent;
+        if (isWalletTaprootAddress(deps.account, address)) pendingOutgoingP2tr += spent;
+        else pendingOutgoingP2wpkh += spent;
         pendingOutgoingTotal += spent;
       }
 
@@ -1438,9 +1492,7 @@ interface AlkaneBalanceDeps {
 }
 
 export function alkaneBalanceQueryOptions(deps: AlkaneBalanceDeps) {
-  const addresses: string[] = [];
-  if (deps.account?.nativeSegwit?.address) addresses.push(deps.account.nativeSegwit.address);
-  if (deps.account?.taproot?.address) addresses.push(deps.account.taproot.address);
+  const addresses = getWalletBalanceAddresses(deps.account);
   const addressKey = addresses.sort().join(',');
 
   return queryOptions({
@@ -1672,9 +1724,7 @@ export function sellableCurrenciesQueryOptions(deps: SellableCurrenciesDeps) {
         const allAlkanes: CurrencyPriceInfoResponse[] = [];
         const alkaneMap = new Map<string, CurrencyPriceInfoResponse>();
 
-        const addresses: string[] = [];
-        if (deps.account?.nativeSegwit?.address) addresses.push(deps.account.nativeSegwit.address);
-        if (deps.account?.taproot?.address) addresses.push(deps.account.taproot.address);
+        const addresses = getWalletBalanceAddresses(deps.account);
         if (deps.walletAddress && !addresses.includes(deps.walletAddress)) {
           addresses.push(deps.walletAddress);
         }
