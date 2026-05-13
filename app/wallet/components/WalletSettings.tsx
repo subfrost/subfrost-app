@@ -133,14 +133,8 @@ export default function WalletSettings() {
   }, [networkDropdownOpen]);
 
   const NETWORK_OPTIONS: { value: NetworkType; label: string }[] = [
-    { value: 'devnet', label: 'Devnet (in-browser)' },
     { value: 'mainnet', label: t('settings.mainnet') },
-    { value: 'signet', label: t('settings.signet') },
-    { value: 'subfrost-regtest', label: t('settings.subfrostRegtest') + ' (regtest.subfrost.io)' },
-    { value: 'qubitcoin-regtest', label: 'Qubitcoin Regtest (meta.lake.direct)' },
-    { value: 'regtest-local', label: t('settings.localRegtest') + ' (localhost:18888)' },
-    { value: 'regtest', label: t('settings.localRegtest') + ' (legacy)' },
-    { value: 'custom', label: t('settings.customNetwork') },
+    { value: 'devnet', label: 'Devnet (in-browser)' },
   ];
 
   const handleSave = () => {
