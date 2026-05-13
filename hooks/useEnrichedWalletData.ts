@@ -219,10 +219,12 @@ export function useEnrichedWalletData(): EnrichedWalletData {
       if (utxo.address === p2wpkhAddress) p2wpkh += utxo.value;
       if (utxo.address === p2trAddress) p2tr += utxo.value;
     }
+    const isDualAddress = !!p2wpkhAddress && !!p2trAddress && p2wpkhAddress !== p2trAddress;
     return {
       p2wpkh,
       p2tr,
       total: p2wpkh + p2tr,
+      spendable: isDualAddress ? p2wpkh : p2wpkh + p2tr,
       pendingIn: 0,
       pendingOut: 0,
     };
@@ -328,7 +330,7 @@ export function useEnrichedWalletData(): EnrichedWalletData {
         p2wpkh: btcFast.p2wpkh,
         p2tr: btcFast.p2tr,
         total: btcFast.total,
-        spendable: btcFast.total,
+        spendable: btcFast.spendable,
       }
       : undefined;
     if (btcQuery.data) {
