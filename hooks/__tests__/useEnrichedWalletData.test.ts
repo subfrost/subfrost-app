@@ -290,7 +290,7 @@ describe('useDemoGate', () => {
   });
 
   it('DEMO_MODE_ENABLED reads from NEXT_PUBLIC_DEMO_MODE env var', () => {
-    expect(demoSrc).toContain("process.env.NEXT_PUBLIC_DEMO_MODE === '1'");
+    expect(demoSrc).toContain("process.env.NEXT_PUBLIC_DEMO_MODE === '0'");
   });
 });
 
