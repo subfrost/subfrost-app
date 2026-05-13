@@ -43,7 +43,13 @@ import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useWallet } from '@/context/WalletContext';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
-import { enrichedWalletQueryOptions, alkaneBalanceQueryOptions, btcBalanceFastQueryOptions } from '@/queries/account';
+import {
+  enrichedWalletQueryOptions,
+  alkaneBalanceQueryOptions,
+  btcBalanceFastQueryOptions,
+  getWalletBalanceAddresses,
+  getWalletBtcBalanceAddresses,
+} from '@/queries/account';
 import type { BtcBalanceFast } from '@/queries/account';
 import { queryKeys } from '@/queries/keys';
 import { getAlkanesDataSource } from '@/lib/alkanes/dataSource';
@@ -129,17 +135,22 @@ const EMPTY_UTXOS = { p2wpkh: [] as EnrichedUTXO[], p2tr: [] as EnrichedUTXO[], 
 const EMPTY_ALKANES: AlkaneAsset[] = [];
 
 export function useEnrichedWalletData(): EnrichedWalletData {
-  const { account, isConnected, network, walletType } = useWallet() as any;
+  const { account, isConnected, network, walletType, paymentAddress } = useWallet() as any;
   const { provider, isInitialized } = useAlkanesSDK();
   const queryClient = useQueryClient();
   const prevConnectedRef = useRef(false);
   const dataSource = getAlkanesDataSource(network || 'mainnet');
   const walletUtxoCache = useWalletUtxoCache();
+  const balanceAccount = useMemo(() => ({
+    ...account,
+    paymentAddress: account?.paymentAddress || paymentAddress || undefined,
+    payerAddress: account?.payerAddress || paymentAddress || undefined,
+  }), [account, paymentAddress]);
 
   const sharedDeps = {
     provider,
     isInitialized,
-    account,
+    account: balanceAccount,
     isConnected,
     network: network || 'mainnet',
   };
@@ -148,7 +159,7 @@ export function useEnrichedWalletData(): EnrichedWalletData {
   // populated spendable-outpoint cache used by swap/send builders, so the app
   // does not issue a separate esplora_address::utxo request for display.
   const btcFastQuery = useQuery(btcBalanceFastQueryOptions({
-    account,
+    account: balanceAccount,
     isConnected,
     network: network || 'mainnet',
     walletType,
@@ -177,10 +188,8 @@ export function useEnrichedWalletData(): EnrichedWalletData {
 
     if (isReady && wasDisconnected) {
       const timer = setTimeout(() => {
-        const addresses: string[] = [];
-        if (account?.nativeSegwit?.address) addresses.push(account.nativeSegwit.address);
-        if (account?.taproot?.address) addresses.push(account.taproot.address);
-        const addressKey = addresses.sort().join(',');
+        const addressKey = getWalletBalanceAddresses(balanceAccount).sort().join(',');
+        const btcAddressKey = getWalletBtcBalanceAddresses(balanceAccount).sort().join(',');
         if (addressKey) {
           queryClient.invalidateQueries({
             queryKey: ['btc-balance-fast'],
@@ -195,42 +204,45 @@ export function useEnrichedWalletData(): EnrichedWalletData {
             queryKey: queryKeys.account.walletUtxoCache(network || 'mainnet', addressKey),
           });
         }
+        if (btcAddressKey && btcAddressKey !== addressKey) {
+          queryClient.invalidateQueries({
+            queryKey: queryKeys.account.enrichedWallet(network || 'mainnet', btcAddressKey),
+          });
+        }
       }, 100);
       return () => clearTimeout(timer);
     }
-  }, [isConnected, isInitialized, provider, account, network, queryClient]);
+  }, [isConnected, isInitialized, provider, account, balanceAccount, network, queryClient]);
 
   const addressKey = useMemo(() => {
-    const addresses: string[] = [];
-    if (account?.nativeSegwit?.address) addresses.push(account.nativeSegwit.address);
-    if (account?.taproot?.address) addresses.push(account.taproot.address);
-    return addresses.sort().join(',');
-  }, [account]);
+    return getWalletBalanceAddresses(balanceAccount).sort().join(',');
+  }, [balanceAccount]);
+
+  const btcAddressSet = useMemo(() => new Set(getWalletBtcBalanceAddresses(balanceAccount)), [balanceAccount]);
 
   const btcFastFromWalletCache = useMemo<BtcBalanceFast | null>(() => {
     if (dataSource !== 'espo') return null;
     if (!addressKey) return null;
     if (walletUtxoCache.utxos.length === 0 && walletUtxoCache.height === 0) return null;
-    const p2wpkhAddress = account?.nativeSegwit?.address;
-    const p2trAddress = account?.taproot?.address;
+    const p2trAddress = balanceAccount?.taproot?.address;
     let p2wpkh = 0;
     let p2tr = 0;
     for (const utxo of walletUtxoCache.utxos) {
-      if (utxo.address === p2wpkhAddress) p2wpkh += utxo.value;
+      if (!btcAddressSet.has(utxo.address)) continue;
       if (utxo.address === p2trAddress) p2tr += utxo.value;
+      else p2wpkh += utxo.value;
     }
-    const isDualAddress = !!p2wpkhAddress && !!p2trAddress && p2wpkhAddress !== p2trAddress;
     return {
       p2wpkh,
       p2tr,
       total: p2wpkh + p2tr,
-      spendable: isDualAddress ? p2wpkh : p2wpkh + p2tr,
+      spendable: p2wpkh + p2tr,
       pendingIn: 0,
       pendingOut: 0,
     };
-  }, [account, addressKey, dataSource, walletUtxoCache.height, walletUtxoCache.utxos]);
+  }, [balanceAccount, addressKey, btcAddressSet, dataSource, walletUtxoCache.height, walletUtxoCache.utxos]);
 
-  const btcFast = btcFastFromWalletCache ?? btcFastQuery.data ?? null;
+  const btcFast = btcFastQuery.data ?? btcFastFromWalletCache ?? null;
 
   const espoAlkanesFromWalletCache = useMemo<AlkaneAsset[] | null>(() => {
     if (dataSource !== 'espo') return null;
@@ -294,13 +306,11 @@ export function useEnrichedWalletData(): EnrichedWalletData {
   const displayAlkanes = espoAlkanesFromWalletCache ?? addressAlkanes;
 
   const refresh = useCallback(async () => {
-    const tasks: Promise<unknown>[] = [refetchBtc(), refetchAlkanes()];
+    const tasks: Promise<unknown>[] = [refetchBtc(), refetchAlkanes(), refetchBtcFast()];
     if (dataSource === 'espo') {
       tasks.push(queryClient.refetchQueries({
         queryKey: queryKeys.account.walletUtxoCache(network || 'mainnet', addressKey),
       }));
-    } else {
-      tasks.push(refetchBtcFast());
     }
     await Promise.all(tasks);
   }, [addressKey, dataSource, network, queryClient, refetchAlkanes, refetchBtc, refetchBtcFast]);
@@ -310,13 +320,13 @@ export function useEnrichedWalletData(): EnrichedWalletData {
   }, [refetchAlkanes]);
 
   const refreshBtcFast = useCallback(async () => {
+    const tasks: Promise<unknown>[] = [refetchBtcFast()];
     if (dataSource === 'espo') {
-      await queryClient.refetchQueries({
+      tasks.push(queryClient.refetchQueries({
         queryKey: queryKeys.account.walletUtxoCache(network || 'mainnet', addressKey),
-      });
-    } else {
-      await refetchBtcFast();
+      }));
     }
+    await Promise.all(tasks);
   }, [addressKey, dataSource, network, queryClient, refetchBtcFast]);
 
   // Merge BTC data + alkane data into the unified WalletBalances shape.
@@ -331,6 +341,10 @@ export function useEnrichedWalletData(): EnrichedWalletData {
         p2tr: btcFast.p2tr,
         total: btcFast.total,
         spendable: btcFast.spendable,
+        pendingP2wpkh: btcFast.p2wpkh > 0 && btcFast.p2tr === 0 ? btcFast.pendingIn : 0,
+        pendingP2tr: btcFast.p2tr > 0 && btcFast.p2wpkh === 0 ? btcFast.pendingIn : 0,
+        pendingTotal: btcFast.pendingIn,
+        pendingOutgoingTotal: btcFast.pendingOut,
       }
       : undefined;
     if (btcQuery.data) {
@@ -361,7 +375,7 @@ export function useEnrichedWalletData(): EnrichedWalletData {
     utxos: btcQuery.data?.utxos ?? EMPTY_UTXOS,
     isLoading: btcQuery.isLoading || alkaneQuery.isLoading,
     isBtcLoading: btcQuery.isLoading,
-    isBtcFastLoading: dataSource === 'espo' ? false : btcFastQuery.isLoading,
+    isBtcFastLoading: btcFastQuery.isLoading,
     isAlkanesLoading: alkaneQuery.isLoading,
     error: errorMsg,
     refresh,
@@ -375,7 +389,6 @@ export function useEnrichedWalletData(): EnrichedWalletData {
     btcQuery.isLoading,
     alkaneQuery.isLoading,
     btcFastQuery.isLoading,
-    dataSource,
     errorMsg,
     displayAlkanes,
     refresh,

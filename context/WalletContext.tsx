@@ -321,6 +321,8 @@ type WalletAddresses = {
 type Account = {
   taproot?: { address: string; pubkey: string; pubKeyXOnly: string; hdPath: string };
   nativeSegwit?: { address: string; pubkey: string; hdPath: string };
+  paymentAddress?: string;
+  payerAddress?: string;
   /** Zcash transparent address — derived from same mnemonic via BIP44 m/44'/133'/0'/0/0 */
   zcash?: { address: string; pubkey: string; hdPath: string };
   spendStrategy: { addressOrder: string[]; utxoSortGreatestToLeast: boolean; changeAddress: string };
@@ -897,9 +899,16 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
 
   // Build account structure
   const account: Account = useMemo(() => {
+    const browserPaymentAddress =
+      (browserWallet as { paymentAddress?: string; payerAddress?: string } | null)?.paymentAddress
+      || (browserWallet as { paymentAddress?: string; payerAddress?: string } | null)?.payerAddress
+      || '';
+    const paymentAddress = addresses.nativeSegwit.address || browserPaymentAddress;
     return {
       nativeSegwit: addresses.nativeSegwit.address ? addresses.nativeSegwit : undefined,
       taproot: addresses.taproot.address ? addresses.taproot : undefined,
+      paymentAddress: paymentAddress || undefined,
+      payerAddress: paymentAddress || undefined,
       zcash: addresses.zcash?.address ? addresses.zcash : undefined,
       spendStrategy: {
         addressOrder: ['nativeSegwit', 'taproot'],
@@ -908,7 +917,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       },
       network: NetworkMap[network],
     };
-  }, [addresses, network]);
+  }, [addresses, browserWallet, network]);
 
   // Compute transaction-context addresses. See `TxContext` jsdoc for the
   // wallet-type semantics this codifies. `null` when neither address is
@@ -2458,9 +2467,12 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       let totalBalance = 0;
 
       // Query both native segwit and taproot addresses
-      const addresses: string[] = [];
-      if (account.nativeSegwit?.address) addresses.push(account.nativeSegwit.address);
-      if (account.taproot?.address) addresses.push(account.taproot.address);
+      const addresses = Array.from(new Set([
+        account.nativeSegwit?.address,
+        account.paymentAddress,
+        account.payerAddress,
+        account.taproot?.address,
+      ].filter((address): address is string => typeof address === 'string' && address.length > 0)));
 
       console.log('[WalletContext] Querying addresses:', addresses);
 
@@ -2521,7 +2533,10 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
         : walletType === 'keystore' ? 'Keystore' : null,
 
       address: addresses.taproot.address || addresses.nativeSegwit.address,
-      paymentAddress: addresses.nativeSegwit.address,
+      paymentAddress: addresses.nativeSegwit.address
+        || (browserWallet as { paymentAddress?: string; payerAddress?: string } | null)?.paymentAddress
+        || (browserWallet as { paymentAddress?: string; payerAddress?: string } | null)?.payerAddress
+        || '',
       publicKey: addresses.nativeSegwit.pubkey,
       addresses,
       account,
