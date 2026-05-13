@@ -3,12 +3,13 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useWallet } from '@/context/WalletContext';
 import { useTheme } from '@/context/ThemeContext';
-import { Network, Save, Eye, Copy, Check, ChevronDown, Download, Shield, Lock, Cloud, AlertTriangle, X, Settings, RotateCcw } from 'lucide-react';
+import { Network, Save, Eye, Copy, Check, ChevronDown, Download, Shield, Lock, Cloud, AlertTriangle, X, Settings, RotateCcw, RefreshCw } from 'lucide-react';
 import { initGoogleDrive, isDriveConfigured, backupWalletToDrive } from '@/utils/clientSideDrive';
 import { unlockKeystore } from '@alkanes/ts-sdk';
 import { useTranslation } from '@/hooks/useTranslation';
 import SfPopup, { type SfPopupHandle } from '@/app/components/SfPopup';
 import { useEphemeralRecoveryMutation } from '@/hooks/useEphemeralRecoveryMutation';
+import { useDevnet } from '@/context/DevnetContext';
 
 type NetworkType = 'mainnet' | 'signet' | 'regtest' | 'regtest-local' | 'qubitcoin-regtest' | 'subfrost-regtest' | 'oylnet' | 'devnet' | 'custom';
 
@@ -39,6 +40,8 @@ export default function WalletSettings() {
   const { theme } = useTheme();
   const { t } = useTranslation();
   const recoveryMutation = useEphemeralRecoveryMutation();
+  const { controls: devnetControls, isDevnet, state: devnetState } = useDevnet();
+  const [devnetResetting, setDevnetResetting] = useState(false);
 
   // Determine if using browser extension wallet
   const isBrowserWallet = walletType === 'browser' && browserWallet;
@@ -376,6 +379,49 @@ export default function WalletSettings() {
               )}
             </div>
           </div>
+
+        {/* Devnet Controls — only shown when devnet network is active */}
+        {isDevnet && (
+          <div className="rounded-xl bg-cyan-500/5 border border-cyan-500/20 p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <RefreshCw size={24} className="text-cyan-400" />
+              <h3 className="text-xl font-bold text-[color:var(--sf-text)]">Devnet Controls</h3>
+              {devnetState.status === 'ready' && (
+                <span className="text-xs text-cyan-400 font-mono ml-auto">H:{devnetState.chainHeight}</span>
+              )}
+            </div>
+            <div className="space-y-3">
+              {devnetState.status !== 'ready' ? (
+                <p className="text-sm text-[color:var(--sf-text)]/60">
+                  {devnetState.status === 'booting'
+                    ? `Booting… ${devnetState.bootProgress}`
+                    : devnetState.status === 'error'
+                      ? `Boot failed: ${devnetState.error}`
+                      : 'Devnet not started yet.'}
+                </p>
+              ) : (
+                <p className="text-sm text-[color:var(--sf-text)]/60">
+                  In-browser Bitcoin node is running. Use the floating panel (bottom-right) for faucets and mining, or reset the entire devnet here.
+                </p>
+              )}
+              <button
+                onClick={async () => {
+                  setDevnetResetting(true);
+                  try {
+                    await devnetControls.resetDevnet();
+                  } finally {
+                    setDevnetResetting(false);
+                  }
+                }}
+                disabled={devnetResetting}
+                className="flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-red-400 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <RotateCcw size={18} className={devnetResetting ? 'animate-spin' : ''} />
+                <span>{devnetResetting ? 'Resetting…' : 'Reset Devnet'}</span>
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Ephemeral Recovery */}
         <div className="rounded-xl bg-[color:var(--sf-primary)]/5 p-6">
