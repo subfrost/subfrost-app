@@ -10,6 +10,7 @@ import { queryKeys } from './keys';
 import { FRBTC_WRAP_FEE_PER_1000, FRBTC_UNWRAP_FEE_PER_1000 } from '@/constants/alkanes';
 import { encodeSimulateCalldata } from '@/utils/simulateCalldata';
 import { getBitcoinPrice as rpcGetBitcoinPrice } from '@/lib/alkanes/rpc';
+import { getAlkanesDataSource } from '@/lib/alkanes/dataSource';
 // Pricing data is global — always use mainnet subpricer regardless of connected network
 const SUBPRICER_BASE = 'https://mainnet.subfrost.io/v4/subfrost';
 
@@ -152,6 +153,16 @@ export function frbtcPremiumQueryOptions(
     retry: 3,
     retryDelay: 1000,
     queryFn: async () => {
+      if (network === 'mainnet' || getAlkanesDataSource(network) === 'espo') {
+        return {
+          premium: FRBTC_WRAP_FEE_PER_1000 * 100_000,
+          wrapFeePerThousand: FRBTC_WRAP_FEE_PER_1000,
+          unwrapFeePerThousand: FRBTC_UNWRAP_FEE_PER_1000,
+          isLive: false,
+          error: 'ESPO data source uses configured frBTC fees; no alkanes_simulate call',
+        };
+      }
+
       if (!provider) throw new Error('Provider not initialized');
 
       if (!frbtcAlkaneId || frbtcAlkaneId === '') {

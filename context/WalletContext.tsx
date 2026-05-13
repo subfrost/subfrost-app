@@ -66,7 +66,7 @@ import { BROWSER_WALLETS, getInstalledWallets, isWalletInstalled } from '@/const
 // import { patchTapInternalKeys } from '@/lib/psbt-patching';
 
 // Import browser wallet signing utilities with robust reconnection handling
-import { signWithOyl, signWithUnisat, signWithXverse, detectWalletId, getOylCallCount, resetOylCallCount, patchTapInternalKeys } from '@/lib/wallet/browserWalletSigning';
+import { signWithOyl, signWithXverse, detectWalletId, getOylCallCount, resetOylCallCount, patchTapInternalKeys } from '@/lib/wallet/browserWalletSigning';
 import { toXOnlyPubKeyHex } from '@/lib/wallet/pubkeyHelpers';
 
 // Connection-specific counter for OYL getAddresses() calls during initial connection
@@ -2040,45 +2040,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
         }
       }
 
-      // For UniSat wallet, use signWithUnisat which calls signPsbts with
-      // `autoFinalized: true`. UniSat's `autoFinalized: false` mode is buggy for
-      // taproot inputs — it returns partial-sig fields that bitcoinjs-lib's
-      // `finalizeAllInputs()` can't reconcile, throwing "Cannot finalize taproot
-      // input #N. No tapleaf script signature provided." (bitcoinjs falls
-      // through to script-path finalization because key-path metadata is
-      // incomplete from UniSat's side).
-      //
-      // The previous fallback at the bottom of this function called the SDK
-      // adapter with `auto_finalized: false`, which forwarded that flag to
-      // UniSat → triggered the bug. Routing UniSat through `signWithUnisat`
-      // (which passes `autoFinalized: true`) makes UniSat return a fully
-      // finalized PSBT (with `finalScriptWitness` set on each input) that
-      // every mutation hook can use directly.
-      //
-      // Source: 2026-04-28 unwrap regression with UniSat. Trace showed
-      // "[WalletContext] unisat signing succeeded (988 hex chars)" hitting
-      // the generic adapter path on line ~1860 instead of the UniSat-specific
-      // helper. Adding this branch routes UniSat through the right helper.
-      if (detectedWallet === 'unisat') {
-        try {
-          const unisatAddress = browserWalletAddresses?.taproot?.address || browserWallet?.address;
-          if (!unisatAddress) {
-            throw new Error('UniSat address not found');
-          }
-          console.log(`[WalletContext] UniSat: Using signWithUnisat (${psbt.inputCount} inputs, address=${unisatAddress})`);
-          const result = await signWithUnisat(psbt, unisatAddress);
-          console.log(`[WalletContext] UniSat: signing succeeded (finalized: ${result.isFinalized})`);
-          return result.signedPsbtBase64;
-        } catch (e: any) {
-          console.error(`[WalletContext] UniSat signing failed:`, e?.message || e);
-          throw new Error(`UniSat signing failed: ${e?.message || e}`);
-        }
-      }
-
-      // For other browser wallets (OKX, Leather, Phantom, etc.), use the SDK
-      // adapter directly. UniSat is handled above and avoids this path because
-      // `auto_finalized: false` is broken for UniSat taproot inputs (see comment
-      // on the UniSat branch).
+      // For UniSat, OKX, Leather, Phantom, etc., use the SDK adapter directly.
       // IMPORTANT: Use the PATCHED psbt (with corrected tapInternalKey), not the original psbtBase64
       const patchedPsbtHex = psbt.toHex();
 
@@ -2187,6 +2149,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       throw new Error('TapTweak produced an invalid private key (overflow)');
     }
     const tweakedKeyPair = ECPair.fromPrivateKey(Buffer.from(tweakedPriv), { network: btcNetwork });
+    const scriptPathKeyPair = ECPair.fromPrivateKey(Buffer.from(taprootChild.privateKey), { network: btcNetwork });
 
     // Parse and sign the PSBT
     const psbt = bitcoin.Psbt.fromBase64(psbtBase64, { network: btcNetwork });
@@ -2196,10 +2159,12 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
     console.log('[signTaprootPsbt] X-only pubkey:', Buffer.from(xOnlyPubkey).toString('hex'));
     console.log('[signTaprootPsbt] Internal y-parity:', taprootChild.publicKey[0] === 0x03 ? 'odd (negated)' : 'even');
 
-    // Sign each input with the tweaked taproot key
+    // Sign normal BIP86 inputs with the tweaked key. Script-path recovery
+    // inputs carry tapLeafScript and are signed by the untweaked leaf key.
     for (let i = 0; i < psbt.inputCount; i++) {
       try {
-        psbt.signInput(i, tweakedKeyPair);
+        const hasTapLeafScript = (psbt.data.inputs[i] as any).tapLeafScript?.length > 0;
+        psbt.signInput(i, hasTapLeafScript ? scriptPathKeyPair : tweakedKeyPair);
         console.log(`[signTaprootPsbt] Signed input ${i}`);
       } catch (error) {
         console.warn(`[signTaprootPsbt] Could not sign input ${i}:`, error);
@@ -2239,34 +2204,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
         }
       }
 
-      // For UniSat, route through signWithUnisat for the same reason as the
-      // taproot path: the SDK adapter's `auto_finalized: false` mode produces
-      // PSBTs that bitcoinjs-lib's finalizer can't reconcile. signWithUnisat
-      // uses `autoFinalized: true` and returns finalized PSBTs.
-      if (detectWalletId(browserWallet) === 'unisat') {
-        try {
-          const bitcoin = await import('bitcoinjs-lib');
-          const btcNetwork = network === 'mainnet' ? bitcoin.networks.bitcoin
-            : network === 'signet' || network === 'testnet' ? bitcoin.networks.testnet
-            : bitcoin.networks.regtest;
-          const psbt = bitcoin.Psbt.fromBase64(psbtBase64, { network: btcNetwork });
-          const unisatAddress = browserWalletAddresses?.nativeSegwit?.address
-            || browserWalletAddresses?.taproot?.address
-            || browserWallet?.address;
-          if (!unisatAddress) {
-            throw new Error('UniSat address not found');
-          }
-          console.log(`[WalletContext] UniSat (segwit): Using signWithUnisat (${psbt.inputCount} inputs, address=${unisatAddress})`);
-          const result = await signWithUnisat(psbt, unisatAddress);
-          console.log(`[WalletContext] UniSat (segwit): signing succeeded (finalized: ${result.isFinalized})`);
-          return result.signedPsbtBase64;
-        } catch (e: any) {
-          console.error(`[WalletContext] UniSat (segwit) signing failed:`, e?.message || e);
-          throw new Error(`UniSat signing failed: ${e?.message || e}`);
-        }
-      }
-
-      // For other browser wallets, use the SDK adapter directly
+      // For UniSat and other browser wallets, use the SDK adapter directly.
       const psbtBuffer = Buffer.from(psbtBase64, 'base64');
       const psbtHex = psbtBuffer.toString('hex');
 

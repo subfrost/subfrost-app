@@ -252,6 +252,13 @@ export function patchInputWitnessScripts(
   for (let i = 0; i < psbt.data.inputs.length; i++) {
     const input = psbt.data.inputs[i];
 
+    // Script-path taproot spends include their own control block and must be
+    // signed against the actual prevout script. Rewriting the script to the
+    // connected wallet's P2TR address makes the Schnorr signature invalid.
+    if (input.tapLeafScript?.length) {
+      continue;
+    }
+
     // If witnessUtxo exists, patch the script
     if (input.witnessUtxo) {
       const script = Buffer.from(input.witnessUtxo.script);

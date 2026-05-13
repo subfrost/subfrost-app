@@ -163,8 +163,9 @@ async function calculateSwapPrice(
   }
 
   const isSellToken0 = pool?.token0.id === sellCurrency;
-  // Reserves MUST come from the live state-trie (`alkanes_simulate` opcode
-  // 999 PoolDetails via `usePoolStateLive`). Using cached aggregator data
+  // Reserves MUST come from the live pool-state source selected by
+  // `usePoolStateLive` (ESPO on mainnet, metashrew simulate otherwise).
+  // Using cached aggregator data
   // (`pool.token0Amount`) here is a Rule SoT-2 violation — verified
   // 2026-05-05 by recomputing user-reported failed swaps:
   //   Tx 2c51b734… min_out = 1197 DIESEL, pool actual = 762 DIESEL

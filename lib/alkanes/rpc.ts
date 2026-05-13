@@ -315,7 +315,7 @@ export interface EsploraTransaction {
   txid: string;
   status?: { confirmed?: boolean; block_height?: number; block_hash?: string; block_time?: number };
   vin?: Array<{ txid: string; vout: number; prevout?: { value: number; scriptpubkey_address?: string } }>;
-  vout?: Array<{ value: number; scriptpubkey_address?: string }>;
+  vout?: Array<{ value: number; scriptpubkey?: string; scriptpubkey_address?: string }>;
   fee?: number;
   size?: number;
 }
@@ -356,10 +356,50 @@ export async function broadcastTransaction(
 ): Promise<string> {
   return jsonRpcCall<string>(
     subfrostRpcUrl(network),
-    'esplora_tx::broadcast',
+    'sendrawtransaction',
     [txHex],
     signal,
   );
+}
+
+/**
+ * Broadcast a signed transaction package in order. Used for CPFP split flows
+ * where the parent may not be accepted by mempool policy without its child.
+ */
+export async function broadcastTransactions(
+  network: string,
+  txHexes: string[],
+  signal?: AbortSignal,
+): Promise<string[]> {
+  let result: unknown;
+  try {
+    result = await jsonRpcCall<unknown>(
+      subfrostRpcUrl(network),
+      'submitpackage',
+      [txHexes],
+      signal,
+    );
+  } catch (error) {
+    if (!(error instanceof JsonRpcError) || error.code !== -32601) {
+      throw error;
+    }
+
+    result = await Promise.all(
+      txHexes.map((txHex) => broadcastTransaction(network, txHex, signal)),
+    );
+  }
+
+  if (Array.isArray(result)) {
+    return result.map(String);
+  }
+  if (
+    result &&
+    typeof result === 'object' &&
+    Array.isArray((result as { txids?: unknown[] }).txids)
+  ) {
+    return (result as { txids: unknown[] }).txids.map(String);
+  }
+  return [];
 }
 
 // ============================================================================

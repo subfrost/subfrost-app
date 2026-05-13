@@ -243,7 +243,7 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
                     {sellId === 'btc' && buyId !== 'frbtc' && buyId !== FRBTC_ALKANE_ID && t('swapSummary.wrapSwapNote')}
                     {buyId === 'btc' && (sellId === 'frbtc' || sellId === FRBTC_ALKANE_ID) && t('swapSummary.unwrapNote')}
                     {buyId === 'btc' && sellId !== 'frbtc' && sellId !== FRBTC_ALKANE_ID && t('swapSummary.unwrapSwapNote')}
-                    {quote?.hops === 2 && ' • Higher fees apply for multi-hop swaps'}
+                    {quote?.hops === 2 && t('swapSummary.multiHopFeeNote')}
                   </span>
                 </div>
               )}
@@ -253,7 +253,7 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
           {/* Routing source indicator — shown when Universal Router provides a better price */}
           {quote?.routeSource && quote.routeSource !== 'amm' && (
             <div className="mx-4 mt-2 flex items-center gap-1.5">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/40">Routed via</span>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/40">{t('swapSummary.routedVia')}</span>
               <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
                 quote.routeSource === 'clob'
                   ? 'bg-emerald-500/15 text-emerald-400'
@@ -262,9 +262,9 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
                 <svg className="h-2.5 w-2.5" fill="currentColor" viewBox="0 0 16 16">
                   <path d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0ZM6.79 5.093A.5.5 0 0 0 6 5.5v5a.5.5 0 0 0 .79.407l3.5-2.5a.5.5 0 0 0 0-.814l-3.5-2.5Z"/>
                 </svg>
-                {quote.routeSource === 'clob' ? 'Orderbook' : 'Hybrid'}
+                {quote.routeSource === 'clob' ? t('swapSummary.orderbook') : t('swapSummary.hybrid')}
               </span>
-              <span className="text-[10px] text-emerald-400/80">Better price</span>
+              <span className="text-[10px] text-emerald-400/80">{t('swapSummary.betterPrice')}</span>
             </div>
           )}
 
@@ -277,7 +277,7 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
                 return formatAlks(quote.minimumReceived, decimals, decimals);
               })()} ${buyName ?? buyId}`} />
             ) : (
-              <Row className="mt-3" label="Maximum Sent" value={`${(() => {
+              <Row className="mt-3" label={t('swapSummary.maximumSent')} value={`${(() => {
                 const isBtcToken = sellId === 'btc' || sellId === FRBTC_ALKANE_ID || sellName === 'BTC' || sellName === 'frBTC';
                 const decimals = isBtcToken ? 8 : 2;
                 return formatAlks(quote.maximumSent, decimals, decimals);

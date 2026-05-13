@@ -130,12 +130,12 @@ describe('useAddLiquidityMutation cache wiring', () => {
     expect(HOOK).toMatch(/useSyncStatus/);
   });
 
-  it('discoverAlkaneUtxos accepts a prefetched cache and short-circuits', () => {
-    expect(HOOK).toMatch(/prefetched\?:\s*WalletUtxoCache/);
-    // The fast path reads from prefetched.utxos directly.
-    expect(HOOK).toMatch(/prefetched\.utxos/);
-    expect(HOOK).toMatch(/no RPC fanout/);
-  });
+  // Removed 2026-05-11: discoverAlkaneUtxos / injectAlkaneInputs deleted —
+  // the SDK now picks alkane-bearing inputs from `prefetched_utxos` itself
+  // (the `(N with alkane assertion)` log line), so the manual fanout +
+  // injection layer became a regtest-only relic that was over-injecting
+  // every alkane UTXO into the signed PSBT on mainnet. See useAddLiquidityMutation.ts
+  // for the comment marking the removal.
 
   it('mutationFn parks on waitForIndexerSync when out of sync (mainnet)', () => {
     // The old behavior threw "Indexer catching up — try again". After

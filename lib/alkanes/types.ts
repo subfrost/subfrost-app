@@ -41,6 +41,9 @@ export interface AlkanesExecuteTypedParams {
   mineEnabled?: boolean;
   autoConfirm?: boolean;
   rawOutput?: boolean;
+  /** Force the unsigned-PSBT path even on local networks. Used by staged
+   *  package builders that need to sign/broadcast multiple txs themselves. */
+  forcePsbt?: boolean;
   /** Controls handling of UTXOs that may contain ordinal inscriptions.
    *  - 'exclude': refuse to spend inscribed UTXOs (default — protects inscriptions/runes)
    *  - 'preserve': split inscribed UTXOs to protect inscriptions
@@ -59,6 +62,19 @@ export interface AlkanesExecuteTypedParams {
    *  skips lua get_utxos entirely. Alkane UTXOs still discovered via espo.
    */
   paymentUtxos?: string[];
+  /** Synthetic raw transactions that should be overlaid onto UTXO selection.
+   *  Used by package flows where Tx B spends an output from a just-signed Tx A
+   *  before indexers can expose it through address UTXO endpoints. */
+  knownPendingTxHexes?: string[];
+  /** Explicit per-outpoint TxOut and optional alkane balance assertions.
+   *  This is lower-level than `cachedUtxos` and is used for synthetic package
+   *  outputs whose alkane balances are known from the parent protostone. */
+  prefetchedUtxos?: Array<{
+    outpoint: string;
+    value: number;
+    script_pubkey_hex: string;
+    alkanes?: Array<{ block: number; tx: number; amount: string }>;
+  }>;
   /** Pre-warmed UTXO + balance-sheet snapshot from `useWalletUtxoCache`.
    *  When supplied, alkanesExecuteTyped derives `payment_utxos` (clean
    *  BTC carriers) from the cache instead of letting the WASM fan out

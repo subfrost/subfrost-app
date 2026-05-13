@@ -84,6 +84,8 @@ export function useBtcSendMutation() {
       });
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['wallet-utxo-cache'] });
+      queryClient.invalidateQueries({ queryKey: ['btc-balance-fast'] });
       queryClient.invalidateQueries({ queryKey: ['btc-balance'] });
       queryClient.invalidateQueries({ queryKey: ['utxos'] });
       queryClient.invalidateQueries({ queryKey: ['enriched-wallet'] });

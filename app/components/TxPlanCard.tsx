@@ -19,6 +19,7 @@
 
 import type { TxPlan, PlanInput, PlanOutput, PlanAlkaneEntry } from '@/context/TransactionConfirmContext';
 import { ArrowDown, FileText } from 'lucide-react';
+import { useTranslation } from '@/hooks/useTranslation';
 
 function formatSats(value: number | bigint): string {
   const n = typeof value === 'bigint' ? Number(value) : value;
@@ -147,6 +148,7 @@ function OutputRow({ output, idx }: { output: PlanOutput; idx: number }) {
 }
 
 export function TxPlanCard({ plan, idx, total }: { plan: TxPlan; idx: number; total: number }) {
+  const { t } = useTranslation();
   const totalIn = plan.inputs.reduce((acc, i) => acc + i.valueSats, 0);
   const totalOut = plan.outputs.reduce((acc, o) => acc + o.valueSats, 0);
   const fee = plan.feeSats > 0 ? plan.feeSats : Math.max(0, totalIn - totalOut);
@@ -156,11 +158,11 @@ export function TxPlanCard({ plan, idx, total }: { plan: TxPlan; idx: number; to
       {(plan.label || total > 1) && (
         <div className="flex items-center justify-between">
           <div className="text-xs font-bold uppercase tracking-wide text-[color:var(--sf-text)]/60">
-            {plan.label ?? `Transaction ${idx + 1}`}
+            {plan.label ?? t('txPlan.transactionNumber', { number: idx + 1 })}
           </div>
           {total > 1 && (
             <div className="text-[10px] text-[color:var(--sf-text)]/40">
-              {idx + 1} of {total}
+              {t('txPlan.stepOfTotal', { step: idx + 1, total })}
             </div>
           )}
         </div>
@@ -172,7 +174,7 @@ export function TxPlanCard({ plan, idx, total }: { plan: TxPlan; idx: number; to
       {/* Inputs */}
       <div className="space-y-2">
         <div className="text-[10px] uppercase tracking-wide font-bold text-[color:var(--sf-text)]/50">
-          Inputs ({plan.inputs.length})
+          {t('txPlan.inputs', { count: plan.inputs.length })}
         </div>
         <div className="space-y-1.5">
           {plan.inputs.map((input, i) => (
@@ -188,7 +190,7 @@ export function TxPlanCard({ plan, idx, total }: { plan: TxPlan; idx: number; to
       {/* Outputs */}
       <div className="space-y-2">
         <div className="text-[10px] uppercase tracking-wide font-bold text-[color:var(--sf-text)]/50">
-          Outputs ({plan.outputs.length})
+          {t('txPlan.outputs', { count: plan.outputs.length })}
         </div>
         <div className="space-y-1.5">
           {plan.outputs.map((output, i) => (
@@ -199,7 +201,7 @@ export function TxPlanCard({ plan, idx, total }: { plan: TxPlan; idx: number; to
 
       {/* Fee */}
       <div className="flex items-center justify-between pt-2 border-t border-[color:var(--sf-outline)] text-xs">
-        <span className="text-[color:var(--sf-text)]/60">Network fee</span>
+        <span className="text-[color:var(--sf-text)]/60">{t('txPlan.networkFee')}</span>
         <span className="text-[color:var(--sf-text)] font-bold">
           {formatSats(fee)}
           {plan.feeRateSatVb && (

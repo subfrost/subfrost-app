@@ -1,10 +1,9 @@
 /**
  * usePoolStateLive — reactive live pool state (reserves + LP supply).
  *
- * Reads pool reserves *directly from the pool contract* via
- * `metashrew_view("simulate")` against opcode 999 (PoolDetails). NO espo
- * dependency — this is what swap/LP slippage math agrees with at submit
- * time. See `lib/alkanes/poolState.ts` for the byte-layout decoder.
+ * Reads pool reserves through the app-level alkanes data source. Mainnet
+ * defaults to ESPO (`essentials.*` reserve/supply reads); metashrew simulate
+ * remains available for non-ESPO networks and explicit configuration.
  *
  * ## Refresh model
  *

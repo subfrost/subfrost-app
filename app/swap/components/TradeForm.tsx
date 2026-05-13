@@ -5,8 +5,13 @@ import type { SelectedOrder, TokenMeta } from '../types';
 import type { Network } from '@/utils/constants';
 import type { ComponentProps } from 'react';
 import { useTranslation } from '@/hooks/useTranslation';
+import SwapInputs from './SwapInputs';
 
-const SwapInputs = lazy(() => import('./SwapInputs'));
+// Market swap is the primary use case on /swap — load it eagerly so the
+// initial render doesn't show the FormSkeleton while the JS chunk streams in.
+// Limit/Liquidity stay lazy: their tabs are opt-in, and the modules carry
+// heavier deps (orderbook, paired-amount math) that aren't worth shipping
+// in the initial bundle.
 const LimitOrderPanel = lazy(() => import('./LimitOrderPanel'));
 const LiquidityInputs = lazy(() => import('./LiquidityInputs'));
 

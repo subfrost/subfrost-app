@@ -3,6 +3,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useQuery } from '@tanstack/react-query';
 import { useWallet } from '@/context/WalletContext';
 import { useBtcPrice } from '@/hooks/useBtcPrice';
 import { useEnrichedWalletData } from '@/hooks/useEnrichedWalletData';
@@ -41,12 +42,12 @@ export default function AlkanesBalancesCard({
   filter,
   onFilterChange,
 }: AlkanesBalancesCardProps) {
-  const { network } = useWallet() as any;
+  const { account, network } = useWallet() as any;
   // Single source of truth for BTC price (queries/market.ts).
   const { data: btcPriceUsd = 0 } = useBtcPrice();
   const { t } = useTranslation();
   const router = useRouter();
-  const { balances, btcFast, isAlkanesLoading, error, refreshAlkanes } = useEnrichedWalletData();
+  const { balances, addressAlkanes, spendableAlkanes, btcFast, isAlkanesLoading, error, refreshAlkanes } = useEnrichedWalletData();
   const { data: poolsData } = usePools();
   const { alkaneDeltas: pendingAlkaneDeltas, pendingTxs } = usePendingTxs();
 
@@ -73,7 +74,15 @@ export default function AlkanesBalancesCard({
     }
     return map;
   }, [pendingAlkaneDeltas, pendingTxs]);
-  const { data: positionMeta } = usePositionMetadata(balances.alkanes);
+  const walletPageAlkanes = addressAlkanes;
+  const spendableByAlkane = useMemo(() => {
+    const map = new Map<string, AlkaneAsset>();
+    for (const alkane of spendableAlkanes) {
+      map.set(alkane.alkaneId, alkane);
+    }
+    return map;
+  }, [spendableAlkanes]);
+  const { data: positionMeta } = usePositionMetadata(walletPageAlkanes);
   const fuelAllocation = useFuelAllocation();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [expandedAlkaneId, setExpandedAlkaneId] = useState<string | null>(null);
@@ -81,6 +90,30 @@ export default function AlkanesBalancesCard({
   const alkaneFilter = filter ?? internalAlkaneFilter;
   const setAlkaneFilter = onFilterChange ?? setInternalAlkaneFilter;
   // hasAutoRefreshed: removed in 2026-05-04 along with the auto-retry useEffect.
+  const btcAddresses = useMemo(() => {
+    const addresses: string[] = [];
+    if (account?.nativeSegwit?.address) addresses.push(account.nativeSegwit.address);
+    if (account?.taproot?.address) addresses.push(account.taproot.address);
+    return addresses;
+  }, [account]);
+  const btcAddressKey = useMemo(() => btcAddresses.slice().sort().join(','), [btcAddresses]);
+  const { data: confirmedBtcSats } = useQuery({
+    queryKey: ['wallet-btc-address-balance', network || 'mainnet', btcAddressKey],
+    enabled: btcAddresses.length > 0,
+    staleTime: 30_000,
+    retry: 2,
+    queryFn: async () => {
+      const totals = await Promise.all(btcAddresses.map(async (address) => {
+        const res = await fetch(`/api/esplora/address/${encodeURIComponent(address)}?network=${encodeURIComponent(network || 'mainnet')}`);
+        if (!res.ok) throw new Error(`BTC address stats failed: ${res.status}`);
+        const data = await res.json();
+        const funded = Number(data?.chain_stats?.funded_txo_sum ?? 0);
+        const spent = Number(data?.chain_stats?.spent_txo_sum ?? 0);
+        return Math.max(0, funded - spent);
+      }));
+      return totals.reduce((sum, value) => sum + value, 0);
+    },
+  });
 
   const poolMap = useMemo(() => {
     const map = new Map<string, { token0Symbol: string; token1Symbol: string; token0Id: string; token1Id: string; token0Amount: string; token1Amount: string; lpTotalSupply: string }>();
@@ -119,10 +152,12 @@ export default function AlkanesBalancesCard({
     return prices;
   }, [poolsData, btcPriceUsd]);
 
-  const btcSats = btcFast && btcFast.total > 0 ? btcFast.total : balances.bitcoin.total;
+  const btcAvailableSats = btcFast && btcFast.total > 0 ? btcFast.total : balances.bitcoin.spendable || balances.bitcoin.total;
+  const btcConfirmedSats = confirmedBtcSats ?? btcAvailableSats;
+  const btcMempoolSats = Math.max(0, btcConfirmedSats - btcAvailableSats);
   const bitcoinAsset: AlkaneAsset = {
     alkaneId: BITCOIN_ASSET_ID,
-    balance: String(btcSats),
+    balance: String(btcConfirmedSats),
     decimals: 8,
     symbol: 'BTC',
     name: 'Bitcoin',
@@ -186,7 +221,9 @@ export default function AlkanesBalancesCard({
   // /get-alkanes-by-address) would intermittently return an empty list
   // when the indexer lagged. The retry was a hack to paper over that.
   //
-  // Why it has to go: after 9ec751fb the balance source is canonical
+  // Why it had to go: automatic refresh loops make the confirmed/available
+  // comparison harder to reason about on the wallet asset list.
+  // Historical note: after 9ec751fb the balance source was canonical
   // (UTXO set) — when it returns 0 alkanes, the wallet *actually has 0*.
   // The retry was firing on the legitimately-empty case, calling
   // refreshAlkanes() which invalidates the query, which races against the
@@ -205,6 +242,25 @@ export default function AlkanesBalancesCard({
   const isPosition = (alkane: { symbol: string; name: string; alkaneId?: string }) =>
     isLpToken(alkane) || isStakedPosition(alkane);
   const isNft = (balance: string) => BigInt(balance) === BigInt(1);
+  const parseRawBalance = (balance?: string): bigint => {
+    try {
+      return BigInt(balance || '0');
+    } catch {
+      return 0n;
+    }
+  };
+  const getAvailabilityBreakdown = (alkane: AlkaneAsset) => {
+    if (isBitcoinAsset(alkane)) {
+      return {
+        availableRaw: BigInt(Math.max(0, btcAvailableSats)),
+        mempoolRaw: BigInt(Math.max(0, btcMempoolSats)),
+      };
+    }
+    const confirmedRaw = parseRawBalance(alkane.balance);
+    const availableRaw = parseRawBalance(spendableByAlkane.get(alkane.alkaneId)?.balance);
+    const mempoolRaw = confirmedRaw > availableRaw ? confirmedRaw - availableRaw : 0n;
+    return { availableRaw, mempoolRaw };
+  };
 
   const formatDepositAmount = (amount: string, decimals: number, symbol: string): string => {
     const val = BigInt(amount);
@@ -226,7 +282,7 @@ export default function AlkanesBalancesCard({
   const formatAlkaneBalance = (balance: string, decimals: number = 8, alkane?: { symbol: string; name: string; alkaneId?: string }): string => {
     const value = BigInt(balance);
     if (alkane && isBitcoinAsset(alkane)) {
-      return `${(Number(value) / 1e8).toFixed(8)} BTC`;
+      return (Number(value) / 1e8).toFixed(8);
     }
     if (value === BigInt(1)) {
       if (alkane && alkane.alkaneId && isEnrichablePosition(alkane) && positionMeta?.[alkane.alkaneId]) {
@@ -352,7 +408,7 @@ export default function AlkanesBalancesCard({
         // token they've never held). Add them as zero-balance entries
         // so the pending overlay has something to attach to.
         const ghostAlkanes: AlkaneAsset[] = [];
-        const confirmedIds = new Set(balances.alkanes.map((a) => a.alkaneId));
+        const confirmedIds = new Set(walletPageAlkanes.map((a) => a.alkaneId));
         for (const [id] of pendingByAlkane) {
           if (confirmedIds.has(id)) continue;
           const poolMatch = poolMap.get(id);
@@ -365,8 +421,8 @@ export default function AlkanesBalancesCard({
           } as AlkaneAsset);
         }
         const merged = alkaneFilter === 'tokens'
-          ? [bitcoinAsset, ...balances.alkanes, ...ghostAlkanes]
-          : [...balances.alkanes, ...ghostAlkanes];
+          ? [bitcoinAsset, ...walletPageAlkanes, ...ghostAlkanes]
+          : [...walletPageAlkanes, ...ghostAlkanes];
 
         let filtered = merged.filter((a) => {
           if (alkaneFilter === 'positions') return isPosition(a);
@@ -490,26 +546,6 @@ export default function AlkanesBalancesCard({
                       <div className="font-bold text-sm text-[color:var(--sf-text)]">
                         {showValue(formatAlkaneBalance(alkane.balance, alkane.decimals, alkane))}
                       </div>
-                      {(() => {
-                        const pending = pendingByAlkane.get(alkane.alkaneId);
-                        if (!pending || pending.delta === 0n) return null;
-                        const decimals = alkane.decimals || 8;
-                        const sign = pending.delta < 0n ? '-' : '+';
-                        const abs = pending.delta < 0n ? -pending.delta : pending.delta;
-                        const divisor = BigInt(10 ** decimals);
-                        const whole = abs / divisor;
-                        const remainder = abs % divisor;
-                        const wholeStr = whole.toString();
-                        const remainderStr = remainder.toString().padStart(decimals, '0');
-                        const dp = wholeStr.length >= 3 ? 2 : 4;
-                        const formatted = `${wholeStr}.${remainderStr.slice(0, dp)}`;
-                        const label = pending.uncertain ? `${sign}? ${alkane.symbol || ''}` : `${sign}${formatted} ${alkane.symbol || ''}`;
-                        return (
-                          <div className="text-[10px] text-amber-300/80" title={pending.uncertain ? 'Contract output amount is uncertain until the swap confirms' : 'Pending mempool delta — overlays confirmed balance'}>
-                            {label.trim()} pending
-                          </div>
-                        );
-                      })()}
                       {!isLoadingData && (() => {
                         const decimals = alkane.decimals || 8;
                         const balanceFloat = Number(BigInt(alkane.balance)) / Math.pow(10, decimals);
@@ -549,6 +585,41 @@ export default function AlkanesBalancesCard({
                           }
                         }
                         return null;
+                      })()}
+                      {!isLoadingData && (() => {
+                        const breakdown = getAvailabilityBreakdown(alkane);
+                        if (!breakdown) return null;
+                        const hasMempoolAmount = breakdown.mempoolRaw > 0n;
+                        return (
+                          <>
+                            <div className="mt-2 text-xs text-[color:var(--sf-primary)]">
+                              available: {formatAlkaneBalance(breakdown.availableRaw.toString(), alkane.decimals, alkane)}
+                            </div>
+                            <div className={`text-xs ${hasMempoolAmount ? 'italic text-white' : 'text-[color:var(--sf-text)]/45'}`}>
+                              mempool: {formatAlkaneBalance(breakdown.mempoolRaw.toString(), alkane.decimals, alkane)}
+                            </div>
+                          </>
+                        );
+                      })()}
+                      {(() => {
+                        const pending = pendingByAlkane.get(alkane.alkaneId);
+                        if (!pending || pending.delta === 0n) return null;
+                        const decimals = alkane.decimals || 8;
+                        const sign = pending.delta < 0n ? '-' : '+';
+                        const abs = pending.delta < 0n ? -pending.delta : pending.delta;
+                        const divisor = BigInt(10 ** decimals);
+                        const whole = abs / divisor;
+                        const remainder = abs % divisor;
+                        const wholeStr = whole.toString();
+                        const remainderStr = remainder.toString().padStart(decimals, '0');
+                        const dp = wholeStr.length >= 3 ? 2 : 4;
+                        const formatted = `${wholeStr}.${remainderStr.slice(0, dp)}`;
+                        const label = pending.uncertain ? `${sign}? ${alkane.symbol || ''}` : `${sign}${formatted} ${alkane.symbol || ''}`;
+                        return (
+                          <div className="text-[10px] text-amber-300/80" title={pending.uncertain ? 'Contract output amount is uncertain until the swap confirms' : 'Pending mempool delta — overlays confirmed balance'}>
+                            {label.trim()} pending
+                          </div>
+                        );
                       })()}
                     </div>
                   </div>

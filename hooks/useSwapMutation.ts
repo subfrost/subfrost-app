@@ -171,6 +171,10 @@ import { buildSwapProtostone, buildSwapExactOutputProtostone, buildSwapInputRequ
 import { FACTORY_SWAP_OPCODE } from '@/lib/alkanes/constants';
 import { uint8ArrayToBase64, getBitcoinNetwork, extractPsbtBase64 } from '@/lib/alkanes/helpers';
 import { buildPlanFromTx } from '@/lib/alkanes/planBuilder';
+import {
+  broadcastTransaction as broadcastRawTransaction,
+  broadcastTransactions as broadcastRawTransactions,
+} from '@/lib/alkanes/rpc';
 import type { PlanAlkaneEntry } from '@/context/TransactionConfirmContext';
 
 bitcoin.initEccLib(ecc);
@@ -398,7 +402,7 @@ export function useSwapMutation() {
         // case where the indexer takes longer than waitForIndexer's own
         // internal budget.
         const wantsSplit = (swapData as any).splitTransactions === true;
-        const useAutoConfirm = isKeystoreWallet || wantsSplit;
+        const useAutoConfirm = isKeystoreWallet;
 
         const buildExecuteOpts = () => ({
           txContext,
@@ -406,10 +410,9 @@ export function useSwapMutation() {
           inputRequirements: (swapData as any).overrideInputRequirements || inputRequirements,
           protostones: (swapData as any).overrideProtostones || protostone,
           feeRate: swapData.feeRate,
-          // Split-tx mode is implemented inside alkanes-rs execute_full. The
-          // browser unsigned-PSBT path cannot broadcast the parent wrap tx
-          // before building the child execute tx, so opt into SDK-side
-          // signing/broadcasting whenever the caller requests split mode.
+          // Browser wallets must stay on the unsigned-PSBT path so the user
+          // gets wallet signing prompts. Keystore wallets can use SDK-side
+          // signing/broadcasting via execute_full.
           autoConfirm: useAutoConfirm,
           toAddresses: (swapData as any).overrideToAddresses || toAddresses,
           network,
@@ -422,11 +425,9 @@ export function useSwapMutation() {
           // the wrap into Tx A and the execute into Tx B; each gets its own
           // 3.5M MINIMUM_FUEL budget. Required for atomic BTC→Token swaps on
           // mainnet where block-fuel-share starvation is real.
-          // `splitTransactions` is honored at runtime by alkanesExecuteFull's
-          // options JSON (see alkanes-rs ts-sdk/src/provider/index.ts), but
-          // the SDK's hand-maintained index.d.ts hasn't surfaced the prop on
-          // alkanesExecuteTyped's param type yet. Cast `as any` until the SDK
-          // d.ts is regenerated; the runtime path is unchanged.
+          // `splitTransactions` is honored by the WASM provider through the
+          // options JSON. Keystore reaches that through execute_full; browser
+          // wallets must still receive unsigned PSBTs for wallet prompts.
           splitTransactions: wantsSplit,
         });
 
@@ -457,6 +458,135 @@ export function useSwapMutation() {
           }
         }
 
+        const broadcastSignedTx = async (txHex: string, fallbackTxid: string): Promise<string> => {
+          let broadcastTxid: string;
+          try {
+            broadcastTxid = await broadcastRawTransaction(network, txHex) || fallbackTxid;
+          } catch (directErr) {
+            console.warn('[useSwapMutation] sendrawtransaction broadcast failed, falling back to provider.broadcastTransaction:', directErr);
+            broadcastTxid = await provider.broadcastTransaction(txHex) || fallbackTxid;
+          }
+          if (typeof window !== 'undefined') {
+            try {
+              const { pendingTxStore } = await import('@/lib/alkanes/pendingTxStore');
+              await pendingTxStore.add(txHex);
+            } catch (error) {
+              console.warn('[useSwapMutation] pendingTxStore.add failed:', error);
+            }
+          }
+          return broadcastTxid;
+        };
+
+        const signPsbtToTx = async (rawPsbt: unknown): Promise<{ txHex: string; txid: string }> => {
+          let psbtBase64 = extractPsbtBase64(rawPsbt);
+          if (isBrowserWallet) {
+            if (!taprootAddress) {
+              throw new Error(
+                'Connected wallet has no taproot address. Switch your wallet ' +
+                'extension to Taproot (P2TR) mode and reconnect — alkanes only ' +
+                'live at P2TR addresses.'
+              );
+            }
+            const patchResult = patchInputsOnly({
+              psbtBase64,
+              network: btcNetwork,
+              taprootAddress,
+              segwitAddress,
+              paymentPubkeyHex: account?.nativeSegwit?.pubkey,
+            });
+            psbtBase64 = patchResult.psbtBase64;
+          }
+
+          const signedPsbtBase64 = await signTaprootPsbt(psbtBase64);
+          const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtBase64, { network: btcNetwork });
+          const alreadyFinalized = signedPsbt.data.inputs.every(input =>
+            input.finalScriptWitness || input.finalScriptSig
+          );
+          if (!alreadyFinalized) {
+            signedPsbt.finalizeAllInputs();
+          }
+          const tx = signedPsbt.extractTransaction();
+          const txHex = tx.toHex();
+          return { txHex, txid: tx.getId() };
+        };
+
+        const signAndBroadcastPsbt = async (rawPsbt: unknown): Promise<string> => {
+          const tx = await signPsbtToTx(rawPsbt);
+          return await broadcastSignedTx(tx.txHex, tx.txid);
+        };
+
+        const broadcastSignedPackage = async (
+          txs: Array<{ txHex: string; txid: string }>,
+        ): Promise<string[]> => {
+          const txids = await broadcastRawTransactions(network, txs.map((tx) => tx.txHex));
+          if (typeof window !== 'undefined') {
+            try {
+              const { pendingTxStore } = await import('@/lib/alkanes/pendingTxStore');
+              await Promise.all(txs.map((tx) => pendingTxStore.add(tx.txHex)));
+            } catch (error) {
+              console.warn('[useSwapMutation] pendingTxStore.add package failed:', error);
+            }
+          }
+          return txs.map((tx, index) => txids[index] || tx.txid);
+        };
+
+        const getSplitPsbts = (value: any): unknown[] => {
+          const arrayCandidates = [
+            value?.readyToSign?.psbts,
+            value?.ready_to_sign?.psbts,
+            value?.readyToSignSplit?.psbts,
+            value?.ready_to_sign_split?.psbts,
+            value?.split?.psbts,
+            value?.psbts,
+          ];
+          for (const candidate of arrayCandidates) {
+            if (Array.isArray(candidate) && candidate.length >= 2) {
+              return candidate;
+            }
+          }
+
+          const parent =
+            value?.readyToSign?.split_psbt ??
+            value?.ready_to_sign?.split_psbt ??
+            value?.split_psbt ??
+            value?.parent_psbt ??
+            value?.parentPsbt ??
+            value?.wrap_psbt ??
+            value?.wrapPsbt;
+          const child =
+            (parent ? (value?.readyToSign?.psbt ?? value?.ready_to_sign?.psbt) : undefined) ??
+            value?.readyToSign?.execute_psbt ??
+            value?.ready_to_sign?.execute_psbt ??
+            value?.execute_psbt ??
+            value?.child_psbt ??
+            value?.childPsbt ??
+            value?.swap_psbt ??
+            value?.swapPsbt;
+          return parent && child ? [parent, child] : [];
+        };
+
+        const splitPsbts = getSplitPsbts(result);
+        if (splitPsbts.length >= 2) {
+          // CPFP split transactions must be pre-signed first and submitted as
+          // one ordered package. Broadcasting the parent alone can fail mempool
+          // policy because the child carries the package fee.
+          const signedPackage = [
+            await signPsbtToTx(splitPsbts[0]),
+            await signPsbtToTx(splitPsbts[1]),
+          ];
+          const [wrapTxId, txId] = await broadcastSignedPackage(signedPackage);
+          return {
+            success: true,
+            transactionId: txId,
+            wrapTxId,
+            frbtcUnwrapTxId: undefined,
+          } as {
+            success: boolean;
+            transactionId?: string;
+            wrapTxId?: string;
+            frbtcUnwrapTxId?: string;
+          };
+        }
 
 
         // Check if SDK auto-completed the transaction.
@@ -742,7 +872,7 @@ export function useSwapMutation() {
 
 
           // Broadcast the transaction
-          const broadcastTxid = await provider.broadcastTransaction(txHex);
+          const broadcastTxid = await broadcastSignedTx(txHex, txid);
 
           if (txid !== broadcastTxid) {
             console.warn('[useSwapMutation] WARNING: Computed txid !== broadcast txid!');
@@ -799,6 +929,8 @@ export function useSwapMutation() {
 
       // Invalidate all balance-related queries to refresh UI
       queryClient.invalidateQueries({ queryKey: ['sellable-currencies'] });
+      queryClient.invalidateQueries({ queryKey: ['wallet-utxo-cache'] });
+      queryClient.invalidateQueries({ queryKey: ['btc-balance-fast'] });
       queryClient.invalidateQueries({ queryKey: ['btc-balance'] });
       queryClient.invalidateQueries({ queryKey: ['frbtc-premium'] });
       queryClient.invalidateQueries({ queryKey: ['dynamic-pools'] });

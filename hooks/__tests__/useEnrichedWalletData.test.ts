@@ -55,6 +55,15 @@ describe('useEnrichedWalletData', () => {
     expect(src).toContain("@/queries/account");
   });
 
+  it('keeps address-level and spendable alkane balance views separate', () => {
+    expect(src).toContain('useWalletUtxoCache');
+    expect(src).toContain('espoAlkanesFromWalletCache');
+    expect(src).toContain('walletUtxoCache.balances');
+    expect(src).toContain('addressAlkanes');
+    expect(src).toContain('spendableAlkanes');
+    expect(src).toContain('displayAlkanes');
+  });
+
   it('destructures isConnected and account from useWallet', () => {
     expect(src).toMatch(/const\s*\{[^}]*account[^}]*isConnected[^}]*\}\s*=\s*useWallet/);
   });
@@ -116,6 +125,8 @@ describe('useEnrichedWalletData', () => {
   it('exports EnrichedWalletData interface', () => {
     expect(src).toContain('export interface EnrichedWalletData');
     expect(src).toContain('balances: WalletBalances');
+    expect(src).toContain('addressAlkanes: AlkaneAsset[]');
+    expect(src).toContain('spendableAlkanes: AlkaneAsset[]');
     expect(src).toContain('isLoading: boolean');
     expect(src).toContain('error: string | null');
     expect(src).toContain('refresh: () => Promise<void>');

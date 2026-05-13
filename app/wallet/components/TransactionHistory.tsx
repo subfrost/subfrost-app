@@ -2,16 +2,22 @@
 
 import { useState, useRef, useEffect, useImperativeHandle, forwardRef, useMemo } from 'react';
 import { useWallet } from '@/context/WalletContext';
-import { useTransactionHistory, type AlkaneTraceSummary } from '@/hooks/useTransactionHistory';
+import { useTransactionHistory, type AlkaneTraceSummary, type EnrichedTransaction } from '@/hooks/useTransactionHistory';
 import { usePendingTxs } from '@/hooks/usePendingTxs';
 import { RefreshCw, Zap, Loader2 } from 'lucide-react';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useTokenDisplayMap, type TokenDisplay } from '@/hooks/useTokenDisplayMap';
-import SpeedUpModal from './SpeedUpModal';
 
 export interface TransactionHistoryHandle {
   refresh: () => Promise<void>;
   isRefreshing: boolean;
+}
+
+export interface SpeedUpRequest {
+  txid: string;
+  hex: string;
+  fee?: number;
+  vsize?: number;
 }
 
 const ESPO_ALKANE_ICON_BASE = 'https://cdn.ordiscan.com/alkanes';
@@ -72,6 +78,7 @@ function AlkaneTraceSummaries({
   summaries?: AlkaneTraceSummary[];
   displayMap?: Record<string, TokenDisplay>;
 }) {
+  const { t } = useTranslation();
   if (!summaries?.length) return null;
 
   return (
@@ -92,7 +99,7 @@ function AlkaneTraceSummaries({
             className="grid gap-2 rounded-lg bg-[color:var(--sf-panel-bg)]/75 p-3"
           >
             <span className="text-xs font-semibold tracking-[0.01em] text-[color:var(--sf-text)]/70">
-              Contract call:
+              {t('history.contractCall')}
             </span>
             <div className="flex min-w-0 items-center gap-2">
               <EspoAlkaneIcon id={summary.contractId} label={label} />
@@ -110,7 +117,7 @@ function AlkaneTraceSummaries({
               </span>
               {summary.createdId && createdLabel && (
                 <span className="inline-flex min-w-0 items-center gap-1.5 text-xs font-medium text-[color:var(--sf-text)]/55">
-                  <span>created</span>
+                  <span>{t('history.created')}</span>
                   <EspoAlkaneIcon id={summary.createdId} label={createdLabel} />
                   <span className="truncate">{createdLabel}</span>
                 </span>
@@ -127,8 +134,12 @@ function AlkaneTraceSummaries({
   );
 }
 
-const TransactionHistory = forwardRef<TransactionHistoryHandle>(function TransactionHistory(_props, ref) {
-  const { account } = useWallet() as any;
+interface TransactionHistoryProps {
+  onSpeedUpRequest?: (request: SpeedUpRequest) => void;
+}
+
+const TransactionHistory = forwardRef<TransactionHistoryHandle, TransactionHistoryProps>(function TransactionHistory({ onSpeedUpRequest }, ref) {
+  const { account, network } = useWallet() as any;
   const { t } = useTranslation();
 
   const addresses = [
@@ -159,6 +170,7 @@ const TransactionHistory = forwardRef<TransactionHistoryHandle>(function Transac
   const { data: summaryDisplayMap } = useTokenDisplayMap(summaryAlkaneIds);
 
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [speedUpLoadingTxid, setSpeedUpLoadingTxid] = useState<string | null>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
 
   // Speed-up modal state. We index pending tx hexes by txid so a
@@ -166,12 +178,6 @@ const TransactionHistory = forwardRef<TransactionHistoryHandle>(function Transac
   // modal without re-querying.
   const { pendingTxs } = usePendingTxs();
   const pendingHexByTxid = new Map(pendingTxs.map((p) => [p.txid, p.hex]));
-  const [speedUpFor, setSpeedUpFor] = useState<{
-    txid: string;
-    hex: string;
-    fee?: number;
-    vsize?: number;
-  } | null>(null);
 
   // Infinite scroll — load next page when scrolled near bottom
   useEffect(() => {
@@ -198,6 +204,36 @@ const TransactionHistory = forwardRef<TransactionHistoryHandle>(function Transac
       ]);
     } finally {
       setIsRefreshing(false);
+    }
+  };
+
+  const handleSpeedUpClick = async (tx: EnrichedTransaction) => {
+    setSpeedUpLoadingTxid(tx.txid);
+    try {
+      let hex = pendingHexByTxid.get(tx.txid);
+      if (!hex) {
+        const response = await fetch(
+          `/api/esplora/tx/${tx.txid}/hex?network=${encodeURIComponent(network || 'mainnet')}`,
+        );
+        if (!response.ok) {
+          const body = await response.text().catch(() => '');
+          throw new Error(body || `Failed to fetch tx hex (${response.status})`);
+        }
+        hex = (await response.text()).trim();
+      }
+      if (!hex) throw new Error('No transaction hex returned for speed-up');
+
+      onSpeedUpRequest?.({
+        txid: tx.txid,
+        hex,
+        fee: tx.fee,
+        vsize: (tx as { vsize?: number }).vsize,
+      });
+    } catch (error) {
+      console.error('[TransactionHistory] Failed to prepare speed-up tx', error);
+      window.alert(error instanceof Error ? error.message : t('speedUp.failed'));
+    } finally {
+      setSpeedUpLoadingTxid(null);
     }
   };
 
@@ -255,20 +291,17 @@ const TransactionHistory = forwardRef<TransactionHistoryHandle>(function Transac
                           // Don't navigate to explorer when bumping.
                           e.preventDefault();
                           e.stopPropagation();
-                          const hex = pendingHexByTxid.get(tx.txid);
-                          if (hex) {
-                            setSpeedUpFor({
-                              txid: tx.txid,
-                              hex,
-                              fee: tx.fee,
-                              vsize: (tx as { vsize?: number }).vsize,
-                            });
-                          }
+                          void handleSpeedUpClick(tx);
                         }}
+                        disabled={speedUpLoadingTxid === tx.txid}
                         className="flex items-center gap-1 px-2 py-1 rounded text-xs font-bold uppercase tracking-wide bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 transition-all"
                         title="Replace this tx with a higher fee (RBF)"
                       >
-                        <Zap size={16} />
+                        {speedUpLoadingTxid === tx.txid ? (
+                          <Loader2 size={16} className="animate-spin" />
+                        ) : (
+                          <Zap size={16} />
+                        )}
                         Speed Up
                       </button>
                     )}
@@ -311,16 +344,6 @@ const TransactionHistory = forwardRef<TransactionHistoryHandle>(function Transac
         )}
         <div ref={loadMoreRef} className="h-px" />
       </div>
-      {speedUpFor && (
-        <SpeedUpModal
-          open={!!speedUpFor}
-          onClose={() => setSpeedUpFor(null)}
-          txid={speedUpFor.txid}
-          txHex={speedUpFor.hex}
-          currentFeeSats={speedUpFor.fee}
-          vsize={speedUpFor.vsize}
-        />
-      )}
     </div>
   );
 });

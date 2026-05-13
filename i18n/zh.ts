@@ -40,15 +40,6 @@ const zh: Record<string, string> = {
   // Swap
   'swap.youSend': '\u60a8\u53d1\u9001',
   'swap.youReceive': '\u60a8\u63a5\u6536',
-  'swap.transactionProgress': '交易进度',
-  'swap.stepOf': '第 {current} 步，共 {total} 步',
-  'swap.step1Wrap': '包装 BTC → frBTC',
-  'swap.step2Swap': '兑换 frBTC →',
-  'swap.step1Swap': '兑换',
-  'swap.step2Unwrap': '解包装 frBTC → BTC',
-  'swap.broadcasting': '正在广播...',
-  'swap.waitingForConfirmation': '等待确认...',
-  'swap.retry': '重试',
   'swap.confirmSwap': '\u786e\u8ba4\u5151\u6362',
   'swap.confirmCrossChainSwap': '\u786e\u8ba4\u8de8\u94fe\u5151\u6362',
   'swap.connectWallet': '\u8fde\u63a5\u94b1\u5305',
@@ -75,6 +66,12 @@ const zh: Record<string, string> = {
   'swap.enterEthAddress': '输入您希望接收代币的以太坊地址。',
   'swap.enterEthereumAddress': '输入以太坊地址',
   'swap.enterZcashAddress': '输入 Zcash 地址',
+
+  'swap.btcUnwrapNoticeDirect': '注意：frBTC 将被解包为 BTC。您将在 3-7 个区块确认后在钱包中收到 BTC。',
+  'swap.btcUnwrapNoticeSwap': '注意：本次兑换后 frBTC 将被解包为 BTC。BTC 将在 3-7 个区块确认后发送到您的钱包。',
+  'swap.backToQuote': '← 返回报价',
+  'swap.buildingTransaction': '正在构建交易...',
+  'swap.bridgePair': '桥接 {from} → {to}',
 
   // Swap Summary
   'swapSummary.multiHopRoute': '\u591a\u8df3\u5151\u6362\u8def\u7ebf',
@@ -103,6 +100,13 @@ const zh: Record<string, string> = {
   'swapSummary.wrapSwapNote': 'BTC 将在此兑换中无缝包装为 frBTC，您甚至不会察觉。',
   'swapSummary.unwrapNote': '注意：frBTC 将在此交易中解包为 BTC。BTC 将在 3 个区块确认后发送到您的钱包。',
   'swapSummary.unwrapSwapNote': '注意：此兑换后 frBTC 将被解包为 BTC。BTC 将在 3 个区块确认后发送到您的钱包。',
+
+  'swapSummary.multiHopFeeNote': ' • 多跳兑换会产生更高手续费',
+  'swapSummary.routedVia': '路由来源',
+  'swapSummary.orderbook': '订单簿',
+  'swapSummary.hybrid': '混合路由',
+  'swapSummary.betterPrice': '价格更优',
+  'swapSummary.maximumSent': '最大发送量',
 
   // Liquidity
   'liquidity.add': '\u6dfb\u52a0',
@@ -135,6 +139,12 @@ const zh: Record<string, string> = {
   'pool.selectMarket': '请在下方选择市场以查看池详情',
   'pool.loading': '\u6b63\u5728\u52a0\u8f7d\u6d41\u52a8\u6c60\u2026',
   'pool.noPools': '\u6682\u65e0\u53ef\u7528\u6d41\u52a8\u6c60\u3002',
+
+  'pool.lpPair': 'LP 交易对',
+  'pool.noPoolsFound': '未找到流动池',
+  'pool.noPoolsMatch': '没有匹配“{query}”的流动池',
+  'pool.noPoolsAvailable': '暂无可用流动池',
+  'pool.clearSearch': '清除搜索',
 
   // Connect Wallet Modal
   'wallet.connectWallet': '\u8fde\u63a5\u94b1\u5305',
@@ -185,6 +195,8 @@ const zh: Record<string, string> = {
   'receive.reuseAddress': '\u6b64\u5730\u5740\u53ef\u4ee5\u591a\u6b21\u4f7f\u7528',
   'receive.close': '\u5173\u95ed',
   'receive.copyAddress': '\u590d\u5236\u5730\u5740',
+  'receive.onlySendBtcOrAlkanes': '仅向此地址发送 BTC 或 Alkane 代币',
+  'receive.onlySendAlkanes': '仅向此地址发送 Alkane 代币',
 
   // Wallet Dashboard
   'walletDash.title': '\u60a8\u7684\u6295\u8d44\u7ec4\u5408',
@@ -200,6 +212,8 @@ const zh: Record<string, string> = {
   'walletDash.nativeSegwit': 'Native SegWit:',
   'walletDash.taproot': 'Taproot:',
   'walletDash.comingSoon': '\u5373\u5c06\u63a8\u51fa\uff01',
+  'history.contractCall': '合约调用：',
+  'history.created': '已创建',
 
   // Balances Panel
   'balances.bitcoinBalance': '\u6bd4\u7279\u5e01\u4f59\u989d',
@@ -225,6 +239,10 @@ const zh: Record<string, string> = {
   'balances.tabFuel': 'FUEL',
   'balances.tabBrc20': 'BRC20 \u4ee3\u5e01',
   'balances.tabOrdinals': 'Ordinals',
+  'balances.tabRunes': 'Runes',
+  'balances.brc20ComingSoon': 'BRC20 代币即将推出',
+  'balances.runesComingSoon': 'Runes 代币即将推出',
+  'balances.ordinalsComingSoon': 'Ordinals 即将推出',
   'balances.noNfts': '\u672a\u627e\u5230 NFT',
   'balances.nftsHint': 'NFT \u662f\u4f59\u989d\u6070\u597d\u4e3a 1 \u5355\u4f4d\u7684 Alkanes',
   'balances.noPositions': '\u672a\u627e\u5230\u4ed3\u4f4d',
@@ -315,6 +333,19 @@ const zh: Record<string, string> = {
   'settings.previewAddress': '\u9884\u89c8\u5730\u5740\uff1a',
   'settings.saveSettings': '\u4fdd\u5b58\u8bbe\u7f6e',
   'settings.settingsSaved': '\u8bbe\u7f6e\u5df2\u4fdd\u5b58\uff01',
+  'settings.ephemeralRecovery': '临时地址恢复',
+  'settings.ephemeralRecoveryDesc': '如果后续临时交易从未被接受，可从包装父交易中恢复资金。',
+  'settings.wrapTxid': '包装交易 ID：',
+  'settings.pasteWrapTxid': '粘贴交易 ID',
+  'settings.recoveryFeeRate': '恢复费率 (sat/vB)',
+  'settings.invalidRecoveryFeeRate': '请输入有效的恢复费率。',
+  'settings.confirmedWrapTxid': '已确认的包装交易 ID：',
+  'settings.pasteConfirmedTxid': '粘贴已确认的交易 ID',
+  'settings.recovering': '正在恢复...',
+  'settings.recoverEphemeralFunds': '恢复临时地址资金',
+  'settings.recoveryBroadcast': '恢复交易已广播：',
+  'settings.backedUp': '已备份！',
+  'settings.backingUp': '正在备份...',
   'settings.securityWarning': '\u5207\u52ff\u4e0e\u4efb\u4f55\u4eba\u5206\u4eab\u60a8\u7684\u52a9\u8bb0\u8bcd\u6216\u79c1\u94a5\u3002Subfrost \u7edd\u4e0d\u4f1a\u8981\u6c42\u60a8\u63d0\u4f9b\u6b64\u4fe1\u606f\u3002',
   'settings.exportKeystore': '\u5bfc\u51fa\u5bc6\u94a5\u5e93',
   'settings.revealSeedPhrase': '\u663e\u793a\u52a9\u8bb0\u8bcd',
@@ -895,9 +926,99 @@ const zh: Record<string, string> = {
   'confirm.reviewWarning': '请仔细检查交易详情。确认后此操作无法撤销。',
   'confirm.confirm': '确认',
   'confirm.cancel': '取消',
+  'confirm.checkingWallet': '正在检查钱包...',
+  'confirm.unlockWallet': '解锁钱包',
+  'confirm.walletLocked': '请解锁钱包以继续。',
 
   // Receive Modal (additional)
   'receive.important': '重要提示：',
+
+  // UTXO Management
+  'utxo.loading': '正在加载 UTXO...',
+  'utxo.countSingular': '{count} 个 UTXO',
+  'utxo.countPlural': '{count} 个 UTXO',
+  'utxo.refresh': '刷新 UTXO',
+  'utxo.filterBy': '筛选：',
+  'utxo.multiSelect': '（可多选）',
+  'utxo.filterAll': '全部',
+  'utxo.filterNativeSegwit': 'Native SegWit',
+  'utxo.filterTaproot': 'Taproot',
+  'utxo.filterRunes': 'Runes',
+  'utxo.filterAlkanes': 'Protorunes (Alkanes)',
+  'utxo.filterInscriptions': '铭文 (BRC20)',
+  'utxo.frozen': '已冻结',
+  'utxo.freeze': '冻结',
+  'utxo.splitOrdinals': '拆分 Ordinals',
+  'utxo.transactionId': '交易 ID：',
+  'utxo.outputIndex': '输出索引：',
+  'utxo.value': '价值：',
+  'utxo.blockHeight': '区块高度：',
+  'utxo.protorunesAlkanes': 'Protorunes/Alkanes：',
+  'utxo.runes': 'Runes：',
+  'utxo.brc20Inscriptions': 'BRC20/铭文：',
+  'utxo.noneFound': '未找到 UTXO',
+  'utxo.protoruneCountSingular': '{count} 个 Protorune',
+  'utxo.protoruneCountPlural': '{count} 个 Protorune',
+  'utxo.runeCountSingular': '{count} 个 Rune',
+  'utxo.runeCountPlural': '{count} 个 Rune',
+  'utxo.inscriptionCountSingular': '{count} 个 BRC20/铭文',
+  'utxo.inscriptionCountPlural': '{count} 个 BRC20/铭文',
+
+  // Orderbook
+  'orderbook.both': '全部',
+  'orderbook.bidsOnly': '仅买单',
+  'orderbook.asksOnly': '仅卖单',
+  'orderbook.price': '价格 ({token})',
+  'orderbook.size': '数量 ({token})',
+  'orderbook.total': '总计',
+  'orderbook.loading': '正在加载订单簿...',
+
+  // Transaction Plan
+  'txPlan.transactionNumber': '交易 {number}',
+  'txPlan.stepOfTotal': '{step} / {total}',
+  'txPlan.inputs': '输入 ({count})',
+  'txPlan.outputs': '输出 ({count})',
+  'txPlan.networkFee': '网络手续费',
+
+  // Inscriptions
+  'inscription.loading': '正在加载铭文...',
+
+  // Speed Up Modal
+  'speedUp.title': '加速交易',
+  'speedUp.replacementBroadcast': '替换交易已广播',
+  'speedUp.newTxid': '新交易 ID：',
+  'speedUp.newRate': '新费率：',
+  'speedUp.original': '原交易：',
+  'speedUp.currentRate': '当前费率',
+  'speedUp.newFeeRate': '新手续费率 (sat/vB)',
+  'speedUp.mustExceedCurrentRate': '必须比当前费率至少高 1 sat/vB。',
+  'speedUp.failed': '加速失败',
+  'speedUp.bumping': '正在加速...',
+
+  // Split UTXO Modal
+  'splitUtxo.title': '为 Ordinals 拆分 UTXO',
+  'splitUtxo.walletNotInitialized': '钱包未初始化',
+  'splitUtxo.amountTooSmall': '拆分金额必须至少为 {dustLimit} sats（粉尘限制）',
+  'splitUtxo.notEnoughValue': '余额不足，无法创建输出并支付手续费',
+  'splitUtxo.failed': '拆分 UTXO 失败',
+  'splitUtxo.utxoToSplit': '要拆分的 UTXO：',
+  'splitUtxo.containsInscriptionSingular': '⚠️ 包含 {count} 个铭文',
+  'splitUtxo.containsInscriptionPlural': '⚠️ 包含 {count} 个铭文',
+  'splitUtxo.numberOfOutputs': '输出数量',
+  'splitUtxo.splitIntoOutputs': '拆分为 {count} 个独立 UTXO（适合管理多个 Ordinals）',
+  'splitUtxo.amountPerOutput': '每个输出金额 (sats)',
+  'splitUtxo.minimumDust': '最低：{dustLimit} sats（粉尘限制）',
+  'splitUtxo.preview': '拆分预览：',
+  'splitUtxo.previewOutputs': '• {count} 个输出 × {amount} sats = {total} sats',
+  'splitUtxo.estimatedFee': '• 预估手续费：约 {amount} sats',
+  'splitUtxo.change': '• 找零：约 {amount} sats',
+  'splitUtxo.warningCreatesSmaller': '这会创建更小的 UTXO，适合 Ordinals/铭文',
+  'splitUtxo.warningEachOutput': '每个输出都将正好是 {amount} sats',
+  'splitUtxo.warningInscriptionsStay': '铭文将保留在原始输出位置',
+  'splitUtxo.warningUseBeforeSending': '发送前使用此功能，避免意外发送 Ordinals',
+  'splitUtxo.split': '拆分 UTXO',
+  'splitUtxo.splitting': '正在拆分 UTXO...',
+  'splitUtxo.success': 'UTXO 拆分成功！',
 
   // Regtest Controls
   'regtest.controls': '测试网控制',
@@ -1078,6 +1199,10 @@ const zh: Record<string, string> = {
   'common.cancel': '取消',
   'common.back': '返回',
   'common.done': '完成',
+  'common.tryAgain': '重试',
+  'common.learnMore': '了解更多',
+  'common.pleaseWait': '请稍候',
+  'common.viewOnBlockExplorer': '在区块浏览器中查看 →',
 };
 
 export default zh;

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import Image from "next/image";
 import NumberField from "@/app/components/NumberField";
 import TokenIcon from "@/app/components/TokenIcon";
 import type { TokenMeta } from "../types";
@@ -224,6 +225,10 @@ export default function SwapInputs({
   };
 
   const activePercent = getActivePercent();
+  const showBtcUnwrapNotice = to?.id === "btc";
+  const btcUnwrapNoticeText = from?.id === "32:0"
+    ? t("swap.btcUnwrapNoticeDirect")
+    : t("swap.btcUnwrapNoticeSwap");
 
   // ---- Cross-chain bridge pair detection ----
   // When a cross-chain pair is selected (e.g., USDT -> BTC or BTC -> USDT),
@@ -261,7 +266,7 @@ export default function SwapInputs({
           onClick={() => setShowBridgeFlow(false)}
           className="text-xs text-[color:var(--sf-text)]/40 hover:text-[color:var(--sf-text)]/60 transition-colors"
         >
-          ← Back to quote
+          {t("swap.backToQuote")}
         </button>
       </div>
     );
@@ -578,6 +583,33 @@ export default function SwapInputs({
         completedSteps={completedSteps}
       />
 
+      {showBtcUnwrapNotice && !bridgeActive && (
+        <div className="relative overflow-hidden rounded-lg bg-[color:var(--sf-primary)]/10 px-3 py-3">
+          <Image
+            src="/brand/balance-snowflake-mark.svg"
+            alt=""
+            aria-hidden="true"
+            width={96}
+            height={96}
+            className="pointer-events-none absolute -right-8 top-1/2 h-24 w-24 -translate-y-1/2 rotate-12 opacity-[0.07]"
+          />
+          <div className="relative z-10">
+            <p className="text-xs font-medium leading-5 text-[color:var(--sf-text)]/75">
+              {btcUnwrapNoticeText}
+              {' '}
+              <a
+                href="https://docs.subfrost.io/"
+                target="_blank"
+                rel="noreferrer"
+                className="text-[color:var(--sf-primary)] no-underline hover:text-[color:var(--sf-primary-pressed)]"
+              >
+                {t("common.learnMore")}
+              </a>
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* CTA Button - slides down when bridge is active */}
       <div
         className={`transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
@@ -618,12 +650,12 @@ export default function SwapInputs({
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
               </svg>
-              Building Transaction...
+              {t("swap.buildingTransaction")}
             </span>
           ) : !isConnected ? (
             t("swap.connectWallet")
           ) : isCrossChainPair ? (
-            `Bridge ${from?.symbol || ''} → ${to?.symbol || ''}`
+            t("swap.bridgePair", { from: from?.symbol || '', to: to?.symbol || '' })
           ) : (
             t("swap.confirmSwap")
           )}

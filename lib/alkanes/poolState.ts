@@ -1,15 +1,12 @@
 /**
- * Live pool state via on-chain `metashrew_view("simulate")` against pool
- * opcode 999 (PoolDetails). NO espo dependency.
+ * Live pool state for swap/LP quote math.
  *
- * Why this changed: previously fetched espo's `/get-pool-details` REST
- * endpoint, which on mainnet was returning stale / mismatched reserves and
- * poisoning swap quotes — atomic wrap+swap shipped a `minimumReceived`
- * that the factory contract rejected, silently returning the input alkanes
- * to the user (no DIESEL produced; see AUDIT_REPORT.md §5).
+ * When the app data source is ESPO, reserves and LP supply are read through
+ * the ESPO RPC path (`essentials.*`) instead of `alkanes_simulate` /
+ * `metashrew_view("simulate")`. The simulate decoder below is retained for
+ * non-ESPO networks and explicit metashrew configuration.
  *
- * The `simulate` view returns the pool contract's *canonical* reserves
- * (whatever the AMM math will see at submit time). PoolInfo byte layout
+ * PoolInfo byte layout for the metashrew fallback
  * (oyl-amm/alkanes/oylswap-library/src/lib.rs::PoolInfo::try_to_vec):
  *
  *   [  0.. 32]  token_a.block + token_a.tx   (2× u128 LE)
@@ -220,7 +217,8 @@ export async function fetchPoolStateFromDataSource(
   token1Id?: string,
   source: AlkanesDataSource = getAlkanesDataSource(network),
 ): Promise<LivePoolState | null> {
-  if (source === 'espo') {
+  const resolvedSource = network === 'mainnet' ? 'espo' : source;
+  if (resolvedSource === 'espo') {
     if (!token0Id || !token1Id) {
       console.warn('[poolState] espo source requires token ids for pool', poolId);
       return null;

@@ -91,7 +91,7 @@ export async function bootDevnet(
   // Dynamic import of qubitcoin SDK
   // Import qubitcoin SDK from public dir (served as static ESM).
   // Cannot use bare '@qubitcoin/sdk' — browser can't resolve npm specifiers.
-  // @ts-ignore — runtime URL import, not resolvable by TypeScript
+  // @ts-expect-error - runtime URL import, not resolvable by TypeScript
   const sdk = await import(/* webpackIgnore: true */ '/sdk/qubitcoin/index.js');
 
   // Load indexer WASMs from the app's public directory or bundled assets
@@ -168,7 +168,7 @@ export async function bootDevnetWithWasms(
   // Import qubitcoin SDK from public dir (served as static ESM).
   // Cannot use bare '@qubitcoin/sdk' — browser can't resolve npm specifiers.
   console.log('[devnet-boot] Importing SDK from /sdk/qubitcoin/index.js...');
-  // @ts-ignore — runtime URL import, not resolvable by TypeScript
+  // @ts-expect-error - runtime URL import, not resolvable by TypeScript
   const sdk = await import(/* webpackIgnore: true */ '/sdk/qubitcoin/index.js');
   console.log('[devnet-boot] SDK imported, exports:', Object.keys(sdk));
 
@@ -247,7 +247,12 @@ export async function bootDevnetWithWasms(
         try {
           const body = typeof init.body === 'string' ? init.body : await new Response(init.body).text();
           const parsed = JSON.parse(body);
-          if (parsed.method === 'sendrawtransactions' || parsed.method === 'btc_sendrawtransactions') {
+          if (
+            parsed.method === 'submitpackage' ||
+            parsed.method === 'btc_submitpackage' ||
+            parsed.method === 'sendrawtransactions' ||
+            parsed.method === 'btc_sendrawtransactions'
+          ) {
             const txHexes: string[] = Array.isArray(parsed.params?.[0]) ? parsed.params[0] : parsed.params;
             const results: string[] = [];
             for (const txHex of txHexes) {

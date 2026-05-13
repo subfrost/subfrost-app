@@ -108,6 +108,23 @@ export async function alkanesExecuteTyped(
   // during the 2026-05-03 mainnet camoufoxd run as "only 1
   // sendrawtransaction observed when wrap+swap should produce 2."
   if (params.splitTransactions !== undefined) options.split_transactions = params.splitTransactions;
+  if (params.knownPendingTxHexes !== undefined) {
+    if (params.knownPendingTxHexes.length > 0) {
+      options.known_pending_tx_hexes = params.knownPendingTxHexes;
+      options.knownPendingTxHexes = params.knownPendingTxHexes;
+    }
+  } else if (typeof window !== 'undefined') {
+    try {
+      const { pendingTxStore } = await import('./pendingTxStore');
+      const pendingHexes = await pendingTxStore.list();
+      if (pendingHexes.length > 0) {
+        options.known_pending_tx_hexes = pendingHexes;
+        options.knownPendingTxHexes = pendingHexes;
+      }
+    } catch (e) {
+      console.warn('[alkanesExecuteTyped] pendingTxStore.list failed:', e);
+    }
+  }
 
   const ordinalsStrategy = params.ordinalsStrategy ?? params.txContext?.defaultOrdinalsStrategy;
   if (ordinalsStrategy !== undefined) options.ordinals_strategy = ordinalsStrategy;
@@ -208,6 +225,7 @@ export async function alkanesExecuteTyped(
       } => x !== null);
       if (prefetched.length > 0) {
         options.prefetched_utxos = prefetched;
+        options.prefetchedUtxos = prefetched;
         console.log(
           `[alkanesExecuteTyped] prefetched_utxos: ${prefetched.length} TxOuts ` +
           `(${alkaneAsserted} with alkane assertion) from wallet cache ` +
@@ -218,6 +236,14 @@ export async function alkanesExecuteTyped(
     } catch (e) {
       console.warn('[alkanesExecuteTyped] failed to build prefetched_utxos:', e);
     }
+  }
+  if (params.prefetchedUtxos?.length) {
+    const prefetchedUtxos = [
+      ...(Array.isArray(options.prefetched_utxos) ? options.prefetched_utxos : []),
+      ...params.prefetchedUtxos,
+    ];
+    options.prefetched_utxos = prefetchedUtxos;
+    options.prefetchedUtxos = prefetchedUtxos;
   }
 
   // Indexer-aware UTXO height filter (2026-05-10, replaces global lag wait).
@@ -313,6 +339,7 @@ export async function alkanesExecuteTyped(
   // path because the user controls block production there.
   const wantPreview = !!params.previewBeforeBroadcast && !isLocalNetwork;
   const useFullExecution =
+    !params.forcePsbt &&
     !wantPreview &&
     (isLocalNetwork || params.autoConfirm) &&
     typeof (provider as any).alkanesExecuteFull === 'function';

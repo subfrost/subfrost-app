@@ -101,6 +101,7 @@
  */
 
 import { useState, useEffect, useRef, useMemo, forwardRef } from 'react';
+import SfPopup, { type SfPopupHandle } from '@/app/components/SfPopup';
 import { X, Send, AlertCircle, CheckCircle, Loader2, ChevronDown, Coins, ExternalLink } from 'lucide-react';
 import { useWallet } from '@/context/WalletContext';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
@@ -118,6 +119,8 @@ import * as ecc from '@bitcoinerlab/secp256k1';
 import { useBtcSendMutation, BtcSendStaleUtxosError } from '@/hooks/useBtcSendMutation';
 import { useAlkaneSendMutation } from '@/hooks/useAlkaneSendMutation';
 import { getHeight as rpcGetHeight, getAddressUtxos as rpcGetAddressUtxos } from '@/lib/alkanes/rpc';
+import { getAlkanesDataSource } from '@/lib/alkanes/dataSource';
+import { useWalletUtxoCache } from '@/hooks/useWalletUtxoCache';
 
 bitcoin.initEccLib(ecc);
 
@@ -260,6 +263,8 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
   const { showError } = useNotification();
   const { t } = useTranslation();
   const { balances, refresh } = useEnrichedWalletData();
+  const dataSource = getAlkanesDataSource(network || 'mainnet');
+  const walletUtxoCache = useWalletUtxoCache();
   const btcSendMutation = useBtcSendMutation();
   const alkaneSendMutation = useAlkaneSendMutation();
 
@@ -339,6 +344,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
   const [esploraUtxos, setEsploraUtxos] = useState<any[]>([]);
   useEffect(() => {
     if (!isOpen) return;
+    if (dataSource === 'espo') return;
     const addresses = [account?.taproot?.address, account?.nativeSegwit?.address].filter(Boolean) as string[];
     if (addresses.length === 0) return;
     const isRegtest = network === 'regtest' || network === 'regtest-local' || network === 'subfrost-regtest' || network === 'qubitcoin-regtest';
@@ -367,15 +373,48 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
       };
     }).filter((u: any) => !u._immature));
     })();
-  }, [isOpen, account, network]);
+  }, [isOpen, account, network, dataSource]);
 
-  const utxos = { p2wpkh: [] as any[], p2tr: esploraUtxos, all: esploraUtxos };
+  const walletCacheUtxos = useMemo(() => {
+    return walletUtxoCache.utxos.map((utxo) => {
+      const alkanes = Object.fromEntries(
+        (utxo.alkanes ?? []).map((alkane) => [
+          `${alkane.block}:${alkane.tx}`,
+          { value: alkane.amount.toString(), name: '', symbol: '' },
+        ]),
+      );
+      return {
+        txid: utxo.txid,
+        vout: utxo.vout,
+        value: utxo.value,
+        address: utxo.address,
+        status: {
+          confirmed: (utxo.confirmations ?? 0) > 0,
+          block_height: utxo.blockHeight ?? undefined,
+        },
+        alkanes,
+        runes: Array.isArray(utxo.runes) ? utxo.runes : [],
+        inscriptions: [],
+      };
+    });
+  }, [walletUtxoCache.utxos]);
+
+  const utxos = useMemo(() => {
+    const all = dataSource === 'espo' ? walletCacheUtxos : esploraUtxos;
+    return {
+      p2wpkh: all.filter((u: any) => u.address === account?.nativeSegwit?.address),
+      p2tr: all.filter((u: any) => u.address === account?.taproot?.address),
+      all,
+    };
+  }, [account?.nativeSegwit?.address, account?.taproot?.address, dataSource, esploraUtxos, walletCacheUtxos]);
   const { selection: feeSelection, setSelection: setFeeSelection, custom: customFeeRate, setCustom: setCustomFeeRate, feeRate, presets } = useFeeRate({ storageKey: 'subfrost-send-fee-rate' });
 
   const [recipientAddress, setRecipientAddress] = useState('');
   const [amount, setAmount] = useState('');
   const [selectedUtxos, setSelectedUtxos] = useState<Set<string>>(new Set());
   const [step, setStep] = useState<'input' | 'confirm' | 'broadcasting' | 'success'>('input');
+  const popupRef = useRef<SfPopupHandle>(null);
+  const handleClose = () => popupRef.current?.close();
   const [error, setError] = useState('');
   const [txid, setTxid] = useState('');
   const [sendMode, setSendMode] = useState<'btc' | 'alkanes'>('btc');
@@ -547,7 +586,6 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
     }
   }, [feeWarningCountdown]);
 
-  if (!isOpen) return null;
 
   const validateAddress = (addr: string): boolean => {
     // Basic Bitcoin address validation
@@ -1054,7 +1092,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
           {t('send.reviewAndSend')}
         </button>
         <button
-          onClick={onClose}
+          onClick={handleClose}
           className="px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:bg-[color:var(--sf-surface)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)] font-bold uppercase tracking-wide"
         >
           {t('send.cancel')}
@@ -1331,7 +1369,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
           ) : t('send.reviewAndSend')}
         </button>
         <button
-          onClick={onClose}
+          onClick={handleClose}
           className="px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:bg-[color:var(--sf-surface)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)] font-bold uppercase tracking-wide"
         >
           {t('send.cancel')}
@@ -1466,7 +1504,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
       </div>
 
       <button
-        onClick={onClose}
+        onClick={handleClose}
         className="w-full px-4 py-3 rounded-xl bg-[color:var(--sf-primary)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white font-bold uppercase tracking-wide"
       >
         {t('send.close')}
@@ -1475,14 +1513,21 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
   );
 
   return (
-    <div className="sf-popup-overlay p-4" onClick={onClose}>
-      <div data-testid="send-modal" className="sf-popup w-full max-w-md max-h-[90vh]" onClick={e => e.stopPropagation()}>
+    <SfPopup
+      ref={popupRef}
+      isOpen={isOpen}
+      onClose={onClose}
+      overlayClassName="p-4"
+      panelClassName="w-full max-w-md max-h-[90vh]"
+      testId="send-modal"
+      trackHeight
+    >
         {/* Header */}
         <div className="bg-[color:var(--sf-panel-bg)] px-6 py-5 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
           <div className="flex items-center justify-between">
             <h2 className="text-xl font-extrabold tracking-wider uppercase text-[color:var(--sf-text)]">{sendMode === 'btc' ? t('send.title') : t('send.titleAlkanes')}</h2>
             <button
-              onClick={onClose}
+              onClick={handleClose}
               className="flex h-8 w-8 items-center justify-center rounded-lg bg-[color:var(--sf-input-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-[color:var(--sf-text)]/70 transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)] hover:text-[color:var(--sf-text)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] focus:outline-none"
               aria-label="Close"
             >
@@ -1492,7 +1537,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+        <div className="overflow-y-auto p-6 space-y-6">
           {/* BTC / Alkanes toggle */}
           {(step === 'input') && (
             <div className="flex gap-4">
@@ -1538,9 +1583,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
             </>
           )}
         </div>
-      </div>
-
-    </div>
+    </SfPopup>
   );
 }
 

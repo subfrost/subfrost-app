@@ -101,19 +101,23 @@ const MAINNET_ESPO_RPC_URL =
 const DIRECT_NETWORK_CONFIG: Record<Network, Record<string, string> | undefined> = {
   mainnet: {
     jsonrpc_url: 'https://mainnet.subfrost.io/v4/subfrost',
+    bitcoin_rpc_url: 'https://mainnet.subfrost.io/v4/jsonrpc',
     data_api_url: 'https://mainnet.subfrost.io/v4/subfrost',
     espo_rpc_url: MAINNET_ESPO_RPC_URL,
   },
   testnet: {
     jsonrpc_url: 'https://testnet.subfrost.io/v4/subfrost',
+    bitcoin_rpc_url: 'https://testnet.subfrost.io/v4/jsonrpc',
     data_api_url: 'https://testnet.subfrost.io/v4/subfrost',
   },
   signet: {
     jsonrpc_url: 'https://signet.subfrost.io/v4/subfrost',
+    bitcoin_rpc_url: 'https://signet.subfrost.io/v4/jsonrpc',
     data_api_url: 'https://signet.subfrost.io/v4/subfrost',
   },
   regtest: {
     jsonrpc_url: 'https://regtest.subfrost.io/v4/subfrost',
+    bitcoin_rpc_url: 'https://regtest.subfrost.io/v4/jsonrpc',
     data_api_url: 'https://regtest.subfrost.io/v4/subfrost',
   },
   'regtest-local': {
@@ -130,6 +134,7 @@ const DIRECT_NETWORK_CONFIG: Record<Network, Record<string, string> | undefined>
   },
   'subfrost-regtest': {
     jsonrpc_url: 'https://regtest.subfrost.io/v4/subfrost',
+    bitcoin_rpc_url: 'https://regtest.subfrost.io/v4/jsonrpc',
     data_api_url: 'https://regtest.subfrost.io/v4/subfrost',
   },
   devnet: {
@@ -161,6 +166,7 @@ const getNetworkConfig = (network: Network): Record<string, string> | undefined 
     console.log(`[AlkanesSDK] Using proxy URL for ${network}:`, proxyUrl);
     return {
       jsonrpc_url: proxyUrl,
+      bitcoin_rpc_url: proxyUrl,
       data_api_url: proxyUrl,
       ...(network === 'mainnet' ? { espo_rpc_url: `${proxyUrl}/espo` } : {}),
     };

@@ -3,10 +3,12 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useWallet } from '@/context/WalletContext';
 import { useTheme } from '@/context/ThemeContext';
-import { Network, Save, Eye, Copy, Check, ChevronDown, Download, Shield, Lock, Cloud, AlertTriangle, X, Settings } from 'lucide-react';
+import { Network, Save, Eye, Copy, Check, ChevronDown, Download, Shield, Lock, Cloud, AlertTriangle, X, Settings, RotateCcw } from 'lucide-react';
 import { initGoogleDrive, isDriveConfigured, backupWalletToDrive } from '@/utils/clientSideDrive';
 import { unlockKeystore } from '@alkanes/ts-sdk';
 import { useTranslation } from '@/hooks/useTranslation';
+import SfPopup, { type SfPopupHandle } from '@/app/components/SfPopup';
+import { useEphemeralRecoveryMutation } from '@/hooks/useEphemeralRecoveryMutation';
 
 type NetworkType = 'mainnet' | 'signet' | 'regtest' | 'regtest-local' | 'qubitcoin-regtest' | 'subfrost-regtest' | 'oylnet' | 'devnet' | 'custom';
 
@@ -36,6 +38,7 @@ export default function WalletSettings() {
   const { network: currentNetwork, wallet, walletType, browserWallet } = useWallet() as any;
   const { theme } = useTheme();
   const { t } = useTranslation();
+  const recoveryMutation = useEphemeralRecoveryMutation();
 
   // Determine if using browser extension wallet
   const isBrowserWallet = walletType === 'browser' && browserWallet;
@@ -72,6 +75,12 @@ export default function WalletSettings() {
   const [saved, setSaved] = useState(false);
   const [networkDropdownOpen, setNetworkDropdownOpen] = useState(false);
   const networkDropdownRef = useRef<HTMLDivElement>(null);
+  const [recoveryTxid, setRecoveryTxid] = useState('');
+  const [recoveryFeeRateInput, setRecoveryFeeRateInput] = useState('8');
+  const [recoveryError, setRecoveryError] = useState('');
+  const [recoveryTxidResult, setRecoveryTxidResult] = useState('');
+  const recoveryFeeRate = Number(recoveryFeeRateInput);
+  const recoveryFeeRateValid = Number.isFinite(recoveryFeeRate) && recoveryFeeRate > 0;
 
   // Track if network has unsaved changes
   const hasNetworkChanges = network !== initialNetwork;
@@ -81,6 +90,7 @@ export default function WalletSettings() {
   const [password, setPassword] = useState('');
   const [revealedSeed, setRevealedSeed] = useState('');
   const [securityError, setSecurityError] = useState('');
+  const seedPopupRef = useRef<SfPopupHandle>(null);
 
   // Google Drive backup
   const [driveConfigured, setDriveConfigured] = useState(false);
@@ -253,6 +263,29 @@ export default function WalletSettings() {
     setSecurityError('');
   };
 
+  const handleSeedModalClose = () => {
+    seedPopupRef.current?.close();
+  };
+
+  const handleEphemeralRecovery = async () => {
+    setRecoveryError('');
+    setRecoveryTxidResult('');
+
+    if (!recoveryFeeRateValid) {
+      setRecoveryError(t('settings.invalidRecoveryFeeRate'));
+      return;
+    }
+
+    try {
+      const result = await recoveryMutation.mutateAsync({
+        parentTxid: recoveryTxid,
+        feeRate: recoveryFeeRate,
+      });
+      setRecoveryTxidResult(result.transactionId);
+    } catch (error: any) {
+      setRecoveryError(error?.message || 'Failed to recover ephemeral funds');
+    }
+  };
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -350,6 +383,74 @@ export default function WalletSettings() {
             </div>
           </div>
 
+        {/* Ephemeral Recovery */}
+        <div className="rounded-xl bg-[color:var(--sf-primary)]/5 p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <RotateCcw size={24} className="text-[color:var(--sf-primary)]" />
+            <h3 className="text-xl font-bold text-[color:var(--sf-text)]">{t('settings.ephemeralRecovery')}</h3>
+          </div>
+
+          <div className="space-y-4">
+            <p className="text-sm text-[color:var(--sf-text)]/70">
+              {t('settings.ephemeralRecoveryDesc')}
+            </p>
+
+            <div>
+              <label className="block text-sm font-medium text-[color:var(--sf-text)]/60 mb-2">
+                {t('settings.wrapTxid')}
+              </label>
+              <input
+                type="text"
+                value={recoveryTxid}
+                onChange={(e) => {
+                  setRecoveryTxid(e.target.value);
+                  setRecoveryError('');
+                  setRecoveryTxidResult('');
+                }}
+                placeholder={t('settings.pasteWrapTxid')}
+                className="w-full rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-primary)]/5 px-4 py-3 text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)]"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-[color:var(--sf-text)]/60 mb-2">
+                {t('settings.recoveryFeeRate')}
+              </label>
+              <input
+                type="number"
+                min="0.1"
+                step="0.1"
+                value={recoveryFeeRateInput}
+                onChange={(e) => {
+                  setRecoveryFeeRateInput(e.target.value);
+                  setRecoveryError('');
+                }}
+                className="w-full rounded-lg border border-[color:var(--sf-outline)] bg-[color:var(--sf-primary)]/5 px-4 py-3 text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)]"
+              />
+            </div>
+
+            <button
+              onClick={handleEphemeralRecovery}
+              disabled={recoveryMutation.isPending || recoveryTxid.trim().length === 0 || !recoveryFeeRateValid}
+              className="flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg rounded-lg font-bold transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {recoveryMutation.isPending ? t('settings.recovering') : t('settings.recoverEphemeralFunds')}
+            </button>
+
+            {recoveryTxidResult && (
+              <div className="rounded-lg border border-green-500/30 bg-green-500/10 p-3 text-sm text-green-400 break-all">
+                {t('settings.recoveryBroadcast')} {recoveryTxidResult}
+              </div>
+            )}
+
+            {recoveryError && (
+              <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-400">
+                {recoveryError}
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* Security & Backup */}
         {wallet && (
           <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-6">
@@ -400,12 +501,12 @@ export default function WalletSettings() {
                       {backupSuccess ? (
                         <>
                           <Check size={18} className="text-green-400" />
-                          <span>Backed Up!</span>
+                          <span>{t('settings.backedUp')}</span>
                         </>
                       ) : isBackingUp ? (
                         <>
                           <Cloud className="animate-bounce" size={18} />
-                          <span>Backing up...</span>
+                          <span>{t('settings.backingUp')}</span>
                         </>
                       ) : (
                         <>
@@ -493,16 +594,20 @@ export default function WalletSettings() {
         </div>
       </div>
 
-      {/* Seed Phrase Modal */}
-      {showSeedModal && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 px-4 backdrop-blur-sm">
-          <div className="flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-3xl bg-[color:var(--sf-glass-bg)] shadow-[0_24px_96px_rgba(0,0,0,0.4)] backdrop-blur-xl">
+      <SfPopup
+        ref={seedPopupRef}
+        isOpen={showSeedModal}
+        onClose={closeSeedModal}
+        overlayClassName="px-4"
+        overlayStyle={{ zIndex: 110 }}
+        panelClassName="flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden"
+      >
             {/* Header */}
             <div className="bg-[color:var(--sf-panel-bg)] px-6 py-5 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
               <div className="flex items-center justify-between">
                 <h2 className="text-xl font-extrabold tracking-wider uppercase text-[color:var(--sf-text)]">{t('settings.revealSeedPhrase')}</h2>
                 <button
-                  onClick={closeSeedModal}
+                  onClick={handleSeedModalClose}
                   className="flex h-8 w-8 items-center justify-center rounded-lg bg-[color:var(--sf-input-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-[color:var(--sf-text)]/70 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)] hover:text-[color:var(--sf-text)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] focus:outline-none"
                   aria-label="Close"
                 >
@@ -521,7 +626,7 @@ export default function WalletSettings() {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/60 mb-2">Password</label>
+                    <label className="block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/60 mb-2">{t('wallet.password')}</label>
                     <input
                       type="password"
                       value={password}
@@ -547,7 +652,7 @@ export default function WalletSettings() {
                       {t('settings.revealSeedPhrase')}
                     </button>
                     <button
-                      onClick={closeSeedModal}
+                      onClick={handleSeedModalClose}
                       className="px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:bg-[color:var(--sf-surface)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)] font-bold uppercase tracking-wide"
                     >
                       {t('common.cancel')}
@@ -572,7 +677,7 @@ export default function WalletSettings() {
                       {t('settings.copyToClipboard')}
                     </button>
                     <button
-                      onClick={closeSeedModal}
+                      onClick={handleSeedModalClose}
                       className="px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:bg-[color:var(--sf-surface)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)] font-bold uppercase tracking-wide"
                     >
                       {t('common.close')}
@@ -581,9 +686,7 @@ export default function WalletSettings() {
                 </>
               )}
             </div>
-          </div>
-        </div>
-      )}
+      </SfPopup>
 
     </div>
   );

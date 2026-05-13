@@ -151,12 +151,22 @@ describe('AlkanesBalancesCard', () => {
     expect(src).toMatch(/useEnrichedWalletData\(\)/);
   });
 
-  it('destructures balances, isAlkanesLoading, error, refreshAlkanes from useEnrichedWalletData', () => {
-    expect(src).toMatch(/\{\s*balances\s*,\s*isAlkanesLoading\s*,\s*error\s*,\s*refreshAlkanes\s*\}\s*=\s*useEnrichedWalletData\(\)/);
+  it('destructures address-level and spendable alkane views from useEnrichedWalletData', () => {
+    expect(src).toMatch(/addressAlkanes/);
+    expect(src).toMatch(/spendableAlkanes/);
+    expect(src).toMatch(/useEnrichedWalletData\(\)/);
   });
 
-  it('renders alkane list from balances.alkanes', () => {
-    expect(src).toMatch(/balances\.alkanes\.(filter|map)/);
+  it('renders the wallet asset list from the address-level alkane view', () => {
+    expect(src).toMatch(/walletPageAlkanes\s*=\s*addressAlkanes/);
+    expect(src).toMatch(/\.\.\.walletPageAlkanes/);
+  });
+
+  it('shows available and mempool amounts from the spendable alkane view', () => {
+    expect(src).toMatch(/spendableByAlkane/);
+    expect(src).toMatch(/getAvailabilityBreakdown/);
+    expect(src).toContain('available:');
+    expect(src).toContain('mempool:');
   });
 
   it('formats alkane balance with formatAlkaneBalance function', () => {

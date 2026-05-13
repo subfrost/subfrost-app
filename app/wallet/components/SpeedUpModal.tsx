@@ -13,9 +13,11 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { X, Zap } from 'lucide-react';
 import { useSpeedUpMutation } from '@/hooks/useSpeedUpMutation';
+import { useTranslation } from '@/hooks/useTranslation';
+import SfPopup, { type SfPopupHandle } from '@/app/components/SfPopup';
 
 interface SpeedUpModalProps {
   open: boolean;
@@ -36,12 +38,16 @@ export default function SpeedUpModal({
   vsize,
   currentFeeSats,
 }: SpeedUpModalProps) {
+  const { t } = useTranslation();
   const currentRate = vsize && currentFeeSats ? currentFeeSats / vsize : null;
   const defaultRate = currentRate ? Math.ceil(currentRate + 5) : 10;
   const [newRate, setNewRate] = useState<number>(defaultRate);
   const speedUp = useSpeedUpMutation();
+  const popupRef = useRef<SfPopupHandle>(null);
 
   if (!open) return null;
+
+  const handleClose = () => popupRef.current?.close();
 
   const handleSubmit = () => {
     speedUp.mutate(
@@ -49,24 +55,33 @@ export default function SpeedUpModal({
       {
         onSuccess: () => {
           // Auto-close after 2s so the user sees the success state.
-          setTimeout(onClose, 2000);
+          setTimeout(handleClose, 2000);
         },
       },
     );
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-end p-4 bg-black/40 backdrop-blur-sm">
-      <div className="w-full max-w-md rounded-2xl bg-[color:var(--sf-glass-bg)] border-t border-[color:var(--sf-top-highlight)] shadow-[0_4px_20px_rgba(0,0,0,0.3)] backdrop-blur-md p-6">
+    <SfPopup
+      ref={popupRef}
+      isOpen={open}
+      onClose={onClose}
+      panelClassName="w-full max-w-md"
+      overlayClassName="p-4"
+      disableBackdropClose={speedUp.isPending}
+      trackHeight
+    >
+      <div className="p-6">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <Zap size={18} className="text-amber-400" />
-            <h2 className="text-lg font-bold uppercase tracking-wide">Speed Up Transaction</h2>
+            <h2 className="text-lg font-bold uppercase tracking-wide">{t('speedUp.title')}</h2>
           </div>
           <button
-            onClick={onClose}
+            onClick={handleClose}
+            disabled={speedUp.isPending}
             className="p-1.5 rounded-md hover:bg-[color:var(--sf-surface)]"
-            aria-label="Close"
+            aria-label={t('common.close')}
           >
             <X size={18} />
           </button>
@@ -74,12 +89,12 @@ export default function SpeedUpModal({
 
         {speedUp.isSuccess && speedUp.data ? (
           <div className="rounded-lg p-3 bg-green-500/10 border border-green-500/30 text-sm">
-            <div className="font-semibold text-green-400 mb-1">Replacement broadcast</div>
+            <div className="font-semibold text-green-400 mb-1">{t('speedUp.replacementBroadcast')}</div>
             <div className="text-[color:var(--sf-text)]/70 break-all">
-              new txid: {speedUp.data.newTxid}
+              {t('speedUp.newTxid')} {speedUp.data.newTxid}
             </div>
             <div className="text-[color:var(--sf-text)]/70 mt-1">
-              new rate: {speedUp.data.newFeeRate.toFixed(2)} sat/vB
+              {t('speedUp.newRate')} {speedUp.data.newFeeRate.toFixed(2)} sat/vB
               <span className="text-[color:var(--sf-text)]/40">
                 {' '}(+{speedUp.data.feeIncreaseSats.toLocaleString()} sats)
               </span>
@@ -88,17 +103,17 @@ export default function SpeedUpModal({
         ) : (
           <>
             <div className="text-xs text-[color:var(--sf-text)]/60 mb-3 break-all">
-              Original: {txid.slice(0, 16)}…{txid.slice(-16)}
+              {t('speedUp.original')} {txid.slice(0, 16)}…{txid.slice(-16)}
               {currentRate !== null && (
                 <>
                   <span className="mx-2">·</span>
-                  current rate {currentRate.toFixed(2)} sat/vB
+                  {t('speedUp.currentRate')} {currentRate.toFixed(2)} sat/vB
                 </>
               )}
             </div>
 
             <label className="block text-xs uppercase tracking-wide text-[color:var(--sf-text)]/60 mb-2">
-              New fee rate (sat/vB)
+              {t('speedUp.newFeeRate')}
             </label>
             <input
               type="number"
@@ -111,15 +126,15 @@ export default function SpeedUpModal({
             />
             {currentRate !== null && newRate <= currentRate + 1 && (
               <div className="text-xs text-amber-400 mt-2">
-                Must exceed current rate by at least 1 sat/vB.
+                {t('speedUp.mustExceedCurrentRate')}
               </div>
             )}
 
             {speedUp.isError && (() => {
-              const err = speedUp.error as Error & { stack?: string; cause?: unknown };
-              const msg = err?.message ?? 'Speed-up failed';
-              const stack = err?.stack ? err.stack.slice(0, 600) : '';
-              const cause = err?.cause ? `\ncause: ${String(err.cause)}` : '';
+              const err = speedUp.error as unknown;
+              const msg = err instanceof Error ? err.message : String(err || t('speedUp.failed'));
+              const stack = err instanceof Error && err.stack ? err.stack.slice(0, 600) : '';
+              const cause = err instanceof Error && err.cause ? `\ncause: ${String(err.cause)}` : '';
               return (
                 <div className="rounded-lg p-3 mt-3 bg-red-500/10 border border-red-500/30 text-xs text-red-400 break-all whitespace-pre-wrap font-mono">
                   {msg}
@@ -131,11 +146,11 @@ export default function SpeedUpModal({
 
             <div className="flex gap-2 mt-4">
               <button
-                onClick={onClose}
+                onClick={handleClose}
                 disabled={speedUp.isPending}
                 className="flex-1 px-4 py-2 rounded-lg bg-[color:var(--sf-panel-bg)] hover:bg-[color:var(--sf-surface)] text-sm font-bold uppercase tracking-wide disabled:opacity-50"
               >
-                Cancel
+                {t('common.cancel')}
               </button>
               <button
                 onClick={handleSubmit}
@@ -145,12 +160,12 @@ export default function SpeedUpModal({
                 }
                 className="flex-1 px-4 py-2 rounded-lg bg-[color:var(--sf-primary)] hover:bg-[color:var(--sf-primary-pressed)] text-white text-sm font-bold uppercase tracking-wide shadow-[0_2px_8px_rgba(0,0,0,0.15)] disabled:opacity-50"
               >
-                {speedUp.isPending ? 'Bumping…' : 'Confirm'}
+                {speedUp.isPending ? t('speedUp.bumping') : t('confirm.confirm')}
               </button>
             </div>
           </>
         )}
       </div>
-    </div>
+    </SfPopup>
   );
 }
