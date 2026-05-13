@@ -30,13 +30,18 @@ import type { Network } from '@/utils/constants';
 
 const NETWORK_STORAGE_KEY = 'subfrost_selected_network';
 
-// Detect network from localStorage, hostname, or env variable
+// Detect network from storage, hostname, or env variable.
+// Devnet is stored in sessionStorage (tab-scoped) — survives in-tab navigation
+// but resets to mainnet on a new tab/page load. All other networks use localStorage.
 function detectNetwork(): Network {
   if (typeof window === 'undefined') return 'mainnet';
 
-  // Restore last-selected network from localStorage, but never auto-restore devnet.
-  // Devnet requires explicit user action each session — it boots a heavy in-browser
-  // WASM node and should never start silently on page load.
+  // Check sessionStorage first for devnet (tab-scoped, does not persist across tabs)
+  if (sessionStorage.getItem(NETWORK_STORAGE_KEY) === 'devnet') {
+    return 'devnet';
+  }
+
+  // Restore other network selections from localStorage
   const stored = localStorage.getItem(NETWORK_STORAGE_KEY);
   if (stored && ['mainnet', 'testnet', 'signet', 'regtest', 'regtest-local', 'qubitcoin-regtest', 'subfrost-regtest', 'oylnet'].includes(stored)) {
     return stored as Network;
@@ -83,7 +88,7 @@ export default function Providers({ children }: { children: ReactNode }) {
 
   // Initialize network on mount and listen for storage changes
   useEffect(() => {
-    // Clear any stale devnet selection so it never auto-boots on load
+    // Clear any stale devnet value from localStorage (legacy cleanup — devnet now uses sessionStorage)
     if (localStorage.getItem(NETWORK_STORAGE_KEY) === 'devnet') {
       localStorage.removeItem(NETWORK_STORAGE_KEY);
     }
