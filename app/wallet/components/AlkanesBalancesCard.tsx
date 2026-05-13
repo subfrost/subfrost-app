@@ -241,6 +241,11 @@ export default function AlkanesBalancesCard({
     alkane.symbol.startsWith('POS-') || alkane.name.startsWith('POS-');
   const isPosition = (alkane: { symbol: string; name: string; alkaneId?: string }) =>
     isLpToken(alkane) || isStakedPosition(alkane);
+  // Known fungible alkanes that should never be classified as NFTs even when balance === 1.
+  const isFungibleAlkane = (alkane: { alkaneId?: string; symbol?: string; name?: string }) =>
+    alkane.alkaneId === FRBTC_ID || alkane.alkaneId === DIESEL_ID ||
+    alkane.symbol === 'frBTC' || alkane.name === 'frBTC' ||
+    alkane.symbol === 'DIESEL' || alkane.name === 'DIESEL';
   const isNft = (balance: string) => BigInt(balance) === BigInt(1);
   const parseRawBalance = (balance?: string): bigint => {
     try {
@@ -284,7 +289,7 @@ export default function AlkanesBalancesCard({
     if (alkane && isBitcoinAsset(alkane)) {
       return (Number(value) / 1e8).toFixed(8);
     }
-    if (value === BigInt(1)) {
+    if (value === BigInt(1) && !(alkane && isFungibleAlkane(alkane))) {
       if (alkane && alkane.alkaneId && isEnrichablePosition(alkane) && positionMeta?.[alkane.alkaneId]) {
         const meta = positionMeta[alkane.alkaneId];
         return formatDepositAmount(meta.depositAmount, meta.depositTokenDecimals, meta.depositTokenSymbol);
@@ -426,8 +431,8 @@ export default function AlkanesBalancesCard({
 
         let filtered = merged.filter((a) => {
           if (alkaneFilter === 'positions') return isPosition(a);
-          if (alkaneFilter === 'nfts') return isNft(a.balance) && !isPosition(a);
-          return isBitcoinAsset(a) || (!isNft(a.balance) && !isPosition(a));
+          if (alkaneFilter === 'nfts') return isNft(a.balance) && !isPosition(a) && !isFungibleAlkane(a);
+          return isBitcoinAsset(a) || (!isNft(a.balance) && !isPosition(a)) || isFungibleAlkane(a);
         });
         // Token sort handled by query (frBTC → DIESEL → USD value → block:tx)
         if (alkaneFilter === 'tokens') {
