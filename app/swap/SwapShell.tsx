@@ -192,6 +192,8 @@ export default function SwapShell() {
   // traffic bounded to one fetch per pool per block.
   const removeLpLiveState = usePoolStateLive(selectedLPPosition?.id, {
     enabled: !!selectedLPPosition,
+    token0Id: selectedLPPosition?.token0Id,
+    token1Id: selectedLPPosition?.token1Id,
   });
 
   // Package-flow state for Token → BTC. BTC → Token is intentionally presented
@@ -1983,6 +1985,8 @@ export default function SwapShell() {
   // `staleTime: Infinity` in usePoolStateLive prevents any extra traffic.
   const addLpLiveState = usePoolStateLive(matchedLpPool?.id, {
     enabled: !!matchedLpPool,
+    token0Id: matchedLpPool?.token0.id,
+    token1Id: matchedLpPool?.token1.id,
   });
 
   // Auto-calculate the paired LP amount based on the matched pool's reserve
