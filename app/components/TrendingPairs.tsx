@@ -43,6 +43,14 @@ function formatUsd(n?: number, showZeroAsDash = false) {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n);
 }
 
+function formatPercent(v?: number | string) {
+  if (v == null) return "-";
+  const n = typeof v === 'string' ? parseFloat(v) : v;
+  if (!isFinite(n)) return "-";
+  const decimals = n > 99.99 ? 0 : n > 9.99 ? 1 : 2;
+  return `${n.toFixed(decimals)}%`;
+}
+
 export default function TrendingPairs() {
   const { t } = useTranslation();
   const { data } = usePools({ sortBy: 'tvl', order: 'desc', limit: 200 });
@@ -73,6 +81,7 @@ export default function TrendingPairs() {
         tvlUsd: pickPositive(p.tvlUsd, stats?.tvlUsd),
         vol24hUsd: pickPositive(p.vol24hUsd, stats?.volume24hUsd),
         vol30dUsd: pickPositive(p.vol30dUsd, stats?.volume30dUsd),
+        apr: pickPositive(p.apr, stats?.apr),
       };
     });
 
@@ -121,9 +130,15 @@ export default function TrendingPairs() {
                   <div className="font-bold text-[color:var(--sf-text)]">{formatUsd(p.vol30dUsd, true)}</div>
                 </div>
               </div>
-              <div className="text-center">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">{t('trending.tvl')}</div>
-                <div className="font-bold text-[color:var(--sf-text)]">{formatUsd(p.tvlUsd)}</div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="text-center">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">{t('trending.tvl')}</div>
+                  <div className="font-bold text-[color:var(--sf-text)]">{formatUsd(p.tvlUsd)}</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">30D APR</div>
+                  <div className="font-bold text-[color:var(--sf-info-green-title)]">{formatPercent(p.apr)}</div>
+                </div>
               </div>
             </div>
           </Link>

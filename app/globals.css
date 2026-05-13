@@ -1038,6 +1038,28 @@ input[type="number"] {
   display: none;
 }
 
+.balance-total-snowflake {
+  animation: balance-snowflake-spin 60s linear infinite;
+  translate: 0 -50%;
+  rotate: 12deg;
+  transform-origin: center;
+}
+
+@keyframes balance-snowflake-spin {
+  from {
+    rotate: 12deg;
+  }
+  to {
+    rotate: -348deg;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .balance-total-snowflake {
+    animation: none;
+  }
+}
+
 @media (max-width: 550px) {
   .wallet-section-tabs {
     display: none;

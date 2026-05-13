@@ -244,7 +244,7 @@ export default function MarketsGrid({ pools, onSelect, volumePeriod: externalVol
                   </span>
                 </button>
               </th>
-              <SortableHeader label="APY" field="apr" currentField={sortField} sortOrder={sortOrder} onSort={handleSort} align="center" />
+              <SortableHeader label="30D APR" field="apr" currentField={sortField} sortOrder={sortOrder} onSort={handleSort} align="center" />
             </tr>
           </thead>
         </table>
