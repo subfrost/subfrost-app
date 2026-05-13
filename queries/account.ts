@@ -1026,6 +1026,12 @@ export interface BtcBalanceFast {
   p2wpkh: number;
   p2tr: number;
   total: number;
+  // Real spendable BTC for swap/send fees. For dual-address browser wallets
+  // (Xverse/Leather/OYL) the SDK runs with `protect_taproot=true` and won't
+  // spend taproot UTXOs for BTC fees — so `spendable` excludes p2tr there.
+  // Keystore is taproot-only (spendable = p2tr). Single-address wallets have
+  // exactly one address populated, so the sum is just that address.
+  spendable: number;
   pendingIn: number;
   pendingOut: number;
 }
@@ -1058,10 +1064,16 @@ function getCachedBtcBalance(network: string, addressKey: string): BtcBalanceFas
     const raw = localStorage.getItem(BTC_BALANCE_CACHE_KEY);
     if (!raw) return undefined;
     const cached = JSON.parse(raw);
-    // Only use cache if it's for the same network + addresses
-    if (cached?.network === network && cached?.addressKey === addressKey) {
-      return cached.balance as BtcBalanceFast;
+    if (cached?.network !== network || cached?.addressKey !== addressKey) return undefined;
+    const balance = cached.balance as Partial<BtcBalanceFast> | undefined;
+    if (!balance) return undefined;
+    // Backfill `spendable` for entries written before the field existed —
+    // `addressKey` is segwit,taproot sorted; "dual" means two distinct addrs.
+    if (typeof balance.spendable !== 'number') {
+      const isDualAddress = addressKey.includes(',');
+      balance.spendable = isDualAddress ? (balance.p2wpkh ?? 0) : (balance.total ?? 0);
     }
+    return balance as BtcBalanceFast;
   } catch { /* corrupt cache, ignore */ }
   return undefined;
 }
@@ -1117,7 +1129,16 @@ export function btcBalanceFastQueryOptions(deps: BtcBalanceFastDeps) {
         if (addresses[i] === deps.account.taproot?.address) p2tr = results[i];
       }
 
-      const balance: BtcBalanceFast = { p2wpkh, p2tr, total: p2wpkh + p2tr, pendingIn: 0, pendingOut: 0 };
+      // Mirrors `txContext.shouldProtectTaproot` from WalletContext + the
+      // existing Header.tsx display logic: dual-address wallets only spend
+      // segwit for BTC fees; single-address (incl. keystore) spend the one
+      // populated address.
+      const segwitAddr = deps.account?.nativeSegwit?.address;
+      const taprootAddr = deps.account?.taproot?.address;
+      const isDualAddress = !!segwitAddr && !!taprootAddr && segwitAddr !== taprootAddr;
+      const spendable = isDualAddress ? p2wpkh : p2wpkh + p2tr;
+
+      const balance: BtcBalanceFast = { p2wpkh, p2tr, total: p2wpkh + p2tr, spendable, pendingIn: 0, pendingOut: 0 };
       cacheBtcBalance(deps.network, addressKey, balance);
       return balance;
     },

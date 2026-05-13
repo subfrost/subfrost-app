@@ -848,9 +848,10 @@ export default function SwapShell() {
     return opts;
   }, [fromToken, poolTokenMap, FRBTC_ALKANE_ID, BUSD_ALKANE_ID, protocolTokens, baseTokenIds, markets, network]);
 
-  // walletBalances already declared above via useEnrichedWalletData
-  // BTC balance from btcFast (instant) with enriched fallback
-  const btcBalanceSats = btcFast?.total ?? walletBalances?.bitcoin?.total ?? 0;
+  // walletBalances already declared above via useEnrichedWalletData.
+  // Use `spendable` (excludes taproot on dual-address browser wallets where
+  // SDK `protect_taproot=true` forbids spending taproot UTXOs for BTC fees).
+  const btcBalanceSats = btcFast?.spendable ?? walletBalances?.bitcoin?.spendable ?? 0;
   const isBalancesLoading = Boolean(isAlkanesLoading);
 
   // Build a map from alkane ID to balance from wallet data (more reliable than useSellableCurrencies)
