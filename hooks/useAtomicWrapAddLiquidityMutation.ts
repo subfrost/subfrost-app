@@ -149,6 +149,7 @@ export function useAtomicWrapAddLiquidityMutation() {
           },
         ],
         invalidate: 'addLiquidity',
+        splitTransactions: params.splitTransactions ?? (network === 'mainnet'),
       });
     },
     [network, address, premiumData, executeEphemeralWrapPackage, provider],

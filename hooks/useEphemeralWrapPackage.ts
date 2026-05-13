@@ -69,6 +69,7 @@ export type EphemeralWrapPackageParams = {
   childToAddresses?: string[];
   childAlkanesChangeAddress?: string;
   invalidate?: 'swap' | 'addLiquidity';
+  splitTransactions?: boolean;
 };
 
 function estimateEphemeralFunding(packageFeeRate: number): number {
@@ -470,6 +471,7 @@ export function useEphemeralWrapPackage() {
         alkanesChangeAddress: ephemeral.address,
         network,
         cachedUtxos: utxoCache.utxos,
+        ...(params.splitTransactions !== undefined ? { splitTransactions: params.splitTransactions } : {}),
       });
       const parentReady = parentResult?.readyToSign ?? parentResult?.ready_to_sign;
       if (!parentReady?.psbt) {

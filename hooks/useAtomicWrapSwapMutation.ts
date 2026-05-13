@@ -115,6 +115,7 @@ export function useAtomicWrapSwapMutation() {
           amount: frbtcAfterFee,
         }],
         invalidate: 'swap',
+        splitTransactions: params.splitTransactions ?? true,
       });
     },
     [network, address, premiumData, executeEphemeralWrapPackage, provider],
