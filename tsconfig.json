@@ -43,6 +43,7 @@
     "__tests__/devnet",
     "agent-context",
     "agent-repos",
+    "__tests__/brc20-prog",
     "vendor",
     "services"
   ]
