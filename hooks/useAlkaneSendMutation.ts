@@ -182,12 +182,11 @@ export function useAlkaneSendMutation() {
         tx = signedPsbt.extractTransaction();
       }
 
-      const txHex = tx.toHex();
-      const broadcastTxid = await provider.broadcastTransaction(txHex);
+      const broadcastTxid = await provider.broadcastTransaction(tx.toHex());
       if (typeof window !== 'undefined') {
         try {
           const { pendingTxStore } = await import('@/lib/alkanes/pendingTxStore');
-          await pendingTxStore.add(txHex);
+          await pendingTxStore.add(tx.toHex());
         } catch (e) {
           console.warn('[alkaneSend] pending-tx-store add failed:', e);
         }
