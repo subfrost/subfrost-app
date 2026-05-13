@@ -273,6 +273,17 @@ export const MAINNET_CURATED_POOLS: readonly CuratedPool[] = [
     decimals: 8,
     lpTokenId: '2:77355',
   },
+  {
+    poolId: '2:77592',
+    tokenId: '2:25349',
+    symbol: 'ARBUZ',
+    name: 'ARBUZ',
+    decimals: 8,
+    quoteTokenId: '2:0',
+    quoteSymbol: 'DIESEL',
+    quoteName: 'DIESEL',
+    lpTokenId: '2:77592',
+  },
 ] as const;
 
 /**
