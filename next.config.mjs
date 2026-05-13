@@ -130,6 +130,8 @@ const nextConfig = {
     NEXT_PUBLIC_NETWORK: process.env.NEXT_PUBLIC_NETWORK || 'subfrost-regtest',
     NEXT_PUBLIC_DEMO_MODE: process.env.NEXT_PUBLIC_DEMO_MODE || '',
     NEXT_PUBLIC_DEVNET_AUTOSTART: process.env.NEXT_PUBLIC_DEVNET_AUTOSTART || '',
+    SWAP_TEST_MODE: process.env.SWAP_TEST_MODE || '0',
+    SWAP_TX_TEST: process.env.SWAP_TX_TEST || '0',
   },
 };
 

@@ -288,6 +288,44 @@ export function buildAtomicWrapCreatePoolProtostones(params: {
   return `${wrapProtostone},${createPoolProtostone}`;
 }
 
+/**
+ * Build a single factory CreateNewPool cellpack for cases where input alkanes
+ * are already staged on the spending UTXO and should auto-route into this
+ * protostone via `inputRequirements`.
+ */
+export function buildFactoryCreatePoolProtostone(params: {
+  factoryId: string;
+  tokenA: string;
+  tokenB: string;
+  amountA: string;
+  amountB: string;
+  pointer?: string;
+  refund?: string;
+}): string {
+  const {
+    factoryId,
+    tokenA,
+    tokenB,
+    amountA,
+    amountB,
+    pointer = 'v0',
+    refund = 'v0',
+  } = params;
+  const [factoryBlock, factoryTx] = factoryId.split(':');
+  const [tokenABlock, tokenATx] = tokenA.split(':');
+  const [tokenBBlock, tokenBTx] = tokenB.split(':');
+
+  const cellpack = [
+    factoryBlock, factoryTx,
+    1, // CreateNewPool
+    tokenABlock, tokenATx,
+    tokenBBlock, tokenBTx,
+    amountA, amountB,
+  ].join(',');
+
+  return `[${cellpack}]:${pointer}:${refund}`;
+}
+
 // ---------------------------------------------------------------------------
 // Router Swap (hybrid CLOB+AMM via Universal Router)
 // ---------------------------------------------------------------------------

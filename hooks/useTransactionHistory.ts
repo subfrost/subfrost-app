@@ -37,6 +37,18 @@ export interface AlkanesTrace {
   trace: any;
 }
 
+export interface AlkaneTraceSummary {
+  contractId: string;
+  contractLabel: string;
+  opcode?: string;
+  methodName: string;
+  callType?: string;
+  status: 'success' | 'failure' | 'pending';
+  statusText: string;
+  createdId?: string;
+  outpoint?: string;
+}
+
 export interface RunestoneData {
   edicts?: any[];
   etching?: any;
@@ -61,6 +73,7 @@ export interface EnrichedTransaction {
   isCoinbase: boolean;
   runestone?: RunestoneData;
   alkanesTraces?: AlkanesTrace[];
+  alkaneSummaries?: AlkaneTraceSummary[];
 }
 
 /**

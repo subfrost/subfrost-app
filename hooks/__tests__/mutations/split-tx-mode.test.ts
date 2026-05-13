@@ -36,7 +36,7 @@ describe('useSwapMutation: splitTransactions plumbing', () => {
   const src = read('useSwapMutation.ts');
 
   it('reads splitTransactions from the mutation payload', () => {
-    expect(src).toMatch(/splitTransactions:\s*\(swapData as any\)\.splitTransactions/);
+    expect(src).toMatch(/const\s+wantsSplit\s*=\s*\(swapData as any\)\.splitTransactions\s*===\s*true/);
   });
 
   it('forwards splitTransactions to alkanesExecuteTyped', () => {
@@ -46,16 +46,23 @@ describe('useSwapMutation: splitTransactions plumbing', () => {
     // Either shape is acceptable as long as `splitTransactions` is part
     // of the options object the SDK is called with.
     const inlineForm =
-      /provider\.alkanesExecuteTyped\(\{[\s\S]*?splitTransactions:\s*\(swapData as any\)\.splitTransactions[\s\S]*?\}\)/;
+      /provider\.alkanesExecuteTyped\(\{[\s\S]*?splitTransactions:\s*(?:\(swapData as any\)\.splitTransactions\s*===\s*true|wantsSplit)[\s\S]*?\}\)/;
     const factoryForm =
-      /buildExecuteOpts\s*=\s*\(\)\s*=>\s*\(\{[\s\S]*?splitTransactions:\s*\(swapData as any\)\.splitTransactions[\s\S]*?\}\)[\s\S]*?provider\.alkanesExecuteTyped\(\s*buildExecuteOpts\(\)/;
+      /buildExecuteOpts\s*=\s*\(\)\s*=>\s*\(\{[\s\S]*?splitTransactions:\s*(?:\(swapData as any\)\.splitTransactions\s*===\s*true|wantsSplit)[\s\S]*?\}\)[\s\S]*?provider\.alkanesExecuteTyped\(\s*buildExecuteOpts\(\)/;
     expect(inlineForm.test(src) || factoryForm.test(src)).toBe(true);
   });
 
   it('uses === true so missing/undefined flag is treated as false', () => {
     // The intent is "opt-in only"; reading via `=== true` prevents
     // truthy-but-not-true values from accidentally enabling split mode.
-    expect(src).toMatch(/splitTransactions:\s*\(swapData as any\)\.splitTransactions\s*===\s*true/);
+    expect(src).toMatch(/const\s+wantsSplit\s*=\s*\(swapData as any\)\.splitTransactions\s*===\s*true/);
+  });
+
+  it('keeps browser wallets on the unsigned-PSBT path', () => {
+    // Browser wallets need wallet prompts; split mode must not force
+    // SDK-side auto-confirm and skip external signing.
+    expect(src).toMatch(/const\s+useAutoConfirm\s*=\s*isKeystoreWallet/);
+    expect(src).toMatch(/autoConfirm:\s*useAutoConfirm/);
   });
 });
 
@@ -83,30 +90,25 @@ describe('useAddLiquidityMutation: splitTransactions plumbing', () => {
     expect(src).toMatch(callRegex);
   });
 
-  it('uses autoConfirm=true when split mode is requested', () => {
-    // Split-tx requires the SDK's `execute_full` path (PSBT-return path is
-    // single-tx only). When the caller asks for split mode, the hook flips
-    // autoConfirm so the SDK signs + broadcasts both Tx A and Tx B itself.
-    // Without this conditional flip, splitTransactions=true was a silent
-    // no-op for atomic wrap+addLiquidity (regression seen 2026-05-03 on
-    // mainnet — wrap+addLiquidity OOG'd because split mode never fired).
-    expect(src).toMatch(/const\s+useAutoConfirm\s*=\s*wantsSplit/);
+  it('keeps browser wallets on the unsigned-PSBT path', () => {
+    // Keystore wallets can auto-confirm in-process; browser wallets must
+    // receive unsigned PSBTs so the user gets signing prompts.
+    expect(src).toMatch(/const\s+useAutoConfirm\s*=\s*walletType\s*===\s*['"]keystore['"]/);
     expect(src).toMatch(/autoConfirm:\s*useAutoConfirm/);
   });
 });
 
-describe('useAtomicWrapSwapMutation: network-aware default', () => {
+describe('useAtomicWrapSwapMutation: default split package', () => {
   const src = read('useAtomicWrapSwapMutation.ts');
 
   it('declares splitTransactions on the params interface', () => {
     expect(src).toMatch(/splitTransactions\?:\s*boolean/);
   });
 
-  it('defaults splitTransactions to (network === mainnet) when caller omits it', () => {
-    // The default policy: explicit param wins; otherwise true on mainnet,
-    // false everywhere else (regtest/devnet have full per-tx block_fuel).
+  it('defaults splitTransactions to true when caller omits it', () => {
+    // BTC -> token should always use the CPFP split package path.
     expect(src).toMatch(
-      /splitTransactions:\s*params\.splitTransactions\s*\?\?\s*\(\s*network\s*===\s*['"]mainnet['"]\s*\)/,
+      /splitTransactions:\s*params\.splitTransactions\s*\?\?\s*true/,
     );
   });
 });

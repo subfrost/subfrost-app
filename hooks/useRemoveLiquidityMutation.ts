@@ -66,6 +66,26 @@ import { getConfig } from '@/utils/getConfig';
 
 bitcoin.initEccLib(ecc);
 
+function stripBrowserTapLeafMetadata(psbtBase64: string, btcNetwork: bitcoin.Network): {
+  psbtBase64: string;
+  stripped: number;
+} {
+  const psbt = bitcoin.Psbt.fromBase64(psbtBase64, { network: btcNetwork });
+  let stripped = 0;
+
+  for (const input of psbt.data.inputs) {
+    const script = input.witnessUtxo?.script ? Buffer.from(input.witnessUtxo.script) : null;
+    const isTaprootKeyPathCandidate = !!script && script.length === 34 && script[0] === 0x51 && script[1] === 0x20;
+    if (!isTaprootKeyPathCandidate || !input.tapLeafScript?.length) continue;
+
+    delete input.tapLeafScript;
+    delete input.tapScriptSig;
+    stripped++;
+  }
+
+  return { psbtBase64: stripped > 0 ? psbt.toBase64() : psbtBase64, stripped };
+}
+
 export type RemoveLiquidityTransactionData = {
   lpTokenId: string;       // LP token alkane id (e.g., "3:123")
   lpAmount: string;        // amount of LP tokens to burn (display units)
@@ -218,7 +238,7 @@ export function useRemoveLiquidityMutation() {
           const readyToSign = result.readyToSign;
 
           // Convert PSBT to base64
-          let psbtBase64: string = extractPsbtBase64(readyToSign.psbt);
+          const psbtBase64: string = extractPsbtBase64(readyToSign.psbt);
 
           // ============================================================================
           // ⚠️ CRITICAL: PSBT PATCHING REMOVED - DO NOT RE-ADD ⚠️
@@ -255,6 +275,12 @@ export function useRemoveLiquidityMutation() {
             finalPsbtBase64 = result.psbtBase64;
             if (result.inputsPatched > 0) {
               console.log(`[RemoveLiquidity] Patched ${result.inputsPatched} input(s) for browser wallet compatibility`);
+            }
+
+            const tapLeafStrip = stripBrowserTapLeafMetadata(finalPsbtBase64, btcNetwork);
+            finalPsbtBase64 = tapLeafStrip.psbtBase64;
+            if (tapLeafStrip.stripped > 0) {
+              console.log(`[RemoveLiquidity] Stripped stale tapleaf metadata from ${tapLeafStrip.stripped} taproot input(s) for key-path signing`);
             }
           }
 
@@ -344,9 +370,18 @@ export function useRemoveLiquidityMutation() {
 
           // Finalize and extract transaction
           const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtBase64, { network: btcNetwork });
-          signedPsbt.finalizeAllInputs();
-
-          const tx = signedPsbt.extractTransaction();
+          let tx: bitcoin.Transaction;
+          try {
+            tx = signedPsbt.extractTransaction();
+          } catch {
+            const alreadyFinalized = signedPsbt.data.inputs.every(input =>
+              input.finalScriptWitness || input.finalScriptSig
+            );
+            if (!alreadyFinalized) {
+              signedPsbt.finalizeAllInputs();
+            }
+            tx = signedPsbt.extractTransaction();
+          }
           const txHex = tx.toHex();
           const txid = tx.getId();
 
@@ -354,6 +389,14 @@ export function useRemoveLiquidityMutation() {
 
           // Broadcast
           const broadcastTxid = await provider.broadcastTransaction(txHex);
+          if (typeof window !== 'undefined') {
+            try {
+              const { pendingTxStore } = await import('@/lib/alkanes/pendingTxStore');
+              await pendingTxStore.add(txHex);
+            } catch (error) {
+              console.warn('[RemoveLiquidity] pendingTxStore.add failed:', error);
+            }
+          }
           console.log('[RemoveLiquidity] Broadcast successful:', broadcastTxid);
 
           return {
@@ -384,6 +427,8 @@ export function useRemoveLiquidityMutation() {
 
       // Invalidate balance queries
       queryClient.invalidateQueries({ queryKey: ['sellable-currencies'] });
+      queryClient.invalidateQueries({ queryKey: ['wallet-utxo-cache'] });
+      queryClient.invalidateQueries({ queryKey: ['btc-balance-fast'] });
       queryClient.invalidateQueries({ queryKey: ['btc-balance'] });
       queryClient.invalidateQueries({ queryKey: ['dynamic-pools'] });
       queryClient.invalidateQueries({ queryKey: ['pool-stats'] });

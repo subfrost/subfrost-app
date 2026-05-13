@@ -28,6 +28,7 @@ interface Props {
   network?: Network;
   orderType: OrderType;
   onOrderTypeChange: (orderType: OrderType) => void;
+  hideLimit?: boolean;
 }
 
 const FormSkeleton = () => (
@@ -50,27 +51,32 @@ export default function TradeForm({
   network,
   orderType,
   onOrderTypeChange,
+  hideLimit = false,
 }: Props) {
   const { t } = useTranslation();
+  const effectiveOrderType = hideLimit && orderType === 'limit' ? 'market' : orderType;
+
   return (
     <div className="sf-card flex flex-col h-full overflow-visible">
       {/* Tabs row: Market / Limit / Liquidity — top of panel */}
       <div className="flex items-center gap-2 w-full p-3 pb-0">
         <button
           onClick={() => onOrderTypeChange('market')}
-          className={`sf-tab-btn flex-1 basis-0 ${orderType === 'market' ? 'sf-tab-btn--active' : ''}`}
+          className={`sf-tab-btn flex-1 basis-0 ${effectiveOrderType === 'market' ? 'sf-tab-btn--active' : ''}`}
         >
           {t('swap.market')}
         </button>
-        <button
-          onClick={() => onOrderTypeChange('limit')}
-          className={`sf-tab-btn flex-1 basis-0 ${orderType === 'limit' ? 'sf-tab-btn--active' : ''}`}
-        >
-          {t('swap.limit')}
-        </button>
+        {!hideLimit && (
+          <button
+            onClick={() => onOrderTypeChange('limit')}
+            className={`sf-tab-btn flex-1 basis-0 ${effectiveOrderType === 'limit' ? 'sf-tab-btn--active' : ''}`}
+          >
+            {t('swap.limit')}
+          </button>
+        )}
         <button
           onClick={() => onOrderTypeChange('liquidity')}
-          className={`sf-tab-btn flex-1 basis-0 ${orderType === 'liquidity' ? 'sf-tab-btn--active' : ''}`}
+          className={`sf-tab-btn flex-1 basis-0 ${effectiveOrderType === 'liquidity' ? 'sf-tab-btn--active' : ''}`}
         >
           {t('swap.liquidity')}
         </button>
@@ -78,11 +84,11 @@ export default function TradeForm({
 
       <div className="flex-1 min-h-0">
         <Suspense fallback={<FormSkeleton />}>
-          {orderType === 'market' ? (
+          {effectiveOrderType === 'market' ? (
             <div className="p-4">
               <SwapInputs {...swapInputsProps} />
             </div>
-          ) : orderType === 'limit' ? (
+          ) : effectiveOrderType === 'limit' ? (
             <LimitOrderPanel
               baseToken={baseToken}
               quoteToken={quoteToken}

@@ -83,6 +83,10 @@ function normalizeActivityItem(item: any): any {
       token0_amount: 'token0Amount', token1_amount: 'token1Amount',
       token0_block_id: 'token0BlockId', token0_tx_id: 'token0TxId',
       token1_block_id: 'token1BlockId', token1_tx_id: 'token1TxId',
+      token0_block: 'token0BlockId', token0_tx: 'token0TxId',
+      token1_block: 'token1BlockId', token1_tx: 'token1TxId',
+      amount0_in: 'amount0In', amount1_in: 'amount1In',
+      amount0_out: 'amount0Out', amount1_out: 'amount1Out',
       seller_address: 'sellerAddress', minter_address: 'minterAddress',
       burner_address: 'burnerAddress', creator_address: 'creatorAddress',
     };
@@ -92,6 +96,33 @@ function normalizeActivityItem(item: any): any {
       }
     }
     if (!mapped.transactionId) mapped.transactionId = mapped.txid || mapped.tx_id || '';
+    if (mapped.type === 'swap') {
+      const token0BlockId = mapped.token0BlockId ?? mapped.soldTokenBlockId;
+      const token0TxId = mapped.token0TxId ?? mapped.soldTokenTxId;
+      const token1BlockId = mapped.token1BlockId ?? mapped.boughtTokenBlockId;
+      const token1TxId = mapped.token1TxId ?? mapped.boughtTokenTxId;
+
+      const amount0In = mapped.amount0In ?? mapped.amount0_in;
+      const amount1In = mapped.amount1In ?? mapped.amount1_in;
+      const amount0Out = mapped.amount0Out ?? mapped.amount0_out;
+      const amount1Out = mapped.amount1Out ?? mapped.amount1_out;
+      const isPositive = (value: any) => Number(value ?? 0) > 0;
+      const soldSide = isPositive(amount1In) ? 1 : 0;
+      const boughtSide = soldSide === 1 ? 0 : 1;
+      const setIfPresent = (key: string, value: any) => {
+        if (mapped[key] === undefined && value !== undefined && value !== null) {
+          mapped[key] = String(value);
+        }
+      };
+
+      setIfPresent('soldTokenBlockId', soldSide === 1 ? token1BlockId : token0BlockId);
+      setIfPresent('soldTokenTxId', soldSide === 1 ? token1TxId : token0TxId);
+      setIfPresent('boughtTokenBlockId', boughtSide === 1 ? token1BlockId : token0BlockId);
+      setIfPresent('boughtTokenTxId', boughtSide === 1 ? token1TxId : token0TxId);
+
+      if (mapped.soldAmount === undefined) mapped.soldAmount = soldSide === 1 ? amount1In : amount0In;
+      if (mapped.boughtAmount === undefined) mapped.boughtAmount = boughtSide === 1 ? amount1Out : amount0Out;
+    }
     return mapped;
   }
 
@@ -110,6 +141,43 @@ function normalizeActivityItem(item: any): any {
   }
   if (!mapped.timestamp) mapped.timestamp = Date.now();
   return mapped;
+}
+
+function getHistoryRoute(address: string | null | undefined, transactionType?: AmmTransactionType) {
+  if (transactionType === 'wrap') {
+    return {
+      endpoint: address ? 'get-address-wrap-history' : 'get-all-wrap-history',
+      body: address ? { address } : {},
+      resultKey: 'wraps',
+      forcedType: 'wrap' as const,
+    };
+  }
+
+  if (transactionType === 'unwrap') {
+    return {
+      endpoint: address ? 'get-address-unwrap-history' : 'get-all-unwrap-history',
+      body: address ? { address } : {},
+      resultKey: 'unwraps',
+      forcedType: 'unwrap' as const,
+    };
+  }
+
+  return {
+    endpoint: address ? 'get-all-address-amm-tx-history' : 'get-all-amm-tx-history',
+    body: address ? { address } : {},
+    resultKey: 'transactions',
+    forcedType: undefined,
+  };
+}
+
+function extractHistoryItems(payload: any, resultKey: string) {
+  if (Array.isArray(payload?.[resultKey])) return payload[resultKey];
+  if (Array.isArray(payload?.transactions)) return payload.transactions;
+  if (Array.isArray(payload?.items)) return payload.items;
+  if (Array.isArray(payload?.wraps)) return payload.wraps;
+  if (Array.isArray(payload?.unwraps)) return payload.unwraps;
+  if (Array.isArray(payload)) return payload;
+  return [];
 }
 
 /**
@@ -302,12 +370,22 @@ export function useInfiniteAmmTxHistory({
       try {
         // Direct REST fetch — no WASM overhead. Same espo endpoint the SDK calls internally.
         const rpcBase = `/api/rpc/${network || 'mainnet'}`;
-        const endpoint = address ? 'get-all-address-amm-tx-history' : 'get-all-amm-tx-history';
-        const body = address
-          ? { address, limit: count, offset }
-          : { limit: count, offset };
+        const route = getHistoryRoute(address, transactionType);
+        const body: Record<string, any> = {
+          ...route.body,
+          count,
+          offset,
+          successful: true,
+        };
+        if (
+          transactionType &&
+          transactionType !== 'wrap' &&
+          transactionType !== 'unwrap'
+        ) {
+          body.transactionType = transactionType;
+        }
 
-        const resp = await fetch(`${rpcBase}/${endpoint}`, {
+        const resp = await fetch(`${rpcBase}/${route.endpoint}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           signal: AbortSignal.timeout(10000),
@@ -317,9 +395,8 @@ export function useInfiniteAmmTxHistory({
         const result = await resp.json();
 
         const payload = result?.data ?? result;
-        const rawItemsRaw = Array.isArray(payload?.items) ? payload.items
-          : Array.isArray(payload) ? payload
-          : [];
+        const rawItemsRaw = extractHistoryItems(payload, route.resultKey)
+          .map((item: any) => route.forcedType ? { ...item, type: route.forcedType } : item);
 
         // Normalize items (handles both mainnet enriched format and devnet raw traces)
         // Filter out nulls (traces we want to skip, e.g. contract deployments)
@@ -329,12 +406,12 @@ export function useInfiniteAmmTxHistory({
         const total = payload?.total ?? rawItems.length;
 
         // Client-side category filter — the API returns all types mixed together,
-        // so we always filter locally when a specific type is requested.
+        // Keep a local type check in case an upstream ignores transactionType.
         const filteredItems = transactionType
           ? rawItems.filter((item: any) => item?.type === transactionType)
           : rawItems;
 
-        console.log(`[useAmmHistory] ${rawItems.length} items (${rawItemsRaw.length} raw, type filter: ${transactionType || 'all'})`);
+        console.log(`[useAmmHistory] ${rawItems.length} items (${rawItemsRaw.length} raw, endpoint: ${route.endpoint}, type filter: ${transactionType || 'all'})`);
 
         return {
           items: filteredItems,

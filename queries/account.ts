@@ -22,8 +22,10 @@ import {
   getAddressMempoolTxs,
   getAddressUtxos,
   getAlkaneInfoBatch,
+  getEsploraTx,
   getProtorunesByOutpoint,
 } from '@/lib/alkanes/rpc';
+import { getAlkanesDataSource } from '@/lib/alkanes/dataSource';
 import type { CurrencyPriceInfoResponse } from '@/types/alkanes';
 
 type WebProvider = import('@alkanes/ts-sdk/wasm').WebProvider;
@@ -248,9 +250,9 @@ export async function fetchAlkaneBalancesViaProtobuf(
   // ──────────────────────────────────────────────────────────────────────
   // MAINNET DISPLAY PATH — single alkanode call (~280ms total)
   // ──────────────────────────────────────────────────────────────────────
-  // Per the user's 2026-05-11 directive: live swap-critical reads stay on
-  // metashrew (`walletUtxoCacheQueryOptions` per-outpoint fanout below);
-  // less-sensitive UI display reads can come from canon Espo (alkanode).
+  // Per the user's 2026-05-13 directive: when the app-level data source is
+  // ESPO, wallet state should use ESPO's populated spendable-outpoint path
+  // instead of pairing an esplora UTXO list with per-outpoint metashrew fanout.
   //
   // Phantom-balance bug check (Rule SoT-1 ban): subfrost's
   // `alkanes_protorunesbyaddress` is banned because it reports phantom
@@ -270,9 +272,6 @@ export async function fetchAlkaneBalancesViaProtobuf(
   //   1× alkanode /get-alkanes-by-address (~280ms)
   //
   // What this does NOT touch:
-  //   - `walletUtxoCacheQueryOptions` (below) — still uses per-outpoint
-  //     metashrew fanout because the swap path needs to know WHICH
-  //     outpoints carry alkanes, not just the address total.
   //   - Non-mainnet networks — they keep the metashrew path because
   //     alkanode hosts a mainnet espo deployment only.
   //
@@ -478,6 +477,11 @@ export interface CachedUtxo {
   value: number;
   /** Owning address — useful for wallets with both segwit + taproot. */
   address: string;
+  scriptPubKeyHex?: string;
+  blockHeight?: number | null;
+  confirmations?: number;
+  coinbase?: boolean;
+  runes?: unknown[];
   /** Per-alkane amounts on this outpoint. Empty for non-dust BTC UTXOs. */
   alkanes: Array<{ block: number; tx: number; amount: bigint }>;
 }
@@ -514,6 +518,232 @@ const EMPTY_UTXO_CACHE: WalletUtxoCache = {
   height: 0,
 };
 
+const ESPO_PRICE_SCALE = 10_000_000_000_000_000;
+
+function parseEspoScaledUsd(value: unknown): number | undefined {
+  const raw = typeof value === 'string' ? value : typeof value === 'number' ? String(value) : '';
+  if (!raw || !/^\d+$/.test(raw)) return undefined;
+  const scaled = Number(raw);
+  if (!Number.isFinite(scaled) || scaled <= 0) return undefined;
+  return scaled / ESPO_PRICE_SCALE;
+}
+
+async function fetchEspoUsdPricesFrom10mCandles(
+  network: string,
+  alkaneIds: string[],
+): Promise<Map<string, number>> {
+  const uniqueIds = [...new Set(alkaneIds)].filter((id) => id && id !== '32:0');
+  const prices = new Map<string, number>();
+  if (uniqueIds.length === 0) return prices;
+
+  const requests = uniqueIds.map((id, index) => ({
+    jsonrpc: '2.0',
+    id: `wallet-usd-price-${index}`,
+    method: 'ammdata.get_candles',
+    params: {
+      pool: `${id}-usd`,
+      timeframe: '10m',
+      side: 'base',
+      limit: 1,
+      page: 1,
+    },
+  }));
+
+  try {
+    const res = await fetch(`/api/rpc/${network}/espo`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(requests),
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!res.ok) return prices;
+
+    const json = await res.json();
+    const envelopes: any[] = Array.isArray(json) ? json : [json];
+    const byId = new Map(envelopes.map((item) => [String(item?.id), item]));
+
+    for (let i = 0; i < requests.length; i++) {
+      const envelope = byId.get(String(requests[i].id));
+      const result = envelope?.result;
+      const candle = Array.isArray(result?.candles) ? result.candles[0] : null;
+      if (result?.ok !== true || !candle) continue;
+      const price = parseEspoScaledUsd(candle.close);
+      if (price !== undefined) prices.set(uniqueIds[i], price);
+    }
+  } catch (err) {
+    console.warn('[alkaneBalances] ESPO USD candle batch failed:', err);
+  }
+
+  return prices;
+}
+
+function buildWalletUtxoCache(utxos: CachedUtxo[], height: number): WalletUtxoCache {
+  const deduped = new Map<string, CachedUtxo>();
+  for (const u of utxos) {
+    deduped.set(`${u.txid}:${u.vout}`, u);
+  }
+
+  const byOutpoint = new Map<string, CachedUtxo>();
+  const byAlkane = new Map<string, CachedUtxo[]>();
+  const balances = new Map<string, bigint>();
+  const all = Array.from(deduped.values());
+  for (const u of all) {
+    byOutpoint.set(`${u.txid}:${u.vout}`, u);
+    for (const a of u.alkanes) {
+      const id = `${a.block}:${a.tx}`;
+      if (!byAlkane.has(id)) byAlkane.set(id, []);
+      byAlkane.get(id)!.push(u);
+      balances.set(id, (balances.get(id) ?? 0n) + a.amount);
+    }
+  }
+
+  return { utxos: all, byOutpoint, byAlkane, balances, height };
+}
+
+function parseEspoOutpoint(raw: unknown): { txid: string; vout: number } | null {
+  if (typeof raw === 'string') {
+    const [txid, voutRaw] = raw.split(':');
+    const vout = Number(voutRaw);
+    return txid && Number.isFinite(vout) ? { txid, vout } : null;
+  }
+
+  const obj = raw as any;
+  const txid = String(obj?.txid ?? obj?.tx_id ?? obj?.transaction_id ?? '');
+  const vout = Number(obj?.vout ?? obj?.index ?? obj?.n);
+  return txid && Number.isFinite(vout) ? { txid, vout } : null;
+}
+
+function parseEspoAlkanes(raw: any): Array<{ block: number; tx: number; amount: bigint }> {
+  const entries: any[] = Array.isArray(raw?.alkanes) ? raw.alkanes : [];
+  return entries
+    .map((entry: any) => {
+      const id = String(entry?.alkane ?? entry?.alkaneId ?? entry?.alkane_id ?? entry?.id ?? '');
+      const [blockRaw, txRaw] = id.split(':');
+      const block = Number(entry?.block ?? entry?.alkaneId?.block ?? blockRaw);
+      const tx = Number(entry?.tx ?? entry?.alkaneId?.tx ?? txRaw);
+      const amount = BigInt(String(entry?.amount ?? entry?.balance ?? 0));
+      if (!Number.isFinite(block) || !Number.isFinite(tx) || amount === 0n) return null;
+      return { block, tx, amount };
+    })
+    .filter((x): x is { block: number; tx: number; amount: bigint } => x !== null);
+}
+
+function normalizeEspoSpendableOutpoint(raw: any, address: string): CachedUtxo | null {
+  const parsed = parseEspoOutpoint(raw?.outpoint ?? raw);
+  if (!parsed) return null;
+
+  const value = getUtxoValueSats(raw);
+  if (!Number.isFinite(value)) return null;
+
+  return {
+    txid: parsed.txid,
+    vout: parsed.vout,
+    value,
+    address,
+    scriptPubKeyHex:
+      typeof raw?.script_pubkey_hex === 'string'
+        ? raw.script_pubkey_hex
+        : typeof raw?.scriptPubKeyHex === 'string'
+          ? raw.scriptPubKeyHex
+          : typeof raw?.script_pubkey === 'string'
+            ? raw.script_pubkey
+            : typeof raw?.txout?.script_pubkey_hex === 'string'
+              ? raw.txout.script_pubkey_hex
+              : undefined,
+    blockHeight: raw?.block_height ?? null,
+    confirmations: Number(raw?.confirmations ?? 0),
+    coinbase: Boolean(raw?.coinbase),
+    runes: Array.isArray(raw?.runes) ? raw.runes : [],
+    alkanes: parseEspoAlkanes(raw),
+  };
+}
+
+function getUtxoValueSats(raw: any): number {
+  const explicitSats = Number(
+    raw?.satoshis ??
+    raw?.sats ??
+    raw?.value ??
+    raw?.txout?.value ??
+    raw?.prevout?.value ??
+    0,
+  );
+  if (Number.isFinite(explicitSats) && explicitSats > 0) return explicitSats;
+
+  const amount = raw?.amount;
+  if (typeof amount === 'string' && amount.includes('.')) {
+    const btc = Number(amount);
+    return Number.isFinite(btc) ? Math.round(btc * 100_000_000) : 0;
+  }
+
+  const value = Number(amount ?? 0);
+  return Number.isFinite(value) ? value : 0;
+}
+
+async function fetchWalletUtxoCacheViaEspo(network: string, addresses: string[]): Promise<WalletUtxoCache> {
+  const requests = addresses.map((address, index) => ({
+    jsonrpc: '2.0',
+    id: `wallet-spendable-${index}`,
+    method: 'essentials.get_address_spendable_outpoints',
+    params: {
+      address,
+      omit_raw_tx: true,
+    },
+  }));
+
+  const res = await fetch(`/api/rpc/${network}/espo`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(requests),
+    signal: AbortSignal.timeout(20_000),
+  });
+  if (!res.ok) throw new Error(`essentials.get_address_spendable_outpoints batch ${res.status}`);
+
+  const json = await res.json();
+  const envelopes: any[] = Array.isArray(json) ? json : [json];
+  const byId = new Map(envelopes.map((item) => [String(item?.id), item]));
+
+  const utxos: CachedUtxo[] = [];
+  let height = 0;
+  for (const request of requests) {
+    const envelope = byId.get(String(request.id));
+    if (!envelope) throw new Error(`missing ESPO batch response for ${request.id}`);
+    if (envelope.error) {
+      throw new Error(
+        `essentials.get_address_spendable_outpoints failed: ${envelope.error.message ?? envelope.error.code ?? 'rpc error'}`,
+      );
+    }
+
+    const result = envelope.result;
+    if (result?.ok === false) {
+      throw new Error(
+        `essentials.get_address_spendable_outpoints failed: ${result.error ?? 'rpc error'}`,
+      );
+    }
+
+    const outpoints = Array.isArray(result?.outpoints)
+      ? result.outpoints
+      : Array.isArray(result?.spendable_outpoints)
+        ? result.spendable_outpoints
+        : Array.isArray(result?.spendableOutpoints)
+          ? result.spendableOutpoints
+          : Array.isArray(result?.data?.outpoints)
+            ? result.data.outpoints
+            : Array.isArray(result?.data?.spendable_outpoints)
+              ? result.data.spendable_outpoints
+              : Array.isArray(result)
+                ? result
+                : [];
+    const address = request.params.address;
+    height = Math.max(height, Number(result?.height ?? 0) || 0);
+    for (const raw of outpoints) {
+      const utxo = normalizeEspoSpendableOutpoint(raw, address);
+      if (utxo) utxos.push(utxo);
+    }
+  }
+
+  return buildWalletUtxoCache(utxos, height);
+}
+
 export function walletUtxoCacheQueryOptions(deps: WalletUtxoCacheDeps) {
   const addresses: string[] = [];
   if (deps.account?.nativeSegwit?.address) addresses.push(deps.account.nativeSegwit.address);
@@ -536,6 +766,10 @@ export function walletUtxoCacheQueryOptions(deps: WalletUtxoCacheDeps) {
     retryDelay: (attempt: number) => Math.min(1000 * 2 ** attempt, 10_000),
     placeholderData: EMPTY_UTXO_CACHE,
     queryFn: async () => {
+      if (getAlkanesDataSource(deps.network) === 'espo') {
+        return fetchWalletUtxoCacheViaEspo(deps.network, addresses);
+      }
+
       // Step 1: pull UTXOs for both addresses in parallel.
       const utxoArrays = await Promise.all(
         addresses.map(async (addr) => {
@@ -671,7 +905,6 @@ export function walletUtxoCacheQueryOptions(deps: WalletUtxoCacheDeps) {
         }
       }
 
-      // Step 3: assemble lookups.
       const utxos: CachedUtxo[] = allUtxos.map((u) => ({
         txid: u.txid,
         vout: u.vout,
@@ -679,20 +912,7 @@ export function walletUtxoCacheQueryOptions(deps: WalletUtxoCacheDeps) {
         address: u.address,
         alkanes: alkaneMap.get(`${u.txid}:${u.vout}`) ?? [],
       }));
-      const byOutpoint = new Map<string, CachedUtxo>();
-      const byAlkane = new Map<string, CachedUtxo[]>();
-      const balances = new Map<string, bigint>();
-      for (const u of utxos) {
-        byOutpoint.set(`${u.txid}:${u.vout}`, u);
-        for (const a of u.alkanes) {
-          const id = `${a.block}:${a.tx}`;
-          if (!byAlkane.has(id)) byAlkane.set(id, []);
-          byAlkane.get(id)!.push(u);
-          balances.set(id, (balances.get(id) ?? 0n) + a.amount);
-        }
-      }
-
-      return { utxos, byOutpoint, byAlkane, balances, height: 0 };
+      return buildWalletUtxoCache(utxos, 0);
     },
   });
 }
@@ -792,9 +1012,7 @@ function mapToObject(value: any): any {
 
 
 // ---------------------------------------------------------------------------
-// Fast BTC balance — wallet API first, esplora fallback (no lua)
-// Browser wallets (UniSat, OKX) return balance instantly from their own state.
-// For SDK/keystore wallets, falls back to esplora address stats (~200ms).
+// Fast BTC balance - shared indexer-backed UTXO path for every wallet.
 // ---------------------------------------------------------------------------
 
 interface BtcBalanceFastDeps {
@@ -810,33 +1028,6 @@ export interface BtcBalanceFast {
   total: number;
   pendingIn: number;
   pendingOut: number;
-}
-
-async function fetchBalanceFromWalletApi(): Promise<BtcBalanceFast | null> {
-  const connectedId = localStorage.getItem('subfrost_browser_wallet_id');
-
-  // UniSat: getBitcoinUtxos() returns only clean/spendable UTXOs (no inscriptions/runes).
-  if (connectedId === 'unisat') {
-    const unisat = (window as any).unisat;
-    if (unisat?.getBitcoinUtxos) {
-      try {
-        // Ensure session is active — auto-reconnect from cache doesn't activate it.
-        const accounts = unisat.getAccounts ? await unisat.getAccounts() : [];
-        if (!accounts?.length && unisat.requestAccounts) {
-          await unisat.requestAccounts();
-        }
-        const utxos = await unisat.getBitcoinUtxos();
-        if (Array.isArray(utxos) && utxos.length > 0) {
-          const spendable = utxos.reduce((sum: number, u: any) => sum + (u.satoshis || 0), 0);
-          return { p2wpkh: 0, p2tr: spendable, total: spendable, pendingIn: 0, pendingOut: 0 };
-        }
-      } catch { /* fall through to esplora */ }
-    }
-  }
-
-  // OKX, Xverse, OYL — no wallet-side balance API. Falls through to esplora.
-
-  return null;
 }
 
 async function fetchAddressBalance(rpcPath: string, address: string) {
@@ -855,7 +1046,7 @@ async function fetchAddressBalance(rpcPath: string, address: string) {
   const json = await response.json();
   const utxos = json.result;
   if (!Array.isArray(utxos)) return 0;
-  return utxos.reduce((sum: number, u: any) => sum + (u.value || 0), 0);
+  return utxos.reduce((sum: number, u: any) => sum + getUtxoValueSats(u), 0);
 }
 
 const BTC_BALANCE_CACHE_KEY = 'subfrost_btc_balance_cache';
@@ -901,23 +1092,19 @@ export function btcBalanceFastQueryOptions(deps: BtcBalanceFastDeps) {
 
   return queryOptions<BtcBalanceFast>({
     queryKey: queryKeys.account.btcBalanceFast(deps.network, addressKey, deps.walletType),
-    enabled: !!deps.account && deps.isConnected && addresses.length > 0,
+    enabled:
+      getAlkanesDataSource(deps.network) !== 'espo' &&
+      !!deps.account &&
+      deps.isConnected &&
+      addresses.length > 0,
     staleTime: isLocal ? 2_000 : Infinity,
-    refetchOnMount: true,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: 'always',
     placeholderData: cached,
     retry: 3,
     retryDelay: (attempt: number) => Math.min(1000 * 2 ** attempt, 5000),
     queryFn: async () => {
-      // Browser wallet: get balance directly from wallet API (instant)
-      if (deps.walletType === 'browser' && typeof window !== 'undefined') {
-        const walletBal = await fetchBalanceFromWalletApi();
-        if (walletBal) {
-          cacheBtcBalance(deps.network, addressKey, walletBal);
-          return walletBal;
-        }
-      }
-
-      // Fallback: esplora UTXOs
+      // All wallets use the same indexer-backed UTXO path.
       const rpcPath = deps.network === 'devnet'
         ? 'http://localhost:18888'
         : `/api/rpc/${deps.network || 'mainnet'}`;
@@ -1085,6 +1272,28 @@ export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
         Promise.all(mempoolSpentPromises),
       ]);
 
+      const toArray = (val: any): any[] => {
+        if (Array.isArray(val)) return val;
+        if (val && typeof val === 'object' && Object.keys(val).length > 0) return Object.values(val);
+        return [];
+      };
+
+      const pendingTxids = new Set<string>();
+      for (const { data } of enrichedResults) {
+        if (!data) continue;
+        for (const utxo of toArray(data.pending)) {
+          const [txid] = (utxo?.outpoint || ':').split(':');
+          if (txid) pendingTxids.add(txid);
+        }
+      }
+      const confirmedPendingTxids = new Set<string>();
+      await Promise.all(
+        [...pendingTxids].map(async (txid) => {
+          const tx = await getEsploraTx(deps.network || 'mainnet', txid);
+          if (tx?.status?.confirmed) confirmedPendingTxids.add(txid);
+        }),
+      );
+
       let totalBtc = 0;
       let p2wpkhBtc = 0;
       let p2trBtc = 0;
@@ -1152,15 +1361,12 @@ export function enrichedWalletQueryOptions(deps: EnrichedWalletDeps) {
           }
         };
 
-        const toArray = (val: any): any[] => {
-          if (Array.isArray(val)) return val;
-          if (val && typeof val === 'object' && Object.keys(val).length > 0) return Object.values(val);
-          return [];
-        };
-
         for (const utxo of toArray(data.spendable)) processUtxo(utxo, true, true);
         for (const utxo of toArray(data.assets)) processUtxo(utxo, true, false);
-        for (const utxo of toArray(data.pending)) processUtxo(utxo, false, false);
+        for (const utxo of toArray(data.pending)) {
+          const [txid] = (utxo?.outpoint || ':').split(':');
+          processUtxo(utxo, confirmedPendingTxids.has(txid), false);
+        }
       }
 
       // Process mempool spent results (already fetched in parallel above)
@@ -1334,6 +1540,20 @@ export function alkaneBalanceQueryOptions(deps: AlkaneBalanceDeps) {
           if (info.name && entry.name === `Token ${id}`) entry.name = info.name;
           if (info.symbol && !entry.symbol) entry.symbol = info.symbol;
           if (info.decimals != null) entry.decimals = info.decimals;
+        }
+      }
+
+      if (getAlkanesDataSource(deps.network) === 'espo') {
+        const priceIds = [...alkaneMap.entries()]
+          .filter(([id, entry]) => id !== '32:0' && !(entry.priceUsd > 0))
+          .map(([id]) => id);
+        const espoUsdPrices = await fetchEspoUsdPricesFrom10mCandles(
+          deps.network || 'mainnet',
+          priceIds,
+        );
+        for (const [id, priceUsd] of espoUsdPrices) {
+          const entry = alkaneMap.get(id);
+          if (entry) entry.priceUsd = priceUsd;
         }
       }
 

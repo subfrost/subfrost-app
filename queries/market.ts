@@ -10,6 +10,7 @@ import { queryKeys } from './keys';
 import { FRBTC_WRAP_FEE_PER_1000, FRBTC_UNWRAP_FEE_PER_1000 } from '@/constants/alkanes';
 import { encodeSimulateCalldata } from '@/utils/simulateCalldata';
 import { getBitcoinPrice as rpcGetBitcoinPrice } from '@/lib/alkanes/rpc';
+import { getAlkanesDataSource } from '@/lib/alkanes/dataSource';
 // Pricing data is global — always use mainnet subpricer regardless of connected network
 const SUBPRICER_BASE = 'https://mainnet.subfrost.io/v4/subfrost';
 
@@ -152,6 +153,16 @@ export function frbtcPremiumQueryOptions(
     retry: 3,
     retryDelay: 1000,
     queryFn: async () => {
+      if (network === 'mainnet' || getAlkanesDataSource(network) === 'espo') {
+        return {
+          premium: FRBTC_WRAP_FEE_PER_1000 * 100_000,
+          wrapFeePerThousand: FRBTC_WRAP_FEE_PER_1000,
+          unwrapFeePerThousand: FRBTC_UNWRAP_FEE_PER_1000,
+          isLive: false,
+          error: 'ESPO data source uses configured frBTC fees; no alkanes_simulate call',
+        };
+      }
+
       if (!provider) throw new Error('Provider not initialized');
 
       if (!frbtcAlkaneId || frbtcAlkaneId === '') {
@@ -243,40 +254,38 @@ async function fetchAlkaneNamesBatch(
 
   const rpcUrl = `/api/rpc/${network || 'mainnet'}/espo`;
 
-  const results = await Promise.all(
-    alkaneIds.map(async (id) => {
-      try {
-        const resp = await fetch(rpcUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          signal: AbortSignal.timeout(5000),
-          body: JSON.stringify({
-            jsonrpc: '2.0', id: 1,
-            method: 'essentials.get_alkane_info',
-            params: { alkane: id },
-          }),
-        });
-        const json = await resp.json();
-        const data = json?.result;
-        if (data?.name) {
-          const name = (data.name as string).replace('SUBFROST BTC', 'frBTC');
-          return { id, name, symbol: data.symbol || '' };
-        }
-        return { id, name: undefined as string | undefined, symbol: '' };
-      } catch {
-        return { id, name: undefined as string | undefined, symbol: '' };
-      }
-    }),
-  );
+  try {
+    const request = alkaneIds.map((id, index) => ({
+      jsonrpc: '2.0',
+      id: index + 1,
+      method: 'essentials.get_alkane_info',
+      params: { alkane: id },
+    }));
+    const resp = await fetch(rpcUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(5000),
+      body: JSON.stringify(request),
+    });
+    const json = await resp.json();
+    const responses = Array.isArray(json) ? json : [];
+    const byId = new Map<number, any>();
+    for (const item of responses) {
+      if (typeof item?.id === 'number') byId.set(item.id, item);
+    }
 
-  for (const r of results) {
-    if (r.name) {
-      map[r.id] = { id: r.id, name: r.name, symbol: r.symbol };
-    } else {
-      // Espo returned no metadata. Fall back to the raw id so consumers'
-      // `name/symbol` checks resolve and the UI renders something instead of
-      // looping on a skeleton forever (see ActivityFeed pairLoaded gate).
-      map[r.id] = { id: r.id, name: r.id, symbol: r.id };
+    for (const [index, id] of alkaneIds.entries()) {
+      const data = byId.get(index + 1)?.result;
+      if (data?.name) {
+        const name = (data.name as string).replace('SUBFROST BTC', 'frBTC');
+        map[id] = { id, name, symbol: data.symbol || '' };
+      } else {
+        map[id] = { id, name: id, symbol: id };
+      }
+    }
+  } catch {
+    for (const id of alkaneIds) {
+      map[id] = { id, name: id, symbol: id };
     }
   }
 

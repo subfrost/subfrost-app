@@ -4,20 +4,25 @@ import CumulativeAmmVolume from "@/app/components/CumulativeAmmVolume";
 import ActivityFeed from "@/app/components/ActivityFeed";
 import AlkanesMainWrapper from "@/app/components/AlkanesMainWrapper";
 import PageContent from "@/app/components/PageContent";
+import { DEMO_MODE_ENABLED } from "@/utils/demoMode";
 
 export default function Home() {
+  const topRowColumns = DEMO_MODE_ENABLED ? "lg:grid-cols-3" : "lg:grid-cols-4";
+
   return (
     <AlkanesMainWrapper>
       <PageContent className="px-4 md:px-5">
         <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-4">
           {/* Top row: Trending Pair (1/4), Trending Vault (1/4), Cumulative AMM Volume (1/2) */}
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
+          <div className={`grid grid-cols-1 ${topRowColumns} gap-4`}>
             <div className="lg:col-span-1">
               <TrendingPairs />
             </div>
-            <div className="lg:col-span-1">
-              <VaultTiles />
-            </div>
+            {!DEMO_MODE_ENABLED && (
+              <div className="lg:col-span-1">
+                <VaultTiles />
+              </div>
+            )}
             <div className="lg:col-span-2">
               <CumulativeAmmVolume />
             </div>

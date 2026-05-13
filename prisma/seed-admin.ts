@@ -46,8 +46,13 @@ async function main() {
   const allocations = [
     {
       address: 'bc1p3692m0sd6nq5mv4uq0yz2laet3r0asw8kpkrdunkk8ddk045nxzsl2vdsq',
-      amount: 1901,
+      amount: 0.01,
       note: 'Migrated from hardcoded data',
+    },
+    {
+      address: 'bc1prx42gsu83kxsg54nvw3edykuzdhh7vshm9hq4nkmkewmhtlv3stqhuqw3t',
+      amount: 0.01,
+      note: 'Test allocation',
     },
     {
       address: 'bc1pyvt8gmk7uznk5y7x96rnsawg6w4jmgx8ggkcj9du5ar7arns2rzsu9hne7',

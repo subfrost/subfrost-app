@@ -46,8 +46,9 @@ import { calculateMaximumFromSlippage, calculateMinimumFromSlippage } from '@/ut
 import { useFrbtcPremium } from '@/hooks/useFrbtcPremium';
 import { fetchRouterQuote } from '@/hooks/useRouterQuote';
 import { usePoolStateLive } from '@/hooks/usePoolStateLive';
-import type { LivePoolState } from '@/lib/alkanes/poolState';
+import { fetchPoolStateFromDataSource, type LivePoolState } from '@/lib/alkanes/poolState';
 import { swapCalculateOut, swapCalculateIn } from '@/lib/alkanes/swapMath';
+import { getAlkanesDataSource } from '@/lib/alkanes/dataSource';
 
 type Direction = 'buy' | 'sell';
 
@@ -162,8 +163,9 @@ async function calculateSwapPrice(
   }
 
   const isSellToken0 = pool?.token0.id === sellCurrency;
-  // Reserves MUST come from the live state-trie (`alkanes_simulate` opcode
-  // 999 PoolDetails via `usePoolStateLive`). Using cached aggregator data
+  // Reserves MUST come from the live pool-state source selected by
+  // `usePoolStateLive` (ESPO on mainnet, metashrew simulate otherwise).
+  // Using cached aggregator data
   // (`pool.token0Amount`) here is a Rule SoT-2 violation — verified
   // 2026-05-05 by recomputing user-reported failed swaps:
   //   Tx 2c51b734… min_out = 1197 DIESEL, pool actual = 762 DIESEL
@@ -279,6 +281,7 @@ export function useSwapQuotes(
 ) {
   const [debouncedAmount] = useDebounce(amount, 300);
   const { network } = useWallet();
+  const dataSource = getAlkanesDataSource(network);
   const { provider, isInitialized } = useAlkanesSDK();
   const { BUSD_ALKANE_ID, FRBTC_ALKANE_ID } = getConfig(network);
   const sellCurrencyId = sellCurrency === 'btc' ? FRBTC_ALKANE_ID : sellCurrency;
@@ -392,6 +395,7 @@ export function useSwapQuotes(
       maxSlippage,
       wrapFee,
       unwrapFee,
+      dataSource,
       liveReserve0,
       liveReserve1,
       pendingSwapsKey,
@@ -514,6 +518,22 @@ export function useSwapQuotes(
 
       const direct = directPool;
       // console.log('[useSwapQuotes] Direct pool found:', direct ? { poolId: direct.poolId, token0: direct.token0.id, token1: direct.token1.id } : 'NONE');
+      const poolStateCache = new Map<string, Promise<LivePoolState | null>>();
+      const getPoolStateForQuote = (pool: PoolsListItem): Promise<LivePoolState | null> => {
+        const cached = poolStateCache.get(pool.id);
+        if (cached) return cached;
+        const pending = fetchPoolStateFromDataSource(
+          network,
+          factoryId ?? '',
+          pool.id,
+          pool.token0.id,
+          pool.token1.id,
+          dataSource,
+        );
+        poolStateCache.set(pool.id, pending);
+        return pending;
+      };
+
       if (direct) {
         const ammQuote = await calculateSwapPrice(
           sellCurrencyId,
@@ -527,7 +547,7 @@ export function useSwapQuotes(
           unwrapFee,
           sellCurrency,
           buyCurrency,
-          liveDirect.data,
+          liveDirect.data ?? null,
           pendingSwapsForDirect,
         );
 
@@ -598,6 +618,7 @@ export function useSwapQuotes(
         const mid = BUSD_ALKANE_ID;
         if (direction === 'sell') {
           try {
+            const firstHopState = await getPoolStateForQuote(sellToBusd);
             const firstHop = await calculateSwapPrice(
               sellCurrencyId,
               mid,
@@ -609,7 +630,10 @@ export function useSwapQuotes(
               wrapFee,
               unwrapFee,
               sellCurrency,
+              undefined,
+              firstHopState,
             );
+            const secondHopState = await getPoolStateForQuote(buyToBusd);
             const secondHop = await calculateSwapPrice(
               mid,
               buyCurrencyId,
@@ -622,6 +646,7 @@ export function useSwapQuotes(
               unwrapFee,
               undefined,
               buyCurrency,
+              secondHopState,
             );
             const overallSellAmount = toAlks(debouncedAmount);
             const overallExchangeRate = new BigNumber(secondHop.buyAmount || '0').dividedBy(overallSellAmount || '1').toString();
@@ -631,6 +656,7 @@ export function useSwapQuotes(
           }
         } else {
           try {
+            const secondHopState = await getPoolStateForQuote(buyToBusd);
             const secondHop = await calculateSwapPrice(
               mid,
               buyCurrencyId,
@@ -643,7 +669,9 @@ export function useSwapQuotes(
               unwrapFee,
               undefined,
               buyCurrency,
+              secondHopState,
             );
+            const firstHopState = await getPoolStateForQuote(sellToBusd);
             const firstHop = await calculateSwapPrice(
               sellCurrencyId,
               mid,
@@ -655,6 +683,8 @@ export function useSwapQuotes(
               wrapFee,
               unwrapFee,
               sellCurrency,
+              undefined,
+              firstHopState,
             );
             const overallBuyAmount = toAlks(debouncedAmount);
             const overallExchangeRate = new BigNumber(overallBuyAmount || '0').dividedBy(firstHop.sellAmount || '1').toString();
@@ -670,6 +700,7 @@ export function useSwapQuotes(
         const mid = FRBTC_ALKANE_ID;
         if (direction === 'sell') {
           try {
+            const firstHopState = await getPoolStateForQuote(sellToFrbtc);
             const firstHop = await calculateSwapPrice(
               sellCurrencyId,
               mid,
@@ -681,7 +712,10 @@ export function useSwapQuotes(
               wrapFee,
               unwrapFee,
               sellCurrency,
+              undefined,
+              firstHopState,
             );
+            const secondHopState = await getPoolStateForQuote(buyToFrbtc);
             const secondHop = await calculateSwapPrice(
               mid,
               buyCurrencyId,
@@ -694,6 +728,7 @@ export function useSwapQuotes(
               unwrapFee,
               undefined,
               buyCurrency,
+              secondHopState,
             );
             const overallSellAmount = toAlks(debouncedAmount);
             const overallExchangeRate = new BigNumber(secondHop.buyAmount || '0').dividedBy(overallSellAmount || '1').toString();
@@ -703,6 +738,7 @@ export function useSwapQuotes(
           }
         } else {
           try {
+            const secondHopState = await getPoolStateForQuote(buyToFrbtc);
             const secondHop = await calculateSwapPrice(
               mid,
               buyCurrencyId,
@@ -715,7 +751,9 @@ export function useSwapQuotes(
               unwrapFee,
               undefined,
               buyCurrency,
+              secondHopState,
             );
+            const firstHopState = await getPoolStateForQuote(sellToFrbtc);
             const firstHop = await calculateSwapPrice(
               sellCurrencyId,
               mid,
@@ -727,6 +765,8 @@ export function useSwapQuotes(
               wrapFee,
               unwrapFee,
               sellCurrency,
+              undefined,
+              firstHopState,
             );
             const overallBuyAmount = toAlks(debouncedAmount);
             const overallExchangeRate = new BigNumber(overallBuyAmount || '0').dividedBy(firstHop.sellAmount || '1').toString();

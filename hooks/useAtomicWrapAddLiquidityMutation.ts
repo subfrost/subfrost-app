@@ -4,30 +4,32 @@
  * Wraps `useAddLiquidityMutation` with the protostone construction needed
  * for an atomic wrap+addLiquidity OR atomic wrap+createPool. Two chained
  * protostones:
- *   p0: [32,0,FRBTC_WRAP_OPCODE]:p1:v1
- *       — wraps BTC, forwards (auto-allocated X + minted frBTC) to p1
- *   p1: factory.AddLiquidity (opcode 11) for existing pool, OR
- *       factory.CreateNewPool (opcode 1) when no frBTC/X pool exists yet.
+ *   p0: [32,0,FRBTC_WRAP_OPCODE]:v0:v0
+ *       — wraps BTC and refunds minted frBTC + auto-allocated X to ephemeral v0
+ *   Tx B: ephemeral signs factory.AddLiquidity (opcode 11) for existing pool,
+ *       OR factory.CreateNewPool (opcode 1) when no frBTC/X pool exists yet.
  *
- * The frBTC contract uses CallResponse::forward(incoming_alkanes), so the
- * user's Token X auto-allocated to p0 passes through alongside the minted
- * frBTC and lands at p1 as incomingAlkanes.
+ * The child transaction spends ephemeral v0 and finalizes the LP outputs back
+ * to the user's address.
  *
  * Output layout:
- *   v0 = signer (receives BTC)
- *   v1 = user (LP tokens + token refunds)
+ *   parent v0 = ephemeral refund/carrier, parent v1 = signer wrap address
+ *   child v0 = user (LP tokens + token refunds)
  */
 'use client';
 
 import BigNumber from 'bignumber.js';
 import { useCallback } from 'react';
+import { useMutation } from '@tanstack/react-query';
 import { useWallet } from '@/context/WalletContext';
-import { useAddLiquidityMutation, findPoolId } from '@/hooks/useAddLiquidityMutation';
+import { findPoolId } from '@/hooks/useAddLiquidityMutation';
 import { useSandshrewProvider } from '@/hooks/useSandshrewProvider';
 import { useFrbtcPremium } from '@/hooks/useFrbtcPremium';
+import { useEphemeralWrapPackage } from '@/hooks/useEphemeralWrapPackage';
 import { FRBTC_WRAP_FEE_PER_1000 } from '@/constants/alkanes';
 import { getConfig } from '@/utils/getConfig';
 import { getFutureBlockHeight } from '@/utils/amm';
+import { FRBTC_WRAP_OPCODE } from '@/lib/alkanes/constants';
 
 export interface AtomicWrapAddLiquidityParams {
   /** The non-BTC token in the LP pair (the partner of frBTC). */
@@ -56,7 +58,7 @@ export interface AtomicWrapAddLiquidityParams {
 export function useAtomicWrapAddLiquidityMutation() {
   const { network, address } = useWallet();
   const provider = useSandshrewProvider();
-  const addLiquidityMutation = useAddLiquidityMutation();
+  const executeEphemeralWrapPackage = useEphemeralWrapPackage();
   const { data: premiumData } = useFrbtcPremium();
 
   const executeAtomicAddLiquidity = useCallback(
@@ -70,8 +72,8 @@ export function useAtomicWrapAddLiquidityMutation() {
 
       const { getSignerAddressDynamic } = await import('@/lib/alkanes/helpers');
       const {
-        buildAtomicWrapAddLiquidityProtostones,
-        buildAtomicWrapCreatePoolProtostones,
+        buildFactoryAddLiquidityProtostones,
+        buildFactoryCreatePoolProtostone,
       } = await import('@/lib/alkanes/builders');
 
       // Convert BTC → sats; apply wrap fee to compute frBTC actually arriving at the factory call.
@@ -106,7 +108,7 @@ export function useAtomicWrapAddLiquidityMutation() {
         // useRemoveLiquidityMutation / useSwapMutation.
         const deadline = (await getFutureBlockHeight(params.deadlineBlocks || 5, provider as any)).toString();
 
-        protostones = buildAtomicWrapAddLiquidityProtostones({
+        protostones = buildFactoryAddLiquidityProtostones({
           factoryId: config.ALKANE_FACTORY_ID,
           tokenA: config.FRBTC_ALKANE_ID,
           tokenB: params.tokenSideId,
@@ -119,7 +121,7 @@ export function useAtomicWrapAddLiquidityMutation() {
       } else {
         // Pool doesn't exist — opcode 1 (CreateNewPool). User's amounts set the
         // initial price; no min-amounts / deadline (nothing to slip against).
-        protostones = buildAtomicWrapCreatePoolProtostones({
+        protostones = buildFactoryCreatePoolProtostone({
           factoryId: config.ALKANE_FACTORY_ID,
           tokenA: config.FRBTC_ALKANE_ID,
           tokenB: params.tokenSideId,
@@ -128,32 +130,34 @@ export function useAtomicWrapAddLiquidityMutation() {
         });
       }
 
-      const inputRequirements = `B:${btcSats.toString()}:v0,${params.tokenSideId}:${tokenAmountAlks.toString()}`;
       const signerAddress = await getSignerAddressDynamic(network);
 
-      return addLiquidityMutation.mutateAsync({
-        token0Id: config.FRBTC_ALKANE_ID,
-        token1Id: params.tokenSideId,
-        token0Amount: new BigNumber(frbtcDesired).dividedBy(1e8).toString(),
-        token1Amount: params.tokenAmount,
-        token0Decimals: 8,
-        token1Decimals: 8,
-        maxSlippage: params.maxSlippage,
+      return executeEphemeralWrapPackage({
         feeRate: params.feeRate,
-        deadlineBlocks: params.deadlineBlocks,
-        poolId: resolvedPoolId ?? undefined,
-        overrideProtostones: protostones,
-        overrideToAddresses: [signerAddress, address],
-        overrideInputRequirements: inputRequirements,
-        splitTransactions: params.splitTransactions ?? (network === 'mainnet'),
-      } as any);
+        signerAddress,
+        userAddress: address,
+        parentInputRequirements: `B:${btcSats.toString()}:v1,${params.tokenSideId}:${tokenAmountAlks.toString()}`,
+        parentProtostone: `[32,0,${FRBTC_WRAP_OPCODE}]:v0:v0`,
+        childInputRequirements: `${config.FRBTC_ALKANE_ID}:${frbtcDesired.toString()},${params.tokenSideId}:${tokenAmountAlks.toString()}`,
+        childProtostone: protostones,
+        childAlkanes: [
+          { block: 32, tx: 0, amount: frbtcDesired.toString() },
+          {
+            block: Number(params.tokenSideId.split(':')[0]),
+            tx: Number(params.tokenSideId.split(':')[1]),
+            amount: tokenAmountAlks.toString(),
+          },
+        ],
+        invalidate: 'addLiquidity',
+      });
     },
-    [network, address, premiumData, addLiquidityMutation, provider],
+    [network, address, premiumData, executeEphemeralWrapPackage, provider],
   );
+  const mutation = useMutation({ mutationFn: executeAtomicAddLiquidity });
 
   return {
-    executeAtomicAddLiquidity,
-    isPending: addLiquidityMutation.isPending,
-    error: addLiquidityMutation.error,
+    executeAtomicAddLiquidity: mutation.mutateAsync,
+    isPending: mutation.isPending,
+    error: mutation.error,
   };
 }

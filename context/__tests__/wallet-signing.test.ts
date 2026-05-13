@@ -226,26 +226,10 @@ describe('Old wallet-specific signing branches are REMOVED', () => {
     expect(signTaprootBody).not.toContain("request('signPsbt'");
   });
 
-  it('signTaprootPsbt routes UniSat through signWithUnisat (autoFinalized:true helper)', () => {
-    // PRIOR ASSERTION (now inverted): the test used to assert that
-    // signTaprootPsbt did NOT contain `autoFinalized: true` because UniSat was
-    // expected to be handled by the SDK adapter's `auto_finalized: false` path.
-    //
-    // That assumption was WRONG on mainnet — UniSat's `autoFinalized: false`
-    // mode produces taproot PSBTs bitcoinjs-lib's finalizer can't reconcile,
-    // throwing "Cannot finalize taproot input #0. No tapleaf script signature
-    // provided." (See PR #77 / commit fix(unisat): route signing through
-    // signWithUnisat (autoFinalized:true).) UniSat now has an explicit branch
-    // in signTaprootPsbt that calls `signWithUnisat`, which passes
-    // `autoFinalized: true` so UniSat returns a fully finalized PSBT.
-    //
-    // The branch handles taproot inputs correctly. Verified mainnet via tx
-    // 90f857372f1adf752547d4abace02adc772053f225cf7161cc98b855d8f49bae.
-    expect(signTaprootBody).toContain('signWithUnisat');
-    // The OYL/Xverse/UniSat branches all sit ABOVE the generic adapter
-    // fallback. Verify the dispatch order is preserved.
-    expect(signTaprootBody.indexOf("detectedWallet === 'unisat'"))
-      .toBeLessThan(signTaprootBody.indexOf('walletAdapter.signPsbt(patchedPsbtHex'));
+  it('signTaprootPsbt routes UniSat through the generic browser wallet adapter', () => {
+    expect(signTaprootBody).not.toContain('signWithUnisat');
+    expect(signTaprootBody).not.toContain("detectedWallet === 'unisat'");
+    expect(signTaprootBody).toContain('walletAdapter.signPsbt(patchedPsbtHex');
   });
 
   it('signTaprootPsbt does NOT contain OYL reconnection logic (handled by adapter)', () => {

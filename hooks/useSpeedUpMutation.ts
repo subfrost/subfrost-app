@@ -35,6 +35,7 @@ import * as bitcoin from 'bitcoinjs-lib';
 import { useWallet } from '@/context/WalletContext';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { pendingTxStore } from '@/lib/alkanes/pendingTxStore';
+import { useWalletUtxoCache, type CachedUtxo } from '@/hooks/useWalletUtxoCache';
 
 interface SpeedUpParams {
   /** Original signed tx hex (still in mempool). */
@@ -58,6 +59,7 @@ interface PrevoutInfo {
   vout: number;
   value_sats: number;
   scriptpubkey: string; // hex
+  address?: string;
 }
 
 /**
@@ -78,7 +80,10 @@ async function fetchPrevoutInfo(
         const res = await fetch(
           `/api/esplora/tx/${prevTxid}?network=${encodeURIComponent(network)}`,
         );
-        if (!res.ok) return;
+        if (!res.ok) {
+          console.warn(`[SpeedUp] prevout fetch returned ${res.status} for ${prevTxid}:${input.index}`);
+          return;
+        }
         const json = await res.json();
         const prevout = json?.vout?.[input.index];
         if (
@@ -90,13 +95,24 @@ async function fetchPrevoutInfo(
             vout: input.index,
             value_sats: prevout.value,
             scriptpubkey: prevout.scriptpubkey,
+            address: typeof prevout.scriptpubkey_address === 'string'
+              ? prevout.scriptpubkey_address
+              : undefined,
           });
         }
-      } catch {
+      } catch (error) {
+        console.warn(`[SpeedUp] prevout fetch failed for ${prevTxid}:${input.index}`, error);
         /* skip — bridge will reject with MissingPrevoutValue */
       }
     }),
   );
+  if (out.length !== tx.ins.length) {
+    const found = new Set(out.map((p) => `${p.txid}:${p.vout}`));
+    const missing = tx.ins
+      .map((input) => `${Buffer.from(input.hash).reverse().toString('hex')}:${input.index}`)
+      .filter((outpoint) => !found.has(outpoint));
+    throw new Error(`Unable to fetch prevout data for ${missing.join(', ')}`);
+  }
   return out;
 }
 
@@ -132,6 +148,9 @@ interface RebuildPayload {
   change_output_index: number;
   new_change_value: number;
 }
+
+const DUST_LIMIT_SATS = 546;
+const RBF_SEQUENCE = 0xfffffffd;
 
 interface BundleRebuildPayload {
   parent_tx_hex: string;
@@ -227,6 +246,163 @@ export function buildPsbtForRbf(params: {
   }
 
   return psbt;
+}
+
+function isNoChangeOutputError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /no change-to-self output to absorb fee bump/i.test(message);
+}
+
+function inputVbytesForScript(scriptHex: string | undefined): number {
+  if (!scriptHex) return 68;
+  const script = scriptHex.toLowerCase();
+  if (script.startsWith('5120') && script.length === 68) return 58;
+  if (script.startsWith('0014') && script.length === 44) return 68;
+  if (script.startsWith('0020') && script.length === 68) return 109;
+  return 110;
+}
+
+function outputVbytesForScript(script: Buffer): number {
+  return 8 + (script.length < 0xfd ? 1 : 3) + script.length;
+}
+
+function isCleanConfirmedBtcUtxo(utxo: CachedUtxo): boolean {
+  if (utxo.alkanes.length > 0) return false;
+  if (Array.isArray(utxo.runes) && utxo.runes.length > 0) return false;
+  if (utxo.coinbase && (utxo.confirmations ?? 0) < 101) return false;
+  return (utxo.confirmations ?? 0) > 0 || typeof utxo.blockHeight === 'number';
+}
+
+function getTxInputOutpoint(input: bitcoin.TxInput): string {
+  return `${Buffer.from(input.hash).reverse().toString('hex')}:${input.index}`;
+}
+
+function txFeeFromPrevouts(tx: bitcoin.Transaction, prevouts: PrevoutInfo[]): number {
+  const inputValue = tx.ins.reduce((sum, input) => {
+    const txid = Buffer.from(input.hash).reverse().toString('hex');
+    const prevout = prevouts.find((p) => p.txid === txid && p.vout === input.index);
+    return sum + (prevout?.value_sats ?? 0);
+  }, 0);
+  const outputValue = tx.outs.reduce((sum, output) => sum + Number(output.value), 0);
+  return inputValue - outputValue;
+}
+
+async function getPendingParentFeeContext(
+  parentHex: string,
+  network: string | undefined,
+): Promise<{ feeSats: number; vsize: number }> {
+  const parentTx = bitcoin.Transaction.fromHex(parentHex);
+  const parentPrevouts = await fetchPrevoutInfo(parentTx, network ?? 'mainnet');
+  return {
+    feeSats: txFeeFromPrevouts(parentTx, parentPrevouts),
+    vsize: parentTx.virtualSize(),
+  };
+}
+
+function buildAddInputRbfPlan(params: {
+  tx: bitcoin.Transaction;
+  prevouts: PrevoutInfo[];
+  walletUtxos: CachedUtxo[];
+  newFeeRate: number;
+  changeAddress: string;
+  network: bitcoin.Network;
+  packageAncestorFeeSats?: number;
+  packageAncestorVsize?: number;
+}): {
+  txHex: string;
+  prevouts: PrevoutInfo[];
+  originalFeeSats: number;
+  newFeeSats: number;
+  newFeeRate: number;
+  vsize: number;
+} {
+  const {
+    tx,
+    prevouts,
+    walletUtxos,
+    newFeeRate,
+    changeAddress,
+    network,
+    packageAncestorFeeSats = 0,
+    packageAncestorVsize = 0,
+  } = params;
+  const originalInputValue = prevouts.reduce((sum, prevout) => sum + prevout.value_sats, 0);
+  const originalOutputValue = tx.outs.reduce((sum, output) => sum + Number(output.value), 0);
+  const originalFeeSats = originalInputValue - originalOutputValue;
+  const originalOutpoints = new Set(tx.ins.map(getTxInputOutpoint));
+  const changeScript = bitcoin.address.toOutputScript(changeAddress, network);
+
+  const candidates = walletUtxos
+    .filter(isCleanConfirmedBtcUtxo)
+    .filter((utxo) => !originalOutpoints.has(`${utxo.txid}:${utxo.vout}`))
+    .filter((utxo) => typeof utxo.scriptPubKeyHex === 'string' && utxo.scriptPubKeyHex.length > 0)
+    .sort((a, b) => a.value - b.value);
+
+  for (const candidate of candidates) {
+    const candidateScriptHex = candidate.scriptPubKeyHex!;
+    const extraInputVbytes = inputVbytesForScript(candidateScriptHex);
+    const changeOutputVbytes = outputVbytesForScript(Buffer.from(changeScript));
+    const totalInputValue = originalInputValue + candidate.value;
+
+    const noChangeVsize = tx.virtualSize() + extraInputVbytes;
+    const noChangeFee = Math.max(
+      originalFeeSats + 1,
+      Math.ceil(newFeeRate * (noChangeVsize + packageAncestorVsize)) - packageAncestorFeeSats,
+    );
+    const noChangeRemainder = totalInputValue - originalOutputValue - noChangeFee;
+
+    let changeValue = 0;
+    let targetVsize = noChangeVsize;
+    let targetFee = noChangeFee;
+    if (noChangeRemainder >= DUST_LIMIT_SATS) {
+      targetVsize = noChangeVsize + changeOutputVbytes;
+      targetFee = Math.max(
+        originalFeeSats + 1,
+        Math.ceil(newFeeRate * (targetVsize + packageAncestorVsize)) - packageAncestorFeeSats,
+      );
+      changeValue = totalInputValue - originalOutputValue - targetFee;
+      if (changeValue < DUST_LIMIT_SATS) continue;
+    } else if (noChangeRemainder < 0) {
+      continue;
+    }
+
+    const replacement = tx.clone();
+    replacement.addInput(
+      Buffer.from(candidate.txid, 'hex').reverse(),
+      candidate.vout,
+      RBF_SEQUENCE,
+    );
+    if (changeValue >= DUST_LIMIT_SATS) {
+      replacement.addOutput(changeScript, BigInt(changeValue));
+    }
+    for (const input of replacement.ins) {
+      input.witness = [];
+      input.script = Buffer.alloc(0);
+    }
+
+    const newOutputValue = replacement.outs.reduce((sum, output) => sum + Number(output.value), 0);
+    const newFeeSats = totalInputValue - newOutputValue;
+
+    return {
+      txHex: replacement.toHex(),
+      prevouts: [
+        ...prevouts,
+        {
+          txid: candidate.txid,
+          vout: candidate.vout,
+          value_sats: candidate.value,
+          scriptpubkey: candidateScriptHex,
+          address: candidate.address,
+        },
+      ],
+      originalFeeSats,
+      newFeeSats,
+      newFeeRate: (newFeeSats + packageAncestorFeeSats) / (targetVsize + packageAncestorVsize),
+      vsize: targetVsize,
+    };
+  }
+
+  throw new Error('rbf: no clean confirmed BTC UTXO available to pay the fee bump');
 }
 
 // ---------------------------------------------------------------------------
@@ -395,6 +571,7 @@ async function runBundleRbf(args: BundleRbfArgs): Promise<SpeedUpResult> {
 export function useSpeedUpMutation() {
   const { account, network, walletType, signTaprootPsbt } = useWallet();
   const { provider } = useAlkanesSDK();
+  const walletUtxoCache = useWalletUtxoCache();
 
   return useMutation<SpeedUpResult, Error, SpeedUpParams>({
     mutationKey: ['speedUp', network],
@@ -408,8 +585,11 @@ export function useSpeedUpMutation() {
 
       const tx = bitcoin.Transaction.fromHex(txHex);
       const prevouts = await fetchPrevoutInfo(tx, network ?? 'mainnet');
-      const ourAddresses = [account?.taproot?.address, account?.nativeSegwit?.address]
-        .filter((a): a is string => !!a);
+      const ourAddresses = Array.from(new Set([
+        account?.taproot?.address,
+        account?.nativeSegwit?.address,
+        ...prevouts.map((prevout) => prevout.address),
+      ].filter((a): a is string => !!a)));
 
       const networkArg = (() => {
         if (!network) return 'mainnet';
@@ -475,6 +655,8 @@ export function useSpeedUpMutation() {
       // behind block-tip until the next eviction sweep, so this check
       // keeps us safe.
       let parentForBundle: { hex: string; txid: string } | undefined;
+      let packageAncestorFeeSats = 0;
+      let packageAncestorVsize = 0;
       if (parentInPending) {
         try {
           const status = await fetch(
@@ -489,43 +671,88 @@ export function useSpeedUpMutation() {
       }
 
       if (parentForBundle && typeof bridge.rebuildBundleWithFeeRate === 'function') {
-        return runBundleRbf({
-          parentHex: parentForBundle.hex,
-          childHex: txHex,
-          newFeeRate,
-          newFeeRateArg: newFeeRate,
-          ourAddresses,
-          networkArg,
-          network: network ?? undefined,
-          walletType: walletType ?? undefined,
-          account,
-          signTaprootPsbt,
-          bridge,
-        });
+        try {
+          return await runBundleRbf({
+            parentHex: parentForBundle.hex,
+            childHex: txHex,
+            newFeeRate,
+            newFeeRateArg: newFeeRate,
+            ourAddresses,
+            networkArg,
+            network: network ?? undefined,
+            walletType: walletType ?? undefined,
+            account,
+            signTaprootPsbt,
+            bridge,
+          });
+        } catch (error) {
+          if (!isNoChangeOutputError(error)) throw error;
+          console.warn('[SpeedUp] Bundle RBF had no change output; falling back to child add-input RBF');
+          try {
+            const parentFeeContext = await getPendingParentFeeContext(parentForBundle.hex, network);
+            packageAncestorFeeSats = parentFeeContext.feeSats;
+            packageAncestorVsize = parentFeeContext.vsize;
+          } catch (feeContextError) {
+            console.warn('[SpeedUp] Failed to calculate parent package fee context', feeContextError);
+          }
+        }
       }
 
-      const raw = await bridge.rebuildTxWithFeeRate(
-        txHex,
-        newFeeRate,
-        JSON.stringify(prevoutValuesPayload),
-        JSON.stringify(ourAddresses),
-        networkArg,
-      );
-      // Debug: serde_wasm_bindgen returns Map by default for objects;
-      // unwrap to plain object if so.
       let plan: RebuildPayload;
-      if (raw instanceof Map) {
-        const obj = Object.fromEntries(raw as unknown as Iterable<[string, unknown]>);
-        plan = obj as unknown as RebuildPayload;
-      } else {
-        plan = raw as RebuildPayload;
-      }
-      if (typeof plan?.tx_hex !== 'string' || plan.tx_hex.length < 20) {
-        throw new Error(
-          `bridge returned malformed plan: keys=${
-            raw instanceof Map ? Array.from(raw.keys()).join(',') : Object.keys(raw as object).join(',')
-          } tx_hex=${typeof plan?.tx_hex} len=${plan?.tx_hex?.length}`,
+      let signingPrevouts = prevouts;
+      try {
+        const raw = await bridge.rebuildTxWithFeeRate(
+          txHex,
+          newFeeRate,
+          JSON.stringify(prevoutValuesPayload),
+          JSON.stringify(ourAddresses),
+          networkArg,
         );
+        // Debug: serde_wasm_bindgen returns Map by default for objects;
+        // unwrap to plain object if so.
+        if (raw instanceof Map) {
+          const obj = Object.fromEntries(raw as unknown as Iterable<[string, unknown]>);
+          plan = obj as unknown as RebuildPayload;
+        } else {
+          plan = raw as RebuildPayload;
+        }
+        if (typeof plan?.tx_hex !== 'string' || plan.tx_hex.length < 20) {
+          throw new Error(
+            `bridge returned malformed plan: keys=${
+              raw instanceof Map ? Array.from(raw.keys()).join(',') : Object.keys(raw as object).join(',')
+            } tx_hex=${typeof plan?.tx_hex} len=${plan?.tx_hex?.length}`,
+          );
+        }
+      } catch (error) {
+        if (!isNoChangeOutputError(error)) throw error;
+        if (walletType !== 'keystore') {
+          throw new Error('rbf: this transaction has no change output; add-input fee bump is only supported for keystore wallets');
+        }
+        const changeAddress = account?.nativeSegwit?.address ?? account?.taproot?.address;
+        if (!changeAddress) {
+          throw new Error('rbf: no wallet change address available for add-input fee bump');
+        }
+        const fallback = buildAddInputRbfPlan({
+          tx,
+          prevouts,
+          walletUtxos: walletUtxoCache.utxos,
+          newFeeRate,
+          changeAddress,
+          network: bitcoinNetworkFor(network),
+          packageAncestorFeeSats,
+          packageAncestorVsize,
+        });
+        plan = {
+          tx_hex: fallback.txHex,
+          original_fee_sats: fallback.originalFeeSats,
+          new_fee_sats: fallback.newFeeSats,
+          original_fee_rate: fallback.originalFeeSats / tx.virtualSize(),
+          new_fee_rate: fallback.newFeeRate,
+          vsize: fallback.vsize,
+          change_output_index: -1,
+          new_change_value: 0,
+        };
+        signingPrevouts = fallback.prevouts;
       }
 
       let broadcastHex: string | undefined;
@@ -550,7 +777,7 @@ export function useSpeedUpMutation() {
         try {
           const psbt = buildPsbtForRbf({
             unsignedHex: plan.tx_hex,
-            prevouts,
+            prevouts: signingPrevouts,
             taprootXOnlyHex: xOnly,
             network: bitcoinNetworkFor(network),
           });
@@ -577,7 +804,7 @@ export function useSpeedUpMutation() {
         }
         const psbt = buildPsbtForRbf({
           unsignedHex: plan.tx_hex,
-          prevouts,
+          prevouts: signingPrevouts,
           taprootXOnlyHex: xOnly,
           network: bitcoinNetworkFor(network),
         });

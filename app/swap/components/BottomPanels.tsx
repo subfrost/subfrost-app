@@ -44,6 +44,7 @@ interface Props {
   quoteTokenId?: string;
   poolId?: string;
   isWrapPair?: boolean;
+  hideOpenOrders?: boolean;
   onAddLiquidity?: (pair: {
     token0Id?: string;
     token0Symbol: string;
@@ -62,9 +63,20 @@ function EmptyState({ icon: Icon, message }: { icon: any; message: string }) {
   );
 }
 
-export default function BottomPanels({ baseToken, quoteToken, baseTokenId, quoteTokenId, poolId, isWrapPair, onAddLiquidity, onRemoveLiquidity }: Props) {
+export default function BottomPanels({
+  baseToken,
+  quoteToken,
+  baseTokenId,
+  quoteTokenId,
+  poolId,
+  isWrapPair,
+  hideOpenOrders = false,
+  onAddLiquidity,
+  onRemoveLiquidity,
+}: Props) {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<PanelTab>('trades');
+  const visibleActiveTab = hideOpenOrders && activeTab === 'orders' ? 'trades' : activeTab;
   const { isConnected, network } = useWallet() as any;
   const { positions: allPositions, isLoading: isLoadingPositions } = useLPPositions();
   const { controls: devnetControls } = useDevnet();
@@ -76,7 +88,7 @@ export default function BottomPanels({ baseToken, quoteToken, baseTokenId, quote
   // Open orders: poll Carbine controller opcode 25 (GetUserOrders) for this wallet.
   // Enabled only when a wallet is connected — avoids unnecessary RPC calls.
   // useUserOrders returns [] when controller is not deployed (safe default).
-  const { data: userOrders = [], isLoading: isLoadingOrders } = useUserOrders(isConnected);
+  const { data: userOrders = [], isLoading: isLoadingOrders } = useUserOrders(isConnected && !hideOpenOrders);
 
   // Cancel order mutation — opcode 21 (CancelOrder) on the Carbine controller.
   // On devnet, mines 1 block after broadcast to keep metashrew synced.
@@ -104,7 +116,9 @@ export default function BottomPanels({ baseToken, quoteToken, baseTokenId, quote
     { key: 'trades', label: t('bottomPanels.globalTrades'), icon: <Globe size={12} /> },
     { key: 'activity', label: t('bottomPanels.myActivity'), icon: <Activity size={12} /> },
     { key: 'positions', label: t('bottomPanels.positions'), icon: <BarChart3 size={12} />, count: lpPositions.length },
-    { key: 'orders', label: t('bottomPanels.openOrders'), icon: <Layers size={12} />, count: openOrderCount },
+    ...(!hideOpenOrders
+      ? [{ key: 'orders' as const, label: t('bottomPanels.openOrders'), icon: <Layers size={12} />, count: openOrderCount }]
+      : []),
   ];
 
   return (
@@ -116,7 +130,7 @@ export default function BottomPanels({ baseToken, quoteToken, baseTokenId, quote
             key={tab.key}
             onClick={() => setActiveTab(tab.key)}
             className={`flex items-center gap-1.5 px-3 sm:px-4 py-2.5 text-[11px] font-bold uppercase tracking-wide transition-colors ${
-              activeTab === tab.key
+              visibleActiveTab === tab.key
                 ? 'text-[color:var(--sf-text)] border-b-2 border-[color:var(--sf-primary)]'
                 : 'text-[color:var(--sf-text)]/25 hover:text-[color:var(--sf-text)]/50'
             }`}
@@ -137,7 +151,7 @@ export default function BottomPanels({ baseToken, quoteToken, baseTokenId, quote
         <Suspense fallback={<div className="p-6 text-center text-xs text-[color:var(--sf-text)]/20 animate-pulse">{t('common.loading')}</div>}>
 
           {/* Open Orders — powered by useUserOrders (Carbine opcode 25) */}
-          {activeTab === 'orders' && (
+          {visibleActiveTab === 'orders' && (
             !isConnected ? (
               <EmptyState icon={Layers} message={t('bottomPanels.connectWalletOrders')} />
             ) : isLoadingOrders ? (
@@ -206,7 +220,7 @@ export default function BottomPanels({ baseToken, quoteToken, baseTokenId, quote
           )}
 
           {/* LP Positions */}
-          {activeTab === 'positions' && (
+          {visibleActiveTab === 'positions' && (
             !isConnected ? (
               <EmptyState icon={BarChart3} message={t('bottomPanels.connectWalletPositions')} />
             ) : isLoadingPositions ? (
@@ -276,7 +290,7 @@ export default function BottomPanels({ baseToken, quoteToken, baseTokenId, quote
           )}
 
           {/* Trades */}
-          {activeTab === 'trades' && (
+          {visibleActiveTab === 'trades' && (
             <RecentTradesPanel
               baseToken={baseTokenId || baseToken}
               quoteToken={quoteTokenId || quoteToken}
@@ -286,7 +300,7 @@ export default function BottomPanels({ baseToken, quoteToken, baseTokenId, quote
           )}
 
           {/* Activity */}
-          {activeTab === 'activity' && (
+          {visibleActiveTab === 'activity' && (
             <MyWalletSwaps />
           )}
         </Suspense>

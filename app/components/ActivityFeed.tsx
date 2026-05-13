@@ -178,9 +178,9 @@ export default function ActivityFeed({
     label: string;
   }[] = [
     { value: "all", label: t("activity.allTypes") },
-    { value: "swap", label: t("activity.swaps") },
-    { value: "mint", label: t("activity.supply") },
-    { value: "burn", label: t("activity.withdraw") },
+    { value: "swap", label: t("activity.market") },
+    { value: "mint", label: t("activity.addLiquidity") },
+    { value: "burn", label: t("activity.removeLiquidity") },
     { value: "wrap", label: t("activity.wrap") },
     { value: "unwrap", label: t("activity.unwrap") },
   ];
@@ -236,8 +236,6 @@ export default function ActivityFeed({
   }, [items]);
   const {
     data: displayMap,
-    isLoading: namesLoading,
-    isFetching: namesFetching,
   } = useTokenDisplayMap(tokenIds);
 
   const loadingRef = useRef<HTMLDivElement | null>(null);
@@ -301,8 +299,6 @@ export default function ActivityFeed({
     const d = displayMap?.[id];
     return Boolean(d && (d.name || d.symbol));
   };
-  const namesPending = namesLoading || namesFetching || !displayMap;
-
   return (
     <div className="rounded-2xl bg-[color:var(--sf-glass-bg)] backdrop-blur-md shadow-[0_4px_20px_rgba(0,0,0,0.2)] border-t border-[color:var(--sf-top-highlight)]">
       <div className="rounded-t-2xl px-6 py-4 border-b-2 border-[color:var(--sf-row-border)] bg-[color:var(--sf-surface)]/40">
@@ -451,9 +447,9 @@ export default function ActivityFeed({
               row.type === "swap"
                 ? t("myActivity.swap")
                 : row.type === "mint"
-                ? t("myActivity.supply")
+                ? t("myActivity.addLiquidity")
                 : row.type === "burn"
-                ? t("myActivity.withdraw")
+                ? t("myActivity.removeLiquidity")
                 : row.type === "creation"
                 ? t("myActivity.create")
                 : row.type === "wrap"
@@ -494,7 +490,6 @@ export default function ActivityFeed({
               }
             })();
             const pairLoaded =
-              !namesPending &&
               nameResolved(pairNames.leftId) &&
               nameResolved(pairNames.rightId);
 

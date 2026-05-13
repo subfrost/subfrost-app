@@ -55,6 +55,15 @@ describe('useEnrichedWalletData', () => {
     expect(src).toContain("@/queries/account");
   });
 
+  it('keeps address-level and spendable alkane balance views separate', () => {
+    expect(src).toContain('useWalletUtxoCache');
+    expect(src).toContain('espoAlkanesFromWalletCache');
+    expect(src).toContain('walletUtxoCache.balances');
+    expect(src).toContain('addressAlkanes');
+    expect(src).toContain('spendableAlkanes');
+    expect(src).toContain('displayAlkanes');
+  });
+
   it('destructures isConnected and account from useWallet', () => {
     expect(src).toMatch(/const\s*\{[^}]*account[^}]*isConnected[^}]*\}\s*=\s*useWallet/);
   });
@@ -116,6 +125,8 @@ describe('useEnrichedWalletData', () => {
   it('exports EnrichedWalletData interface', () => {
     expect(src).toContain('export interface EnrichedWalletData');
     expect(src).toContain('balances: WalletBalances');
+    expect(src).toContain('addressAlkanes: AlkaneAsset[]');
+    expect(src).toContain('spendableAlkanes: AlkaneAsset[]');
     expect(src).toContain('isLoading: boolean');
     expect(src).toContain('error: string | null');
     expect(src).toContain('refresh: () => Promise<void>');
@@ -262,8 +273,8 @@ describe('useEnrichedWalletData', () => {
 // ---------------------------------------------------------------------------
 
 describe('useDemoGate', () => {
-  // Per-wallet ungating (UNGATED_WALLET_IDS) was removed in 940f42d4.
-  // Demo gate is now a one-liner: DEMO_MODE_ENABLED && network === 'mainnet'.
+  // Per-wallet and per-network exemptions are not supported.
+  // Demo gate is now a one-liner: DEMO_MODE_ENABLED.
   const src = readSrc('hooks/useDemoGate.ts');
   const demoSrc = readSrc('utils/demoMode.ts');
 
@@ -272,12 +283,10 @@ describe('useDemoGate', () => {
     expect(src).toContain('@/utils/demoMode');
   });
 
-  it('imports useWallet for network detection', () => {
-    expect(src).toContain('useWallet');
-  });
-
-  it('gates on DEMO_MODE_ENABLED && network === "mainnet"', () => {
-    expect(src).toMatch(/DEMO_MODE_ENABLED\s*&&\s*network\s*===\s*['"]mainnet['"]/);
+  it('gates directly on DEMO_MODE_ENABLED', () => {
+    expect(src).toMatch(/return\s+DEMO_MODE_ENABLED/);
+    expect(src).not.toContain("network === 'mainnet'");
+    expect(src).not.toContain('network === "mainnet"');
   });
 
   it('DEMO_MODE_ENABLED reads from NEXT_PUBLIC_DEMO_MODE env var', () => {

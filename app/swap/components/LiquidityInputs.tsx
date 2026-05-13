@@ -12,7 +12,6 @@ import { ChevronDown, Settings, Plus, Minus, Loader2 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import type { FeeSelection } from "@/hooks/useFeeRate";
 import { useTranslation } from '@/hooks/useTranslation';
-import { useDemoGate } from '@/hooks/useDemoGate';
 
 type LPPosition = {
   id: string;                    // LP token alkane ID (same as pool ID)
@@ -138,7 +137,6 @@ export default function LiquidityInputs({
   const [focusedField, setFocusedField] = useState<'deadline' | 'slippage' | 'fee' | null>(null);
   // Local deadline state to allow empty field while typing
   const [deadlineLocal, setDeadlineLocal] = useState(String(deadlineBlocks));
-  const [showLiquidityComingSoon, setShowLiquidityComingSoon] = useState(false);
   // Focus states for input panels
   const [token0Focused, setToken0Focused] = useState(false);
   const [token1Focused, setToken1Focused] = useState(false);
@@ -170,8 +168,6 @@ export default function LiquidityInputs({
 
   const ctaText = getCtaText();
 
-  const isDemoGated = useDemoGate();
-
   // While a mutation is in flight, the CTA must visibly disable AND
   // ignore extra clicks. Users in a hurry double-click thinking the
   // first click didn't register; without this guard the second click
@@ -179,24 +175,21 @@ export default function LiquidityInputs({
   // re-uses the same alkane carrier and double-spends in the mempool).
   const isMutationPending =
     liquidityMode === 'remove' ? isRemoveLoading : isLoading;
+  const hasValidLiquidityInputs =
+    liquidityMode === 'remove' ? canRemoveLiquidity : canAddLiquidity;
+  const isCtaDisabled =
+    isMutationPending || (isConnected && !hasValidLiquidityInputs);
 
   const onCtaClick = () => {
-    if (isMutationPending) return;  // hard guard against double-clicks
+    if (isCtaDisabled) return;  // hard guard against invalid or duplicate clicks
     if (!isConnected) {
       onConnectModalOpenChange(true);
       return;
     }
-    if (!isDemoGated) {
-      if (liquidityMode === 'remove') {
-        onRemoveLiquidity?.();
-      } else {
-        onAddLiquidity();
-      }
-      return;
-    }
-    if (!showLiquidityComingSoon) {
-      setShowLiquidityComingSoon(true);
-      setTimeout(() => setShowLiquidityComingSoon(false), 1000);
+    if (liquidityMode === 'remove') {
+      onRemoveLiquidity?.();
+    } else {
+      onAddLiquidity();
     }
   };
 
@@ -838,12 +831,13 @@ export default function LiquidityInputs({
         <button
           type="button"
           onClick={onCtaClick}
-          disabled={isMutationPending}
+          disabled={isCtaDisabled}
           aria-busy={isMutationPending}
+          aria-disabled={isCtaDisabled}
           className={`mt-2 h-12 w-full rounded-xl font-bold text-sm uppercase tracking-wider transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none focus:outline-none ${
             isMutationPending
               ? 'bg-[color:var(--sf-primary-pressed)] text-white/90 cursor-wait shadow-[0_2px_8px_rgba(0,0,0,0.2)]'
-              : isConnected && isDemoGated
+              : isConnected && !hasValidLiquidityInputs
               ? 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)]/30 cursor-not-allowed'
               : 'bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] text-white shadow-[0_4px_16px_rgba(0,0,0,0.3)] hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98]'
           }`}
@@ -855,8 +849,6 @@ export default function LiquidityInputs({
                 ? t('liquidity.removingLiquidity')
                 : t('liquidity.addingLiquidity')}
             </span>
-          ) : showLiquidityComingSoon ? (
-            <span className="animate-pulse">{t('badge.comingSoon')}</span>
           ) : (
             ctaText
           )}

@@ -2,6 +2,7 @@
 
 import { ChevronRight, Plus, Key, Lock, Eye, EyeOff, Copy, Check, Mail, Download, Cloud, Upload, RotateCcw, X, Ticket } from 'lucide-react';
 import { useState, useEffect, useRef, startTransition } from 'react';
+import SfPopup, { type SfPopupHandle } from '@/app/components/SfPopup';
 import { useRouter } from 'next/navigation';
 
 import { useWallet, type BrowserWalletInfo } from '@/context/WalletContext';
@@ -59,6 +60,8 @@ export default function ConnectWalletModal() {
   const [isValidatingCode, setIsValidatingCode] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const wasModalOpenRef = useRef(false);
+
+  const popupRef = useRef<SfPopupHandle>(null);
 
   // Only reset the view when the modal is first opened, not when hasExistingKeystoreFromContext changes
   useEffect(() => {
@@ -138,25 +141,15 @@ export default function ConnectWalletModal() {
     }
   };
 
-  const handleClose = () => {
-    // JOURNAL (2026-03-31): Use startTransition so React treats the modal unmount
-    // as a low-priority transition. This prevents the "removeChild: node is not a
-    // child" error that fires in React 18 Strict Mode when onConnectModalOpenChange(false)
-    // and resetForm() both run synchronously — Strict Mode double-invokes unmounts,
-    // leaving the DOM in a state where React's fiber tree and the real DOM diverge.
-    // The mount guard has also been moved to AppShell (ConnectWalletModalGate) so
-    // this component is never in a partial-unmount state. startTransition provides
-    // a second layer of safety by deferring the state update to a non-blocking pass.
-    startTransition(() => {
-      onConnectModalOpenChange(false);
-      resetForm();
-    });
-  };
+  // JOURNAL (2026-03-31): startTransition wraps the unmount so React 18
+  // Strict Mode's double-invoke can't tear down `onConnectModalOpenChange`
+  // and `resetForm` mid-DOM-diff. Modal mount-guard lives in AppShell's
+  // ConnectWalletModalGate; this is a second-layer safety net.
+  const handleClose = () => popupRef.current?.close();
+  const handleCloseAndNavigate = () => popupRef.current?.close();
 
-  const handleCloseAndNavigate = () => {
-    // Close modal and reset form — stay on current page.
-    // The old behavior (router.push('/wallet')) was disruptive when connecting
-    // from the swap page or any non-wallet page.
+  // Real cleanup runs after SfPopup finishes the 140ms exit animation.
+  const onSfPopupClose = () => {
     startTransition(() => {
       onConnectModalOpenChange(false);
       resetForm();
@@ -403,17 +396,16 @@ export default function ConnectWalletModal() {
   // This component is only rendered when isConnectModalOpen === true, so the
   // guard here is redundant. Keeping it as a safety net in case the component
   // is ever rendered outside AppShell.
-  if (!isConnectModalOpen) return null;
-
   return (
-    <div
-      className="sf-popup-overlay p-4"
-      onClick={connectingWallet ? undefined : handleClose}
+    <SfPopup
+      ref={popupRef}
+      isOpen={isConnectModalOpen}
+      onClose={onSfPopupClose}
+      overlayClassName="p-4"
+      panelClassName="w-[480px] max-w-[92vw] max-h-[90vh]"
+      disableBackdropClose={!!connectingWallet}
+      trackHeight
     >
-      <div
-        className="sf-popup w-[480px] max-w-[92vw] max-h-[90vh]"
-        onClick={(e) => e.stopPropagation()}
-      >
         {/* Header */}
         <div className="bg-[color:var(--sf-panel-bg)] px-6 py-5 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
           <div className="flex items-center justify-between">
@@ -1225,7 +1217,6 @@ export default function ConnectWalletModal() {
             </div>
           )}
         </div>
-      </div>
-    </div>
+    </SfPopup>
   );
 }

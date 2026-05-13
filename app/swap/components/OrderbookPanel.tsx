@@ -5,6 +5,7 @@ import { useOrderbook, type OrderLevel } from '@/hooks/useOrderbook';
 import { useWallet } from '@/context/WalletContext';
 import { TrendingUp, TrendingDown, ArrowUpDown, ChevronDown } from 'lucide-react';
 import type { SelectedOrder } from '../types';
+import { useTranslation } from '@/hooks/useTranslation';
 
 interface Props {
   baseToken: string;
@@ -67,6 +68,7 @@ function OrderRow({
 }
 
 export default function OrderbookPanel({ baseToken, quoteToken, onOrderSelect, bare }: Props) {
+  const { t } = useTranslation();
   const { data: orderbook, isLoading } = useOrderbook(baseToken, quoteToken);
   const [displayMode, setDisplayMode] = useState<DisplayMode>('both');
   const [grouping, setGrouping] = useState<GroupingSize>('0.01');
@@ -153,21 +155,21 @@ export default function OrderbookPanel({ baseToken, quoteToken, onOrderSelect, b
           <div className="flex gap-0.5 bg-[color:var(--sf-surface)] rounded-md p-0.5">
             <button
               onClick={() => setDisplayMode('both')}
-              title="Both"
+              title={t('orderbook.both')}
               className={`p-1 rounded transition-colors ${displayMode === 'both' ? 'bg-[color:var(--sf-primary)]/20 text-[color:var(--sf-primary)]' : 'text-[color:var(--sf-text)]/30 hover:text-[color:var(--sf-text)]/50'}`}
             >
               <ArrowUpDown size={12} />
             </button>
             <button
               onClick={() => setDisplayMode('bids')}
-              title="Bids only"
+              title={t('orderbook.bidsOnly')}
               className={`p-1 rounded transition-colors ${displayMode === 'bids' ? 'bg-green-500/20 text-green-400' : 'text-[color:var(--sf-text)]/30 hover:text-[color:var(--sf-text)]/50'}`}
             >
               <TrendingUp size={12} />
             </button>
             <button
               onClick={() => setDisplayMode('asks')}
-              title="Asks only"
+              title={t('orderbook.asksOnly')}
               className={`p-1 rounded transition-colors ${displayMode === 'asks' ? 'bg-red-500/20 text-red-400' : 'text-[color:var(--sf-text)]/30 hover:text-[color:var(--sf-text)]/50'}`}
             >
               <TrendingDown size={12} />
@@ -178,16 +180,16 @@ export default function OrderbookPanel({ baseToken, quoteToken, onOrderSelect, b
 
       {/* Column headers */}
       <div className="sf-table-header grid grid-cols-3 text-right px-4 py-2">
-        <span>Price ({quoteToken})</span>
-        <span>Size ({baseToken})</span>
-        <span>Total</span>
+        <span>{t('orderbook.price', { token: quoteToken })}</span>
+        <span>{t('orderbook.size', { token: baseToken })}</span>
+        <span>{t('orderbook.total')}</span>
       </div>
 
       {isLoading || !orderbook ? (
         <div className="flex-1 flex items-center justify-center py-12">
           <div className="flex flex-col items-center gap-2">
             <div className="w-5 h-5 border-2 border-[color:var(--sf-primary)]/30 border-t-[color:var(--sf-primary)] rounded-full animate-spin" />
-            <span className="text-[10px] text-[color:var(--sf-text)]/30">Loading orderbook...</span>
+            <span className="text-[10px] text-[color:var(--sf-text)]/30">{t('orderbook.loading')}</span>
           </div>
         </div>
       ) : (

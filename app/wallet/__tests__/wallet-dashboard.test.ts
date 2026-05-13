@@ -37,10 +37,6 @@ describe('WalletDashboardPage (page.tsx)', () => {
     expect(src).toMatch(/import\s+BitcoinBalanceCard\s+from\s+['"]\.\/components\/BitcoinBalanceCard['"]/);
   });
 
-  it('imports AlkanesBalancesCard component', () => {
-    expect(src).toMatch(/import\s+AlkanesBalancesCard\s+from\s+['"]\.\/components\/AlkanesBalancesCard['"]/);
-  });
-
   it('imports TransactionHistory component', () => {
     expect(src).toMatch(/import\s+TransactionHistory/);
   });
@@ -57,13 +53,12 @@ describe('WalletDashboardPage (page.tsx)', () => {
     expect(src).toMatch(/import\s+type\s+\{\s*AlkaneAsset\s*\}\s+from\s+['"]@\/hooks\/useEnrichedWalletData['"]/);
   });
 
-  it('has a Send button that opens the SendModal', () => {
-    // The handler sets showSendModal to true
-    expect(src).toMatch(/onClick=\{.*setShowSendModal\(true\)/);
+  it('passes a Send handler that opens the SendModal', () => {
+    expect(src).toMatch(/onSend=\{\(\)\s*=>\s*setShowSendModal\(true\)\}/);
   });
 
-  it('has a Receive button that opens the ReceiveModal', () => {
-    expect(src).toMatch(/onClick=\{.*setShowReceiveModal\(true\)/);
+  it('passes a Receive handler that opens the ReceiveModal', () => {
+    expect(src).toMatch(/onReceive=\{\(\)\s*=>\s*setShowReceiveModal\(true\)\}/);
   });
 
   it('renders SendModal with isOpen tied to showSendModal state', () => {
@@ -74,8 +69,8 @@ describe('WalletDashboardPage (page.tsx)', () => {
     expect(src).toMatch(/<ReceiveModal[\s\S]*?isOpen=\{showReceiveModal\}/);
   });
 
-  it('passes onSendAlkane callback to AlkanesBalancesCard', () => {
-    expect(src).toMatch(/<AlkanesBalancesCard\s+onSendAlkane=/);
+  it('passes onSendAlkane callback to the Alkanes card', () => {
+    expect(src).toMatch(/<AlkanesBalancesCard[\s\S]*?onSendAlkane=/);
   });
 
   it('onSendAlkane callback sets sendAlkane state and opens SendModal', () => {
@@ -94,30 +89,30 @@ describe('WalletDashboardPage (page.tsx)', () => {
     expect(src).toMatch(/walletConnected\s*=.*connected.*isConnected/);
   });
 
-  it('has tab-based navigation including transactions and settings', () => {
-    expect(src).toContain("'transactions'");
+  it('has section-based navigation including history and settings', () => {
+    expect(src).toContain("'history'");
     expect(src).toContain("'settings'");
+    expect(src).toMatch(/sf-tab-group/);
   });
 
-  it('defaults to transactions tab', () => {
-    // Default is 'transactions' when no valid tab param
-    expect(src).toMatch(/useState<TabView>\(.*'transactions'/);
+  it('defaults to tokens section', () => {
+    expect(src).toMatch(/useState<WalletSection>\([\s\S]*'tokens'/);
   });
 
-  it('conditionally renders tab content based on activeTab', () => {
-    expect(src).toMatch(/activeTab\s*===\s*['"]transactions['"]\s*&&\s*<TransactionHistory/);
-    // The settings branch wraps WalletSettings in a fragment alongside
-    // RegtestControls, so the conditional is followed by `(<>` then a
-    // newline then WalletSettings.
-    expect(src).toMatch(/activeTab\s*===\s*['"]settings['"]\s*&&\s*\([\s\S]*?<WalletSettings/);
+  it('conditionally renders section content based on activeSection', () => {
+    expect(src).toMatch(/activeSection\s*===\s*['"]history['"][\s\S]*?<TransactionHistory/);
+    expect(src).toMatch(/activeSection\s*===\s*['"]settings['"][\s\S]*?<WalletSettings/);
+    expect(src).toMatch(/isAlkaneSection[\s\S]*?<AlkanesBalancesCard/);
   });
 
   it('passes initialAlkane prop to SendModal from sendAlkane state', () => {
     expect(src).toMatch(/initialAlkane=\{sendAlkane\}/);
   });
 
-  it('renders BitcoinBalanceCard without props', () => {
-    expect(src).toMatch(/<BitcoinBalanceCard\s*\/>/);
+  it('passes Send and Receive handlers to BitcoinBalanceCard', () => {
+    expect(src).toMatch(/<BitcoinBalanceCard[\s\S]*?onSend=\{\(\)\s*=>\s*setShowSendModal\(true\)\}/);
+    expect(src).toMatch(/onReceive=\{\(\)\s*=>\s*setShowReceiveModal\(true\)\}/);
+    expect(src).toMatch(/onSettings=\{\(\)\s*=>\s*setActiveSection\(['"]settings['"]\)\}/);
   });
 
   it('has a transaction history refresh button with RefreshCw icon', () => {
@@ -141,8 +136,14 @@ describe('AlkanesBalancesCard', () => {
     expect(src).toMatch(/onSendAlkane\?\s*:\s*\(alkane:\s*AlkaneAsset\)\s*=>\s*void/);
   });
 
-  it('accepts onSendAlkane prop in the component signature', () => {
-    expect(src).toMatch(/\{\s*onSendAlkane\s*\}\s*:\s*AlkanesBalancesCardProps/);
+  it('accepts onSendAlkane and display mode props in the component signature', () => {
+    expect(src).toMatch(/\{\s*onSendAlkane\s*,\s*embedded\s*=\s*false\s*,\s*hideHeader\s*=\s*false\s*,\s*hideTabs\s*=\s*false/);
+  });
+
+  it('uses the shared vault-style tab group classes', () => {
+    expect(src).toMatch(/sf-tab-group/);
+    expect(src).toMatch(/sf-tab-btn/);
+    expect(src).toMatch(/sf-tab-btn--active/);
   });
 
   it('uses useEnrichedWalletData hook for balances', () => {
@@ -150,12 +151,22 @@ describe('AlkanesBalancesCard', () => {
     expect(src).toMatch(/useEnrichedWalletData\(\)/);
   });
 
-  it('destructures balances, isAlkanesLoading, error, refreshAlkanes from useEnrichedWalletData', () => {
-    expect(src).toMatch(/\{\s*balances\s*,\s*isAlkanesLoading\s*,\s*error\s*,\s*refreshAlkanes\s*\}\s*=\s*useEnrichedWalletData\(\)/);
+  it('destructures address-level and spendable alkane views from useEnrichedWalletData', () => {
+    expect(src).toMatch(/addressAlkanes/);
+    expect(src).toMatch(/spendableAlkanes/);
+    expect(src).toMatch(/useEnrichedWalletData\(\)/);
   });
 
-  it('renders alkane list from balances.alkanes', () => {
-    expect(src).toMatch(/balances\.alkanes\.(filter|map)/);
+  it('renders the wallet asset list from the address-level alkane view', () => {
+    expect(src).toMatch(/walletPageAlkanes\s*=\s*addressAlkanes/);
+    expect(src).toMatch(/\.\.\.walletPageAlkanes/);
+  });
+
+  it('shows available and mempool amounts from the spendable alkane view', () => {
+    expect(src).toMatch(/spendableByAlkane/);
+    expect(src).toMatch(/getAvailabilityBreakdown/);
+    expect(src).toContain('available:');
+    expect(src).toContain('mempool:');
   });
 
   it('formats alkane balance with formatAlkaneBalance function', () => {
@@ -226,11 +237,6 @@ describe('AlkanesBalancesCard', () => {
 describe('BitcoinBalanceCard', () => {
   const src = readSource(path.join(COMPONENTS_DIR, 'BitcoinBalanceCard.tsx'));
 
-  it('uses useWallet() for account data', () => {
-    expect(src).toMatch(/useWallet\(\)/);
-    expect(src).toMatch(/account/);
-  });
-
   it('uses useEnrichedWalletData for balance data', () => {
     expect(src).toMatch(/useEnrichedWalletData\(\)/);
     expect(src).toMatch(/balances/);
@@ -256,35 +262,15 @@ describe('BitcoinBalanceCard', () => {
     expect(src).toMatch(/btcPriceUsd/);
   });
 
-  it('shows both SegWit and Taproot address sections', () => {
-    expect(src).toMatch(/nativeSegwit/i);
-    expect(src).toMatch(/taproot/i);
-    expect(src).toMatch(/Native SegWit/);
-  });
-
-  it('shows SegWit (p2wpkh) balance from btcFast or enriched fallback', () => {
-    expect(src).toMatch(/p2wpkh/);
-    expect(src).toMatch(/btcFast\.p2wpkh/);
-  });
-
-  it('shows Taproot (p2tr) balance from btcFast or enriched fallback', () => {
-    expect(src).toMatch(/p2tr/);
-    expect(src).toMatch(/btcFast\.p2tr/);
-  });
-
   it('has a refresh button using RefreshCw', () => {
     expect(src).toMatch(/import.*RefreshCw/);
     expect(src).toMatch(/handleRefresh/);
     expect(src).toMatch(/<RefreshCw/);
   });
 
-  it('links to mempool.space for address exploration', () => {
-    expect(src).toMatch(/mempool\.space\/address/);
-  });
-
-  it('uses ExternalLink icon for mempool links', () => {
-    expect(src).toMatch(/import.*ExternalLink/);
-    expect(src).toMatch(/<ExternalLink/);
+  it('does not render address breakdown cards in the bitcoin card', () => {
+    expect(src).not.toMatch(/mempool\.space\/address/);
+    expect(src).not.toMatch(/ExternalLink/);
   });
 
   it('handles error state with retry button', () => {
@@ -372,9 +358,10 @@ describe('TransactionHistory', () => {
     expect(src).toMatch(/espo\.sh\/tx/);
   });
 
-  it('shows alkanes badge for transactions with protostones', () => {
-    expect(src).toMatch(/tx\.hasProtostones/);
-    expect(src).toMatch(/Zap/);
+  it('renders alkane transaction summaries without the old alkane badge', () => {
+    expect(src).toMatch(/AlkaneTraceSummaries/);
+    expect(src).toMatch(/tx\.alkaneSummaries/);
+    expect(src).not.toMatch(/txHistory\.alkanes/);
   });
 
   it('has refresh capability', () => {
@@ -562,11 +549,10 @@ describe('Cross-component integration patterns', () => {
     expect(alkanesSrc).toMatch(/import\s+type\s+\{.*AlkaneAsset.*\}\s+from\s+['"]@\/hooks\/useEnrichedWalletData['"]/);
   });
 
-  it('page uses onSendAlkane callback to bridge AlkanesBalancesCard actions to SendModal', () => {
+  it('page uses onSendAlkane callback to bridge alkane actions to SendModal', () => {
     // AlkanesBalancesCard accepts the callback
     expect(alkanesSrc).toMatch(/onSendAlkane\?\.\(/);
-    // page.tsx wires it to set state + open modal
-    expect(pageSrc).toMatch(/onSendAlkane=\{.*setSendAlkane.*setShowSendModal/s);
+    expect(pageSrc).toMatch(/<AlkanesBalancesCard[\s\S]*?onSendAlkane=\{.*setSendAlkane.*setShowSendModal/s);
   });
 
   it('all interactive card components use useTranslation for i18n', () => {

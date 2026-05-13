@@ -182,7 +182,16 @@ export function useAlkaneSendMutation() {
         tx = signedPsbt.extractTransaction();
       }
 
-      const broadcastTxid = await provider.broadcastTransaction(tx.toHex());
+      const txHex = tx.toHex();
+      const broadcastTxid = await provider.broadcastTransaction(txHex);
+      if (typeof window !== 'undefined') {
+        try {
+          const { pendingTxStore } = await import('@/lib/alkanes/pendingTxStore');
+          await pendingTxStore.add(txHex);
+        } catch (e) {
+          console.warn('[alkaneSend] pending-tx-store add failed:', e);
+        }
+      }
       return {
         success: true,
         transactionId: broadcastTxid || tx.getId(),
@@ -191,6 +200,8 @@ export function useAlkaneSendMutation() {
       };
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['wallet-utxo-cache'] });
+      queryClient.invalidateQueries({ queryKey: ['btc-balance-fast'] });
       queryClient.invalidateQueries({ queryKey: ['btc-balance'] });
       queryClient.invalidateQueries({ queryKey: ['utxos'] });
       queryClient.invalidateQueries({ queryKey: ['enriched-wallet'] });

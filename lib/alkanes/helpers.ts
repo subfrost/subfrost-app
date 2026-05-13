@@ -62,9 +62,15 @@ export function getBitcoinNetwork(network: string): bitcoin.Network {
 /**
  * Dynamically query the frBTC signer address from the contract via opcode 103.
  * On devnet the signer key changes each boot, so the hardcoded address is stale.
- * Falls back to the static SIGNER_ADDRESSES entry if the query fails.
+ * Mainnet uses the static address to avoid an alkanes_simulate call during
+ * ESPO-backed swap/wrap flows; non-mainnet keeps the dynamic lookup because
+ * local/regtest signer keys can change between deployments.
  */
 export async function getSignerAddressDynamic(network: string): Promise<string> {
+  if (network === 'mainnet') {
+    return getSignerAddress(network);
+  }
+
   try {
     const { getRpcUrl } = await import('@/utils/getConfig');
     const rpcUrl = getRpcUrl(network);

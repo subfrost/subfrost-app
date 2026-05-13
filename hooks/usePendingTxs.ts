@@ -44,6 +44,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useWallet } from '@/context/WalletContext';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { pendingTxStore } from '@/lib/alkanes/pendingTxStore';
+import { getEsploraTx } from '@/lib/alkanes/rpc';
 
 // Phase 3-lite: alkane delta prediction.
 //
@@ -188,11 +189,11 @@ export function usePendingTxs(): UsePendingTxsResult {
   // broadcast through `alkanesExecuteTyped` auto-pushes — wrap, swap,
   // addLiquidity, alkane-send, etc.). Merge + dedupe by txid.
   const { data, isLoading, refetch } = useQuery<string[]>({
-    queryKey: ['pendingTxs', !!provider],
+    queryKey: ['pendingTxs', network, account?.taproot?.address, account?.nativeSegwit?.address, !!provider],
     enabled: typeof window !== 'undefined' && ourAddresses.size > 0,
     queryFn: async () => {
       const seen = new Set<string>();
-      const merged: string[] = [];
+      const merged: Array<{ txid: string; hex: string }> = [];
       try {
         const idbList = await pendingTxStore.list();
         for (const hex of idbList) {
@@ -200,7 +201,7 @@ export function usePendingTxs(): UsePendingTxsResult {
             const txid = bitcoin.Transaction.fromHex(hex).getId();
             if (!seen.has(txid)) {
               seen.add(txid);
-              merged.push(hex);
+              merged.push({ txid, hex });
             }
           } catch {
             /* skip malformed */
@@ -219,7 +220,7 @@ export function usePendingTxs(): UsePendingTxsResult {
                 const txid = bitcoin.Transaction.fromHex(hex).getId();
                 if (!seen.has(txid)) {
                   seen.add(txid);
-                  merged.push(hex);
+                  merged.push({ txid, hex });
                 }
               } catch {
                 /* skip malformed */
@@ -230,11 +231,47 @@ export function usePendingTxs(): UsePendingTxsResult {
           console.warn('[usePendingTxs] wasm list failed:', e);
         }
       }
-      return merged;
+
+      const confirmedTxids: string[] = [];
+      const statuses = await Promise.all(
+        merged.map(async ({ txid, hex }) => {
+          const tx = await getEsploraTx(network ?? 'mainnet', txid);
+          if (tx?.status?.confirmed) {
+            return { txid, hex, confirmed: true };
+          } else {
+            return { txid, hex, confirmed: false };
+          }
+        }),
+      );
+      const stillPending = statuses
+        .filter((status) => !status.confirmed)
+        .map((status) => status.hex);
+      confirmedTxids.push(
+        ...statuses
+          .filter((status) => status.confirmed)
+          .map((status) => status.txid),
+      );
+
+      if (confirmedTxids.length > 0) {
+        await pendingTxStore.evict(confirmedTxids);
+        if (provider && typeof (provider as any).pendingTxStoreEvict === 'function') {
+          try {
+            await (provider as any).pendingTxStoreEvict(confirmedTxids);
+          } catch (e) {
+            console.warn('[usePendingTxs] wasm eviction failed:', e);
+          }
+        }
+        queryClient.invalidateQueries({ queryKey: ['pendingTxsPredict'] });
+        queryClient.invalidateQueries({ queryKey: ['btc-balance-fast'] });
+        queryClient.invalidateQueries({ queryKey: ['enriched-wallet'] });
+        queryClient.invalidateQueries({ queryKey: ['alkane-balances'] });
+      }
+
+      return stillPending;
     },
     staleTime: 5_000, // re-poll occasionally so newly-broadcast WASM-side txs surface
     refetchInterval: 8_000,
-    refetchOnWindowFocus: false,
+    refetchOnWindowFocus: 'always',
   });
 
   // BTC-side summary (output-only — see decodeHex docs).
