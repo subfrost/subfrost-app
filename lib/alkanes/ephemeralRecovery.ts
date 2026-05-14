@@ -336,6 +336,13 @@ export function getRawEphemeralChildTxRecord(
 }
 
 export function getSwapTxTestMode(): 0 | 1 | 2 {
+  // Hard-guard: mainnet never honours the test flag. Non-zero modes broadcast
+  // only the wrap parent and skip the swap child, stranding BTC at an
+  // ephemeral address recoverable only via Settings → Ephemeral Recovery.
+  // A stale SWAP_TX_TEST=1 in the deploy env caused real fund loss in prod.
+  const network = process.env.NEXT_PUBLIC_NETWORK ?? process.env.NETWORK ?? '';
+  if (network === 'mainnet') return 0;
+
   const raw =
     process.env.SWAP_TX_TEST ??
     process.env.NEXT_PUBLIC_SWAP_TX_TEST ??
