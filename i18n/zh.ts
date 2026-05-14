@@ -18,9 +18,11 @@ const zh: Record<string, string> = {
   'header.settings': '\u8bbe\u7f6e',
 
   // Demo Banner
-  'demo.warning': 'SUBFROST \u5e94\u7528\u5c1a\u672a\u53d1\u5e03\u3002',
-  'demo.description': '在此期间，我们邀请您使用提供的邀请码创建一个新钱包。\n\n您在此应用中看到的任何内容都可能会更改。',
+  'demo.warning': 'SUBFROST APP 正在测试阶段',
+  'demo.description': '欢迎通过创建新的密钥库钱包或连接您现有的钱包来体验我们的 AMM 兑换功能。\n\n您在此应用中看到的一切均可能发生变化，欢迎提供反馈。',
   'demo.understand': '\u6211\u5df2\u4e86\u89e3',
+  'vaults.unreleasedTitle': 'SUBFROST 金库尚未发布',
+  'vaults.unreleasedDescription': '与此同时，欢迎四处浏览，了解我们正在构建的内容。\n\n您在此看到的一切均可能发生变化。',
 
   // Coming Soon Overlay
   'comingSoon.title': '\u5373\u5c06\u63a8\u51fa',
@@ -115,6 +117,7 @@ const zh: Record<string, string> = {
   'liquidity.selectPosition': '\u9009\u62e9\u4ed3\u4f4d',
   'liquidity.amountToRemove': '\u79fb\u9664\u6570\u91cf',
   'liquidity.minimumReceived': '\u6700\u5c0f\u63a5\u6536\u91cf',
+  'liquidity.minimumDeposit': '\u6700\u5c0f\u5b58\u6b3e\u91cf',
   'liquidity.selectPair': '\u9009\u62e9\u63d0\u4f9b\u7684\u4ea4\u6613\u5bf9',
   'liquidity.selectToken': '\u9009\u62e9\u4ee3\u5e01',
   'liquidity.connectWallet': '\u8fde\u63a5\u94b1\u5305',
@@ -529,6 +532,7 @@ const zh: Record<string, string> = {
   'bottomPanels.side': '\u65b9\u5411',
   'bottomPanels.price': '\u4ef7\u683c',
   'bottomPanels.amount': '\u6570\u91cf',
+  'bottomPanels.value': '\u4ef7\u503c',
   'bottomPanels.filled': '\u5df2\u6210\u4ea4',
   'bottomPanels.sell': '\u5356\u51fa',
   'bottomPanels.buy': '\u4e70\u5165',
@@ -859,7 +863,7 @@ const zh: Record<string, string> = {
   'wallet.browserExtensionWallets': '浏览器扩展钱包',
   'wallet.newPassword': '新密码',
   'wallet.enterRecoveryPhrase': '输入您的 12 或 24 个单词的助记词',
-  'wallet.runesInscriptionsWarning': '本应用不支持 runes 或铭文。使用持有这些资产的钱包可能会导致它们被销毁。',
+  'wallet.runesInscriptionsWarning': '警告：本应用不支持 Runes 或铭文。使用持有这些资产的钱包将会导致它们被销毁。',
   'wallet.createPassword': '创建密码',
   'wallet.restoring': '正在恢复...',
   'wallet.uploadKeystoreDesc': '上传之前导出的 JSON 密钥库文件以恢复您的钱包。',

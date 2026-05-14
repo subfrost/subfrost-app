@@ -378,7 +378,7 @@ export default function FireStakingPanel({ vaultDetailsSlot }: FireStakingPanelP
                   <div className="flex gap-1 justify-end">
                     <button
                       onClick={() => handleClaim(pos.tokenId)}
-                      disabled={actionPending}
+                      disabled={actionPending || isDemoGated}
                       className="sf-btn-ghost text-[10px] px-1.5 py-0.5 text-orange-400 hover:text-orange-300 disabled:opacity-50"
                       title="Claim FIRE rewards"
                     >
@@ -386,7 +386,7 @@ export default function FireStakingPanel({ vaultDetailsSlot }: FireStakingPanelP
                     </button>
                     <button
                       onClick={() => handleUnstake(pos.tokenId)}
-                      disabled={actionPending}
+                      disabled={actionPending || isDemoGated}
                       className="sf-btn-ghost text-[10px] px-1.5 py-0.5 text-red-400 hover:text-red-300 disabled:opacity-50"
                       title="Unstake LP + claim rewards"
                     >

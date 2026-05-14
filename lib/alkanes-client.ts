@@ -363,7 +363,6 @@ export function getPools(networkName?: string): Record<string, PoolConfig> {
 export const DIESEL_TOKEN = {
   alkaneId: { block: 2, tx: 0 },
   decimals: 8,
-  totalSupplyPayload: '0x20e3ce382a030200653001',
 };
 
 // ============================================================================
@@ -636,68 +635,15 @@ class AlkanesClient {
     }
   }
 
-  async getDieselTotalSupply(): Promise<bigint | null> {
-    const provider = await this.ensureProvider();
-
-    // Method 1: espo.getCirculatingSupply — structured response (preferred)
-    // Note: method exists at runtime but may not be in installed type declarations
-    try {
-      const result = await (provider.espo as any).getCirculatingSupply('2:0');
-      if (result != null) {
-        const val = typeof result === 'object'
-          ? (result as any)?.supply ?? (result as any)?.circulating_supply ?? (result as any)?.data
-          : result;
-        if (val != null) {
-          const n = typeof val === 'string' ? BigInt(val) : BigInt(Number(val));
-          if (n > BigInt(0)) return n;
-        }
-      }
-    } catch {
-      // fall through to metashrew_view
-    }
-
-    // Method 2: metashrewView simulate — raw protobuf hex (fallback)
-    // JOURNAL ENTRY (2026-02-11): Kept as fallback. espo.getCirculatingSupply is preferred.
-    try {
-      const hex = await this.metashrewView('simulate', DIESEL_TOKEN.totalSupplyPayload, 'latest');
-      return this.parseTotalSupplyHex(hex);
-    } catch (error) {
-      console.error('[AlkanesClient] Error fetching DIESEL total supply:', error);
-      return null;
-    }
-  }
-
-  parseTotalSupplyHex(hex: string): bigint | null {
-    try {
-      const data = hex.startsWith('0x') ? hex.slice(2) : hex;
-      if (!data) return null;
-
-      const marker1a = data.indexOf('1a');
-      if (marker1a === -1) return null;
-
-      const valueStart = marker1a + 4;
-      const valueEnd = data.indexOf('10', valueStart);
-
-      if (valueEnd === -1) {
-        const valueHex = data.slice(valueStart, Math.min(valueStart + 32, data.length));
-        return parseU128LE(valueHex);
-      }
-
-      const valueHex = data.slice(valueStart, valueEnd);
-      const paddedHex = valueHex.padEnd(32, '0');
-      return parseU128LE(paddedHex);
-    } catch {
-      return null;
-    }
-  }
-
   // ==========================================================================
   // Data API Methods
   // ==========================================================================
 
   async getBitcoinPrice(): Promise<number> {
-    // Method 1: SDK dataApi.getBitcoinPrice (preferred)
-    // JOURNAL ENTRY (2026-02-11): Try SDK first, fall back to direct REST.
+    // Canonical source: SDK dataApi.getBitcoinPrice. Returns 0 on SDK
+    // failure so the caller (pool-service.ts) degrades gracefully. No REST
+    // fallback — the deprecated `mainnet.subfrost.io/.../get-bitcoin-price`
+    // endpoint was a stale infra artifact and is removed (2026-05-10).
     try {
       const provider = await this.ensureProvider();
       const result = await provider.dataApi.getBitcoinPrice();
@@ -709,27 +655,9 @@ class AlkanesClient {
           return price;
         }
       }
-    } catch {
-      // fall through to direct REST
-    }
-
-    // Method 2: Direct REST (fallback)
-    try {
-      const response = await fetch('https://mainnet.subfrost.io/v4/subfrost/get-bitcoin-price', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
-      });
-      const result = await response.json();
-      const price = result?.data?.bitcoin?.usd;
-      if (typeof price === 'number' && price > 0) {
-        return price;
-      }
-      console.warn('[AlkanesClient] Unexpected BTC price response:', JSON.stringify(result));
     } catch (error) {
       console.error('[AlkanesClient] getBitcoinPrice failed:', error);
     }
-
     return 0;
   }
 }

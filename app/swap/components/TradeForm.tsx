@@ -74,12 +74,31 @@ export default function TradeForm({
             {t('swap.limit')}
           </button>
         )}
-        <button
-          onClick={() => onOrderTypeChange('liquidity')}
-          className={`sf-tab-btn flex-1 basis-0 ${effectiveOrderType === 'liquidity' ? 'sf-tab-btn--active' : ''}`}
-        >
-          {t('swap.liquidity')}
-        </button>
+        {effectiveOrderType === 'liquidity' ? (
+          <div className="flex flex-1 basis-0 gap-1">
+            <button
+              onClick={() => liquidityProps.onModeChange?.('provide')}
+              className={`sf-tab-btn flex-1 basis-0 ${liquidityProps.liquidityMode !== 'remove' ? 'sf-tab-btn--active' : ''}`}
+              style={liquidityProps.liquidityMode !== 'remove' ? { '--sf-tab-active-bg': '#16a34a' } as React.CSSProperties : undefined}
+            >
+              {t('liquidity.add')}
+            </button>
+            <button
+              onClick={() => liquidityProps.onModeChange?.('remove')}
+              className={`sf-tab-btn flex-1 basis-0 ${liquidityProps.liquidityMode === 'remove' ? 'sf-tab-btn--active' : ''}`}
+              style={liquidityProps.liquidityMode === 'remove' ? { '--sf-tab-active-bg': '#dc2626' } as React.CSSProperties : undefined}
+            >
+              {t('liquidity.remove')}
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => onOrderTypeChange('liquidity')}
+            className={`sf-tab-btn flex-1 basis-0`}
+          >
+            {t('swap.liquidity')}
+          </button>
+        )}
       </div>
 
       <div className="flex-1 min-h-0">

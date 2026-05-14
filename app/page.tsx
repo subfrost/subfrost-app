@@ -7,23 +7,23 @@ import PageContent from "@/app/components/PageContent";
 import { DEMO_MODE_ENABLED } from "@/utils/demoMode";
 
 export default function Home() {
-  const topRowColumns = DEMO_MODE_ENABLED ? "lg:grid-cols-3" : "lg:grid-cols-4";
+  const showVaultTiles = !DEMO_MODE_ENABLED;
 
   return (
     <AlkanesMainWrapper>
       <PageContent className="px-4 md:px-5">
         <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-4">
-          {/* Top row: Trending Pair (1/4), Trending Vault (1/4), Cumulative AMM Volume (1/2) */}
-          <div className={`grid grid-cols-1 ${topRowColumns} gap-4`}>
-            <div className="lg:col-span-1">
+          {/* Top row: Trending Pair (40%), Cumulative AMM Volume (60%) */}
+          <div className="grid grid-cols-1 md:grid-cols-10 gap-4">
+            <div className={showVaultTiles ? "md:col-span-3" : "md:col-span-4"}>
               <TrendingPairs />
             </div>
-            {!DEMO_MODE_ENABLED && (
-              <div className="lg:col-span-1">
+            {showVaultTiles && (
+              <div className="md:col-span-3">
                 <VaultTiles />
               </div>
             )}
-            <div className="lg:col-span-2">
+            <div className={showVaultTiles ? "md:col-span-4" : "md:col-span-6"}>
               <CumulativeAmmVolume />
             </div>
           </div>

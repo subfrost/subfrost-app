@@ -18,9 +18,11 @@ const en: Record<string, string> = {
   'header.settings': 'Settings',
 
   // Demo Banner
-  'demo.warning': 'SUBFROST App is unreleased',
-  'demo.description': 'In the meantime, we invite you to create a new wallet with your provided invitation code.\n\nAnything you see across this app is subject to change.',
+  'demo.warning': 'SUBFROST APP IS IN BETA',
+  'demo.description': 'We invite you to explore our AMM swap by creating a new keystore wallet or connecting a wallet you already use today.\n\nAnything you see across this app is subject to change. Feedback is appreciated.',
   'demo.understand': 'I Understand',
+  'vaults.unreleasedTitle': 'SUBFROST VAULTS ARE UNRELEASED',
+  'vaults.unreleasedDescription': 'In the meantime, please look around to see what we are building.\n\nAnything you see here is subject to change.',
 
   // Coming Soon Overlay
   'comingSoon.title': 'Coming Soon',
@@ -113,6 +115,7 @@ const en: Record<string, string> = {
   'liquidity.selectPosition': 'Select Position',
   'liquidity.amountToRemove': 'Amount to Remove',
   'liquidity.minimumReceived': 'Minimum Received',
+  'liquidity.minimumDeposit': 'Minimum Deposit',
   'liquidity.selectPair': 'Select Pair to Provide',
   'liquidity.selectToken': 'Select Token',
   'liquidity.connectWallet': 'CONNECT WALLET',
@@ -526,6 +529,7 @@ const en: Record<string, string> = {
   'bottomPanels.side': 'Side',
   'bottomPanels.price': 'Price',
   'bottomPanels.amount': 'Amount',
+  'bottomPanels.value': 'Value',
   'bottomPanels.filled': 'Filled',
   'bottomPanels.sell': 'SELL',
   'bottomPanels.buy': 'BUY',
@@ -856,7 +860,7 @@ const en: Record<string, string> = {
   'wallet.browserExtensionWallets': 'Browser Extension Wallets',
   'wallet.newPassword': 'New Password',
   'wallet.enterRecoveryPhrase': 'Enter your 12 or 24 word recovery phrase',
-  'wallet.runesInscriptionsWarning': 'This app does not support runes or inscriptions. Using a wallet that holds these assets may result in them being burned.',
+  'wallet.runesInscriptionsWarning': 'WARNING: This app does not support runes or inscriptions. Using a wallet that holds these assets WILL result in burning them.',
   'wallet.createPassword': 'Create a password',
   'wallet.restoring': 'Restoring...',
   'wallet.uploadKeystoreDesc': 'Upload a previously exported JSON keystore file to restore your wallet.',
