@@ -25,8 +25,8 @@ export const metadata: Metadata = {
   description: "The app built for seamless Bitcoin DeFi.",
   keywords: ["Bitcoin DeFi", "dxBTC", "frBTC", "cross-chain swaps", "BTC yield", "Bitcoin Layer 0", "native asset swaps", "Bitcoin AMM", "BTC staking", "Subfrost"],
   icons: {
-    icon: "/og-image.png",
-    apple: "/og-image.png",
+    icon: "/brand/Logo.png",
+    apple: "/brand/Logo.png",
   },
   openGraph: {
     title: "SUBFROST App | Next-gen DeFi on Bitcoin",

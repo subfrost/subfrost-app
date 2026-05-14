@@ -1039,7 +1039,7 @@ input[type="number"] {
 }
 
 .balance-total-snowflake {
-  animation: balance-snowflake-spin 60s linear infinite;
+  animation: balance-snowflake-spin 120s linear infinite;
   translate: 0 -50%;
   rotate: 12deg;
   transform-origin: center;
@@ -1147,6 +1147,33 @@ input[type="number"] {
 
 .sf-card-header-action:hover {
   opacity: 0.75;
+}
+
+.tx-pending-tone {
+  background: rgba(234, 179, 8, 0.2);
+  color: rgb(202, 138, 4);
+}
+
+.tx-pending-action:hover:not(:disabled) {
+  background: rgba(234, 179, 8, 0.3);
+}
+
+.mempool-queue-text {
+  color: color-mix(in srgb, var(--sf-primary) 90%, transparent);
+  font-style: italic;
+}
+
+[data-theme="light"] .mempool-queue-text {
+  color: #284372 !important;
+}
+
+[data-theme="dark"] .tx-pending-tone {
+  background: rgba(245, 158, 11, 0.2);
+  color: rgb(252, 211, 77);
+}
+
+[data-theme="dark"] .tx-pending-action:hover:not(:disabled) {
+  background: rgba(245, 158, 11, 0.3);
 }
 
 /* --- sf-tile -----------------------------------------------

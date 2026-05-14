@@ -344,27 +344,18 @@ export default function Header() {
                 </div>
               )}
             </div>
-            {isDemoGated ? (
-              <span
-                aria-disabled="true"
-                className="text-sm font-semibold whitespace-nowrap text-[color:var(--sf-text)]/30 cursor-not-allowed"
-              >
-                {t("nav.vaults")}
-              </span>
-            ) : (
-              <Link
-                href="/vaults"
-                className={`text-sm font-semibold hover:opacity-80 outline-none whitespace-nowrap transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
-                  isActive("/vaults")
-                    ? theme === "light"
-                      ? "text-[color:var(--sf-text)]/60"
-                      : "text-[color:var(--sf-primary)]"
-                    : "text-[color:var(--sf-text)]"
-                }`}
-              >
-                {t("nav.vaults")}
-              </Link>
-            )}
+            <Link
+              href="/vaults"
+              className={`text-sm font-semibold hover:opacity-80 outline-none whitespace-nowrap transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
+                isActive("/vaults")
+                  ? theme === "light"
+                    ? "text-[color:var(--sf-text)]/60"
+                    : "text-[color:var(--sf-primary)]"
+                  : "text-[color:var(--sf-text)]"
+              }`}
+            >
+              {t("nav.vaults")}
+            </Link>
             {isDemoGated ? (
               <span
                 aria-disabled="true"

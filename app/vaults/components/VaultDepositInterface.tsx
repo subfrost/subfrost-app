@@ -99,7 +99,6 @@ export default function VaultDepositInterface({
   const [inputFocused, setInputFocused] = useState(false);
   // Collapsible details (all screen sizes)
   const [detailsOpen, setDetailsOpen] = useState(false);
-  const [showDepositComingSoon, setShowDepositComingSoon] = useState(false);
   const { t } = useTranslation();
   // Single state to track which settings field is focused (only one can be focused at a time)
   const [focusedField, setFocusedField] = useState<'deadline' | 'slippage' | 'fee' | null>(null);
@@ -113,9 +112,9 @@ export default function VaultDepositInterface({
   const selectorRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const canExecute = mode === 'deposit' 
+  const canExecute = !isDemoGated && (mode === 'deposit'
     ? (isConnected && amount && parseFloat(amount) > 0)
-    : (isConnected && selectedUnitId !== '');
+    : (isConnected && selectedUnitId !== ''));
 
   // Check if current amount matches a specific percentage of balance
   const getActivePercent = (): number | null => {
@@ -506,26 +505,17 @@ export default function VaultDepositInterface({
           {/* Deposit Button */}
           <button
             onClick={() => {
+              if (isDemoGated) return;
               if (!isConnected) {
                 onConnectModalOpenChange(true);
                 return;
               }
-              if (!isDemoGated) {
-                onExecute(amount);
-                return;
-              }
-              if (!showDepositComingSoon) {
-                setShowDepositComingSoon(true);
-                setTimeout(() => setShowDepositComingSoon(false), 1000);
-              }
+              onExecute(amount);
             }}
-            className={`mt-2 h-12 w-full rounded-xl font-bold text-sm uppercase tracking-wider transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none focus:outline-none ${isConnected && isDemoGated ? 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)]/30 cursor-not-allowed' : 'bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] text-white shadow-[0_4px_16px_rgba(0,0,0,0.3)] hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98]'}`}
+            disabled={isDemoGated}
+            className={`mt-2 h-12 w-full rounded-xl font-bold text-sm uppercase tracking-wider transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none focus:outline-none ${isDemoGated ? 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)]/30 cursor-not-allowed' : 'bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] text-white shadow-[0_4px_16px_rgba(0,0,0,0.3)] hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98]'}`}
           >
-            {showDepositComingSoon ? (
-              <span className="animate-pulse">{t('badge.comingSoon')}</span>
-            ) : (
-              isConnected ? t('vaultDeposit.depositBtn') : t('vaultDeposit.connectWallet')
-            )}
+            {isDemoGated ? t('common.comingSoon') : isConnected ? t('vaultDeposit.depositBtn') : t('vaultDeposit.connectWallet')}
           </button>
         </div>
       ) : (
@@ -577,16 +567,17 @@ export default function VaultDepositInterface({
           {/* Withdraw Button */}
           <button
             onClick={() => {
+              if (isDemoGated) return;
               if (!isConnected) {
                 onConnectModalOpenChange(true);
                 return;
               }
               onExecute('1'); // Vault units are typically 1 per deposit
             }}
-            disabled={!canExecute}
+            disabled={isDemoGated || !canExecute}
             className={`mt-2 h-12 w-full rounded-xl font-bold text-sm uppercase tracking-wider transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none focus:outline-none ${!canExecute ? 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)]/30 cursor-not-allowed' : 'bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] text-white shadow-[0_4px_16px_rgba(0,0,0,0.3)] hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98]'}`}
           >
-            {isConnected ? t('vaultDeposit.withdrawBtn') : t('vaultDeposit.connectWallet')}
+            {isDemoGated ? t('common.comingSoon') : isConnected ? t('vaultDeposit.withdrawBtn') : t('vaultDeposit.connectWallet')}
           </button>
         </div>
       )}

@@ -31,7 +31,13 @@ export interface LivePoolState {
   name: string;
 }
 
-async function espoRpcBatch<T extends any[]>(
+type UnknownRecord = Record<string, unknown>;
+
+function isRecord(value: unknown): value is UnknownRecord {
+  return typeof value === 'object' && value !== null;
+}
+
+async function espoRpcBatch<T extends unknown[]>(
   network: string,
   calls: Array<{ method: string; params: Record<string, unknown> }>,
 ): Promise<T> {
@@ -53,21 +59,43 @@ async function espoRpcBatch<T extends any[]>(
   const json = await res.json();
   if (!Array.isArray(json)) throw new Error('Espo batch returned non-array response');
 
-  const byId = new Map<number, any>();
+  const byId = new Map<number, unknown>();
   for (const item of json) {
-    if (item?.error) {
-      throw new Error(`Espo batch id=${item.id}: ${item.error?.message ?? JSON.stringify(item.error)}`);
+    if (!isRecord(item)) throw new Error('Espo batch returned invalid item');
+
+    if (item.error) {
+      const message = isRecord(item.error) && typeof item.error.message === 'string'
+        ? item.error.message
+        : JSON.stringify(item.error);
+      throw new Error(`Espo batch id=${String(item.id)}: ${message}`);
     }
-    if (typeof item?.id === 'number') byId.set(item.id, item.result);
+    if (typeof item.id === 'number') byId.set(item.id, item.result);
   }
 
   return request.map((item) => byId.get(item.id)) as T;
 }
 
-function parseOkStringField(payload: any, field: string, method: string): string {
-  if (!payload?.ok) throw new Error(`${method} returned not-ok: ${payload?.error ?? 'unknown'}`);
+function parseOkStringField(payload: unknown, field: string, method: string): string {
+  if (!isRecord(payload) || payload.ok !== true) {
+    throw new Error(`${method} returned not-ok: ${isRecord(payload) ? payload.error ?? 'unknown' : 'unknown'}`);
+  }
+
   const value = payload[field];
   if (value == null) throw new Error(`${method} missing ${field}`);
+  return String(value);
+}
+
+function parseEspoTotalSupplyKey(payload: unknown): string {
+  const method = 'essentials.get_keys';
+  if (!isRecord(payload) || payload.ok !== true) {
+    throw new Error(`${method} returned not-ok: ${isRecord(payload) ? payload.error ?? 'unknown' : 'unknown'}`);
+  }
+
+  const items = payload.items;
+  const totalSupplyItem = isRecord(items) ? items['/totalsupply'] : null;
+  const value = isRecord(totalSupplyItem) ? totalSupplyItem.value_u128 : null;
+  if (value == null) throw new Error(`${method} missing /totalsupply value_u128`);
+
   return String(value);
 }
 
@@ -75,7 +103,7 @@ function parseOkStringField(payload: any, field: string, method: string): string
  * Espo-backed pool state. Reserves are the balances held by the pool alkane:
  *   reserve0 = balance(owner=poolId, alkane=token0Id)
  *   reserve1 = balance(owner=poolId, alkane=token1Id)
- * LP supply comes from the pool alkane's circulating supply.
+ * LP supply comes from the pool alkane's /totalsupply state key.
  */
 export async function fetchEspoPoolState(
   network: string,
@@ -86,8 +114,8 @@ export async function fetchEspoPoolState(
   if (!poolId || !token0Id || !token1Id) return null;
 
   try {
-    const [reserve0Resp, reserve1Resp, supplyResp, selfBalanceResp] = await espoRpcBatch<
-      [any, any, any, any]
+    const [reserve0Resp, reserve1Resp, supplyResp] = await espoRpcBatch<
+      [unknown, unknown, unknown]
     >(network, [
       {
         method: 'essentials.get_alkane_balance_metashrew',
@@ -98,17 +126,10 @@ export async function fetchEspoPoolState(
         params: { owner: poolId, alkane: token1Id },
       },
       {
-        method: 'essentials.get_circulating_supply',
-        params: { alkane: poolId },
-      },
-      {
-        method: 'essentials.get_alkane_balance_metashrew',
-        params: { owner: poolId, alkane: poolId },
+        method: 'essentials.get_keys',
+        params: { alkane: poolId, keys: ['/totalsupply'] },
       },
     ]);
-    const circulatingSupply = BigInt(parseOkStringField(supplyResp, 'supply', 'essentials.get_circulating_supply'));
-    const selfBalance = BigInt(parseOkStringField(selfBalanceResp, 'balance', 'essentials.get_alkane_balance_metashrew'));
-    const spendableLpSupply = circulatingSupply > selfBalance ? circulatingSupply - selfBalance : 0n;
 
     return {
       poolId,
@@ -116,7 +137,7 @@ export async function fetchEspoPoolState(
       token1Id,
       reserve0: parseOkStringField(reserve0Resp, 'balance', 'essentials.get_alkane_balance_metashrew'),
       reserve1: parseOkStringField(reserve1Resp, 'balance', 'essentials.get_alkane_balance_metashrew'),
-      totalSupply: spendableLpSupply.toString(),
+      totalSupply: parseEspoTotalSupplyKey(supplyResp),
       name: `${token0Id}/${token1Id}`,
     };
   } catch (err) {
