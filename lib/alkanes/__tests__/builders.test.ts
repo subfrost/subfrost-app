@@ -10,6 +10,7 @@ import {
   buildSwapInputRequirements,
   buildWrapProtostone,
   buildUnwrapProtostone,
+  buildUnwrapProtostones,
   buildUnwrapInputRequirements,
   buildTransferProtostone,
   buildTransferInputRequirements,
@@ -180,6 +181,28 @@ describe('buildUnwrapProtostone', () => {
     });
     // Position 4 in the cellpack is dustVout (after block, tx, opcode, then this).
     expect(result).toContain(',78,3,1000]');
+  });
+});
+
+describe('buildUnwrapProtostones', () => {
+  it('builds edict p0 plus unwrap call p1', () => {
+    const result = buildUnwrapProtostones({
+      frbtcId: FRBTC_ID,
+      dustVout: 2,
+      amount: '500000',
+    });
+    expect(result).toBe('[32:0:500000:p1]:v0:v0,[32,0,78,2,500000]:v1:v0');
+  });
+
+  it('keeps custom unwrap pointer on p1 without changing p0', () => {
+    const result = buildUnwrapProtostones({
+      frbtcId: FRBTC_ID,
+      dustVout: 2,
+      amount: '500000',
+      pointer: 'v2',
+      refund: 'v3',
+    });
+    expect(result).toBe('[32:0:500000:p1]:v0:v0,[32,0,78,2,500000]:v2:v3');
   });
 });
 
@@ -417,6 +440,11 @@ describe('builder consistency', () => {
       buildCreateNewPoolProtostone({
         factoryId: FACTORY_ID, token0Id: DIESEL_ID, token1Id: FRBTC_ID,
         amount0: '100', amount1: '50',
+      }),
+      buildUnwrapProtostones({
+        frbtcId: FRBTC_ID,
+        dustVout: 2,
+        amount: '500000',
       }),
     ];
 

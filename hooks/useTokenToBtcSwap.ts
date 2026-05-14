@@ -84,7 +84,7 @@ export function useTokenToBtcSwap() {
 
       const config = getConfig(network);
       const { getSignerAddressDynamic } = await import('@/lib/alkanes/helpers');
-      const { buildSwapProtostone, buildUnwrapProtostone } = await import('@/lib/alkanes/builders');
+      const { buildSwapProtostone, buildUnwrapProtostones } = await import('@/lib/alkanes/builders');
 
       const unwrapFee = premiumData?.unwrapFeePerThousand ?? FRBTC_UNWRAP_FEE_PER_1000;
       const minimumFrbtcAmount = grossUpForUnwrapFee(params.minimumReceived || '1', unwrapFee);
@@ -106,7 +106,7 @@ export function useTokenToBtcSwap() {
         refund: 'v0',
       });
 
-      const childProtostone = buildUnwrapProtostone({
+      const childProtostone = buildUnwrapProtostones({
         frbtcId: config.FRBTC_ALKANE_ID,
         dustVout: 2,
         amount: minimumFrbtcAmount,
@@ -130,7 +130,7 @@ export function useTokenToBtcSwap() {
             amount: minimumFrbtcAmount,
           }],
           // v0 is the taproot alkane refund/change output; v1 is the BTC
-          // recipient the unwrap contract reads via pointer=v1.
+          // recipient the unwrap call reads via pointer=v1.
           childToAddresses: [alkaneRefundAddress, payerAddress, signerAddress],
           childAlkanesChangeAddress: alkaneRefundAddress,
           invalidate: 'swap',

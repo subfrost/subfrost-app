@@ -924,7 +924,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
   // available (wallet not connected); consumers should guard via the
   // `isConnected` flag they already check.
   const txContext: TxContext | null = useMemo(() => {
-    const segwit = account.nativeSegwit?.address;
+    const segwit = account.nativeSegwit?.address || account.paymentAddress || account.payerAddress;
     const taproot = account.taproot?.address;
 
     if (walletType === 'keystore') {
@@ -1740,7 +1740,8 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       } else if (walletId === 'okx') {
         // OKX wallet exposes window.okxwallet.bitcoin with connect(), signPsbt()
         // JOURNAL ENTRY (2026-03-02): Added 10s timeout - should respond quickly.
-        const okxProvider = (window as any).okxwallet?.bitcoin;
+        const okxWallet = (window as any).okxwallet;
+        const okxProvider = okxWallet?.bitcoin;
         if (!okxProvider) throw new Error('OKX wallet not available');
 
         console.log('[WalletContext] OKX: calling connect...');
@@ -1769,7 +1770,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
         }
         additionalAddresses.taproot = { address: addr, publicKey: pubKey };
 
-        connected = new (ConnectedWallet as any)(walletInfo, okxProvider, {
+        connected = new (ConnectedWallet as any)(walletInfo, okxWallet, {
           address: addr,
           publicKey: pubKey,
           addressType: 'p2tr',
