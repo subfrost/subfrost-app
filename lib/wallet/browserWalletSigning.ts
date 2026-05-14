@@ -89,10 +89,9 @@ export async function ensureWalletSession(): Promise<void> {
       }
     }
   } else if (connectedId === 'oyl') {
-    const oyl = (window as any).oyl;
-    if (oyl?.getAddresses) {
-      try { await oyl.getAddresses(); } catch { /* already connected */ }
-    }
+    // OYL: getAddresses() triggers the connection popup even when already connected,
+    // so we cannot use it as a silent session check. OYL reconnects automatically
+    // on the first signing call if the session expired.
   }
 }
 

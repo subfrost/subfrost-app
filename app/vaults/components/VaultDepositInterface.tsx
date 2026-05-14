@@ -13,7 +13,7 @@ import { useGlobalStore } from "@/stores/global";
 import type { SlippageSelection } from "@/stores/global";
 import { ChevronDown, Settings } from "lucide-react";
 import { useTranslation } from '@/hooks/useTranslation';
-import { useDemoGate } from '@/hooks/useDemoGate';
+import { useVaultDemoGate } from '@/hooks/useVaultDemoGate';
 
 // All available tokens that can be deposited into vaults
 const ALL_VAULT_TOKENS: Array<{ id: string; symbol: string }> = [
@@ -105,7 +105,7 @@ export default function VaultDepositInterface({
   const [focusedField, setFocusedField] = useState<'deadline' | 'slippage' | 'fee' | null>(null);
   const { isConnected, onConnectModalOpenChange, network } = useWallet();
   const { theme } = useTheme();
-  const isDemoGated = useDemoGate();
+  const isDemoGated = useVaultDemoGate();
   const { selection: feeSelection, setSelection: setFeeSelection, custom: customFee, setCustom: setCustomFee, feeRate, presets: feePresets } = useFeeRate({ storageKey: 'subfrost-vault-fee-rate' });
   const { maxSlippage, setMaxSlippage, slippageSelection, setSlippageSelection, deadlineBlocks, setDeadlineBlocks } = useGlobalStore();
   // Local deadline state to allow empty field while typing

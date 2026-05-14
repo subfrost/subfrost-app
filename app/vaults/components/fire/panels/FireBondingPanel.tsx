@@ -3,7 +3,7 @@
 import { useState, useRef } from 'react';
 import { useFireBondingStats } from '@/hooks/fire/useFireBondingStats';
 import { useWallet } from '@/context/WalletContext';
-import { useDemoGate } from '@/hooks/useDemoGate';
+import { useVaultDemoGate } from '@/hooks/useVaultDemoGate';
 import { useTranslation } from '@/hooks/useTranslation';
 import BigNumber from 'bignumber.js';
 
@@ -14,7 +14,7 @@ interface FireBondingPanelProps {
 export default function FireBondingPanel({ vaultDetailsSlot }: FireBondingPanelProps) {
   const { t } = useTranslation();
   const { isConnected } = useWallet();
-  const isDemoGated = useDemoGate();
+  const isDemoGated = useVaultDemoGate();
   const { data: bondingStats } = useFireBondingStats();
 
 

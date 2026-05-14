@@ -66,7 +66,7 @@ import { BROWSER_WALLETS, getInstalledWallets, isWalletInstalled } from '@/const
 // import { patchTapInternalKeys } from '@/lib/psbt-patching';
 
 // Import browser wallet signing utilities with robust reconnection handling
-import { signWithOyl, signWithXverse, detectWalletId, getOylCallCount, resetOylCallCount, patchTapInternalKeys } from '@/lib/wallet/browserWalletSigning';
+import { signWithOyl, signWithUnisat, signWithXverse, detectWalletId, getOylCallCount, resetOylCallCount, patchTapInternalKeys } from '@/lib/wallet/browserWalletSigning';
 import { toXOnlyPubKeyHex } from '@/lib/wallet/pubkeyHelpers';
 
 // Connection-specific counter for OYL getAddresses() calls during initial connection
@@ -321,8 +321,8 @@ type WalletAddresses = {
 type Account = {
   taproot?: { address: string; pubkey: string; pubKeyXOnly: string; hdPath: string };
   nativeSegwit?: { address: string; pubkey: string; hdPath: string };
-  paymentAddress?: string;
-  payerAddress?: string;
+  /** P2SH-P2WPKH — OYL exposes this as a separate address type (3K2t... on mainnet) */
+  nestedSegwit?: { address: string; pubkey: string; hdPath: string };
   /** Zcash transparent address — derived from same mnemonic via BIP44 m/44'/133'/0'/0/0 */
   zcash?: { address: string; pubkey: string; hdPath: string };
   spendStrategy: { addressOrder: string[]; utxoSortGreatestToLeast: boolean; changeAddress: string };
@@ -534,6 +534,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
   const [browserWalletAddresses, setBrowserWalletAddresses] = useState<{
     nativeSegwit?: { address: string; publicKey?: string };
     taproot?: { address: string; publicKey?: string };
+    nestedSegwit?: { address: string; publicKey?: string };
   } | null>(null);
   // SDK wallet adapter for signing - handles all wallet-specific logic
   const [walletAdapter, setWalletAdapter] = useState<JsWalletAdapter | null>(null);
@@ -899,16 +900,12 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
 
   // Build account structure
   const account: Account = useMemo(() => {
-    const browserPaymentAddress =
-      (browserWallet as { paymentAddress?: string; payerAddress?: string } | null)?.paymentAddress
-      || (browserWallet as { paymentAddress?: string; payerAddress?: string } | null)?.payerAddress
-      || '';
-    const paymentAddress = addresses.nativeSegwit.address || browserPaymentAddress;
     return {
       nativeSegwit: addresses.nativeSegwit.address ? addresses.nativeSegwit : undefined,
       taproot: addresses.taproot.address ? addresses.taproot : undefined,
-      paymentAddress: paymentAddress || undefined,
-      payerAddress: paymentAddress || undefined,
+      nestedSegwit: browserWalletAddresses?.nestedSegwit?.address
+        ? { address: browserWalletAddresses.nestedSegwit.address, pubkey: browserWalletAddresses.nestedSegwit.publicKey || '', hdPath: '' }
+        : undefined,
       zcash: addresses.zcash?.address ? addresses.zcash : undefined,
       spendStrategy: {
         addressOrder: ['nativeSegwit', 'taproot'],
@@ -917,14 +914,14 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       },
       network: NetworkMap[network],
     };
-  }, [addresses, browserWallet, network]);
+  }, [addresses, network]);
 
   // Compute transaction-context addresses. See `TxContext` jsdoc for the
   // wallet-type semantics this codifies. `null` when neither address is
   // available (wallet not connected); consumers should guard via the
   // `isConnected` flag they already check.
   const txContext: TxContext | null = useMemo(() => {
-    const segwit = account.nativeSegwit?.address || account.paymentAddress || account.payerAddress;
+    const segwit = account.nativeSegwit?.address;
     const taproot = account.taproot?.address;
 
     if (walletType === 'keystore') {
@@ -1123,20 +1120,23 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
   }, []);
 
   // Disconnect (lock) wallet - works for both keystore and browser wallets
-  const disconnect = useCallback(() => {
+  const disconnect = useCallback(async () => {
     // Mark explicit disconnect so the devnet auto-connect effect doesn't
     // immediately re-create the boot wallet. Cleared on network change.
     userDisconnectedRef.current = true;
-
-    const walletToDisconnect = browserWallet;
-    const connector = getWalletConnector();
 
     // Clear keystore session
     sessionStorage.removeItem(STORAGE_KEYS.SESSION_MNEMONIC);
     setWallet(null);
 
-    // Clear app-visible browser wallet state immediately. Some extension
-    // disconnect APIs can hang, and that must not make the UI stay connected.
+    // Clear browser wallet connection
+    if (browserWallet) {
+      try {
+        await browserWallet.disconnect();
+      } catch (error) {
+        console.warn('[WalletContext] Failed to disconnect browser wallet:', error);
+      }
+    }
     setBrowserWallet(null);
     setBrowserWalletAddresses(null);
     setWalletAdapter(null); // Clear SDK wallet adapter
@@ -1144,18 +1144,16 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
     localStorage.removeItem(STORAGE_KEYS.WALLET_TYPE);
     localStorage.removeItem(STORAGE_KEYS.BROWSER_WALLET_ADDRESSES);
 
-    setWalletType(null);
-    setIsConnectModalOpen(false);
-
-    if (walletToDisconnect) {
-      void Promise.resolve(walletToDisconnect.disconnect()).catch((error) => {
-        console.warn('[WalletContext] Failed to disconnect browser wallet:', error);
-      });
+    // Disconnect the WalletConnector
+    const connector = getWalletConnector();
+    try {
+      await connector.disconnect();
+    } catch (error) {
+      // Ignore disconnect errors
     }
 
-    void Promise.resolve(connector.disconnect()).catch(() => {
-      // Ignore connector disconnect errors.
-    });
+    setWalletType(null);
+    setIsConnectModalOpen(false);
   }, [browserWallet, getWalletConnector]);
 
   // Detect installed browser wallets
@@ -1266,6 +1264,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       const additionalAddresses: {
         nativeSegwit?: { address: string; publicKey?: string };
         taproot?: { address: string; publicKey?: string };
+        nestedSegwit?: { address: string; publicKey?: string };
       } = {};
 
       // For wallets that support multiple address types, call their native API
@@ -1493,12 +1492,13 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
         }
 
         // Handle different possible response formats from OYL
-        // Format 1: { nativeSegwit: { address, publicKey }, taproot: { address, publicKey } }
+        // Format 1: { nativeSegwit: { address, publicKey }, taproot: { address, publicKey }, nestedSegwit?: {...} }
         // Format 2: { nativeSegwit: "address", taproot: "address" }
         // Format 3: Array format
         let addresses: {
           nativeSegwit?: { address: string; publicKey?: string };
           taproot?: { address: string; publicKey?: string };
+          nestedSegwit?: { address: string; publicKey?: string };
         } = {};
 
         if (Array.isArray(rawAddresses)) {
@@ -1509,6 +1509,8 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
               addresses.nativeSegwit = { address: addr.address, publicKey: addr.publicKey };
             } else if (addr.type === 'p2tr' || addr.addressType === 'p2tr' || addr.purpose === 'ordinals') {
               addresses.taproot = { address: addr.address, publicKey: addr.publicKey };
+            } else if (addr.type === 'p2sh-p2wpkh' || addr.addressType === 'p2sh-p2wpkh' || addr.type === 'nested-segwit') {
+              addresses.nestedSegwit = { address: addr.address, publicKey: addr.publicKey };
             }
           }
         } else if (rawAddresses && typeof rawAddresses === 'object') {
@@ -1518,8 +1520,11 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
             console.log('[WalletContext] OYL returned string addresses');
             addresses.nativeSegwit = { address: rawAddresses.nativeSegwit };
             addresses.taproot = { address: rawAddresses.taproot };
+            if (rawAddresses.nestedSegwit) {
+              addresses.nestedSegwit = { address: rawAddresses.nestedSegwit };
+            }
           } else {
-            // Format: { nativeSegwit: { address, publicKey }, taproot: { address, publicKey } }
+            // Format: { nativeSegwit: { address, publicKey }, taproot: { address, publicKey }, nestedSegwit?: {...} }
             console.log('[WalletContext] OYL returned object addresses');
             addresses = rawAddresses;
           }
@@ -1541,7 +1546,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
         console.log('  If addresses differ, your funds are on Xverse addresses, not OYL addresses.');
         console.log('  This is normal - different wallets use different derivation paths.');
 
-        // Store both address types
+        // Store all address types — nestedSegwit (3K2t... P2SH) holds BTC on OYL
         if (addresses.taproot?.address) {
           additionalAddresses.taproot = {
             address: addresses.taproot.address,
@@ -1552,6 +1557,12 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
           additionalAddresses.nativeSegwit = {
             address: addresses.nativeSegwit.address,
             publicKey: addresses.nativeSegwit.publicKey,
+          };
+        }
+        if (addresses.nestedSegwit?.address) {
+          additionalAddresses.nestedSegwit = {
+            address: addresses.nestedSegwit.address,
+            publicKey: addresses.nestedSegwit.publicKey,
           };
         }
 
@@ -1740,8 +1751,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       } else if (walletId === 'okx') {
         // OKX wallet exposes window.okxwallet.bitcoin with connect(), signPsbt()
         // JOURNAL ENTRY (2026-03-02): Added 10s timeout - should respond quickly.
-        const okxWallet = (window as any).okxwallet;
-        const okxProvider = okxWallet?.bitcoin;
+        const okxProvider = (window as any).okxwallet?.bitcoin;
         if (!okxProvider) throw new Error('OKX wallet not available');
 
         console.log('[WalletContext] OKX: calling connect...');
@@ -1770,7 +1780,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
         }
         additionalAddresses.taproot = { address: addr, publicKey: pubKey };
 
-        connected = new (ConnectedWallet as any)(walletInfo, okxWallet, {
+        connected = new (ConnectedWallet as any)(walletInfo, okxProvider, {
           address: addr,
           publicKey: pubKey,
           addressType: 'p2tr',
@@ -2050,7 +2060,45 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
         }
       }
 
-      // For UniSat, OKX, Leather, Phantom, etc., use the SDK adapter directly.
+      // For UniSat wallet, use signWithUnisat which calls signPsbts with
+      // `autoFinalized: true`. UniSat's `autoFinalized: false` mode is buggy for
+      // taproot inputs — it returns partial-sig fields that bitcoinjs-lib's
+      // `finalizeAllInputs()` can't reconcile, throwing "Cannot finalize taproot
+      // input #N. No tapleaf script signature provided." (bitcoinjs falls
+      // through to script-path finalization because key-path metadata is
+      // incomplete from UniSat's side).
+      //
+      // The previous fallback at the bottom of this function called the SDK
+      // adapter with `auto_finalized: false`, which forwarded that flag to
+      // UniSat → triggered the bug. Routing UniSat through `signWithUnisat`
+      // (which passes `autoFinalized: true`) makes UniSat return a fully
+      // finalized PSBT (with `finalScriptWitness` set on each input) that
+      // every mutation hook can use directly.
+      //
+      // Source: 2026-04-28 unwrap regression with UniSat. Trace showed
+      // "[WalletContext] unisat signing succeeded (988 hex chars)" hitting
+      // the generic adapter path on line ~1860 instead of the UniSat-specific
+      // helper. Adding this branch routes UniSat through the right helper.
+      if (detectedWallet === 'unisat') {
+        try {
+          const unisatAddress = browserWalletAddresses?.taproot?.address || browserWallet?.address;
+          if (!unisatAddress) {
+            throw new Error('UniSat address not found');
+          }
+          console.log(`[WalletContext] UniSat: Using signWithUnisat (${psbt.inputCount} inputs, address=${unisatAddress})`);
+          const result = await signWithUnisat(psbt, unisatAddress);
+          console.log(`[WalletContext] UniSat: signing succeeded (finalized: ${result.isFinalized})`);
+          return result.signedPsbtBase64;
+        } catch (e: any) {
+          console.error(`[WalletContext] UniSat signing failed:`, e?.message || e);
+          throw new Error(`UniSat signing failed: ${e?.message || e}`);
+        }
+      }
+
+      // For other browser wallets (OKX, Leather, Phantom, etc.), use the SDK
+      // adapter directly. UniSat is handled above and avoids this path because
+      // `auto_finalized: false` is broken for UniSat taproot inputs (see comment
+      // on the UniSat branch).
       // IMPORTANT: Use the PATCHED psbt (with corrected tapInternalKey), not the original psbtBase64
       const patchedPsbtHex = psbt.toHex();
 
@@ -2159,7 +2207,6 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       throw new Error('TapTweak produced an invalid private key (overflow)');
     }
     const tweakedKeyPair = ECPair.fromPrivateKey(Buffer.from(tweakedPriv), { network: btcNetwork });
-    const scriptPathKeyPair = ECPair.fromPrivateKey(Buffer.from(taprootChild.privateKey), { network: btcNetwork });
 
     // Parse and sign the PSBT
     const psbt = bitcoin.Psbt.fromBase64(psbtBase64, { network: btcNetwork });
@@ -2169,12 +2216,10 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
     console.log('[signTaprootPsbt] X-only pubkey:', Buffer.from(xOnlyPubkey).toString('hex'));
     console.log('[signTaprootPsbt] Internal y-parity:', taprootChild.publicKey[0] === 0x03 ? 'odd (negated)' : 'even');
 
-    // Sign normal BIP86 inputs with the tweaked key. Script-path recovery
-    // inputs carry tapLeafScript and are signed by the untweaked leaf key.
+    // Sign each input with the tweaked taproot key
     for (let i = 0; i < psbt.inputCount; i++) {
       try {
-        const hasTapLeafScript = (psbt.data.inputs[i] as any).tapLeafScript?.length > 0;
-        psbt.signInput(i, hasTapLeafScript ? scriptPathKeyPair : tweakedKeyPair);
+        psbt.signInput(i, tweakedKeyPair);
         console.log(`[signTaprootPsbt] Signed input ${i}`);
       } catch (error) {
         console.warn(`[signTaprootPsbt] Could not sign input ${i}:`, error);
@@ -2214,7 +2259,34 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
         }
       }
 
-      // For UniSat and other browser wallets, use the SDK adapter directly.
+      // For UniSat, route through signWithUnisat for the same reason as the
+      // taproot path: the SDK adapter's `auto_finalized: false` mode produces
+      // PSBTs that bitcoinjs-lib's finalizer can't reconcile. signWithUnisat
+      // uses `autoFinalized: true` and returns finalized PSBTs.
+      if (detectWalletId(browserWallet) === 'unisat') {
+        try {
+          const bitcoin = await import('bitcoinjs-lib');
+          const btcNetwork = network === 'mainnet' ? bitcoin.networks.bitcoin
+            : network === 'signet' || network === 'testnet' ? bitcoin.networks.testnet
+            : bitcoin.networks.regtest;
+          const psbt = bitcoin.Psbt.fromBase64(psbtBase64, { network: btcNetwork });
+          const unisatAddress = browserWalletAddresses?.nativeSegwit?.address
+            || browserWalletAddresses?.taproot?.address
+            || browserWallet?.address;
+          if (!unisatAddress) {
+            throw new Error('UniSat address not found');
+          }
+          console.log(`[WalletContext] UniSat (segwit): Using signWithUnisat (${psbt.inputCount} inputs, address=${unisatAddress})`);
+          const result = await signWithUnisat(psbt, unisatAddress);
+          console.log(`[WalletContext] UniSat (segwit): signing succeeded (finalized: ${result.isFinalized})`);
+          return result.signedPsbtBase64;
+        } catch (e: any) {
+          console.error(`[WalletContext] UniSat (segwit) signing failed:`, e?.message || e);
+          throw new Error(`UniSat signing failed: ${e?.message || e}`);
+        }
+      }
+
+      // For other browser wallets, use the SDK adapter directly
       const psbtBuffer = Buffer.from(psbtBase64, 'base64');
       const psbtHex = psbtBuffer.toString('hex');
 
@@ -2467,13 +2539,11 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
     try {
       let totalBalance = 0;
 
-      // Query both native segwit and taproot addresses
-      const addresses = Array.from(new Set([
-        account.nativeSegwit?.address,
-        account.paymentAddress,
-        account.payerAddress,
-        account.taproot?.address,
-      ].filter((address): address is string => typeof address === 'string' && address.length > 0)));
+      // Query all address types — OYL exposes nestedSegwit (3K2t...) which holds BTC
+      const addresses: string[] = [];
+      if (account.nativeSegwit?.address) addresses.push(account.nativeSegwit.address);
+      if (account.taproot?.address) addresses.push(account.taproot.address);
+      if (account.nestedSegwit?.address) addresses.push(account.nestedSegwit.address);
 
       console.log('[WalletContext] Querying addresses:', addresses);
 
@@ -2534,10 +2604,7 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
         : walletType === 'keystore' ? 'Keystore' : null,
 
       address: addresses.taproot.address || addresses.nativeSegwit.address,
-      paymentAddress: addresses.nativeSegwit.address
-        || (browserWallet as { paymentAddress?: string; payerAddress?: string } | null)?.paymentAddress
-        || (browserWallet as { paymentAddress?: string; payerAddress?: string } | null)?.payerAddress
-        || '',
+      paymentAddress: addresses.nativeSegwit.address,
       publicKey: addresses.nativeSegwit.pubkey,
       addresses,
       account,

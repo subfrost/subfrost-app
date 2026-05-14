@@ -12,7 +12,7 @@ import { useFireUserPositions } from '@/hooks/fire/useFireUserPositions';
 import { useWallet } from '@/context/WalletContext';
 import { useEnrichedWalletData } from '@/hooks/useEnrichedWalletData';
 import { getConfig } from '@/utils/getConfig';
-import { useDemoGate } from '@/hooks/useDemoGate';
+import { useVaultDemoGate } from '@/hooks/useVaultDemoGate';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useFeeRate } from '@/hooks/useFeeRate';
 import type { FeeSelection } from '@/hooks/useFeeRate';
@@ -31,7 +31,7 @@ interface FireStakingPanelProps {
 export default function FireStakingPanel({ vaultDetailsSlot }: FireStakingPanelProps) {
   const { t } = useTranslation();
   const { isConnected, network } = useWallet();
-  const isDemoGated = useDemoGate();
+  const isDemoGated = useVaultDemoGate();
   const { data: stakingStats } = useFireStakingStats();
   const stakeMutation = useFireStakeMutation();
   const unstakeMutation = useFireUnstakeMutation();

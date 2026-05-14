@@ -4,7 +4,7 @@ import { useState, useRef } from 'react';
 import { useFireDistributor } from '@/hooks/fire/useFireDistributor';
 import { useWallet } from '@/context/WalletContext';
 import TokenIcon from '@/app/components/TokenIcon';
-import { useDemoGate } from '@/hooks/useDemoGate';
+import { useVaultDemoGate } from '@/hooks/useVaultDemoGate';
 import { useTranslation } from '@/hooks/useTranslation';
 import BigNumber from 'bignumber.js';
 
@@ -18,7 +18,7 @@ const PHASE_KEYS = [
 export default function FireDistributionPanel() {
   const { t } = useTranslation();
   const { isConnected, network } = useWallet();
-  const isDemoGated = useDemoGate();
+  const isDemoGated = useVaultDemoGate();
   const { data: distributor } = useFireDistributor();
 
   const contributeRef = useRef<HTMLInputElement>(null);

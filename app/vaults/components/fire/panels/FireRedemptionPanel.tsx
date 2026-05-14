@@ -6,14 +6,14 @@ import { useFireRedemption } from '@/hooks/fire/useFireRedemption';
 import { useFireTokenStats } from '@/hooks/fire/useFireTokenStats';
 import { useFireTreasury } from '@/hooks/fire/useFireTreasury';
 import { useWallet } from '@/context/WalletContext';
-import { useDemoGate } from '@/hooks/useDemoGate';
+import { useVaultDemoGate } from '@/hooks/useVaultDemoGate';
 import { useTranslation } from '@/hooks/useTranslation';
 import BigNumber from 'bignumber.js';
 
 export default function FireRedemptionPanel() {
   const { t } = useTranslation();
   const { isConnected } = useWallet();
-  const isDemoGated = useDemoGate();
+  const isDemoGated = useVaultDemoGate();
   const { data: redemption } = useFireRedemption();
   const { data: tokenStats } = useFireTokenStats();
   const { data: treasury } = useFireTreasury();
