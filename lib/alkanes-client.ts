@@ -559,54 +559,33 @@ class AlkanesClient {
   // ==========================================================================
 
   async getPoolReserves(pool: PoolConfig, _blockTag: string = 'latest'): Promise<PoolReserves | null> {
+    // Canonical source: SDK dataApi.getReserves (single REST call).
+    //
+    // Caller is `pool-service.ts::getPoolReserves` on the markets-display
+    // path (cached, allowed to be stale per Rule SoT-2). For
+    // slippage-critical reserves the swap-quote path uses
+    // `alkanes_simulate` opcode 97/999 via `lib/alkanes/poolState.ts` —
+    // this method is NOT on that path.
+    //
+    // No REST fallback to /get-pool-details — the deprecated direct-REST
+    // path was a stale infra artifact (2026-05-10). On SDK failure we
+    // return null so the caller's cache-or-skip flow handles it.
     try {
       const provider = await this.ensureProvider();
-
-      // Method 1: dataApi.getReserves — single REST call (preferred)
-      try {
-        const result = await provider.dataApi.getReserves(pool.id);
-        if (result) {
-          const data = typeof result === 'string' ? JSON.parse(result) : result;
-          const r0 = data?.reserve0 ?? data?.token0_amount ?? data?.data?.token0_amount;
-          const r1 = data?.reserve1 ?? data?.token1_amount ?? data?.data?.token1_amount;
-          const ts = data?.totalSupply ?? data?.token_supply ?? data?.data?.token_supply;
-          if (r0 !== undefined && r1 !== undefined) {
-            return {
-              reserve0: BigInt(String(r0 || '0')),
-              reserve1: BigInt(String(r1 || '0')),
-              totalSupply: BigInt(String(ts || '0')),
-            };
-          }
+      const result = await provider.dataApi.getReserves(pool.id);
+      if (result) {
+        const data = typeof result === 'string' ? JSON.parse(result) : result;
+        const r0 = data?.reserve0 ?? data?.token0_amount ?? data?.data?.token0_amount;
+        const r1 = data?.reserve1 ?? data?.token1_amount ?? data?.data?.token1_amount;
+        const ts = data?.totalSupply ?? data?.token_supply ?? data?.data?.token_supply;
+        if (r0 !== undefined && r1 !== undefined) {
+          return {
+            reserve0: BigInt(String(r0 || '0')),
+            reserve1: BigInt(String(r1 || '0')),
+            totalSupply: BigInt(String(ts || '0')),
+          };
         }
-      } catch {
-        // fall through to direct REST
       }
-
-      // Method 2: Direct REST to /get-pool-details (fallback)
-      // JOURNAL ENTRY (2026-02-11): Kept as fallback. SDK dataApi.getReserves is preferred.
-      const baseUrl = this.networkConfig.url;
-      const response = await fetch(`${baseUrl}/get-pool-details`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          poolId: {
-            block: String(pool.alkaneId.block),
-            tx: String(pool.alkaneId.tx),
-          },
-        }),
-      });
-      const result = await response.json();
-
-      if (result?.statusCode === 200 && result?.data) {
-        const data = result.data;
-        return {
-          reserve0: BigInt(data.token0_amount || '0'),
-          reserve1: BigInt(data.token1_amount || '0'),
-          totalSupply: BigInt(data.token_supply || '0'),
-        };
-      }
-
-      console.warn(`[AlkanesClient] Unexpected pool details response for ${pool.id}:`, JSON.stringify(result));
       return null;
     } catch (error) {
       console.error(`[AlkanesClient] Error fetching pool reserves for ${pool.id}:`, error);
