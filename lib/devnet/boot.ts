@@ -360,6 +360,7 @@ export async function bootDevnetWithWasms(
   } else {
     contracts = await deployFullProtocol(
       _provider, _harness, segwitAddress, taprootAddress, onProgress,
+      /* ammOnly= */ true,
     );
   }
 
@@ -995,6 +996,7 @@ async function deployFullProtocol(
   segwit: string,
   taproot: string,
   onProgress: ProgressCallback,
+  ammOnly = false,
 ): Promise<DeployedContracts> {
   const S = PROTOCOL_SLOTS;
   const contracts = getDefaultContractIds();
@@ -1131,6 +1133,16 @@ async function deployFullProtocol(
   }
   contracts.ammPoolId = poolId;
   const [poolBlock, poolTx] = poolId ? poolId.split(':').map(Number) : [2, 0];
+
+  // -----------------------------------------------------------------------
+  // AMM-only mode: skip all phases beyond 2 (CLOB, FIRE, Fujin, Bridge,
+  // Synth, Vaults, seeding). This cuts boot time from ~5 min to ~45 sec.
+  // -----------------------------------------------------------------------
+  if (ammOnly) {
+    onProgress('AMM devnet ready!', 100);
+    console.log('[devnet-boot] ammOnly=true — skipping phases 3–10');
+    return contracts;
+  }
 
   // -----------------------------------------------------------------------
   // Phase 3a: Carbine CLOB — deployed early so logs are visible before

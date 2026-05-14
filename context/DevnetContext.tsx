@@ -522,7 +522,15 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
       if (!providerRef.current || !harnessRef.current) throw new Error('Devnet not ready');
       const boot = getBootAddresses();
       console.log('[devnet] faucetDiesel: address=', address, 'boot.taproot=', boot.taproot);
-      harnessRef.current.mineBlocks(1);
+      // Mine a coinbase block directly to boot.taproot so it always has a
+      // fresh spendable UTXO for fees. Plain mineBlocks() pays the internal
+      // harness miner, not boot.taproot — after many faucet calls the taproot
+      // address can run out of BTC causing "Insufficient funds".
+      const coinbaseResult = JSON.parse(harnessRef.current.server.handleRpc(JSON.stringify({
+        jsonrpc: '2.0', method: 'generatetoaddress', params: [1, boot.taproot], id: 1,
+      })));
+      if (coinbaseResult.error) console.warn('[devnet] faucetDiesel: coinbase to boot.taproot failed:', coinbaseResult.error);
+      harnessRef.current.mineBlocks(1); // index the coinbase block
       await new Promise(r => setTimeout(r, 50));
       // Use taproot-only from_addresses with protect_taproot:false.
       // After a full boot the segwit address has 300+ UTXOs — the SDK's PSBT
@@ -566,7 +574,12 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
       if (!providerRef.current || !harnessRef.current) throw new Error('Devnet not ready');
       // Mint FUEL via opcode 77 on FUEL token [4:7000], funded by boot wallet
       const boot = getBootAddresses();
-      harnessRef.current.mineBlocks(1);
+      // Mine coinbase to boot.taproot so it always has a fresh spendable UTXO.
+      const coinbaseResult = JSON.parse(harnessRef.current.server.handleRpc(JSON.stringify({
+        jsonrpc: '2.0', method: 'generatetoaddress', params: [1, boot.taproot], id: 1,
+      })));
+      if (coinbaseResult.error) console.warn('[devnet] faucetFuel: coinbase to boot.taproot failed:', coinbaseResult.error);
+      harnessRef.current.mineBlocks(1); // index the coinbase block
       await new Promise(r => setTimeout(r, 50));
       await providerRef.current.alkanesExecuteFull(
         JSON.stringify([address]),
