@@ -3,14 +3,12 @@
 import AlkanesMainWrapper from '@/app/components/AlkanesMainWrapper';
 import PageHeader from '@/app/components/PageHeader';
 import { useTranslation } from '@/hooks/useTranslation';
-import { useVaultDemoGate } from '@/hooks/useVaultDemoGate';
 
 export default function VaultsPageHeader({ children }: { children: React.ReactNode }) {
   const { t } = useTranslation();
-  const isDemoGated = useVaultDemoGate();
 
   return (
-    <AlkanesMainWrapper header={<PageHeader title={<>{t('vaults.title')}{isDemoGated && <span className="block text-lg font-semibold text-[color:var(--sf-text)]/60">{t('vaults.comingSoon')}</span>}</>} />}>
+    <AlkanesMainWrapper header={<PageHeader title={t('vaults.title')} />}>
       {children}
     </AlkanesMainWrapper>
   );

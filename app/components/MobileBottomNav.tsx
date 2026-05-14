@@ -14,11 +14,9 @@ export default function MobileBottomNav() {
   const navItems: Array<{ href: string; label: string; icon: LucideIcon }> = [
     { href: '/', label: t('nav.home'), icon: Home },
     { href: '/swap', label: t('nav.swap'), icon: ArrowLeftRight },
+    { href: '/vaults', label: t('nav.vaults'), icon: Vault },
     ...(!isDemoGated
-      ? [
-          { href: '/vaults', label: t('nav.vaults'), icon: Vault },
-          { href: '/futures', label: t('nav.futures'), icon: TrendingUp },
-        ]
+      ? [{ href: '/futures', label: t('nav.futures'), icon: TrendingUp }]
       : []),
   ];
 
