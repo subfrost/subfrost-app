@@ -459,8 +459,6 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
     },
     faucetBtc: async (address: string, sats: number) => {
       if (!harnessRef.current) throw new Error('Devnet not ready');
-      // With devnet mapped to regtest in WalletContext, the address should already be bcrt1.
-      // If it's still bc1 (mainnet), convert it.
       let devnetAddr = address;
       if (address.startsWith('bc1') && !address.startsWith('bcrt1')) {
         try {
@@ -472,11 +470,8 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
           console.warn('[devnet] Address conversion failed, using raw:', e?.message);
         }
       }
-      // Use generatetoaddress RPC — mines a block with coinbase paying to the user's address.
-      // JOURNAL (2026-04-02): generatetoaddress via handleRpc advances bitcoind WITHOUT
-      // running the metashrew indexer, creating a 1-block gap. Fix: immediately call
-      // mineBlocks(1) after generatetoaddress so metashrew catches up through that block
-      // before the 100 maturity blocks are mined.
+      // generatetoaddress mines coinbase to user's address (no mature UTXOs needed
+      // for display — the enriched balance path is not used in ammOnly devnet).
       const result = harnessRef.current.server.handleRpc(JSON.stringify({
         jsonrpc: '2.0',
         method: 'generatetoaddress',
@@ -487,19 +482,17 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
       if (parsed.error) {
         console.warn('[devnet] generatetoaddress error:', parsed.error, 'addr:', devnetAddr);
       }
-      // Immediately index the generatetoaddress block through metashrew by mining one more
-      // block via the harness (which runs the indexer sequentially from last_indexed_height).
+      // Index the coinbase block through metashrew.
       harnessRef.current.mineBlocks(1);
-      // CRITICAL: Coinbase outputs require 100 confirmations before they're spendable.
-      // Without these extra blocks, the BTC appears in the UTXO set but lua_evalsaved
-      // (getEnrichedBalances) filters it as immature, so the UI shows 0 BTC.
-      // Mine in batches of 25 with yields to prevent OOM (same pattern as boot).
-      for (let b = 0; b < 4; b++) {
-        harnessRef.current.mineBlocks(25);
+      // Mine maturity blocks in small batches with async yields to prevent OOM.
+      // 100 blocks required for coinbase spendability. Batch size 10 (vs 25) to
+      // stay well under WASM memory limits after quspo was added pre-Phase2.
+      for (let b = 0; b < 10; b++) {
+        harnessRef.current.mineBlocks(10);
         await new Promise(r => setTimeout(r, 0));
       }
       await new Promise(r => setTimeout(r, 50));
-      console.log('[devnet] BTC faucet: mined block with coinbase to', devnetAddr, '(+100 maturity blocks)');
+      console.log('[devnet] BTC faucet: mined coinbase to', devnetAddr, '(+100 maturity blocks)');
       setState(prev => ({ ...prev, chainHeight: harnessRef.current.height }));
       debounceSave();
     },

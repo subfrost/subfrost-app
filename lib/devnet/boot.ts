@@ -361,17 +361,19 @@ export async function bootDevnetWithWasms(
     contracts = await deployFullProtocol(
       _provider, _harness, segwitAddress, taprootAddress, onProgress,
       /* ammOnly= */ true,
+      quspoWasm,
     );
   }
 
-  // Add quspo tertiary indexer AFTER deployments (or state restore).
-  // quspo processes the full chain on addTertiary, catching up instantly.
-  if (quspoWasm) {
+  // Add quspo tertiary indexer after state restore (fresh boot adds it inside deployFullProtocol).
+  // On savedState restore, contracts were already deployed — add quspo now so the UI can
+  // discover pool UTXOs and alkane balances.
+  if (savedState && quspoWasm) {
     onProgress('Loading quspo indexer...', 98);
     try {
       _harness.server.addTertiary('quspo', quspoWasm);
       _harness.mineBlocks(1);
-      console.log('[devnet-boot] quspo tertiary indexer added');
+      console.log('[devnet-boot] quspo tertiary indexer added (state-restore path)');
     } catch (e: any) {
       console.warn('[devnet-boot] Failed to add quspo (non-fatal):', e?.message || e);
     }
@@ -997,6 +999,7 @@ async function deployFullProtocol(
   taproot: string,
   onProgress: ProgressCallback,
   ammOnly = false,
+  quspoWasm?: Uint8Array,
 ): Promise<DeployedContracts> {
   const S = PROTOCOL_SLOTS;
   const contracts = getDefaultContractIds();
@@ -1057,6 +1060,25 @@ async function deployFullProtocol(
 
   const factoryId = `4:${AMM_SLOTS.FACTORY_PROXY}`;
   contracts.ammFactoryId = factoryId;
+
+  // -----------------------------------------------------------------------
+  // Add quspo BEFORE Phase 2 so the SDK's alkane UTXO selector can find
+  // the DIESEL/frBTC dust UTXOs when building the CreateNewPool transaction.
+  // Without quspo, `get_address_outpoints` returns empty → SDK reports
+  // "Insufficient alkanes: have 0" even though the tokens exist on-chain.
+  // We add it here (after Phase 1 deploys) rather than at boot start to
+  // avoid quspo adding per-block overhead during the 6 deploy transactions.
+  // -----------------------------------------------------------------------
+  if (quspoWasm) {
+    try {
+      harness.server.addTertiary('quspo', quspoWasm);
+      harness.mineBlocks(1);
+      await new Promise(r => setTimeout(r, 200));
+      console.log('[devnet-boot] quspo tertiary indexer added (pre-Phase2)');
+    } catch (e: any) {
+      console.warn('[devnet-boot] Failed to add quspo before Phase 2 (non-fatal):', e?.message || e);
+    }
+  }
 
   // -----------------------------------------------------------------------
   // Phase 2: Mint DIESEL + wrap frBTC + create AMM pool
