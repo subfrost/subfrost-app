@@ -520,7 +520,6 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
     // processing all skipped blocks before adding the new ones. Gap = 0 after call.
     faucetDiesel: async (address: string) => {
       if (!providerRef.current || !harnessRef.current) throw new Error('Devnet not ready');
-      // Use boot wallet to fund the tx, output DIESEL to user's address
       const boot = getBootAddresses();
       harnessRef.current.mineBlocks(1);
       await new Promise(r => setTimeout(r, 50));
@@ -536,10 +535,16 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
           mine_enabled: true,
         }),
       );
-      // mineBlocks(2): catches up metashrew through the 2 generatetoaddress blocks
-      // (commit+reveal) that mine_enabled:true created. Without this, subsequent
-      // alkanesExecuteTyped calls fail with "Indexer sync timed out".
-      harnessRef.current.mineBlocks(2);
+      // mine_enabled:true uses generatetoaddress internally (commit+reveal = 2 blocks)
+      // which advances bitcoind WITHOUT running the harness indexer, leaving a 2-block
+      // gap. We mine 3 extra blocks with yields so the harness processes all skipped
+      // blocks sequentially from last_indexed_height through the new tip.
+      await new Promise(r => setTimeout(r, 100));
+      harnessRef.current.mineBlocks(1);
+      await new Promise(r => setTimeout(r, 50));
+      harnessRef.current.mineBlocks(1);
+      await new Promise(r => setTimeout(r, 50));
+      harnessRef.current.mineBlocks(1);
       console.log('[devnet] DIESEL minted to', address);
       setState(prev => ({ ...prev, chainHeight: harnessRef.current.height }));
       debounceSave();
@@ -562,8 +567,12 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
           mine_enabled: true,
         }),
       );
-      // mineBlocks(2): same generatetoaddress desync fix as faucetDiesel above
-      harnessRef.current.mineBlocks(2);
+      await new Promise(r => setTimeout(r, 100));
+      harnessRef.current.mineBlocks(1);
+      await new Promise(r => setTimeout(r, 50));
+      harnessRef.current.mineBlocks(1);
+      await new Promise(r => setTimeout(r, 50));
+      harnessRef.current.mineBlocks(1);
       console.log('[devnet] FUEL minted to', address);
       setState(prev => ({ ...prev, chainHeight: harnessRef.current.height }));
       debounceSave();
@@ -624,10 +633,12 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
           mine_enabled: true,
         }),
       );
-      // mineBlocks(2): same generatetoaddress desync fix — mine_enabled:true creates
-      // 2 unindexed blocks (commit+reveal via generatetoaddress). mineBlocks(2) runs
-      // the indexer from last_indexed_height, catching up through all skipped blocks.
-      harnessRef.current.mineBlocks(2);
+      await new Promise(r => setTimeout(r, 100));
+      harnessRef.current.mineBlocks(1);
+      await new Promise(r => setTimeout(r, 50));
+      harnessRef.current.mineBlocks(1);
+      await new Promise(r => setTimeout(r, 50));
+      harnessRef.current.mineBlocks(1);
       console.log('[devnet] frBTC wrapped to', address);
       setState(prev => ({ ...prev, chainHeight: harnessRef.current.height }));
       debounceSave();
