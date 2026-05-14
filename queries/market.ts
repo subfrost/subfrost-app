@@ -9,7 +9,6 @@ import { queryOptions } from '@tanstack/react-query';
 import { queryKeys } from './keys';
 import { FRBTC_WRAP_FEE_PER_1000, FRBTC_UNWRAP_FEE_PER_1000 } from '@/constants/alkanes';
 import { encodeSimulateCalldata } from '@/utils/simulateCalldata';
-import { getBitcoinPrice as rpcGetBitcoinPrice } from '@/lib/alkanes/rpc';
 import { getAlkanesDataSource } from '@/lib/alkanes/dataSource';
 // Pricing data is global — always use mainnet subpricer regardless of connected network
 const SUBPRICER_BASE = 'https://mainnet.subfrost.io/v4/subfrost';
@@ -84,7 +83,14 @@ export function btcPriceQueryOptions(
     staleTime: Infinity,
     refetchOnWindowFocus: false,
     queryFn: async () => {
-      // Primary: subpricer — protocol-canonical price.
+      // Canonical source: subpricer (protocol price endpoint, mainnet
+      // global — always queried regardless of connected network).
+      //
+      // No fallback chain (rpc.ts /api/btc-price and CoinGecko removed
+      // 2026-05-14 per the no-fallbacks campaign). If subpricer is
+      // unreachable we return 0; downstream USD display renders "—"
+      // and TVL math safely no-ops rather than showing a stale or
+      // mismatched price from a different aggregator.
       try {
         const resp = await fetch(`${SUBPRICER_BASE}/api/v1/bitcoin-price`, {
           signal: AbortSignal.timeout(5000),
@@ -94,32 +100,7 @@ export function btcPriceQueryOptions(
           const price = data?.usd ?? data?.price ?? 0;
           if (price > 0) return price;
         }
-      } catch { /* fall through to rpc.ts */ }
-
-      // Fallback 1: SDK-mediated rpc.ts layer (Next.js /api/btc-price).
-      try {
-        const data = await rpcGetBitcoinPrice(AbortSignal.timeout(5000));
-        const price = (data as { usd?: number; price?: number })?.usd
-          ?? (data as { price?: number })?.price
-          ?? (typeof data === 'number' ? data : 0);
-        if (price > 0) return price;
-      } catch { /* fall through to coingecko */ }
-
-      // Fallback 2: coingecko public API (last resort).
-      try {
-        const resp = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd', {
-          signal: AbortSignal.timeout(5000),
-        });
-        if (resp.ok) {
-          const data = await resp.json();
-          const price = data?.bitcoin?.usd ?? 0;
-          if (price > 0) return price;
-        }
-      } catch { /* fall through */ }
-
-      // No source returned a price. Surface this honestly rather than
-      // returning a hardcoded 90000 — display "—" is better than a wrong
-      // number that triggers wrong USD math everywhere downstream.
+      } catch { /* subpricer down — return 0 below */ }
       return 0;
     },
   });
