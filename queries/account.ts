@@ -342,13 +342,17 @@ export async function fetchAlkaneBalancesViaProtobuf(
     return [];
   }
 
-  // Step 2: Promise.all alkanes_protorunesbyoutpoint per dust UTXO.
+  // Step 2: Promise.all alkanes_protorunesbyoutpoint per UTXO.
   //
-  // Alkane tokens live on dust outputs (~546-600 sats). Filtering to ≤1000
-  // sats keeps the fan-out small. The indexer answers each outpoint query
-  // independently, so parallelism is safe and bounded by the number of
-  // dust UTXOs at the address (typically <30 for active wallets).
-  const dustUtxos = utxos.filter((u) => u.value <= 1000);
+  // On mainnet/regtest, alkane tokens live on dust outputs (~546-600 sats).
+  // Filtering to ≤1000 sats keeps the fan-out small for live networks.
+  //
+  // On devnet, the in-process DIESEL mint (opcode 77) creates 10000-sat
+  // outputs — not dust. The dust filter silently drops these and the balance
+  // always shows 0. Since devnet uses a synchronous in-process indexer with
+  // no phantom-balance risk, fan out to ALL confirmed UTXOs instead.
+  const isDevnet = network === 'devnet';
+  const dustUtxos = isDevnet ? utxos : utxos.filter((u) => u.value <= 1000);
   if (dustUtxos.length === 0) return [];
 
   // Per-outpoint retry: a single transient timeout silently dropped tokens
