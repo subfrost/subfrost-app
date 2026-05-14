@@ -464,7 +464,7 @@ export default function AlkanesBalancesCard({
 
         return filtered.length > 0 ? (
           alkaneFilter === 'nfts' ? (
-          <div className="grid grid-cols-4 lg:grid-cols-3 xl:grid-cols-4 gap-3 overflow-y-auto flex-1 pr-1">
+          <div className="grid grid-cols-4 lg:grid-cols-4 xl:grid-cols-4 gap-3 overflow-y-auto flex-1 pr-1">
             {filtered.map((alkane) => {
               const isExpanded = expandedAlkaneId === alkane.alkaneId;
               return (

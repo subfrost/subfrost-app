@@ -240,9 +240,6 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
                       </>
                     )}
                     {sellId === 'btc' && (buyId === 'frbtc' || buyId === FRBTC_ALKANE_ID) && t('swapSummary.wrapNote')}
-                    {sellId === 'btc' && buyId !== 'frbtc' && buyId !== FRBTC_ALKANE_ID && t('swapSummary.wrapSwapNote')}
-                    {buyId === 'btc' && (sellId === 'frbtc' || sellId === FRBTC_ALKANE_ID) && t('swapSummary.unwrapNote')}
-                    {buyId === 'btc' && sellId !== 'frbtc' && sellId !== FRBTC_ALKANE_ID && t('swapSummary.unwrapSwapNote')}
                     {quote?.hops === 2 && t('swapSummary.multiHopFeeNote')}
                   </span>
                 </div>
