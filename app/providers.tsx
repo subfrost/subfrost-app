@@ -37,32 +37,42 @@ function normalizeNetworkForDemo(network: Network): Network {
 // Detect network from storage, hostname, or env variable.
 // Devnet is stored in sessionStorage (tab-scoped) — survives in-tab navigation
 // but resets to mainnet on a new tab/page load. All other networks use localStorage.
+// The frontend can only operate on two networks: mainnet (the live
+// protocol) and devnet (in-browser stack). Stale legacy values like
+// `subfrost-regtest` / `signet` / `regtest-local` are no longer
+// accepted from storage — they would silently route to a backend
+// that's been retired (e.g. the 502'ing regtest.subfrost.io upstream).
+const ALLOWED_NETWORKS: ReadonlySet<Network> = new Set(['mainnet', 'devnet']);
+
 function detectNetwork(): Network {
   if (typeof window === 'undefined') return 'mainnet';
 
-  // Check sessionStorage first for devnet (tab-scoped, does not persist across tabs)
+  // Devnet is tab-scoped (sessionStorage) so it doesn't leak across tabs.
   if (!DEMO_MODE_ENABLED && sessionStorage.getItem(NETWORK_STORAGE_KEY) === 'devnet') {
     return 'devnet';
   }
 
-  // Restore other network selections from localStorage
+  // Restore network selection from localStorage. Only 'mainnet' is
+  // accepted here — devnet routes through sessionStorage above. Any
+  // legacy value (subfrost-regtest, signet, …) is treated as missing
+  // and falls through to the mainnet default.
   const stored = localStorage.getItem(NETWORK_STORAGE_KEY);
-  if (stored && ['mainnet', 'testnet', 'signet', 'regtest', 'regtest-local', 'qubitcoin-regtest', 'subfrost-regtest', 'oylnet'].includes(stored)) {
-    return normalizeNetworkForDemo(stored as Network);
+  if (stored === 'mainnet') {
+    return normalizeNetworkForDemo('mainnet');
+  }
+  // Stale legacy value — strip it so the next load is clean.
+  if (stored && !ALLOWED_NETWORKS.has(stored as Network)) {
+    localStorage.removeItem(NETWORK_STORAGE_KEY);
   }
 
-  // Then check hostname
-  const host = window.location.host;
-  if (!process.env.NEXT_PUBLIC_NETWORK) {
-    if (host.startsWith('signet.') || host.startsWith('staging-signet.')) {
-      return 'signet';
-    } else if (host.startsWith('regtest.') || host.startsWith('staging-regtest.')) {
-      return 'subfrost-regtest';
-    }
-    // Default to mainnet for all other cases (including localhost)
-    return 'mainnet';
+  // Optional explicit env override (CI, local dev). Anything other than
+  // an allowed value is ignored.
+  const envNet = process.env.NEXT_PUBLIC_NETWORK as Network | undefined;
+  if (envNet && ALLOWED_NETWORKS.has(envNet)) {
+    return normalizeNetworkForDemo(envNet);
   }
-  return normalizeNetworkForDemo(process.env.NEXT_PUBLIC_NETWORK as Network);
+
+  return 'mainnet';
 }
 
 export default function Providers({ children }: { children: ReactNode }) {
