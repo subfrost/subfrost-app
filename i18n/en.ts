@@ -858,7 +858,7 @@ const en: Record<string, string> = {
   'wallet.browserExtensionWallets': 'Browser Extension Wallets',
   'wallet.newPassword': 'New Password',
   'wallet.enterRecoveryPhrase': 'Enter your 12 or 24 word recovery phrase',
-  'wallet.runesInscriptionsWarning': 'This app does not support runes or inscriptions. Using a wallet that holds these assets may result in them being burned.',
+  'wallet.runesInscriptionsWarning': 'WARNING: This app does not support runes or inscriptions. Using a wallet that holds these assets WILL result in burning them.',
   'wallet.createPassword': 'Create a password',
   'wallet.restoring': 'Restoring...',
   'wallet.uploadKeystoreDesc': 'Upload a previously exported JSON keystore file to restore your wallet.',

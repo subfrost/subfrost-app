@@ -5,10 +5,12 @@ import { useRouter } from 'next/navigation';
 import { ChevronRight } from 'lucide-react';
 import { useTranslation } from '@/hooks/useTranslation';
 import { AVAILABLE_VAULTS } from '@/app/vaults/constants';
+import { useDemoGate } from '@/hooks/useDemoGate';
 
 export default function VaultTiles() {
   const { t } = useTranslation();
   const router = useRouter();
+  const isDemoGated = useDemoGate();
   const VAULT_NAME_KEYS: Record<string, string> = {
     'yv-frbtc': 'vault.yvfrbtc',
     've-diesel': 'vault.veDiesel',
@@ -17,6 +19,8 @@ export default function VaultTiles() {
     'dx-btc': 'vault.dxBtc',
   };
   const fireVault = AVAILABLE_VAULTS.find(v => v.id === 've-diesel');
+
+  if (isDemoGated) return null;
 
   return (
     <div className="sf-card h-full">

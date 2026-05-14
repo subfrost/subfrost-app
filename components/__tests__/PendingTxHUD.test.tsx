@@ -50,16 +50,12 @@ describe('PendingTxHUD source contract', () => {
 });
 
 describe('PendingTxHUD mount point', () => {
-  it('is mounted in providers.tsx inside WalletProvider', () => {
+  it('is not mounted in providers.tsx while the pending bubble is disabled', () => {
     const providers = fs.readFileSync(
       path.resolve(__dirname, '../../app/providers.tsx'),
       'utf-8',
     );
-    expect(providers).toMatch(/<PendingTxHUD\s*\/>/);
-    const providerIdx = providers.indexOf('<WalletProvider');
-    const hudIdx = providers.indexOf('<PendingTxHUD');
-    const closeIdx = providers.indexOf('</WalletProvider>');
-    expect(providerIdx).toBeLessThan(hudIdx);
-    expect(hudIdx).toBeLessThan(closeIdx);
+    expect(providers).not.toMatch(/<PendingTxHUD\s*\/>/);
+    expect(providers).not.toMatch(/from ['"]@\/components\/PendingTxHUD['"]/);
   });
 });
