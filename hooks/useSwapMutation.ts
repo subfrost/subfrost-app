@@ -166,7 +166,7 @@ import * as bitcoin from 'bitcoinjs-lib';
 import * as ecc from '@bitcoinerlab/secp256k1';
 // NOTE: Only patching INPUTS (witnessUtxo + redeemScript), NOT outputs
 // Output patching was removed - see comment at line 442 for why
-import { patchInputsOnly } from '@/lib/psbt-patching';
+import { patchInputsOnly, patchTapInternalKeys } from '@/lib/psbt-patching';
 import { buildSwapProtostone, buildSwapExactOutputProtostone, buildSwapInputRequirements, buildRouterSwapProtostone } from '@/lib/alkanes/builders';
 import { FACTORY_SWAP_OPCODE } from '@/lib/alkanes/constants';
 import { uint8ArrayToBase64, getBitcoinNetwork, extractPsbtBase64 } from '@/lib/alkanes/helpers';
@@ -495,6 +495,25 @@ export function useSwapMutation() {
               paymentPubkeyHex: account?.nativeSegwit?.pubkey,
             });
             psbtBase64 = patchResult.psbtBase64;
+          } else if (walletType === 'keystore' && taprootAddress) {
+            // Keystore CPFP path: SDK returns unsigned PSBT with dummy wallet
+            // scripts. patchInputsOnly rewrites witnessUtxo.script to the user's
+            // real P2TR address; patchTapInternalKeys replaces the dummy
+            // tapInternalKey so BIP-341 signInput key-path check passes.
+            const patchResult = patchInputsOnly({
+              psbtBase64,
+              network: btcNetwork,
+              taprootAddress,
+              segwitAddress,
+              paymentPubkeyHex: account?.nativeSegwit?.pubkey,
+            });
+            psbtBase64 = patchResult.psbtBase64;
+            const taprootPubkeyHex = account?.taproot?.pubkey;
+            if (taprootPubkeyHex) {
+              const psbt = bitcoin.Psbt.fromBase64(psbtBase64, { network: btcNetwork });
+              patchTapInternalKeys(psbt, taprootPubkeyHex);
+              psbtBase64 = psbt.toBase64();
+            }
           }
 
           const signedPsbtBase64 = await signTaprootPsbt(psbtBase64);
@@ -678,6 +697,26 @@ export function useSwapMutation() {
             });
             finalPsbtBase64 = result.psbtBase64;
             if (result.inputsPatched > 0) {
+            }
+          } else if (walletType === 'keystore' && taprootAddress) {
+            // Keystore single-tx readyToSign path: same as above.
+            // SDK PSBT carries the dummy wallet's witnessUtxo.script and
+            // tapInternalKey. Without patching both, signInput's BIP-341
+            // key-path check fails silently (tapKeySig never written) and
+            // finalizeAllInputs throws "Can not finalize taproot input 0".
+            const patchResult = patchInputsOnly({
+              psbtBase64,
+              network: btcNetwork,
+              taprootAddress,
+              segwitAddress,
+              paymentPubkeyHex: account?.nativeSegwit?.pubkey,
+            });
+            finalPsbtBase64 = patchResult.psbtBase64;
+            const taprootPubkeyHex = account?.taproot?.pubkey;
+            if (taprootPubkeyHex) {
+              const psbt = bitcoin.Psbt.fromBase64(finalPsbtBase64, { network: btcNetwork });
+              patchTapInternalKeys(psbt, taprootPubkeyHex);
+              finalPsbtBase64 = psbt.toBase64();
             }
           }
 
