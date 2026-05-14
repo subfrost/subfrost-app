@@ -1101,35 +1101,54 @@ async function deployFullProtocol(
 
   // Create AMM pool
   onProgress('Creating AMM pool...', 44);
-  const dieselBal = await getAlkaneBalance(provider, taproot, '2:0');
-  const frbtcBal = await getAlkaneBalance(provider, taproot, '32:0');
-  console.log('[devnet-boot] DIESEL:', dieselBal.toString(), 'frBTC:', frbtcBal.toString());
+  // Check both taproot and segwit — alkane change can land at either address
+  // depending on which UTXOs the SDK selected. protorunesbyaddress has known
+  // phantom-balance issues so we sum from both addresses defensively.
+  const dieselBalTaproot = await getAlkaneBalance(provider, taproot, '2:0');
+  const dieselBalSegwit = await getAlkaneBalance(provider, segwit, '2:0');
+  const frbtcBalTaproot = await getAlkaneBalance(provider, taproot, '32:0');
+  const frbtcBalSegwit = await getAlkaneBalance(provider, segwit, '32:0');
+  const dieselBal = dieselBalTaproot + dieselBalSegwit;
+  const frbtcBal = frbtcBalTaproot + frbtcBalSegwit;
+  console.log('[devnet-boot] DIESEL taproot:', dieselBalTaproot.toString(), 'segwit:', dieselBalSegwit.toString(), 'total:', dieselBal.toString());
+  console.log('[devnet-boot] frBTC taproot:', frbtcBalTaproot.toString(), 'segwit:', frbtcBalSegwit.toString(), 'total:', frbtcBal.toString());
+
+  // Fallback: if balance query returns 0 (protorunesbyaddress phantom issue),
+  // use conservative fixed amounts. 3x mints of 10000 DIESEL = 30000 total;
+  // wrap of 1000000 sats frBTC should yield ~1000000 units.
+  const effectiveDiesel = dieselBal > BigInt(0) ? dieselBal : BigInt(10000);
+  const effectiveFrbtc = frbtcBal > BigInt(0) ? frbtcBal : BigInt(500000);
+  if (dieselBal === BigInt(0) || frbtcBal === BigInt(0)) {
+    console.warn('[devnet-boot] Balance query returned 0 — using fallback amounts for pool creation. diesel=', effectiveDiesel.toString(), 'frbtc=', effectiveFrbtc.toString());
+  }
 
   let poolId = '';
-  if (dieselBal > BigInt(0) && frbtcBal > BigInt(0)) {
-    const dieselAmount = dieselBal / BigInt(3);
-    const frbtcAmount = frbtcBal / BigInt(2);
-    const [fBlock, fTx] = factoryId.split(':');
-    await executeCall(provider, harness, segwit, taproot,
-      `[${fBlock},${fTx},1,2,0,32,0,${dieselAmount},${frbtcAmount}]:v0:v0`,
-      `2:0:${dieselAmount},32:0:${frbtcAmount}`);
-    harness.mineBlocks(1);
-    await new Promise(r => setTimeout(r, 50));
+  const dieselAmount = effectiveDiesel / BigInt(3);
+  const frbtcAmount = effectiveFrbtc / BigInt(2);
+  const [fBlock, fTx] = factoryId.split(':');
+  console.log('[devnet-boot] Creating pool with DIESEL:', dieselAmount.toString(), 'frBTC:', frbtcAmount.toString());
+  await executeCall(provider, harness, segwit, taproot,
+    `[${fBlock},${fTx},1,2,0,32,0,${dieselAmount},${frbtcAmount}]:v0:v0`,
+    `2:0:${dieselAmount},32:0:${frbtcAmount}`);
+  harness.mineBlocks(1);
+  await new Promise(r => setTimeout(r, 50));
 
-    try {
-      const findPool = await simulate(factoryId, ['2', '2', '0', '32', '0']);
-      const poolData = findPool?.result?.execution?.data?.replace('0x', '') || '';
-      if (poolData.length >= 64) {
-        // Parse two u128 LE values (pool block and tx) from hex.
-        // Browser Buffer polyfill may not support readBigUInt64LE, so parse manually.
-        const poolBlock128 = parseLeU128FromHex(poolData, 0);
-        const poolTx128 = parseLeU128FromHex(poolData, 16);
-        poolId = `${poolBlock128}:${poolTx128}`;
-        console.log('[devnet-boot] AMM pool created:', poolId);
-      }
-    } catch (e: any) {
-      console.warn('[devnet-boot] Pool discovery failed:', e?.message);
+  try {
+    const findPool = await simulate(factoryId, ['2', '2', '0', '32', '0']);
+    const poolData = findPool?.result?.execution?.data?.replace('0x', '') || '';
+    console.log('[devnet-boot] FindPool response data length:', poolData.length, 'raw:', poolData.slice(0, 64));
+    if (poolData.length >= 64) {
+      // Parse two u128 LE values (pool block and tx) from hex.
+      // Browser Buffer polyfill may not support readBigUInt64LE, so parse manually.
+      const poolBlock128 = parseLeU128FromHex(poolData, 0);
+      const poolTx128 = parseLeU128FromHex(poolData, 16);
+      poolId = `${poolBlock128}:${poolTx128}`;
+      console.log('[devnet-boot] AMM pool created:', poolId);
+    } else {
+      console.warn('[devnet-boot] Pool creation may have failed — FindPool returned empty data. Check executeCall error above.');
     }
+  } catch (e: any) {
+    console.warn('[devnet-boot] Pool discovery failed:', e?.message);
   }
   contracts.ammPoolId = poolId;
   const [poolBlock, poolTx] = poolId ? poolId.split(':').map(Number) : [2, 0];

@@ -567,6 +567,16 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
       await new Promise(r => setTimeout(r, 50));
       harnessRef.current.mineBlocks(1);
       console.log('[devnet] DIESEL minted to', address, '(height:', harnessRef.current.height, ')');
+      // Diagnostic: confirm DIESEL landed at the target address
+      try {
+        const utxoCheck = JSON.parse(harnessRef.current.server.handleRpc(JSON.stringify({
+          jsonrpc: '2.0', method: 'esplora_address::utxo', params: [address], id: 99,
+        })));
+        const dustUtxos = (utxoCheck?.result || []).filter((u: any) => u.value <= 1000);
+        console.log('[devnet] faucetDiesel: UTXOs at address after mint:', (utxoCheck?.result || []).length, 'total,', dustUtxos.length, 'dust');
+      } catch (diagErr: any) {
+        console.warn('[devnet] faucetDiesel: UTXO diagnostic failed:', diagErr?.message);
+      }
       setState(prev => ({ ...prev, chainHeight: harnessRef.current.height }));
       debounceSave();
     },

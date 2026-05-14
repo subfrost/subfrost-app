@@ -897,7 +897,7 @@ export function usePools(params: UsePoolsParams = {}) {
       // the curated/on-chain fallback paths where reserves come from
       // opcode-999 directly and pricing isn't joined yet. Filtering those
       // out would silently nuke the curated set whenever espo is empty.
-      if (!network?.includes('regtest') && network !== 'devnet') {
+      if (!network?.includes('regtest')) {
         const MIN_TVL_USD = 5;
         items = items.filter(p => p.tvlUsd === undefined || p.tvlUsd >= MIN_TVL_USD);
       }
