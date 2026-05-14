@@ -363,31 +363,27 @@ export async function broadcastTransaction(
 }
 
 /**
- * Broadcast a signed transaction package in order. Used for CPFP split flows
- * where the parent may not be accepted by mempool policy without its child.
+ * Broadcast a signed transaction package atomically via `submitpackage`.
+ *
+ * This is the ONLY supported atomic-package broadcast path. There is no
+ * fallback to back-to-back `sendrawtransaction` calls — that would break
+ * the CPFP parent+child atomicity guarantee that the ephemeral wrap-package
+ * (`useEphemeralWrapPackage`) depends on. If the upstream node doesn't
+ * implement `submitpackage` (-32601), the caller MUST surface the failure
+ * loudly so we don't silently regress to the 2026-05-10 RBF-rejection
+ * regime.
  */
 export async function broadcastTransactions(
   network: string,
   txHexes: string[],
   signal?: AbortSignal,
 ): Promise<string[]> {
-  let result: unknown;
-  try {
-    result = await jsonRpcCall<unknown>(
-      subfrostRpcUrl(network),
-      'submitpackage',
-      [txHexes],
-      signal,
-    );
-  } catch (error) {
-    if (!(error instanceof JsonRpcError) || error.code !== -32601) {
-      throw error;
-    }
-
-    result = await Promise.all(
-      txHexes.map((txHex) => broadcastTransaction(network, txHex, signal)),
-    );
-  }
+  const result = await jsonRpcCall<unknown>(
+    subfrostRpcUrl(network),
+    'submitpackage',
+    [txHexes],
+    signal,
+  );
 
   if (Array.isArray(result)) {
     return result.map(String);
