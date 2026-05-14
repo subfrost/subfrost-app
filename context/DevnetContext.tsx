@@ -521,24 +521,33 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
     faucetDiesel: async (address: string) => {
       if (!providerRef.current || !harnessRef.current) throw new Error('Devnet not ready');
       const boot = getBootAddresses();
+      console.log('[devnet] faucetDiesel: address=', address, 'boot.taproot=', boot.taproot);
       harnessRef.current.mineBlocks(1);
       await new Promise(r => setTimeout(r, 50));
       // Use taproot-only from_addresses with protect_taproot:false.
       // After a full boot the segwit address has 300+ UTXOs — the SDK's PSBT
       // builder is O(n²) and hangs indefinitely when both addresses are passed.
-      await providerRef.current.alkanesExecuteFull(
-        JSON.stringify([address]),
-        'B:10000:v0',
-        '[2,0,77]:v0:v0',
-        '1', null,
-        JSON.stringify({
-          from_addresses: [boot.taproot],
-          change_address: boot.taproot,
-          alkanes_change_address: address,
-          protect_taproot: false,
-          mine_enabled: true,
-        }),
-      );
+      let result: any;
+      try {
+        result = await providerRef.current.alkanesExecuteFull(
+          JSON.stringify([address]),
+          'B:10000:v0',
+          '[2,0,77]:v0:v0',
+          '1', null,
+          JSON.stringify({
+            from_addresses: [boot.taproot],
+            change_address: boot.taproot,
+            alkanes_change_address: address,
+            protect_taproot: false,
+            mine_enabled: true,
+          }),
+        );
+        const parsed = typeof result === 'string' ? JSON.parse(result) : result;
+        console.log('[devnet] faucetDiesel: alkanesExecuteFull result:', parsed?.txid || parsed?.reveal_txid || JSON.stringify(parsed)?.slice(0, 120));
+      } catch (e: any) {
+        console.error('[devnet] faucetDiesel: alkanesExecuteFull failed:', e?.message || e);
+        throw e;
+      }
       // mine_enabled:true uses generatetoaddress internally (commit+reveal = 2 blocks)
       // which advances bitcoind WITHOUT running the harness indexer, leaving a 2-block
       // gap. We mine 3 extra blocks with yields so the harness processes all skipped
@@ -549,7 +558,7 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
       harnessRef.current.mineBlocks(1);
       await new Promise(r => setTimeout(r, 50));
       harnessRef.current.mineBlocks(1);
-      console.log('[devnet] DIESEL minted to', address);
+      console.log('[devnet] DIESEL minted to', address, '(height:', harnessRef.current.height, ')');
       setState(prev => ({ ...prev, chainHeight: harnessRef.current.height }));
       debounceSave();
     },
