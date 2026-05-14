@@ -96,6 +96,114 @@ describe('Devnet diagnostic: post-mint DIESEL visibility', () => {
     disposeHarness();
   });
 
+  it('dust-carrier mint puts DIESEL on a 546-sat UTXO that the SDK can spend', async () => {
+    // Production pattern: mint DIESEL with the `:v1:v1` cellpack pointer so
+    // the runtime routes the minted alkanes to output 1 (a fresh 546-sat
+    // dust carrier), not output 0 (the funded BTC output). Per
+    // alkanes-rs/crates/alkanes-cli-common/src/alkanes/execute.rs ~L?
+    //   `.filter(|(_, u)| u.amount <= 1000) // alkanes live on dust`
+    // — the SDK's per-outpoint protorunesbyoutpoint fan-out only checks
+    // UTXOs with value <= 1000 sats. The 10000-sat output produced by
+    // `[2,0,77]:v0:v0` with `B:10000:v0` is invisible to coin selection
+    // because of this dust filter, even though the indexer indexes the
+    // DIESEL on that outpoint just fine.
+    mineBlocks(harness, 1);
+    const mintTxid = await executeAlkanesSetup(
+      '[2,0,77]:v1:v1',
+      'B:10000:v0',
+      { toAddresses: [taprootAddress, taprootAddress] },
+    );
+    mineBlocks(harness, 2);
+    console.log(`[dust-mint] minted DIESEL via dust carrier at ${mintTxid}:1`);
+
+    // Look at the on-chain tx — output 1 should be ~546 sats with DIESEL.
+    const rawRes = await rpcCall('esplora_tx::raw', [mintTxid]);
+    const rawHex = rawRes?.result;
+    if (rawHex) {
+      const tx = bitcoin.Transaction.fromHex(rawHex);
+      for (let i = 0; i < tx.outs.length; i++) {
+        const out = tx.outs[i];
+        const isOp = out.script[0] === 0x6a;
+        console.log(`[dust-mint]   vout=${i} value=${out.value} op_return=${isOp}`);
+      }
+    }
+
+    // Per-outpoint balance — DIESEL should be at vout=1.
+    const r1 = await rpcCall('alkanes_protorunesbyoutpoint', [
+      { txid: mintTxid, vout: 1, protocolTag: '1' },
+    ]);
+    const v1Balances = r1?.result?.balance_sheet?.cached?.balances ?? [];
+    const v1Diesel = v1Balances
+      .filter((b: any) => Number(b.block) === 2 && Number(b.tx) === 0)
+      .reduce((s: bigint, b: any) => s + BigInt(b.amount ?? '0'), 0n);
+    console.log(`[dust-mint] vout=1 DIESEL: ${v1Diesel}`);
+
+    expect(v1Diesel, 'DIESEL must land on vout=1 (the dust carrier) via :v1:v1 pointer').toBeGreaterThan(0n);
+
+    // Now: can the SDK actually spend it? Trigger a consolidation mint that
+    // consumes 1000 DIESEL as input. This is the same call that fails
+    // ("have 0") when DIESEL is on a non-dust carrier.
+    mineBlocks(harness, 1);
+    let consolidationTxid: string | null = null;
+    let consolidationError: string | null = null;
+    try {
+      consolidationTxid = await executeAlkanesSetup('[2,0,77]:v1:v1', '2:0:1000', {
+        toAddresses: [taprootAddress, taprootAddress],
+      });
+    } catch (e: any) {
+      consolidationError = (e?.message || String(e)).slice(0, 300);
+    }
+
+    expect(
+      consolidationError,
+      `SDK coin selection must find DIESEL on dust UTXO and broadcast the consolidation; got: ${consolidationError}`,
+    ).toBeNull();
+    expect(consolidationTxid, 'consolidation broadcast should produce a txid').toBeTruthy();
+  }, 120_000);
+
+  it('protorunesbyoutpoint determinism — same RPC, same outpoint, 5 calls', async () => {
+    // Mint a single DIESEL UTXO so we have a fresh outpoint to query.
+    mineBlocks(harness, 1);
+    const mintTxid = await executeAlkanesSetup('[2,0,77]:v0:v0', 'B:10000:v0');
+    mineBlocks(harness, 2);
+    console.log(`[determinism] minted DIESEL at ${mintTxid}:0`);
+
+    // The DIESEL output is vout=0 of the mint tx (per `[2,0,77]:v0:v0`
+    // — cellpack at output 0, pointer to output 0).
+    const op = { txid: mintTxid, vout: 0 };
+
+    const balances: bigint[] = [];
+    for (let i = 0; i < 5; i++) {
+      const r = await rpcCall('alkanes_protorunesbyoutpoint', [
+        { txid: op.txid, vout: op.vout, protocolTag: '1' },
+      ]);
+      const bal = (
+        r?.result?.balance_sheet?.cached?.balances ??
+        r?.result?.balanceSheet?.balances ??
+        []
+      ) as Array<{ block: number | string; tx: number | string; amount: string | number }>;
+      let diesel = 0n;
+      for (const b of bal) {
+        if (Number(b.block) === 2 && Number(b.tx) === 0) {
+          diesel += BigInt(b.amount ?? '0');
+        }
+      }
+      balances.push(diesel);
+      console.log(`[determinism]   call #${i + 1}: DIESEL=${diesel}`);
+    }
+
+    // All 5 calls must agree. If they don't, that's a flat-out indexer
+    // bug — same view fn, same input, same height, different answer.
+    const first = balances[0];
+    for (let i = 1; i < balances.length; i++) {
+      expect(
+        balances[i],
+        `protorunesbyoutpoint must be deterministic. call #1=${first}, call #${i + 1}=${balances[i]}`,
+      ).toBe(first);
+    }
+    expect(first, 'first call must see the freshly-minted DIESEL').toBeGreaterThan(0n);
+  }, 120_000);
+
   it('mint 3x DIESEL, then inspect every layer the SDK uses for coin selection', async () => {
     // ── Step 1: mint DIESEL three times.
     const mintTxids: string[] = [];

@@ -285,7 +285,15 @@ describe('Devnet E2E: CPFP atomic wrap+swap bundle', () => {
     //   - broadcast the mint (the helper mines 1 more block to confirm it).
     for (let i = 0; i < 3; i++) {
       mineBlocks(harness, 1);
-      await executeAlkanesSetup('[2,0,77]:v0:v0', 'B:10000:v0');
+      // Dust-carrier mint: DIESEL lands at vout=1 (~546 sat carrier) per
+      // the :v1:v1 pointer, NOT vout=0 (the 10000-sat BTC output). The SDK's
+      // select_utxos only queries protorunesbyoutpoint for UTXOs with value
+      // <= 1000 sats, so a v0 mint (10000-sat carrier) becomes invisible to
+      // coin selection. Production mints (via swap/transfer) always produce
+      // dust carriers; the test fixture must do the same.
+      await executeAlkanesSetup('[2,0,77]:v1:v1', 'B:10000:v0', {
+        toAddresses: [taprootAddress, taprootAddress],
+      });
     }
     mineBlocks(harness, 1);
 
@@ -313,14 +321,18 @@ describe('Devnet E2E: CPFP atomic wrap+swap bundle', () => {
     // Future: investigate which specific code path makes the difference;
     // until then we mirror the known-working harness pattern.
     try {
-      await executeAlkanesSetup(`[${fBlock},${fTx},4]:v0:v0`, `2:0:1000`);
+      await executeAlkanesSetup(`[${fBlock},${fTx},4]:v0:v0`, `2:0:1000`, {
+        toAddresses: [taprootAddress, taprootAddress],
+      });
       mineBlocks(harness, 1);
     } catch (e: any) {
       console.log('[cpfp setup] priming-A error (non-fatal):', (e?.message || e)?.toString()?.slice(0, 120));
     }
     mineBlocks(harness, 1);
     try {
-      await executeAlkanesSetup('[2,0,77]:v0:v0', '2:0:1000000');
+      await executeAlkanesSetup('[2,0,77]:v1:v1', '2:0:1000000', {
+        toAddresses: [taprootAddress, taprootAddress],
+      });
       mineBlocks(harness, 1);
     } catch (e: any) {
       console.log('[cpfp setup] priming-B (consolidation mint) error:', (e?.message || e)?.toString()?.slice(0, 120));
@@ -371,6 +383,11 @@ describe('Devnet E2E: CPFP atomic wrap+swap bundle', () => {
       toAddresses: [frbtcSignerAddress, taprootAddress],
       splitTransactions: true,
     });
+
+    // Debug dump — surfaces the exact result shape so we know what the
+    // SDK actually emitted on the split_transactions=true path.
+    console.log('[cpfp] split-tx result keys:', Object.keys(result ?? {}));
+    console.log('[cpfp] split-tx result:', JSON.stringify(result, (k, v) => typeof v === 'bigint' ? v.toString() : v).slice(0, 600));
 
     // ---- Assertion 1: two distinct txids in the result.
     const splitTxid: string | undefined = result?.split_txid ?? result?.splitTxid;

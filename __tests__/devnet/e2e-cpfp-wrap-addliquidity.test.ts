@@ -221,7 +221,15 @@ describe('Devnet E2E: CPFP atomic wrap+addLiquidity bundle', () => {
     // Mint DIESEL — need plenty for seeding the pool AND the CPFP add.
     for (let i = 0; i < 4; i++) {
       mineBlocks(harness, 1);
-      await executeAlkanesSetup('[2,0,77]:v0:v0', 'B:10000:v0');
+      // Dust-carrier mint: DIESEL lands at vout=1 (~546 sat carrier) per
+      // the :v1:v1 pointer, NOT vout=0 (the 10000-sat BTC output). The SDK's
+      // select_utxos only queries protorunesbyoutpoint for UTXOs with value
+      // <= 1000 sats, so a v0 mint (10000-sat carrier) becomes invisible to
+      // coin selection. Production mints (via swap/transfer) always produce
+      // dust carriers; the test fixture must do the same.
+      await executeAlkanesSetup('[2,0,77]:v1:v1', 'B:10000:v0', {
+        toAddresses: [taprootAddress, taprootAddress],
+      });
     }
     mineBlocks(harness, 1);
 
