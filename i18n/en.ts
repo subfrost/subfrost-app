@@ -18,8 +18,8 @@ const en: Record<string, string> = {
   'header.settings': 'Settings',
 
   // Demo Banner
-  'demo.warning': 'SUBFROST App is unreleased',
-  'demo.description': 'In the meantime, we invite you to create a new wallet with your provided invitation code.\n\nAnything you see across this app is subject to change.',
+  'demo.warning': 'SUBFROST APP IS IN BETA',
+  'demo.description': 'We invite you to explore our AMM swap by creating a new keystore wallet or connecting a wallet you already use today.\n\nAnything you see across this app is subject to change. Feedback is appreciated.',
   'demo.understand': 'I Understand',
 
   // Coming Soon Overlay
@@ -29,7 +29,8 @@ const en: Record<string, string> = {
   // Feature Coming Soon Notice (mainnet)
   'featureNotice.title': 'Coming Soon',
   'featureNotice.swap': 'Swap is currently in development and will be released when ready.\nPlease take a look around to see what we are building.',
-  'featureNotice.vaults': 'Vaults are currently in development and will be released when ready.\nPlease take a look around to see what we are building.',
+  'featureNotice.vaults': 'In the meantime, please look around to see what we are building.\n\nAnything you see here is subject to change.',
+  'featureNotice.vaultsTitle': 'SUBFROST VAULTS ARE UNRELEASED',
   'featureNotice.futures': 'Futures are currently in development and will be released when ready.\nPlease take a look around to see what we are building.',
 
   // Footer
