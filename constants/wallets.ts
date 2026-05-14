@@ -51,10 +51,8 @@ const LOCAL_WALLETS: BrowserWalletInfo[] = [
 ];
 
 // Desired display order (by wallet id)
-// NOTE: 'okx' is listed but disabled in the UI (see ENABLED_WALLET_IDS in
-// ConnectWalletModal.tsx). It renders as "COMING SOON" because OKX is a
-// single-address wallet with no getBitcoinUtxos API — connecting it would
-// risk spending inscription/rune UTXOs as fees. See commit 5d8bc5f3.
+// OKX is a single-address wallet, so WalletContext requires Taproot mode and
+// txContext disables taproot UTXO protection for that single-address layout.
 const WALLET_ORDER = [
   'oyl',
   'okx',
@@ -114,6 +112,10 @@ export function isWalletInstalled(wallet: BrowserWalletInfo): boolean {
       case 'xverse':
         // Xverse injects at window.XverseProviders.BitcoinProvider
         return win.XverseProviders?.BitcoinProvider !== undefined;
+
+      case 'okx':
+        // OKX injects a top-level object; the Bitcoin provider is nested.
+        return win.okxwallet?.bitcoin !== undefined;
 
       default:
         // Standard injection key check
