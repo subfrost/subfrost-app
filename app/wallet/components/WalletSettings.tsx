@@ -10,6 +10,7 @@ import { useTranslation } from '@/hooks/useTranslation';
 import SfPopup, { type SfPopupHandle } from '@/app/components/SfPopup';
 import { useEphemeralRecoveryMutation } from '@/hooks/useEphemeralRecoveryMutation';
 import { useDevnet } from '@/context/DevnetContext';
+import { useDemoGate } from '@/hooks/useDemoGate';
 
 type NetworkType = 'mainnet' | 'signet' | 'regtest' | 'regtest-local' | 'qubitcoin-regtest' | 'subfrost-regtest' | 'oylnet' | 'devnet' | 'custom';
 
@@ -41,6 +42,7 @@ export default function WalletSettings() {
   const { t } = useTranslation();
   const recoveryMutation = useEphemeralRecoveryMutation();
   const { controls: devnetControls, isDevnet, state: devnetState } = useDevnet();
+  const isDemoGated = useDemoGate();
   const [devnetResetting, setDevnetResetting] = useState(false);
 
   // Determine if using browser extension wallet
@@ -105,10 +107,11 @@ export default function WalletSettings() {
   // Sync initial network when currentNetwork changes from context
   useEffect(() => {
     if (currentNetwork) {
-      setNetwork(currentNetwork);
-      setInitialNetwork(currentNetwork);
+      const nextNetwork = isDemoGated && currentNetwork === 'devnet' ? 'mainnet' : currentNetwork;
+      setNetwork(nextNetwork);
+      setInitialNetwork(nextNetwork);
     }
-  }, [currentNetwork]);
+  }, [currentNetwork, isDemoGated]);
 
   // Initialize Google Drive on mount
   useEffect(() => {
@@ -135,10 +138,10 @@ export default function WalletSettings() {
     };
   }, [networkDropdownOpen]);
 
-  const NETWORK_OPTIONS: { value: NetworkType; label: string }[] = [
+  const NETWORK_OPTIONS: { value: NetworkType; label: string }[] = useMemo(() => [
     { value: 'mainnet', label: t('settings.mainnet') },
-    { value: 'devnet', label: 'Devnet (in-browser)' },
-  ];
+    ...(!isDemoGated ? [{ value: 'devnet' as NetworkType, label: 'Devnet (in-browser)' }] : []),
+  ], [isDemoGated, t]);
 
   const handleSave = () => {
     // Devnet is tab-scoped: store in sessionStorage so it stays active during

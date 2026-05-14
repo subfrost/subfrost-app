@@ -7,6 +7,8 @@ import { usePools } from '@/hooks/usePools';
 import { usePendingTxs } from '@/hooks/usePendingTxs';
 import { HelpCircle, RefreshCw, Send, QrCode, Settings } from 'lucide-react';
 import { useTranslation } from '@/hooks/useTranslation';
+import { useWallet } from '@/context/WalletContext';
+import AccountSwitcher from '@/app/components/AccountSwitcher';
 
 type BitcoinBalanceCardProps = {
   onSend?: () => void;
@@ -18,6 +20,7 @@ type BitcoinBalanceCardProps = {
 export default function BitcoinBalanceCard({ onSend, onReceive, onSettings, settingsActive = false }: BitcoinBalanceCardProps) {
   const { data: btcPriceUsd = 0 } = useBtcPrice();
   const { t } = useTranslation();
+  const { walletType } = useWallet() as { walletType?: string | null };
   const { balances, btcFast, isBtcFastLoading, error, refreshBtcFast } = useEnrichedWalletData();
   const { data: poolsData } = usePools();
   const { btcDelta: pendingBtcDelta } = usePendingTxs();
@@ -157,13 +160,15 @@ export default function BitcoinBalanceCard({ onSend, onReceive, onSettings, sett
   }
 
   return (
-    <div className="relative h-full overflow-hidden rounded-2xl bg-[color:var(--sf-glass-bg)] p-6 shadow-[0_4px_20px_rgba(0,0,0,0.2)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)]">
-      <img
-        src="/brand/balance-snowflake-mark.svg"
-        alt=""
-        aria-hidden="true"
-        className="balance-total-snowflake pointer-events-none absolute -right-16 top-[58%] h-96 w-96 opacity-[0.08]"
-      />
+    <div className="relative z-40 h-full overflow-visible rounded-2xl bg-[color:var(--sf-glass-bg)] p-6 shadow-[0_4px_20px_rgba(0,0,0,0.2)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)]">
+      <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl">
+        <img
+          src="/brand/balance-snowflake-mark.svg"
+          alt=""
+          aria-hidden="true"
+          className="balance-total-snowflake pointer-events-none absolute -right-16 top-[58%] h-96 w-96 opacity-[0.08]"
+        />
+      </div>
       <div className="relative z-30 flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
           <h3 className="flex items-center gap-2 text-lg font-bold text-[color:var(--sf-text)]">
@@ -185,6 +190,9 @@ export default function BitcoinBalanceCard({ onSend, onReceive, onSettings, sett
           >
             <RefreshCw size={16} className={isLoadingData ? 'animate-spin' : ''} />
           </button>
+          {walletType === 'keystore' && (
+            <AccountSwitcher size={20} className="shrink-0" menuAlign="right" />
+          )}
           {onSettings && (
             <button
               onClick={onSettings}
