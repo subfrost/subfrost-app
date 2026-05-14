@@ -69,17 +69,21 @@ type ProgressCallback = (message: string, percent: number) => void;
 // Prints used/total JS heap in MB alongside a label. Silently no-ops on
 // browsers that don't expose the API. Use at every major phase boundary to
 // track cumulative WASM heap growth during boot.
+// Uses console.warn so [mem] lines appear in the Warnings level filter,
+// making them visible even when the WASM KV trace (__get_len/__flush) drowns
+// out console.log output. In DevTools: set level to "Warnings" to see only
+// memory checkpoints, or filter by "[mem]" text.
 function memLog(label: string): void {
   const mem = (performance as any).memory;
   if (!mem) {
-    console.log(`[mem] ${label} — performance.memory unavailable`);
+    console.warn(`[mem] ${label} — performance.memory unavailable`);
     return;
   }
   const used = (mem.usedJSHeapSize / 1024 / 1024).toFixed(1);
   const total = (mem.totalJSHeapSize / 1024 / 1024).toFixed(1);
   const limit = (mem.jsHeapSizeLimit / 1024 / 1024).toFixed(0);
   const pct = ((mem.usedJSHeapSize / mem.jsHeapSizeLimit) * 100).toFixed(1);
-  console.log(`[mem] ${label} — used=${used}MB / total=${total}MB / limit=${limit}MB (${pct}%)`);
+  console.warn(`[mem] ${label} — used=${used}MB / total=${total}MB / limit=${limit}MB (${pct}%)`);
 }
 
 // The harness and provider are stored globally so the fetch interceptor
