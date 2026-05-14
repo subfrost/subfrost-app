@@ -457,10 +457,14 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
     mineBlocks: async (count: number) => {
       if (!harnessRef.current) return;
       try {
-        // Mine 1 block at a time with yields to prevent OOM
+        // Mine 1 block at a time with a GC yield before EVERY block, including
+        // count=1. quspo's TertiaryRuntime::run_block creates a new
+        // WebAssembly.Instance per block — without a yield the browser GC has
+        // no opportunity to reclaim instances from the prior call, exhausting
+        // WASM linear memory on the very first post-boot mine.
         for (let i = 0; i < count; i++) {
+          await new Promise(r => setTimeout(r, 200));
           harnessRef.current.mineBlocks(1);
-          if (count > 1) await new Promise(r => setTimeout(r, 50));
         }
         setState(prev => ({ ...prev, chainHeight: harnessRef.current.height }));
         debounceSave();
@@ -499,13 +503,16 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
           console.warn('[devnet] generatetoaddress error:', parsed.error, 'addr:', devnetAddr);
         }
         // Index the coinbase block through metashrew.
+        await new Promise(r => setTimeout(r, 100));
         harnessRef.current.mineBlocks(1);
         // Mine maturity blocks in small batches with async yields to prevent OOM.
-        // 100 blocks required for coinbase spendability. Batch size 10 (vs 25) to
-        // stay well under WASM memory limits after quspo was added pre-Phase2.
-        for (let b = 0; b < 10; b++) {
-          harnessRef.current.mineBlocks(10);
-          await new Promise(r => setTimeout(r, 0));
+        // 100 blocks required for coinbase spendability. Batch size 5 (vs 10) with
+        // 100ms GC yield so FinalizationRegistry can reclaim quspo WASM instances
+        // between batches. The original 0ms yield was too short after state grew
+        // larger from the full boot sequence.
+        for (let b = 0; b < 20; b++) {
+          await new Promise(r => setTimeout(r, 100));
+          harnessRef.current.mineBlocks(5);
         }
         await new Promise(r => setTimeout(r, 50));
         console.log('[devnet] BTC faucet: mined coinbase to', devnetAddr, '(+100 maturity blocks)');
