@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { useEnrichedWalletData } from '@/hooks/useEnrichedWalletData';
 import { usePools } from '@/hooks/usePools';
-import { useBtcPrice } from '@/hooks/useBtcPrice';
+import { useAllPoolStats } from '@/hooks/usePoolData';
 import type { LPPosition } from '@/app/swap/components/LiquidityInputs';
 
 // Filtering helpers — same logic as AlkanesBalancesCard "Positions" tab
@@ -23,7 +23,7 @@ const isPositionAsset = (alkane: { symbol: string; name: string; alkaneId?: stri
 export function useLPPositions() {
   const { balances, isLoading: isLoadingWallet, refresh } = useEnrichedWalletData();
   const { data: poolsData, isLoading: isLoadingPools } = usePools({ limit: 200 });
-  const { data: btcPrice } = useBtcPrice();
+  const { data: poolStats } = useAllPoolStats();
   const positions = useMemo<LPPosition[]>(() => {
     if (!balances.alkanes) {
       // console.log('[useLPPositions] No alkanes data');
@@ -35,6 +35,13 @@ export function useLPPositions() {
     if (poolsData?.items) {
       for (const pool of poolsData.items) {
         poolMap.set(pool.id, pool);
+      }
+    }
+
+    const statsMap = new Map<string, NonNullable<typeof poolStats>[string]>();
+    if (poolStats) {
+      for (const [, stats] of Object.entries(poolStats)) {
+        if (stats?.poolId) statsMap.set(stats.poolId, stats);
       }
     }
 
@@ -95,15 +102,19 @@ export function useLPPositions() {
           }
         }
 
-        // Calculate USD value
+        // USD value = userShare × pool TVL. Source priority:
+        //   1. `useAllPoolStats` — keyed by poolId, has both tvlUsd and lpTotalSupply
+        //   2. `usePools` overlay — may have tvlUsd but not lpTotalSupply on mainnet (curated set)
         let valueUSD = 0;
-        if (pool?.tvlUsd && pool.tvlUsd > 0 && btcPrice) {
-          const balanceFloat = Number(balanceValue) / Math.pow(10, decimals);
-          valueUSD = balanceFloat * btcPrice;
-        } else if (btcPrice) {
-          // Rough estimate without pool data
-          const balanceFloat = Number(balanceValue) / Math.pow(10, decimals);
-          valueUSD = balanceFloat * btcPrice;
+        const stats = statsMap.get(alkane.alkaneId);
+        const tvlUsd = stats?.tvlUsd ?? pool?.tvlUsd ?? 0;
+        const totalSupplyStr = stats?.lpTotalSupply ?? pool?.lpTotalSupply;
+        if (tvlUsd > 0 && totalSupplyStr) {
+          const totalSupply = Number(totalSupplyStr);
+          const userBalance = Number(balanceValue);
+          if (totalSupply > 0) {
+            valueUSD = (userBalance / totalSupply) * tvlUsd;
+          }
         }
 
         // Gain/loss: zero until impermanent loss tracking is implemented via quspo historical views
@@ -129,7 +140,7 @@ export function useLPPositions() {
 
     // console.log('[useLPPositions] Total LP positions found:', lpPositions.length);
     return lpPositions;
-  }, [balances.alkanes, poolsData?.items, btcPrice]);
+  }, [balances.alkanes, poolsData?.items, poolStats]);
 
   return {
     positions,

@@ -21,7 +21,7 @@
 // Source: hooks/useUserOrders.ts, hooks/useCancelOrderMutation.ts
 
 import { useState, lazy, Suspense } from 'react';
-import { BarChart3, Layers, Globe, Activity, X, LogOut, Plus } from 'lucide-react';
+import { BarChart3, Layers, Globe, Activity, X, Plus, Minus } from 'lucide-react';
 import { useLPPositions } from '@/hooks/useLPPositions';
 import { useWallet } from '@/context/WalletContext';
 import { useUserOrders } from '@/hooks/useUserOrders';
@@ -229,17 +229,16 @@ export default function BottomPanels({
               <EmptyState icon={BarChart3} message={t('bottomPanels.noPositions')} />
             ) : (
               <div>
-                {/* Header — column layout: Pool | Amount | Add | Close | ID */}
-                <div className="sf-table-header grid grid-cols-[1.4fr_0.9fr_0.7fr_0.7fr_0.7fr] gap-2 px-3 py-2">
+                <div className="sf-table-header grid grid-cols-[1.4fr_0.9fr_0.8fr_0.6fr_1.2fr] gap-2 px-3 py-2">
                   <span>{t('bottomPanels.pool')}</span>
                   <span className="text-right">{t('bottomPanels.amount')}</span>
-                  <span className="text-center">{t('bottomPanels.add')}</span>
-                  <span className="text-center">{t('bottomPanels.close')}</span>
+                  <span className="text-right">{t('bottomPanels.value')}</span>
                   <span className="text-right">{t('bottomPanels.id')}</span>
+                  <span />
                 </div>
                 <div className="max-h-[240px] overflow-y-auto">
                 {lpPositions.map((pos) => (
-                  <div key={pos.id} className="sf-row grid grid-cols-[1.4fr_0.9fr_0.7fr_0.7fr_0.7fr] gap-2 px-3 py-2.5 items-center">
+                  <div key={pos.id} className="sf-row grid grid-cols-[1.4fr_0.9fr_0.8fr_0.6fr_1.2fr] gap-2 px-3 py-2.5 items-center">
                     <div className="flex items-center gap-2 min-w-0">
                       <div className="flex -space-x-2 shrink-0">
                         <div className="relative z-10">
@@ -256,7 +255,18 @@ export default function BottomPanels({
                     <span className="text-[11px] text-right tabular-nums text-[color:var(--sf-text)]/60 truncate">
                       {pos.amount || '--'}
                     </span>
-                    <div className="flex justify-center">
+                    <span className="text-[11px] text-right tabular-nums text-[color:var(--sf-text)]/60 truncate">
+                      {pos.valueUSD > 0
+                        ? new Intl.NumberFormat('en-US', {
+                            style: 'currency', currency: 'USD',
+                            minimumFractionDigits: 2, maximumFractionDigits: 2,
+                          }).format(pos.valueUSD)
+                        : '--'}
+                    </span>
+                    <span className="text-[10px] text-right tabular-nums text-[color:var(--sf-text)]/40 truncate">
+                      {pos.id}
+                    </span>
+                    <div className="flex items-center justify-end gap-2">
                       <button
                         onClick={() => onAddLiquidity?.({
                           token0Id: pos.token0Id,
@@ -265,23 +275,18 @@ export default function BottomPanels({
                           token1Symbol: pos.token1Symbol,
                         })}
                         disabled={!onAddLiquidity || !pos.token0Id || !pos.token1Id}
-                        className="sf-btn-ghost text-[10px] px-2 py-1 text-green-400 hover:text-green-300 disabled:opacity-50"
+                        className="sf-percent-btn-pill"
                       >
                         <Plus size={10} className="inline mr-0.5" />{t('bottomPanels.add')}
                       </button>
-                    </div>
-                    <div className="flex justify-center">
                       <button
                         onClick={() => onRemoveLiquidity?.(pos)}
                         disabled={!onRemoveLiquidity}
-                        className="sf-btn-ghost text-[10px] px-2 py-1 text-red-400 hover:text-red-300 disabled:opacity-50"
+                        className="sf-percent-btn-pill"
                       >
-                        <LogOut size={10} className="inline mr-0.5" />{t('bottomPanels.close')}
+                        <Minus size={10} className="inline mr-0.5" />{t('liquidity.remove')}
                       </button>
                     </div>
-                    <span className="text-[10px] text-right tabular-nums text-[color:var(--sf-text)]/40 truncate">
-                      {pos.id}
-                    </span>
                   </div>
                 ))}
                 </div>
