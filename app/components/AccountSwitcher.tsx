@@ -35,9 +35,10 @@ function saveKnownIndices(indices: number[]): void {
 interface AccountSwitcherProps {
   size?: number;
   className?: string;
+  menuAlign?: 'left' | 'right';
 }
 
-export default function AccountSwitcher({ size = 24, className = '' }: AccountSwitcherProps) {
+export default function AccountSwitcher({ size = 24, className = '', menuAlign = 'left' }: AccountSwitcherProps) {
   const { wallet, walletType, address: currentAddress } = useWallet() as any;
   const [open, setOpen] = useState(false);
   const [knownIndices, setKnownIndices] = useState<number[]>(() => loadKnownIndices());
@@ -150,7 +151,7 @@ export default function AccountSwitcher({ size = 24, className = '' }: AccountSw
       </button>
 
       {open && (
-        <div className="absolute left-0 top-full z-50 mt-1 w-[280px] overflow-hidden rounded-xl bg-[color:var(--sf-surface)] backdrop-blur-xl shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
+        <div className={`absolute top-full z-50 mt-1 w-[280px] overflow-hidden rounded-xl bg-[color:var(--sf-surface)] backdrop-blur-xl shadow-[0_8px_24px_rgba(0,0,0,0.12)] ${menuAlign === 'right' ? 'right-0' : 'left-0'}`}>
           <div className="px-3 py-2 text-[11px] uppercase tracking-wider font-bold text-[color:var(--sf-text)]/40">
             Accounts
           </div>

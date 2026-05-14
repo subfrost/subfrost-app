@@ -15,7 +15,6 @@ import { TransactionConfirmProvider } from '@/context/TransactionConfirmContext'
 import { NotificationProvider } from '@/context/NotificationContext';
 import { HeightPoller } from '@/queries/height';
 import { WalletStatePrewarmer } from '@/components/WalletStatePrewarmer';
-import { PendingTxHUD } from '@/components/PendingTxHUD';
 import { IndexerSyncProvider } from '@/context/IndexerSyncContext';
 import { IndexerSyncOverlay } from '@/components/IndexerSyncOverlay';
 import { DevnetProvider } from '@/context/DevnetContext';
@@ -152,7 +151,6 @@ export default function Providers({ children }: { children: ReactNode }) {
                     <HeightPoller network={network} />
                     <WalletProvider network={network}>
                       <WalletStatePrewarmer />
-                      <PendingTxHUD />
                       <IndexerSyncProvider>
                         <IndexerSyncOverlay />
                         <TransactionConfirmProvider>

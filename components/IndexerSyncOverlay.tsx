@@ -8,7 +8,7 @@
  * overlay unmounts; the mutation proceeds automatically without a user
  * retry.
  *
- * Mounted in providers.tsx alongside <PendingTxHUD/>.
+ * Mounted in providers.tsx alongside the wallet state prewarmer.
  */
 
 'use client';
