@@ -13,9 +13,9 @@ export default function Home() {
     <AlkanesMainWrapper>
       <PageContent className="px-4 md:px-5">
         <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-4">
-          {/* Top row: Trending Pair (30%), Cumulative AMM Volume (70%) */}
+          {/* Top row: Trending Pair (40%), Cumulative AMM Volume (60%) */}
           <div className="grid grid-cols-1 md:grid-cols-10 gap-4">
-            <div className={showVaultTiles ? "md:col-span-3" : "md:col-span-3"}>
+            <div className={showVaultTiles ? "md:col-span-3" : "md:col-span-4"}>
               <TrendingPairs />
             </div>
             {showVaultTiles && (
@@ -23,7 +23,7 @@ export default function Home() {
                 <VaultTiles />
               </div>
             )}
-            <div className={showVaultTiles ? "md:col-span-4" : "md:col-span-7"}>
+            <div className={showVaultTiles ? "md:col-span-4" : "md:col-span-6"}>
               <CumulativeAmmVolume />
             </div>
           </div>
