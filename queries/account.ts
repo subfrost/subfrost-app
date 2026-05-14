@@ -829,7 +829,11 @@ export function walletUtxoCacheQueryOptions(deps: WalletUtxoCacheDeps) {
       // Step 2: fan out alkanes_protorunesbyoutpoint for dust UTXOs.
       // Non-dust UTXOs are pure BTC and have no protorunes balance to
       // fetch (querying anyway just doubles the indexer load).
-      const dustUtxos = allUtxos.filter((u) => u.value <= 1000);
+      // On devnet, DIESEL mints create 10000-sat UTXOs (opcode 77) — above
+      // the ≤1000 dust filter. Apply the same devnet bypass used in
+      // fetchAlkaneBalancesViaProtobuf so DIESEL UTXOs reach prefetched_utxos.
+      const isDevnet = deps.network === 'devnet';
+      const dustUtxos = isDevnet ? allUtxos : allUtxos.filter((u) => u.value <= 1000);
       const alkaneMap = new Map<string, Array<{ block: number; tx: number; amount: bigint }>>();
       if (dustUtxos.length > 0) {
         const RETRY_DELAYS = [0, 500, 1500];
