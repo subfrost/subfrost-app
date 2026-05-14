@@ -130,7 +130,7 @@ export function useAtomicWrapSwapMutation() {
           feeRate: params.feeRate,
           autoConfirm: true,
         });
-        const txid = result?.txid || result?.transaction_id || '';
+        const txid = result?.txid || result?.reveal_txid || result?.revealTxid || result?.transaction_id || '';
         return { success: true, transactionId: txid };
       }
 
