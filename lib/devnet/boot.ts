@@ -65,6 +65,23 @@ import type { DeployedContracts } from './types';
 // Progress callback type
 type ProgressCallback = (message: string, percent: number) => void;
 
+// Memory reporter — Chrome/Edge only (performance.memory is non-standard).
+// Prints used/total JS heap in MB alongside a label. Silently no-ops on
+// browsers that don't expose the API. Use at every major phase boundary to
+// track cumulative WASM heap growth during boot.
+function memLog(label: string): void {
+  const mem = (performance as any).memory;
+  if (!mem) {
+    console.log(`[mem] ${label} — performance.memory unavailable`);
+    return;
+  }
+  const used = (mem.usedJSHeapSize / 1024 / 1024).toFixed(1);
+  const total = (mem.totalJSHeapSize / 1024 / 1024).toFixed(1);
+  const limit = (mem.jsHeapSizeLimit / 1024 / 1024).toFixed(0);
+  const pct = ((mem.usedJSHeapSize / mem.jsHeapSizeLimit) * 100).toFixed(1);
+  console.log(`[mem] ${label} — used=${used}MB / total=${total}MB / limit=${limit}MB (${pct}%)`);
+}
+
 // The harness and provider are stored globally so the fetch interceptor
 // routes all RPC calls to the in-process devnet.
 let _harness: any = null;
@@ -1071,9 +1088,12 @@ async function deployFullProtocol(
   // -----------------------------------------------------------------------
   if (quspoWasm) {
     try {
+      memLog('addTertiary(quspo) BEFORE — this raises per-block WASM cost from 2→3 instances');
       harness.server.addTertiary('quspo', quspoWasm);
+      memLog('addTertiary(quspo) AFTER attach (quspo now retroactively indexing chain)');
       harness.mineBlocks(1);
       await new Promise(r => setTimeout(r, 200));
+      memLog('addTertiary(quspo) AFTER catchup mine — baseline from here forward');
       console.log('[devnet-boot] quspo tertiary indexer added (pre-Phase2)');
     } catch (e: any) {
       console.warn('[devnet-boot] Failed to add quspo before Phase 2 (non-fatal):', e?.message || e);
@@ -1084,6 +1104,7 @@ async function deployFullProtocol(
   // Phase 2: Mint DIESEL + wrap frBTC + create AMM pool
   // -----------------------------------------------------------------------
   onProgress('Minting DIESEL...', 40);
+  memLog('Phase 2 START (DIESEL mint + frBTC wrap + pool creation)');
   console.log('[devnet-boot] Phase 2: Seeding tokens...');
 
   for (let i = 0; i < 3; i++) {
@@ -1221,6 +1242,7 @@ async function deployFullProtocol(
   //   A fresh boot always deploys the correct binary, so new devnets are fine.
   // -----------------------------------------------------------------------
   onProgress('Deploying Carbine CLOB...', 40);
+  memLog('Phase 3a START (Carbine CLOB)');
   console.log('[devnet-boot] Phase 3a: Carbine CLOB (proxied)...');
   try {
     // 1. Controller impl [4:80000] — opcode 0 = Initialize(template_block=0, template_tx=0)
@@ -1318,6 +1340,7 @@ async function deployFullProtocol(
   // Business init happens THROUGH proxy (delegatecall).
   // -----------------------------------------------------------------------
   onProgress('Deploying FIRE protocol...', 46);
+  memLog('Phase 3 START (FIRE protocol — 6 impl+proxy pairs)');
   console.log('[devnet-boot] Phase 3: FIRE protocol (impl+proxy for each)...');
   const F = FIRE_SLOTS;
 
@@ -1380,6 +1403,7 @@ async function deployFullProtocol(
   // Phase 4: Core Protocol — standalone proxies + template beacons
   // -----------------------------------------------------------------------
   onProgress('Deploying core protocol...', 60);
+  memLog('Phase 4 START (core protocol — FUEL, dxBTC, gauges, vaults)');
   console.log('[devnet-boot] Phase 4: Core protocol (proxied)...');
 
   // FUEL Token — standalone proxy
@@ -1473,6 +1497,7 @@ async function deployFullProtocol(
   // Phase 5: Fujin Difficulty Futures (already has proxy/beacon — unchanged)
   // -----------------------------------------------------------------------
   onProgress('Deploying Fujin...', 72);
+  memLog('Phase 5 START (Fujin difficulty futures)');
   console.log('[devnet-boot] Phase 5: Deploying Fujin...');
 
   await deployWasm(provider, harness, segwit, taproot,
@@ -1549,6 +1574,7 @@ async function deployFullProtocol(
   // Phase 7: Bridge contracts — each behind upgradeable proxy
   // -----------------------------------------------------------------------
   onProgress('Deploying bridge contracts...', 91);
+  memLog('Phase 7 START (bridge contracts)');
   console.log('[devnet-boot] Phase 7: Bridge contracts (proxied)...');
   try {
     contracts.frzec.authTokenId = await deployWithProxy(
@@ -1570,6 +1596,7 @@ async function deployFullProtocol(
   // Upgrade the beacon once → all 6 pools get the new implementation.
   // -----------------------------------------------------------------------
   onProgress('Deploying synth pools...', 94);
+  memLog('Phase 8 START (synth pools)');
   console.log('[devnet-boot] Phase 8: Synth pools (beacon pattern)...');
 
   const FRUSD_BLOCK = 4;
@@ -1613,6 +1640,7 @@ async function deployFullProtocol(
   // Phase 9: Verify key contracts
   // -----------------------------------------------------------------------
   onProgress('Verifying deployments...', 98);
+  memLog('Phase 9 START (verify + post-deploy baseline)');
   console.log('[devnet-boot] Phase 9: Verifying...');
   const checks: [string, string, string][] = [
     ['AMM Factory', factoryId, '4'],
@@ -1667,6 +1695,7 @@ async function deployFullProtocol(
   // at prices computed from actual AMM pool reserves.
   // -----------------------------------------------------------------------
   onProgress('Seeding CLOB orderbook...', 97);
+  memLog('Phase 10a START (CLOB + vault seeding — fresh token re-mint)');
   try {
     console.log('[devnet-boot] Phase 10a: Seeding CLOB orderbook...');
     const ctrlProxy = S.CARBINE_CTRL_PROXY;
@@ -1825,6 +1854,7 @@ async function deployFullProtocol(
   // All opcodes verified against constants/index.ts and e2e-fire.test.ts.
   // -----------------------------------------------------------------------
   onProgress('Seeding FIRE protocol...', 98);
+  memLog('Phase 10b START (FIRE protocol seeding)');
   try {
     console.log('[devnet-boot] Phase 10b: Seeding FIRE protocol state...');
     const treasuryAuth = contracts.fireTreasury.authTokenId;
@@ -2009,6 +2039,7 @@ async function deployFullProtocol(
   // Pattern: e2e-futures-protocols.test.ts line 656-688
   // -----------------------------------------------------------------------
   onProgress('Seeding Fujin futures...', 99);
+  memLog('Phase 10c START (Fujin futures seeding)');
   try {
     console.log('[devnet-boot] Phase 10c: Seeding Fujin difficulty futures...');
 
@@ -2074,6 +2105,7 @@ async function deployFullProtocol(
   // -----------------------------------------------------------------------
   onProgress('Seeding activity feeds...', 99);
   try {
+    memLog('Phase 10d START (activity feed seeding — swaps/mints/burns)');
     console.log('[devnet-boot] Phase 10d: Seeding activity feeds...');
 
     // Fresh mint for activity seeding (prior tokens consumed by Phase 10a-c)
@@ -2147,6 +2179,7 @@ async function deployFullProtocol(
     console.warn('[devnet-boot] Activity seeding failed (non-fatal):', e?.message?.slice(0, 120));
   }
 
+  memLog('deployFullProtocol COMPLETE — this is the post-boot memory baseline');
   return contracts;
 }
 
@@ -2175,6 +2208,7 @@ async function mineInitialBlocks(onProgress: ProgressCallback): Promise<void> {
   // setTimeout(0) yields lets FinalizationRegistry reclaim instances.
   const BATCH = 25;
   const TOTAL = 101;
+  memLog('mineInitialBlocks START (alkanes+esplora, no quspo)');
   for (let mined = 0; mined < TOTAL; ) {
     const n = Math.min(BATCH, TOTAL - mined);
     onProgress(`Mining blocks ${mined + 1}-${mined + n} of ${TOTAL}...`, 20 + Math.round((mined / TOTAL) * 30));
@@ -2182,8 +2216,10 @@ async function mineInitialBlocks(onProgress: ProgressCallback): Promise<void> {
     mined += n;
     // Yield to let FinalizationRegistry / GC reclaim WASM instances
     await new Promise(r => setTimeout(r, 0));
+    memLog(`mineInitialBlocks batch done (${mined}/${TOTAL} blocks)`);
   }
   onProgress('Mining complete', 50);
+  memLog('mineInitialBlocks DONE');
 }
 
 /**
