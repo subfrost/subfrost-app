@@ -8,6 +8,7 @@ import { useWallet } from "@/context/WalletContext";
 import NumberField from "@/app/components/NumberField";
 import TokenIcon from "@/app/components/TokenIcon";
 import { useTranslation } from '@/hooks/useTranslation';
+import { useDemoGate } from "@/hooks/useDemoGate";
 
 
 type Props = {
@@ -23,6 +24,7 @@ export default function BoostSection({ vault, showPositions = false }: Props) {
   const { theme } = useTheme();
   const { network } = useWallet();
   const { t } = useTranslation();
+  const isDemoGated = useDemoGate();
 
 
   // Boost stats: zero until boost/gauge contract is deployed on-chain
@@ -204,11 +206,13 @@ export default function BoostSection({ vault, showPositions = false }: Props) {
           </div>
 
           <button
-            disabled={isComingSoon}
+            disabled={isComingSoon || isDemoGated}
             className="group relative w-full overflow-hidden rounded-xl px-6 py-3 font-bold text-white transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
             style={{ background: `linear-gradient(to right, var(--sf-boost-icon-from), var(--sf-boost-icon-to))` }}
           >
-            <span className="relative z-10">{activeTab === "stake" ? t('boost.stakeToBoost') : t('boost.unstakeTab')}</span>
+            <span className="relative z-10">
+              {isDemoGated ? t('common.comingSoon') : activeTab === "stake" ? t('boost.stakeToBoost') : t('boost.unstakeTab')}
+            </span>
             <div className="absolute inset-0 animate-[shimmer_2s_infinite] bg-gradient-to-r from-transparent via-purple-300/40 to-transparent group-disabled:animate-none" />
           </button>
         </div>

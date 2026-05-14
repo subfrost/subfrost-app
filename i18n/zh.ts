@@ -18,9 +18,11 @@ const zh: Record<string, string> = {
   'header.settings': '\u8bbe\u7f6e',
 
   // Demo Banner
-  'demo.warning': 'SUBFROST \u5e94\u7528\u5c1a\u672a\u53d1\u5e03\u3002',
-  'demo.description': '在此期间，我们邀请您使用提供的邀请码创建一个新钱包。\n\n您在此应用中看到的任何内容都可能会更改。',
+  'demo.warning': 'SUBFROST APP IS IN BETA',
+  'demo.description': 'We invite you to explore our AMM swap by creating a new keystore wallet or connecting a wallet you already use today.\n\nAnything you see across this app is subject to change. Feedback is appreciated.',
   'demo.understand': '\u6211\u5df2\u4e86\u89e3',
+  'vaults.unreleasedTitle': 'SUBFROST VAULTS ARE UNRELEASED',
+  'vaults.unreleasedDescription': 'In the meantime, please look around to see what we are building.\n\nAnything you see here is subject to change.',
 
   // Coming Soon Overlay
   'comingSoon.title': '\u5373\u5c06\u63a8\u51fa',

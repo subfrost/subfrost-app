@@ -18,9 +18,11 @@ const en: Record<string, string> = {
   'header.settings': 'Settings',
 
   // Demo Banner
-  'demo.warning': 'SUBFROST App is unreleased',
-  'demo.description': 'In the meantime, we invite you to create a new wallet with your provided invitation code.\n\nAnything you see across this app is subject to change.',
+  'demo.warning': 'SUBFROST APP IS IN BETA',
+  'demo.description': 'We invite you to explore our AMM swap by creating a new keystore wallet or connecting a wallet you already use today.\n\nAnything you see across this app is subject to change. Feedback is appreciated.',
   'demo.understand': 'I Understand',
+  'vaults.unreleasedTitle': 'SUBFROST VAULTS ARE UNRELEASED',
+  'vaults.unreleasedDescription': 'In the meantime, please look around to see what we are building.\n\nAnything you see here is subject to change.',
 
   // Coming Soon Overlay
   'comingSoon.title': 'Coming Soon',

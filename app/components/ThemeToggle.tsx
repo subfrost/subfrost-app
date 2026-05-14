@@ -2,10 +2,14 @@
 
 import { Sun } from 'lucide-react';
 import { useTheme } from '@/context/ThemeContext';
+import { useDemoGate } from '@/hooks/useDemoGate';
 
 export default function ThemeToggle() {
   const { theme, toggleTheme } = useTheme();
+  const isDemoGated = useDemoGate();
   const isLight = theme === 'light';
+
+  if (isDemoGated) return null;
 
   return (
     <button

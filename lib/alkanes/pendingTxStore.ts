@@ -34,7 +34,7 @@ const DB_NAME = 'subfrost-wallet';
 const DB_VERSION = 1;
 const STORE_NAME = 'pending-txs';
 
-interface PendingTxRecord {
+export interface PendingTxRecord {
   txid: string;
   hex: string;
   /** Unix-ms timestamp the tx was added. Useful for stale-tx eviction. */
@@ -224,6 +224,11 @@ export class IndexedDbPendingTxStore implements PendingTxStore {
   }
 
   async list(): Promise<string[]> {
+    const records = await this.listRecords();
+    return records.map((r) => r.hex);
+  }
+
+  async listRecords(): Promise<PendingTxRecord[]> {
     const db = await openDB();
     return new Promise((resolve, reject) => {
       const tx = db.transaction(STORE_NAME, 'readonly');
@@ -232,7 +237,7 @@ export class IndexedDbPendingTxStore implements PendingTxStore {
       request.onsuccess = () => {
         db.close();
         const records = request.result as PendingTxRecord[];
-        resolve(records.map((r) => r.hex));
+        resolve(records);
       };
       request.onerror = () => {
         db.close();

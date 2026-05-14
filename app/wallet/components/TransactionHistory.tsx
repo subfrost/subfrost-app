@@ -139,7 +139,7 @@ interface TransactionHistoryProps {
 }
 
 const TransactionHistory = forwardRef<TransactionHistoryHandle, TransactionHistoryProps>(function TransactionHistory({ onSpeedUpRequest }, ref) {
-  const { account, network } = useWallet() as any;
+  const { account, network, walletType } = useWallet() as any;
   const { t } = useTranslation();
 
   const addresses = [
@@ -284,7 +284,7 @@ const TransactionHistory = forwardRef<TransactionHistoryHandle, TransactionHisto
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
-                    {!tx.confirmed && pendingHexByTxid.has(tx.txid) && (
+                    {walletType === 'keystore' && !tx.confirmed && pendingHexByTxid.has(tx.txid) && (
                       <button
                         type="button"
                         onClick={(e) => {
@@ -294,7 +294,7 @@ const TransactionHistory = forwardRef<TransactionHistoryHandle, TransactionHisto
                           void handleSpeedUpClick(tx);
                         }}
                         disabled={speedUpLoadingTxid === tx.txid}
-                        className="flex items-center gap-1 px-2 py-1 rounded text-xs font-bold uppercase tracking-wide bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 transition-all"
+                        className="tx-pending-tone tx-pending-action flex items-center gap-1 px-2 py-1 rounded text-xs font-bold uppercase tracking-wide transition-all disabled:opacity-50"
                         title="Replace this tx with a higher fee (RBF)"
                       >
                         {speedUpLoadingTxid === tx.txid ? (
@@ -309,7 +309,7 @@ const TransactionHistory = forwardRef<TransactionHistoryHandle, TransactionHisto
                       className={`px-3 py-1 rounded-full text-xs font-bold ${
                         tx.confirmed
                           ? 'bg-[color:var(--sf-info-green-bg)] text-[color:var(--sf-info-green-title)]'
-                          : 'bg-yellow-500/20 text-yellow-600 dark:text-yellow-400'
+                          : 'tx-pending-tone'
                       }`}
                     >
                       {tx.confirmed ? t('txHistory.confirmed') : t('txHistory.pending')}

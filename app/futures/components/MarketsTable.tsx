@@ -115,6 +115,8 @@ export default function MarketsTable({ contracts, onContractSelect }: MarketsTab
   const { t } = useTranslation();
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [showPositionsInfo, setShowPositionsInfo] = useState(false);
+  const mempoolTextClass = "mempool-queue-text ml-1";
+  const mempoolDetailTextClass = "mempool-queue-text ml-2";
 
   const toggleRow = (contractId: string) => {
     const newExpanded = new Set(expandedRows);
@@ -241,7 +243,7 @@ export default function MarketsTable({ contracts, onContractSelect }: MarketsTab
                     <span>
                       {contract.remaining.toFixed(1)} BTC ({((contract.remaining / contract.totalSupply) * 100).toFixed(1)}%) {t('markets.remaining')}
                       {contract.mempoolQueue > 0 && (
-                        <span className="ml-1 text-[color:var(--sf-primary)]/90">
+                        <span className={mempoolTextClass}>
                           ({contract.mempoolQueue.toFixed(1)} {t('markets.inMempool')})
                         </span>
                       )}
@@ -270,7 +272,7 @@ export default function MarketsTable({ contracts, onContractSelect }: MarketsTab
                         <div className="font-medium">
                           {contract.remaining.toFixed(1)} BTC
                           {contract.mempoolQueue > 0 && (
-                            <span className="ml-1 text-[color:var(--sf-primary)]/90 text-xs">
+                            <span className={`${mempoolTextClass} text-xs`}>
                               ({contract.mempoolQueue.toFixed(1)} {t('markets.inQueue')})
                             </span>
                           )}
@@ -395,7 +397,7 @@ export default function MarketsTable({ contracts, onContractSelect }: MarketsTab
                             <span>
                               {contract.remaining.toFixed(1)} BTC ({((contract.remaining / contract.totalSupply) * 100).toFixed(1)}%) {t('markets.remaining')}
                               {contract.mempoolQueue > 0 && (
-                                <span className="ml-1 text-[color:var(--sf-primary)]/90">
+                                <span className={mempoolTextClass}>
                                   ({contract.mempoolQueue.toFixed(1)} {t('markets.inMempool')})
                                 </span>
                               )}
@@ -446,7 +448,7 @@ export default function MarketsTable({ contracts, onContractSelect }: MarketsTab
                                 <div className="font-medium">
                                   {contract.remaining.toFixed(1)} BTC
                                   {contract.mempoolQueue > 0 && (
-                                    <span className="ml-2 text-[color:var(--sf-primary)]/90">
+                                    <span className={mempoolDetailTextClass}>
                                       ({contract.mempoolQueue.toFixed(1)} BTC {t('markets.inQueue')})
                                     </span>
                                   )}
