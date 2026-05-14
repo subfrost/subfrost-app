@@ -93,7 +93,6 @@ describe('computePairedLpAmount', () => {
         uiToken0Id: DIESEL_ID,
         uiToken1Id: FRBTC_ID,
         poolToken0Id: FRBTC_ID,
-        poolToken1Id: DIESEL_ID,
         // Pool reserves: 1k frBTC / 100k DIESEL — same product so the
         // paired result for 1 DIESEL must again be 0.01 frBTC.
         reserve0: (1_000n * 10n ** 8n).toString(),
@@ -115,7 +114,6 @@ describe('computePairedLpAmount', () => {
         uiToken0Id: 'btc',
         uiToken1Id: DIESEL_ID,
         poolToken0Id: FRBTC_ID,
-        poolToken1Id: DIESEL_ID,
         reserve0: (1_000n * 10n ** 8n).toString(), // frBTC
         reserve1: (100_000n * 10n ** 8n).toString(), // DIESEL
         typedDisplay: '1',
@@ -133,7 +131,6 @@ describe('computePairedLpAmount', () => {
         uiToken0Id: 'btc',
         uiToken1Id: DIESEL_ID,
         poolToken0Id: FRBTC_ID,
-        poolToken1Id: DIESEL_ID,
         reserve0: (1_000n * 10n ** 8n).toString(),
         reserve1: (100_000n * 10n ** 8n).toString(),
         typedDisplay: '1',
@@ -151,7 +148,6 @@ describe('computePairedLpAmount', () => {
         uiToken0Id: 'btc',
         uiToken1Id: DIESEL_ID,
         poolToken0Id: FRBTC_ID,
-        poolToken1Id: DIESEL_ID,
         reserve0: (1_000n * 10n ** 8n).toString(),
         reserve1: (100_000n * 10n ** 8n).toString(),
         typedDisplay: '99.5',

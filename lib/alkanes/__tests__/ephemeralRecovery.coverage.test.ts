@@ -168,6 +168,8 @@ describe('EphemeralRecoveryRecord storage round-trip', () => {
       outputScriptHex: '5120' + 'aa'.repeat(32),
       outputValue: 12_345,
       userAddress: 'bc1pxyz_user',
+      signerAddress: 'bc1pxyz_signer',
+      childAlkanes: [],
       ...over,
     };
   }
@@ -282,7 +284,7 @@ describe('RawEphemeralChildTxRecord storage round-trip', () => {
       parentVout: 0, userXOnlyPubkey: makeRandomXOnly(),
       ephemeralXOnlyPubkey: makeRandomXOnly(), internalPubkey: makeRandomXOnly(),
       address: 'a', outputScriptHex: '5120' + 'aa'.repeat(32), outputValue: 1,
-      userAddress: 'u',
+      userAddress: 'u', signerAddress: 's', childAlkanes: [],
     });
     saveRawEphemeralChildTxRecord(makeRawRecord({ parentTxid: txid }));
     expect(getEphemeralRecoveryRecord('mainnet', txid)).not.toBeNull();
@@ -339,6 +341,8 @@ describe('paymentFromRecoveryRecord — rebuild from stored record', () => {
       outputScriptHex: built.outputScriptHex,
       outputValue: 1_000,
       userAddress: 'bc1pxyz',
+      signerAddress: 'bc1pxyz_signer',
+      childAlkanes: [],
     };
     const rebuilt = paymentFromRecoveryRecord(record, bitcoin.networks.bitcoin);
     expect(rebuilt.address).toBe(built.address);
@@ -434,11 +438,12 @@ describe('deriveEphemeralRecoveryInternalPubkey — determinism', () => {
     const network = bitcoin.networks.bitcoin;
     const userXOnly = makeRandomXOnly(network);
     const ephemeralXOnly = makeRandomXOnly(network);
+    void network;
     const a = deriveEphemeralRecoveryInternalPubkey({
-      network, networkId: 'mainnet', userXOnlyPubkey: userXOnly, ephemeralXOnlyPubkey: ephemeralXOnly,
+      networkId: 'mainnet', userXOnlyPubkey: userXOnly, ephemeralXOnlyPubkey: ephemeralXOnly,
     });
     const b = deriveEphemeralRecoveryInternalPubkey({
-      network, networkId: 'mainnet', userXOnlyPubkey: userXOnly, ephemeralXOnlyPubkey: ephemeralXOnly,
+      networkId: 'mainnet', userXOnlyPubkey: userXOnly, ephemeralXOnlyPubkey: ephemeralXOnly,
     });
     expect(a.toString('hex')).toBe(b.toString('hex'));
   });
@@ -447,11 +452,12 @@ describe('deriveEphemeralRecoveryInternalPubkey — determinism', () => {
     const network = bitcoin.networks.bitcoin;
     const userXOnly = makeRandomXOnly(network);
     const ephemeralXOnly = makeRandomXOnly(network);
+    void network;
     const mainnet = deriveEphemeralRecoveryInternalPubkey({
-      network, networkId: 'mainnet', userXOnlyPubkey: userXOnly, ephemeralXOnlyPubkey: ephemeralXOnly,
+      networkId: 'mainnet', userXOnlyPubkey: userXOnly, ephemeralXOnlyPubkey: ephemeralXOnly,
     });
     const regtest = deriveEphemeralRecoveryInternalPubkey({
-      network: bitcoin.networks.regtest, networkId: 'subfrost-regtest',
+      networkId: 'subfrost-regtest',
       userXOnlyPubkey: userXOnly, ephemeralXOnlyPubkey: ephemeralXOnly,
     });
     expect(mainnet.toString('hex')).not.toBe(regtest.toString('hex'));
