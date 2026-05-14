@@ -123,6 +123,16 @@ export default function LiquidityInputs({
   const { maxSlippage, setMaxSlippage, slippageSelection, setSlippageSelection, deadlineBlocks, setDeadlineBlocks } = useGlobalStore();
 
   // Calculate active percentage for token inputs
+  const formatTokenAmount = (raw: string | number, _symbolOrId?: string): string => {
+    const v = typeof raw === 'string' ? parseFloat(raw) : raw;
+    if (!isFinite(v) || v <= 0) return '0.00';
+    if (v >= 1e12) return `${(v / 1e12).toFixed(2)}T`;
+    if (v >= 1e9) return `${(v / 1e9).toFixed(2)}B`;
+    if (v >= 1e6) return `${(v / 1e6).toFixed(2)}M`;
+    if (v >= 100) return v.toFixed(2);
+    return v.toFixed(8);
+  };
+
   const getActivePercent = (amount: string, balanceText: string): number | null => {
     if (!amount || !balanceText) return null;
     const balanceMatch = balanceText.match(/[\d.]+/);
@@ -306,7 +316,7 @@ export default function LiquidityInputs({
                         <span className="text-sm font-bold text-[color:var(--sf-text)]">{selectedLPPosition.token0Symbol}</span>
                       </div>
                       <div className="flex flex-col items-end">
-                        <span className="text-sm font-bold text-[color:var(--sf-text)]">{removeExpectedToken0}</span>
+                        <span className="text-sm font-bold text-[color:var(--sf-text)]">{formatTokenAmount(removeExpectedToken0, selectedLPPosition.token0Symbol || selectedLPPosition.token0Id)}</span>
                         {removeExpectedFiat0 && (
                           <span className="text-xs font-medium text-[color:var(--sf-text)]/50">{removeExpectedFiat0}</span>
                         )}
@@ -318,7 +328,7 @@ export default function LiquidityInputs({
                         <span className="text-sm font-bold text-[color:var(--sf-text)]">{selectedLPPosition.token1Symbol}</span>
                       </div>
                       <div className="flex flex-col items-end">
-                        <span className="text-sm font-bold text-[color:var(--sf-text)]">{removeExpectedToken1}</span>
+                        <span className="text-sm font-bold text-[color:var(--sf-text)]">{formatTokenAmount(removeExpectedToken1, selectedLPPosition.token1Symbol || selectedLPPosition.token1Id)}</span>
                         {removeExpectedFiat1 && (
                           <span className="text-xs font-medium text-[color:var(--sf-text)]/50">{removeExpectedFiat1}</span>
                         )}
@@ -346,15 +356,21 @@ export default function LiquidityInputs({
                 {/* Collapsible details content */}
                 <div className={`transition-all duration-[200ms] ease-in-out ${detailsOpen ? 'max-h-[1000px] opacity-100 pb-4 overflow-visible' : 'max-h-0 opacity-0 pb-0 overflow-hidden'}`}>
                 <div className="flex flex-col gap-2.5 px-4 text-sm">
-                  {/* Minimum Received row */}
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60">
-                      {t('liquidity.minimumReceived')}
-                    </span>
-                    <span className="font-semibold text-[color:var(--sf-text)]">
-                      {selectedLPPosition.token0Symbol} / {selectedLPPosition.token1Symbol}
-                    </span>
-                  </div>
+                  {removeExpectedToken0 && removeExpectedToken1 && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60">
+                        {t('liquidity.minimumReceived')}
+                      </span>
+                      <span className="font-semibold text-[color:var(--sf-text)]">
+                        {(() => {
+                          const slip = (parseFloat(maxSlippage) || 0) / 100;
+                          const m0 = parseFloat(removeExpectedToken0) * (1 - slip);
+                          const m1 = parseFloat(removeExpectedToken1) * (1 - slip);
+                          return `${formatTokenAmount(m0, selectedLPPosition.token0Symbol || selectedLPPosition.token0Id)} ${selectedLPPosition.token0Symbol} / ${formatTokenAmount(m1, selectedLPPosition.token1Symbol || selectedLPPosition.token1Id)} ${selectedLPPosition.token1Symbol}`;
+                        })()}
+                      </span>
+                    </div>
+                  )}
 
                   {/* Deadline (blocks) row */}
                   <div className="flex items-center justify-between">
@@ -690,10 +706,10 @@ export default function LiquidityInputs({
             {/* Collapsible details content */}
             <div className={`transition-all duration-[200ms] ease-in-out ${detailsOpen ? 'max-h-[1000px] opacity-100 pb-4 overflow-visible' : 'max-h-0 opacity-0 pb-0 overflow-hidden'}`}>
             <div className="flex flex-col gap-2.5 px-4 text-sm">
-              {/* Minimum Received row */}
+              {/* Minimum Deposit row */}
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--sf-text)]/60">
-                  {t('liquidity.minimumReceived')}
+                  {t('liquidity.minimumDeposit')}
                 </span>
                 <span className="font-semibold text-[color:var(--sf-text)]">
                   {minimumToken0 || (token0.id === 'btc' || token0.symbol === 'frBTC' ? '0.00000000' : '0.00')} {token0.symbol} / {minimumToken1 || (token1.id === 'btc' || token1.symbol === 'frBTC' ? '0.00000000' : '0.00')} {token1.symbol}

@@ -532,16 +532,16 @@ export default function SwapShell() {
     // Phase 1: need at least pools loaded with some markets
     if (isLoadingPools || markets.length === 0) return;
 
-    // If a one-shot pair was already consumed synchronously above, attach the
-    // matching pool record (if any) and mark initialized — don't override it.
-    if (usedSessionRef.current && fromToken && toToken) {
-      const matchingPool = markets.find(
-        (p) =>
-          (p.token0.id === fromToken.id && p.token1.id === toToken.id) ||
-          (p.token0.id === toToken.id && p.token1.id === fromToken.id)
-      );
-      if (matchingPool) setSelectedPool(matchingPool);
-      trendingPoolInitializedRef.current = true;
+    if (usedSessionRef.current) {
+      if (fromToken && toToken) {
+        const matchingPool = markets.find(
+          (p) =>
+            (p.token0.id === fromToken.id && p.token1.id === toToken.id) ||
+            (p.token0.id === toToken.id && p.token1.id === fromToken.id)
+        );
+        if (matchingPool) setSelectedPool(matchingPool);
+        trendingPoolInitializedRef.current = true;
+      }
       return;
     }
 
