@@ -30,7 +30,11 @@ export type { PendingTxRecord } from '@/lib/pendingTxStorage';
 async function isTxConfirmed(network: string, txid: string): Promise<boolean> {
   try {
     const tx = await getEsploraTx(network, txid);
-    return !!tx?.status?.confirmed;
+    if (tx?.status?.confirmed) return true;
+    // On devnet the esplora index may not surface the tx at all once mined
+    // (autoConfirm flow). Treat null as confirmed so the record is pruned.
+    if (network === 'devnet' && tx === null) return true;
+    return false;
   } catch {
     return false;
   }

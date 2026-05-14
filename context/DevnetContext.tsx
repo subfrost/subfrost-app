@@ -77,6 +77,13 @@ export function useDevnet() {
 /** Debounce delay (ms) for saving state after actions. */
 const SAVE_DEBOUNCE_MS = 2000;
 
+// Detect WebAssembly OOM errors — these require a page reload to recover because
+// the WASM linear memory is unrecoverable once exhausted.
+const isOomError = (e: any): boolean => {
+  const msg = e?.message || (typeof e === 'string' ? e : '');
+  return msg.includes('Out of memory') || msg.includes('Cannot allocate Wasm memory') || msg.includes('WebAssembly.Instance') || msg.includes('memory access out of bounds');
+};
+
 export function DevnetProvider({ children, network }: { children: React.ReactNode; network: string }) {
   const [state, setState] = useState<DevnetState>(defaultState);
   const harnessRef = useRef<any>(null);
@@ -449,52 +456,68 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
   const controls: DevnetControls = {
     mineBlocks: async (count: number) => {
       if (!harnessRef.current) return;
-      // Mine 1 block at a time with yields to prevent OOM
-      for (let i = 0; i < count; i++) {
-        harnessRef.current.mineBlocks(1);
-        if (count > 1) await new Promise(r => setTimeout(r, 50));
+      try {
+        // Mine 1 block at a time with yields to prevent OOM
+        for (let i = 0; i < count; i++) {
+          harnessRef.current.mineBlocks(1);
+          if (count > 1) await new Promise(r => setTimeout(r, 50));
+        }
+        setState(prev => ({ ...prev, chainHeight: harnessRef.current.height }));
+        debounceSave();
+      } catch (e: any) {
+        if (isOomError(e)) {
+          setState(prev => ({ ...prev, status: 'error', error: e?.message || 'WebAssembly out of memory' }));
+          return;
+        }
+        throw e;
       }
-      setState(prev => ({ ...prev, chainHeight: harnessRef.current.height }));
-      debounceSave();
     },
     faucetBtc: async (address: string, sats: number) => {
       if (!harnessRef.current) throw new Error('Devnet not ready');
-      let devnetAddr = address;
-      if (address.startsWith('bc1') && !address.startsWith('bcrt1')) {
-        try {
-          const bitcoin = await import('bitcoinjs-lib');
-          const mainnetOutput = bitcoin.address.toOutputScript(address, bitcoin.networks.bitcoin);
-          devnetAddr = bitcoin.address.fromOutputScript(mainnetOutput, bitcoin.networks.regtest);
-          console.log('[devnet] Converted', address.slice(0, 10) + '...', '→', devnetAddr.slice(0, 12) + '...');
-        } catch (e: any) {
-          console.warn('[devnet] Address conversion failed, using raw:', e?.message);
+      try {
+        let devnetAddr = address;
+        if (address.startsWith('bc1') && !address.startsWith('bcrt1')) {
+          try {
+            const bitcoin = await import('bitcoinjs-lib');
+            const mainnetOutput = bitcoin.address.toOutputScript(address, bitcoin.networks.bitcoin);
+            devnetAddr = bitcoin.address.fromOutputScript(mainnetOutput, bitcoin.networks.regtest);
+            console.log('[devnet] Converted', address.slice(0, 10) + '...', '→', devnetAddr.slice(0, 12) + '...');
+          } catch (e: any) {
+            console.warn('[devnet] Address conversion failed, using raw:', e?.message);
+          }
         }
+        // generatetoaddress mines coinbase to user's address (no mature UTXOs needed
+        // for display — the enriched balance path is not used in ammOnly devnet).
+        const result = harnessRef.current.server.handleRpc(JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'generatetoaddress',
+          params: [1, devnetAddr],
+          id: 1,
+        }));
+        const parsed = JSON.parse(result);
+        if (parsed.error) {
+          console.warn('[devnet] generatetoaddress error:', parsed.error, 'addr:', devnetAddr);
+        }
+        // Index the coinbase block through metashrew.
+        harnessRef.current.mineBlocks(1);
+        // Mine maturity blocks in small batches with async yields to prevent OOM.
+        // 100 blocks required for coinbase spendability. Batch size 10 (vs 25) to
+        // stay well under WASM memory limits after quspo was added pre-Phase2.
+        for (let b = 0; b < 10; b++) {
+          harnessRef.current.mineBlocks(10);
+          await new Promise(r => setTimeout(r, 0));
+        }
+        await new Promise(r => setTimeout(r, 50));
+        console.log('[devnet] BTC faucet: mined coinbase to', devnetAddr, '(+100 maturity blocks)');
+        setState(prev => ({ ...prev, chainHeight: harnessRef.current.height }));
+        debounceSave();
+      } catch (e: any) {
+        if (isOomError(e)) {
+          setState(prev => ({ ...prev, status: 'error', error: e?.message || 'WebAssembly out of memory' }));
+          return;
+        }
+        throw e;
       }
-      // generatetoaddress mines coinbase to user's address (no mature UTXOs needed
-      // for display — the enriched balance path is not used in ammOnly devnet).
-      const result = harnessRef.current.server.handleRpc(JSON.stringify({
-        jsonrpc: '2.0',
-        method: 'generatetoaddress',
-        params: [1, devnetAddr],
-        id: 1,
-      }));
-      const parsed = JSON.parse(result);
-      if (parsed.error) {
-        console.warn('[devnet] generatetoaddress error:', parsed.error, 'addr:', devnetAddr);
-      }
-      // Index the coinbase block through metashrew.
-      harnessRef.current.mineBlocks(1);
-      // Mine maturity blocks in small batches with async yields to prevent OOM.
-      // 100 blocks required for coinbase spendability. Batch size 10 (vs 25) to
-      // stay well under WASM memory limits after quspo was added pre-Phase2.
-      for (let b = 0; b < 10; b++) {
-        harnessRef.current.mineBlocks(10);
-        await new Promise(r => setTimeout(r, 0));
-      }
-      await new Promise(r => setTimeout(r, 50));
-      console.log('[devnet] BTC faucet: mined coinbase to', devnetAddr, '(+100 maturity blocks)');
-      setState(prev => ({ ...prev, chainHeight: harnessRef.current.height }));
-      debounceSave();
     },
     // JOURNAL (2026-03-27): Faucets require mine_enabled:true in the options JSON.
     // Without it, alkanesExecuteFull broadcasts the tx but never mines it into a
@@ -513,6 +536,7 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
     // processing all skipped blocks before adding the new ones. Gap = 0 after call.
     faucetDiesel: async (address: string) => {
       if (!providerRef.current || !harnessRef.current) throw new Error('Devnet not ready');
+      try {
       const boot = getBootAddresses();
       console.log('[devnet] faucetDiesel: address=', address, 'boot.taproot=', boot.taproot);
       // Mine a coinbase block directly to boot.taproot so it always has a
@@ -532,7 +556,7 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
       try {
         result = await providerRef.current.alkanesExecuteFull(
           JSON.stringify([address]),
-          'B:10000:v0',
+          'B:546:v0',
           '[2,0,77]:v0:v0',
           '1', null,
           JSON.stringify({
@@ -582,9 +606,17 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
       }
       setState(prev => ({ ...prev, chainHeight: harnessRef.current.height }));
       debounceSave();
+      } catch (e: any) {
+        if (isOomError(e)) {
+          setState(prev => ({ ...prev, status: 'error', error: e?.message || 'WebAssembly out of memory' }));
+          return;
+        }
+        throw e;
+      }
     },
     faucetFuel: async (address: string) => {
       if (!providerRef.current || !harnessRef.current) throw new Error('Devnet not ready');
+      try {
       // Mint FUEL via opcode 77 on FUEL token [4:7000], funded by boot wallet
       const boot = getBootAddresses();
       // Mine coinbase to boot.taproot so it always has a fresh spendable UTXO.
@@ -596,7 +628,7 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
       await new Promise(r => setTimeout(r, 50));
       await providerRef.current.alkanesExecuteFull(
         JSON.stringify([address]),
-        'B:10000:v0',
+        'B:546:v0',
         '[4,7000,77]:v0:v0',
         '1', null,
         JSON.stringify({
@@ -616,9 +648,17 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
       console.log('[devnet] FUEL minted to', address);
       setState(prev => ({ ...prev, chainHeight: harnessRef.current.height }));
       debounceSave();
+      } catch (e: any) {
+        if (isOomError(e)) {
+          setState(prev => ({ ...prev, status: 'error', error: e?.message || 'WebAssembly out of memory' }));
+          return;
+        }
+        throw e;
+      }
     },
     faucetFrbtc: async (address: string) => {
       if (!providerRef.current || !harnessRef.current) throw new Error('Devnet not ready');
+      try {
       // Wrap BTC → frBTC via opcode 77 on frBTC contract [32:0]
       //
       // ⚠️ CRITICAL (2026-03-26): The signer address MUST be queried dynamically
@@ -663,7 +703,7 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
       const boot = getBootAddresses();
       await providerRef.current.alkanesExecuteFull(
         JSON.stringify([signerAddr, address]),
-        'B:100000:v0',
+        'B:100000000:v0',
         '[32,0,77]:v1:v1',
         '1', null,
         JSON.stringify({
@@ -683,6 +723,13 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
       console.log('[devnet] frBTC wrapped to', address);
       setState(prev => ({ ...prev, chainHeight: harnessRef.current.height }));
       debounceSave();
+      } catch (e: any) {
+        if (isOomError(e)) {
+          setState(prev => ({ ...prev, status: 'error', error: e?.message || 'WebAssembly out of memory' }));
+          return;
+        }
+        throw e;
+      }
     },
     faucetUsdt: async (address: string) => {
       if (!evmProviderRef.current || !evmTokensRef.current) {

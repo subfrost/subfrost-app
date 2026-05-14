@@ -78,6 +78,7 @@ import { getConfig } from '@/utils/getConfig';
 import { buildPlanFromTx } from '@/lib/alkanes/planBuilder';
 import { buildUnwrapProtostones, buildUnwrapInputRequirements } from '@/lib/alkanes/builders';
 import { getBitcoinNetwork, extractPsbtBase64, toAlks, getSignerAddressDynamic } from '@/lib/alkanes/helpers';
+import { alkanesExecuteTyped } from '@/lib/alkanes/execute';
 
 bitcoin.initEccLib(ecc);
 
@@ -122,6 +123,30 @@ export function useUnwrapMutation() {
       }
 
       const unwrapAmount = toAlks(unwrapData.amount);
+
+      // Devnet shortcut: the full PSBT signing flow requires browser wallet
+      // infrastructure not available in-browser devnet. Use autoConfirm instead.
+      if (network === 'devnet') {
+        const signerAddressDevnet = await getSignerAddressDynamic(network);
+        const inputReqsDevnet = buildUnwrapInputRequirements({ frbtcId: FRBTC_ALKANE_ID, amount: unwrapAmount });
+        const protoDevnet = buildUnwrapProtostones({
+          frbtcId: FRBTC_ALKANE_ID,
+          dustVout: 2,
+          amount: unwrapAmount,
+          pointer: 'v1',
+          refund: 'v0',
+        });
+        const devnetResult = await alkanesExecuteTyped(provider as any, {
+          network, txContext,
+          toAddresses: [txContext.alkanesChangeAddress, txContext.btcChangeAddress, signerAddressDevnet],
+          inputRequirements: inputReqsDevnet,
+          protostones: protoDevnet,
+          feeRate: unwrapData.feeRate,
+          autoConfirm: true,
+        });
+        const txId = devnetResult?.txid || devnetResult?.reveal_txid || '';
+        return { success: true, transactionId: txId };
+      }
 
       // Input requirements select the frBTC UTXO. The protostones below
       // explicitly include p0 as the edict into the p1 unwrap call.

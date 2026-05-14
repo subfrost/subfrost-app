@@ -139,7 +139,7 @@ interface TransactionHistoryProps {
 }
 
 const TransactionHistory = forwardRef<TransactionHistoryHandle, TransactionHistoryProps>(function TransactionHistory({ onSpeedUpRequest }, ref) {
-  const { account, network } = useWallet() as any;
+  const { account, network, walletType } = useWallet() as any;
   const { t } = useTranslation();
 
   const addresses = [
@@ -284,7 +284,7 @@ const TransactionHistory = forwardRef<TransactionHistoryHandle, TransactionHisto
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
-                    {!tx.confirmed && pendingHexByTxid.has(tx.txid) && (
+                    {!tx.confirmed && pendingHexByTxid.has(tx.txid) && walletType === 'keystore' && (
                       <button
                         type="button"
                         onClick={(e) => {

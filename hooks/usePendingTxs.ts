@@ -238,9 +238,14 @@ export function usePendingTxs(): UsePendingTxsResult {
           const tx = await getEsploraTx(network ?? 'mainnet', txid);
           if (tx?.status?.confirmed) {
             return { txid, hex, confirmed: true };
-          } else {
-            return { txid, hex, confirmed: false };
           }
+          // On devnet the esplora index may not surface the tx at all once mined
+          // (autoConfirm flow). Treat a null response as confirmed so the pending
+          // entry is evicted rather than lingering indefinitely.
+          if ((network ?? '') === 'devnet' && tx === null) {
+            return { txid, hex, confirmed: true };
+          }
+          return { txid, hex, confirmed: false };
         }),
       );
       const stillPending = statuses

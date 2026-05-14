@@ -19,6 +19,7 @@ import { getConfig } from '@/utils/getConfig';
 import { getFutureBlockHeight } from '@/utils/amm';
 import { FRBTC_UNWRAP_FEE_PER_1000 } from '@/constants/alkanes';
 import type { OperationType } from '@/app/components/SwapSuccessNotification';
+import { alkanesExecuteTyped } from '@/lib/alkanes/execute';
 
 export interface TokenToBtcSwapProgress {
   type:
@@ -85,6 +86,53 @@ export function useTokenToBtcSwap() {
       const config = getConfig(network);
       const { getSignerAddressDynamic } = await import('@/lib/alkanes/helpers');
       const { buildSwapProtostone, buildUnwrapProtostones } = await import('@/lib/alkanes/builders');
+
+      // Devnet shortcut: the ephemeral CPFP package flow cannot orchestrate
+      // two-PSBT signing in the in-browser devnet. Execute swap then unwrap
+      // as sequential autoConfirm calls instead.
+      if (network === 'devnet') {
+        const signerAddressDevnet = await getSignerAddressDynamic(network);
+        const deadlineProviderDevnet = provider as Parameters<typeof getFutureBlockHeight>[1];
+        const deadlineDevnet = (await getFutureBlockHeight(deadlineBlocks || 5, deadlineProviderDevnet)).toString();
+        const swapProtostoneDevnet = buildSwapProtostone({
+          factoryId: config.ALKANE_FACTORY_ID,
+          sellTokenId: params.fromTokenId,
+          buyTokenId: config.FRBTC_ALKANE_ID,
+          sellAmount: params.sellAmount,
+          minOutput: '1',
+          deadline: deadlineDevnet,
+        });
+        await alkanesExecuteTyped(provider as any, {
+          network, txContext,
+          toAddresses: [address],
+          inputRequirements: `${params.fromTokenId}:${params.sellAmount}`,
+          protostones: swapProtostoneDevnet,
+          feeRate: params.feeRate,
+          autoConfirm: true,
+        });
+        const unwrapFeeDevnet = premiumData?.unwrapFeePerThousand ?? FRBTC_UNWRAP_FEE_PER_1000;
+        const minimumFrbtcDevnet = grossUpForUnwrapFee(params.minimumReceived || '1', unwrapFeeDevnet);
+        const [frbtcBlockD, frbtcTxD] = config.FRBTC_ALKANE_ID.split(':').map(Number);
+        const unwrapProtostoneDevnet = buildUnwrapProtostones({
+          frbtcId: config.FRBTC_ALKANE_ID,
+          dustVout: 2,
+          amount: minimumFrbtcDevnet,
+          pointer: 'v1',
+          refund: 'v0',
+        });
+        const unwrapResult = await alkanesExecuteTyped(provider as any, {
+          network, txContext,
+          toAddresses: [txContext.alkanesChangeAddress, txContext.btcChangeAddress, signerAddressDevnet],
+          inputRequirements: `${config.FRBTC_ALKANE_ID}:${minimumFrbtcDevnet}`,
+          protostones: unwrapProtostoneDevnet,
+          feeRate: params.feeRate,
+          autoConfirm: true,
+        });
+        const unwrapTxId = unwrapResult?.txid || unwrapResult?.reveal_txid || '';
+        params.onNotify(unwrapTxId, 'swap');
+        params.onProgress({ type: 'complete', swapTxId: unwrapTxId, unwrapTxId });
+        return { swapTxId: unwrapTxId, unwrapTxId };
+      }
 
       const unwrapFee = premiumData?.unwrapFeePerThousand ?? FRBTC_UNWRAP_FEE_PER_1000;
       const minimumFrbtcAmount = grossUpForUnwrapFee(params.minimumReceived || '1', unwrapFee);

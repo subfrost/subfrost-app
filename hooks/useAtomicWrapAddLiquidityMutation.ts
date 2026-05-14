@@ -30,6 +30,7 @@ import { FRBTC_WRAP_FEE_PER_1000 } from '@/constants/alkanes';
 import { getConfig } from '@/utils/getConfig';
 import { getFutureBlockHeight } from '@/utils/amm';
 import { FRBTC_WRAP_OPCODE } from '@/lib/alkanes/constants';
+import { alkanesExecuteTyped } from '@/lib/alkanes/execute';
 
 export interface AtomicWrapAddLiquidityParams {
   /** The non-BTC token in the LP pair (the partner of frBTC). */
@@ -56,7 +57,7 @@ export interface AtomicWrapAddLiquidityParams {
 }
 
 export function useAtomicWrapAddLiquidityMutation() {
-  const { network, address } = useWallet();
+  const { network, address, txContext } = useWallet();
   const provider = useSandshrewProvider();
   const executeEphemeralWrapPackage = useEphemeralWrapPackage();
   const { data: premiumData } = useFrbtcPremium();
@@ -83,6 +84,74 @@ export function useAtomicWrapAddLiquidityMutation() {
         .integerValue(BigNumber.ROUND_FLOOR);
       const tokenAmountAlks = new BigNumber(params.tokenAmount).multipliedBy(1e8)
         .integerValue(BigNumber.ROUND_FLOOR);
+
+      // Devnet shortcut: the ephemeral CPFP package flow requires PSBT signing
+      // across two transactions which the in-browser devnet cannot orchestrate.
+      // Instead execute wrap + addLiquidity/createPool as sequential autoConfirm calls.
+      if (network === 'devnet' && provider && txContext) {
+        const { getSignerAddressDynamic } = await import('@/lib/alkanes/helpers');
+        const {
+          buildFactoryAddLiquidityProtostones,
+          buildFactoryCreatePoolProtostone,
+        } = await import('@/lib/alkanes/builders');
+
+        const signerAddressDevnet = await getSignerAddressDynamic(network);
+        await alkanesExecuteTyped(provider as any, {
+          network, txContext,
+          toAddresses: [signerAddressDevnet, address],
+          inputRequirements: `B:${btcSats.toString()}:v0`,
+          protostones: `[32,0,${FRBTC_WRAP_OPCODE}]:v1:v1`,
+          feeRate: params.feeRate,
+          autoConfirm: true,
+        });
+
+        let devnetResolvedPoolId = params.poolId ?? null;
+        if (!devnetResolvedPoolId) {
+          devnetResolvedPoolId = await findPoolId(
+            provider,
+            config.ALKANE_FACTORY_ID,
+            config.FRBTC_ALKANE_ID,
+            params.tokenSideId,
+          );
+        }
+
+        let devnetProtostones: string;
+        if (devnetResolvedPoolId) {
+          const slippageFactor = new BigNumber(100).minus(params.maxSlippage).dividedBy(100);
+          const frbtcMin = frbtcDesired.multipliedBy(slippageFactor).integerValue(BigNumber.ROUND_FLOOR);
+          const tokenMin = tokenAmountAlks.multipliedBy(slippageFactor).integerValue(BigNumber.ROUND_FLOOR);
+          const deadline = (await getFutureBlockHeight(params.deadlineBlocks || 5, provider as any)).toString();
+          devnetProtostones = buildFactoryAddLiquidityProtostones({
+            factoryId: config.ALKANE_FACTORY_ID,
+            tokenA: config.FRBTC_ALKANE_ID,
+            tokenB: params.tokenSideId,
+            amountADesired: frbtcDesired.toString(),
+            amountBDesired: tokenAmountAlks.toString(),
+            amountAMin: frbtcMin.toString(),
+            amountBMin: tokenMin.toString(),
+            deadline,
+          });
+        } else {
+          devnetProtostones = buildFactoryCreatePoolProtostone({
+            factoryId: config.ALKANE_FACTORY_ID,
+            tokenA: config.FRBTC_ALKANE_ID,
+            tokenB: params.tokenSideId,
+            amountA: frbtcDesired.toString(),
+            amountB: tokenAmountAlks.toString(),
+          });
+        }
+
+        const result = await alkanesExecuteTyped(provider as any, {
+          network, txContext,
+          toAddresses: [address],
+          inputRequirements: `${config.FRBTC_ALKANE_ID}:${frbtcDesired.toString()},${params.tokenSideId}:${tokenAmountAlks.toString()}`,
+          protostones: devnetProtostones,
+          feeRate: params.feeRate,
+          autoConfirm: true,
+        });
+        const txid = result?.txid || result?.reveal_txid || result?.revealTxid || result?.transaction_id || '';
+        return { success: true, transactionId: txid };
+      }
 
       // Resolve pool existence: caller-supplied poolId trumps factory lookup.
       // null → no pool exists → CreateNewPool path; otherwise → AddLiquidity.
@@ -152,7 +221,7 @@ export function useAtomicWrapAddLiquidityMutation() {
         splitTransactions: params.splitTransactions ?? (network === 'mainnet'),
       });
     },
-    [network, address, premiumData, executeEphemeralWrapPackage, provider],
+    [network, address, txContext, premiumData, executeEphemeralWrapPackage, provider],
   );
   const mutation = useMutation({ mutationFn: executeAtomicAddLiquidity });
 
