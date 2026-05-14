@@ -25,55 +25,9 @@ import GlobalNotificationArea from '@/app/components/GlobalNotificationArea';
 import { DEMO_MODE_ENABLED } from '@/utils/demoMode';
 
 
-// Define Network type locally
 import type { Network } from '@/utils/constants';
-
-const NETWORK_STORAGE_KEY = 'subfrost_selected_network';
-
-function normalizeNetworkForDemo(network: Network): Network {
-  return DEMO_MODE_ENABLED && network === 'devnet' ? 'mainnet' : network;
-}
-
-// Detect network from storage, hostname, or env variable.
-// Devnet is stored in sessionStorage (tab-scoped) — survives in-tab navigation
-// but resets to mainnet on a new tab/page load. All other networks use localStorage.
-// The frontend can only operate on two networks: mainnet (the live
-// protocol) and devnet (in-browser stack). Stale legacy values like
-// `subfrost-regtest` / `signet` / `regtest-local` are no longer
-// accepted from storage — they would silently route to a backend
-// that's been retired (e.g. the 502'ing regtest.subfrost.io upstream).
-const ALLOWED_NETWORKS: ReadonlySet<Network> = new Set(['mainnet', 'devnet']);
-
-function detectNetwork(): Network {
-  if (typeof window === 'undefined') return 'mainnet';
-
-  // Devnet is tab-scoped (sessionStorage) so it doesn't leak across tabs.
-  if (!DEMO_MODE_ENABLED && sessionStorage.getItem(NETWORK_STORAGE_KEY) === 'devnet') {
-    return 'devnet';
-  }
-
-  // Restore network selection from localStorage. Only 'mainnet' is
-  // accepted here — devnet routes through sessionStorage above. Any
-  // legacy value (subfrost-regtest, signet, …) is treated as missing
-  // and falls through to the mainnet default.
-  const stored = localStorage.getItem(NETWORK_STORAGE_KEY);
-  if (stored === 'mainnet') {
-    return normalizeNetworkForDemo('mainnet');
-  }
-  // Stale legacy value — strip it so the next load is clean.
-  if (stored && !ALLOWED_NETWORKS.has(stored as Network)) {
-    localStorage.removeItem(NETWORK_STORAGE_KEY);
-  }
-
-  // Optional explicit env override (CI, local dev). Anything other than
-  // an allowed value is ignored.
-  const envNet = process.env.NEXT_PUBLIC_NETWORK as Network | undefined;
-  if (envNet && ALLOWED_NETWORKS.has(envNet)) {
-    return normalizeNetworkForDemo(envNet);
-  }
-
-  return 'mainnet';
-}
+import { detectNetwork, normalizeNetworkForDemo, NETWORK_STORAGE_KEY } from '@/utils/detectNetwork';
+export { detectNetwork };
 
 export default function Providers({ children }: { children: ReactNode }) {
   const [mounted, setMounted] = useState(false);
