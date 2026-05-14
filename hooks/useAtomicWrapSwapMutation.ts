@@ -33,6 +33,7 @@ import { FRBTC_WRAP_FEE_PER_1000 } from '@/constants/alkanes';
 import { getConfig } from '@/utils/getConfig';
 import { getFutureBlockHeight } from '@/utils/amm';
 import { FRBTC_WRAP_OPCODE } from '@/lib/alkanes/constants';
+import { alkanesExecuteTyped } from '@/lib/alkanes/execute';
 
 export interface AtomicWrapSwapParams {
   /** Display BTC amount (e.g. "0.001"). */
@@ -66,7 +67,7 @@ export interface AtomicWrapSwapParams {
 }
 
 export function useAtomicWrapSwapMutation() {
-  const { network, address } = useWallet();
+  const { network, address, txContext } = useWallet();
   const provider = useSandshrewProvider();
   const executeEphemeralWrapPackage = useEphemeralWrapPackage();
   const { data: premiumData } = useFrbtcPremium();
@@ -89,6 +90,49 @@ export function useAtomicWrapSwapMutation() {
       // "Invalid edict format"). Same pattern as
       // useRemoveLiquidityMutation / useSwapMutation.
       const deadline = (await getFutureBlockHeight(params.deadlineBlocks, provider as any)).toString();
+
+      // On devnet, the ephemeral CPFP wrap+swap flow is broken: forcePsbt=true
+      // bypasses alkanesExecuteFull (no auto-mine), so the parent wrap is never
+      // confirmed and the child swap can't reference it. Use two sequential
+      // alkanesExecuteFull calls instead — wrap BTC→frBTC (auto-mined), then
+      // swap frBTC→DIESEL (auto-mined). Sequential is fine on devnet since
+      // block production is in-process.
+      if (network === 'devnet' && provider && txContext) {
+        const signerAddress = await getSignerAddressDynamic(network);
+        // Step 1: Wrap BTC → frBTC
+        // Output layout: v0=signer (receives BTC), v1=user (receives minted frBTC).
+        // protostone pointer=v1 sends minted frBTC to the user's taproot address.
+        await alkanesExecuteTyped(provider as any, {
+          network,
+          txContext,
+          toAddresses: [signerAddress, address],
+          inputRequirements: `B:${btcSats.toString()}:v0`,
+          protostones: `[32,0,${FRBTC_WRAP_OPCODE}]:v1:v1`,
+          feeRate: params.feeRate,
+          autoConfirm: true,
+        });
+
+        // Step 2: Swap frBTC → buyToken
+        const swapProtostone = buildSwapProtostone({
+          factoryId: config.ALKANE_FACTORY_ID,
+          sellTokenId: config.FRBTC_ALKANE_ID,
+          buyTokenId: params.buyTokenId,
+          sellAmount: frbtcAfterFee,
+          minOutput: '1',
+          deadline,
+        });
+        const result = await alkanesExecuteTyped(provider as any, {
+          network,
+          txContext,
+          toAddresses: [address],
+          inputRequirements: `${config.FRBTC_ALKANE_ID}:${frbtcAfterFee}`,
+          protostones: swapProtostone,
+          feeRate: params.feeRate,
+          autoConfirm: true,
+        });
+        const txid = result?.txid || result?.transaction_id || '';
+        return { success: true, transactionId: txid };
+      }
 
       const childProtostone = buildSwapProtostone({
         factoryId: config.ALKANE_FACTORY_ID,
@@ -118,7 +162,7 @@ export function useAtomicWrapSwapMutation() {
         splitTransactions: params.splitTransactions ?? true,
       });
     },
-    [network, address, premiumData, executeEphemeralWrapPackage, provider],
+    [network, address, txContext, premiumData, executeEphemeralWrapPackage, provider],
   );
   const mutation = useMutation({ mutationFn: executeAtomicSwap });
 

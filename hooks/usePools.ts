@@ -13,6 +13,7 @@ import { KNOWN_TOKENS } from '@/lib/alkanes-client';
 import { simulateContract, extractField3Data, parseU128LE } from '@/lib/fujin/rpc';
 import { getCuratedPoolsListItems } from '@/lib/alkanes/curated-pools';
 import { queryKeys } from '@/queries/keys';
+import { quspoGetPools } from '@/lib/devnet/quspoQuery';
 
 export type UsePoolsParams = {
   search?: string;
@@ -521,6 +522,43 @@ async function fetchPoolsFromTokenPairsApi(
 }
 
 // ============================================================================
+// Quspo tertiary indexer pool fetch (devnet primary)
+// Quspo is loaded during devnet boot and provides structured pool data via
+// metashrew_view('get_pools', ...). This is more reliable than the alkanes_simulate
+// protobuf path (fetchPoolsFromDirectSimulate) for the in-browser harness.
+// ============================================================================
+
+async function fetchPoolsFromQuspo(
+  factoryId: string,
+  network: string,
+): Promise<PoolsListItem[]> {
+  const pools = await quspoGetPools(factoryId, network);
+  if (!pools || pools.length === 0) return [];
+
+  const items: PoolsListItem[] = [];
+  for (const p of pools) {
+    const poolId = `${p.poolId.block}:${p.poolId.tx}`;
+    const token0Id = `${p.token0.block}:${p.token0.tx}`;
+    const token1Id = `${p.token1.block}:${p.token1.tx}`;
+    if (!poolId || !token0Id || !token1Id) continue;
+
+    const token0Symbol = KNOWN_TOKENS[token0Id]?.symbol || token0Id;
+    const token1Symbol = KNOWN_TOKENS[token1Id]?.symbol || token1Id;
+
+    items.push({
+      id: poolId,
+      pairLabel: `${token0Symbol}/${token1Symbol}`,
+      token0: { id: token0Id, symbol: token0Symbol, name: token0Symbol },
+      token1: { id: token1Id, symbol: token1Symbol, name: token1Symbol },
+      token0Amount: p.reserve0,
+      token1Amount: p.reserve1,
+      lpTotalSupply: p.lpTokenSupply,
+    });
+  }
+  return items;
+}
+
+// ============================================================================
 // Direct metashrew_view simulate fallback (regtest-local)
 // ============================================================================
 
@@ -718,15 +756,26 @@ export function usePools(params: UsePoolsParams = {}) {
       let items: PoolsListItem[] = [];
       let tokenMetaMap: Map<string, { name: string; symbol: string }> = new Map();
 
-      // regtest-local / devnet: skip REST/SDK fallbacks (devnet's quspo may not
-      // have indexed the pool yet; regtest-local REST returns 503 or hangs 30s).
-      // Go directly to metashrew_view simulate which reads live on-chain state.
+      // regtest-local / devnet: skip REST/SDK fallbacks, query on-chain state directly.
+      // For devnet: quspo is loaded as a tertiary indexer during boot and provides
+      // structured pool data via metashrew_view('get_pools'). Use it as primary.
+      // For regtest-local: quspo isn't available, go straight to alkanes_simulate.
       if (network === 'regtest-local' || network === 'qubitcoin-regtest' || network === 'devnet') {
         try { tokenMetaMap = await tokenMetaPromise; } catch { /* ignore */ }
-        try {
-          items = await fetchPoolsFromDirectSimulate(ALKANE_FACTORY_ID, network);
-        } catch (e) {
-          console.warn('[usePools] regtest-local/devnet: Direct simulate failed:', e);
+        if (network === 'devnet') {
+          try {
+            items = await fetchPoolsFromQuspo(ALKANE_FACTORY_ID, network);
+            console.log('[usePools] devnet: quspo returned', items.length, 'pools');
+          } catch (e) {
+            console.warn('[usePools] devnet: quspo pool fetch failed, falling back to direct simulate:', e);
+          }
+        }
+        if (items.length === 0) {
+          try {
+            items = await fetchPoolsFromDirectSimulate(ALKANE_FACTORY_ID, network);
+          } catch (e) {
+            console.warn('[usePools] regtest-local/devnet: Direct simulate failed:', e);
+          }
         }
         return { items, total: items.length };
       }
