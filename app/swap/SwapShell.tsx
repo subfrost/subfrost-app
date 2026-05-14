@@ -196,6 +196,21 @@ export default function SwapShell() {
     token1Id: selectedLPPosition?.token1Id,
   });
 
+  const removeExpected = useMemo(() => {
+    if (!selectedLPPosition || !removeAmount || !removeLpLiveState.data) return null;
+    const lp = parseFloat(removeAmount);
+    if (!isFinite(lp) || lp <= 0) return null;
+    try {
+      return computeRemoveLiquidityMinAmounts({
+        lpAmountDisplay: removeAmount,
+        reserve0: removeLpLiveState.data.reserve0,
+        reserve1: removeLpLiveState.data.reserve1,
+        lpTotalSupply: removeLpLiveState.data.totalSupply,
+        maxSlippagePercent: '0',
+      });
+    } catch { return null; }
+  }, [selectedLPPosition, removeAmount, removeLpLiveState.data]);
+
   // Package-flow state for Token → BTC. BTC → Token is intentionally presented
   // like a normal swap because the browser-owned ephemeral child tx is internal.
   const [swapFlowStep, setSwapFlowStep] = useState<SwapFlowStep>({ type: 'idle' });
@@ -2133,7 +2148,7 @@ export default function SwapShell() {
     <div className="flex w-full flex-col gap-4 h-full">
       {/* Desktop: 12-column grid — Chart (7) + TradeForm/Orderbook (5) */}
       {/* Mobile: stacked — TradeForm first, then data panels */}
-      <div className="flex flex-col lg:grid lg:grid-cols-12 gap-3">
+      <div className="flex flex-col lg:grid lg:grid-cols-12 lg:items-start gap-3">
 
         {/* Trade Form — FIRST on mobile (order matters), RIGHT on desktop */}
         <div className="lg:col-span-5 lg:order-2 order-1 min-h-0">
@@ -2251,6 +2266,28 @@ export default function SwapShell() {
                 onOpenLPSelector: () => setIsLPSelectorOpen(true),
                 removeAmount,
                 onChangeRemoveAmount: setRemoveAmount,
+                removeExpectedToken0: removeExpected?.minAmount0,
+                removeExpectedToken1: removeExpected?.minAmount1,
+                removeExpectedFiat0: removeExpected
+                  ? calculateUsdValue(selectedLPPosition?.token0Id, removeExpected.minAmount0)
+                  : undefined,
+                removeExpectedFiat1: removeExpected
+                  ? calculateUsdValue(selectedLPPosition?.token1Id, removeExpected.minAmount1)
+                  : undefined,
+                removeAmountFiat: (() => {
+                  if (!removeExpected || !selectedLPPosition) return undefined;
+                  const p0 = getTokenPrice(selectedLPPosition.token0Id);
+                  const p1 = getTokenPrice(selectedLPPosition.token1Id);
+                  if (!p0 && !p1) return undefined;
+                  const a0 = parseFloat(removeExpected.minAmount0) || 0;
+                  const a1 = parseFloat(removeExpected.minAmount1) || 0;
+                  const total = a0 * (p0 ?? 0) + a1 * (p1 ?? 0);
+                  if (!isFinite(total) || total <= 0) return undefined;
+                  return new Intl.NumberFormat('en-US', {
+                    style: 'currency', currency: 'USD',
+                    minimumFractionDigits: 2, maximumFractionDigits: 2,
+                  }).format(total);
+                })(),
               }}
               orderType={orderType}
               onOrderTypeChange={setOrderType}
@@ -2263,7 +2300,7 @@ export default function SwapShell() {
             Buttons are absolutely positioned over the content so the chart/orderbook
             panels can start at the very top of the card while the buttons retain their
             original top-right placement. */}
-        <div className="hidden lg:flex lg:col-span-7 lg:order-1 sf-card flex-col h-full overflow-hidden relative" style={{ minHeight: '450px' }}>
+        <div className="hidden lg:flex lg:col-span-7 lg:order-1 sf-card flex-col overflow-hidden relative" style={{ height: '550px' }}>
           <div className="flex-1 min-h-0 relative">
             {/* Both panels stay mounted so the chart iframe doesn't reload when toggling. */}
             <div className={`absolute inset-0 ${visibleDesktopLeftView === 'chart' ? '' : 'invisible pointer-events-none'}`}>

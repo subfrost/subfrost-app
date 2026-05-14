@@ -8,7 +8,7 @@ import { useTheme } from "@/context/ThemeContext";
 import { useModalStore } from "@/stores/modals";
 import { useGlobalStore } from "@/stores/global";
 import type { SlippageSelection } from "@/stores/global";
-import { ChevronDown, Settings, Plus, Minus, Loader2 } from "lucide-react";
+import { ChevronDown, Settings, Loader2 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import type { FeeSelection } from "@/hooks/useFeeRate";
 import { useTranslation } from '@/hooks/useTranslation';
@@ -63,6 +63,11 @@ type Props = {
   onOpenLPSelector?: () => void;
   removeAmount?: string;
   onChangeRemoveAmount?: (v: string) => void;
+  removeExpectedToken0?: string;
+  removeExpectedToken1?: string;
+  removeExpectedFiat0?: string;
+  removeExpectedFiat1?: string;
+  removeAmountFiat?: string;
   summary?: React.ReactNode;
 };
 
@@ -104,6 +109,11 @@ export default function LiquidityInputs({
   onOpenLPSelector,
   removeAmount = '',
   onChangeRemoveAmount,
+  removeExpectedToken0,
+  removeExpectedToken1,
+  removeExpectedFiat0,
+  removeExpectedFiat1,
+  removeAmountFiat,
   summary,
 }: Props) {
   const { isConnected, onConnectModalOpenChange, network } = useWallet();
@@ -195,127 +205,128 @@ export default function LiquidityInputs({
 
   return (
     <>
-      {/* Add/Remove Tabs — mirrors the Buy/Sell toggle in LimitOrderPanel */}
-      <div className="sf-tab-group w-full mb-3">
-        <button
-          onClick={() => onModeChange?.('provide')}
-          className={`sf-tab-btn flex-1 flex items-center justify-center gap-1.5 ${
-            liquidityMode === 'provide' ? 'sf-tab-btn--active' : ''
-          }`}
-          style={liquidityMode === 'provide' ? { '--sf-tab-active-bg': '#16a34a' } as React.CSSProperties : undefined}
-        >
-          <Plus className="h-3.5 w-3.5" />
-          {t('liquidity.add')}
-        </button>
-        <button
-          onClick={() => onModeChange?.('remove')}
-          className={`sf-tab-btn flex-1 flex items-center justify-center gap-1.5 ${
-            liquidityMode === 'remove' ? 'sf-tab-btn--active' : ''
-          }`}
-          style={liquidityMode === 'remove' ? { '--sf-tab-active-bg': '#dc2626' } as React.CSSProperties : undefined}
-        >
-          <Minus className="h-3.5 w-3.5" />
-          {t('liquidity.remove')}
-        </button>
-      </div>
-
       <div className="relative flex flex-col gap-3">
         {liquidityMode === 'remove' ? (
-        /* Remove Mode: LP Position Selector */
+        /* Remove Mode: unified input with LP selector floating top-right */
         <>
-          <button
-            type="button"
-            onClick={onOpenLPSelector}
-            className="sf-tile w-full inline-flex items-center justify-between gap-2 px-4 py-3 !rounded-[0.375rem] focus:outline-none"
+          <div
+            className="sf-input group relative z-20 px-4 pt-4 pb-6 cursor-text"
+            onFocusCapture={() => setRemoveFocused(true)}
+            onBlurCapture={() => setRemoveFocused(false)}
           >
-            {selectedLPPosition ? (
-              <div className="flex items-center gap-2 min-w-0">
+            {/* LP Selector — floating top-right */}
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onOpenLPSelector?.(); }}
+              className="sf-tile absolute right-4 top-4 inline-flex items-center gap-2 px-3 py-2 !rounded-[0.375rem] focus:outline-none z-10"
+            >
+              {selectedLPPosition ? (
                 <div className="flex -space-x-2 shrink-0">
                   <div className="relative z-10">
-                    <TokenIcon symbol={selectedLPPosition.token0Symbol} id={selectedLPPosition.token0Id} size="md" network={network} />
+                    <TokenIcon symbol={selectedLPPosition.token0Symbol} id={selectedLPPosition.token0Id} size="sm" network={network} />
                   </div>
                   <div className="relative">
-                    <TokenIcon symbol={selectedLPPosition.token1Symbol} id={selectedLPPosition.token1Id} size="md" network={network} />
+                    <TokenIcon symbol={selectedLPPosition.token1Symbol} id={selectedLPPosition.token1Id} size="sm" network={network} />
                   </div>
                 </div>
-                <div className="min-w-0 text-left">
-                  <div className="font-medium text-sm text-[color:var(--sf-text)] truncate">
-                    {selectedLPPosition.token0Symbol}/{selectedLPPosition.token1Symbol} LP
-                  </div>
-                  <div className="text-[10px] text-[color:var(--sf-text)]/40 truncate">
-                    LP · {selectedLPPosition.id}
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <span className="font-bold text-sm text-[color:var(--sf-text)]">
-                {t('liquidity.selectPosition')}
-              </span>
-            )}
-            <div className="flex items-center gap-2 shrink-0">
-              {selectedLPPosition && (
-                <span className="font-bold text-sm text-[color:var(--sf-text)]">
-                  {selectedLPPosition.amount}
+              ) : (
+                <span className="font-bold text-sm text-[color:var(--sf-text)] whitespace-nowrap">
+                  {t('liquidity.selectPosition')}
                 </span>
               )}
-              <ChevronDown size={16} className="text-[color:var(--sf-text)]/60" />
-            </div>
-          </button>
+              <ChevronDown size={16} className="text-[color:var(--sf-text)]/60 flex-shrink-0" />
+            </button>
 
-          {/* Remove Amount Input */}
+            <div className="flex flex-col gap-1">
+              <span className="text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70 pr-24">
+                {t('liquidity.amountToRemove')}
+              </span>
+              <div className="pr-24">
+                <NumberField
+                  placeholder="0.00"
+                  align="left"
+                  value={removeAmount}
+                  onChange={onChangeRemoveAmount || (() => {})}
+                  disabled={!selectedLPPosition}
+                />
+              </div>
+              <div className="flex items-center justify-between">
+                <div className="text-xs font-medium text-[color:var(--sf-text)]/50">
+                  {removeAmountFiat ?? '$0.00'}
+                </div>
+                {selectedLPPosition && (
+                  <div className="text-xs font-medium text-[color:var(--sf-text)]/60">
+                    Balance: {selectedLPPosition.amount}
+                  </div>
+                )}
+              </div>
+              {selectedLPPosition && (
+                <div
+                  className="flex items-center justify-end w-full"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className={`flex items-center gap-1.5 transition-opacity duration-300 ${removeFocused ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
+                    {[
+                      { label: '25%', value: 0.25 },
+                      { label: '50%', value: 0.5 },
+                      { label: '75%', value: 0.75 },
+                      { label: 'Max', value: 1 },
+                    ].map(({ label, value }) => {
+                      const targetAmount = (parseFloat(selectedLPPosition.amount) * value).toString();
+                      const isActive = removeAmount && Math.abs(parseFloat(removeAmount) - parseFloat(targetAmount)) < 0.0001;
+                      return (
+                        <button
+                          key={label}
+                          type="button"
+                          onClick={() => onChangeRemoveAmount?.(targetAmount)}
+                          className={`sf-percent-btn-pill ${isActive ? '!bg-[color:var(--sf-primary)]/20' : ''}`}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
           {selectedLPPosition && (
             <>
-              <div
-                className={`sf-panel group relative z-20 p-5 transition-shadow duration-[200ms] ${removeFocused ? "shadow-[0_0_14px_rgba(91,156,255,0.3),0_4px_20px_rgba(0,0,0,0.12)]" : "hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]"}`}
-                onFocusCapture={() => setRemoveFocused(true)}
-                onBlurCapture={() => setRemoveFocused(false)}
-              >
-                <span className="mb-3 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">{t('liquidity.amountToRemove')}</span>
-                <div className="sf-input p-3">
+
+              {removeExpectedToken0 && removeExpectedToken1 && (
+                <div className="sf-panel relative z-[5] p-4 mt-3">
+                  <span className="mb-3 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">
+                    {t('swap.youReceive')}
+                  </span>
                   <div className="flex flex-col gap-2">
-                    {/* Row 1: Input */}
-                    <NumberField 
-                      placeholder="0.00" 
-                      align="left" 
-                      value={removeAmount} 
-                      onChange={onChangeRemoveAmount || (() => {})} 
-                    />
-                    
-                    {/* Row 2: USD Value + Balance */}
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="font-medium text-[color:var(--sf-text)]/50">
-                        ${selectedLPPosition.valueUSD}
-                      </span>
-                      <span className="font-medium text-[color:var(--sf-text)]/60">
-                        Balance: {selectedLPPosition.amount}
-                      </span>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <TokenIcon symbol={selectedLPPosition.token0Symbol} id={selectedLPPosition.token0Id} size="sm" network={network} />
+                        <span className="text-sm font-bold text-[color:var(--sf-text)]">{selectedLPPosition.token0Symbol}</span>
+                      </div>
+                      <div className="flex flex-col items-end">
+                        <span className="text-sm font-bold text-[color:var(--sf-text)]">{removeExpectedToken0}</span>
+                        {removeExpectedFiat0 && (
+                          <span className="text-xs font-medium text-[color:var(--sf-text)]/50">{removeExpectedFiat0}</span>
+                        )}
+                      </div>
                     </div>
-                    
-                    {/* Row 3: Percentage Buttons */}
-                    <div className={`flex items-center justify-end gap-1.5 transition-opacity duration-300 ${removeFocused ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
-                      {[
-                        { label: '25%', value: 0.25 },
-                        { label: '50%', value: 0.5 },
-                        { label: '75%', value: 0.75 },
-                        { label: 'Max', value: 1 },
-                      ].map(({ label, value }) => {
-                        const targetAmount = (parseFloat(selectedLPPosition.amount) * value).toString();
-                        const isActive = removeAmount && Math.abs(parseFloat(removeAmount) - parseFloat(targetAmount)) < 0.0001;
-                        return (
-                          <button
-                            key={label}
-                            type="button"
-                            onClick={() => onChangeRemoveAmount?.(targetAmount)}
-                            className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none outline-none focus:outline-none border text-[color:var(--sf-percent-btn)] ${isActive ? "border-[color:var(--sf-percent-btn)]/20 bg-[color:var(--sf-primary)]/20" : "border-[color:var(--sf-percent-btn)]/20 bg-[color:var(--sf-surface)] hover:bg-[color:var(--sf-primary)]/10"}`}
-                          >
-                            {label}
-                          </button>
-                        );
-                      })}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <TokenIcon symbol={selectedLPPosition.token1Symbol} id={selectedLPPosition.token1Id} size="sm" network={network} />
+                        <span className="text-sm font-bold text-[color:var(--sf-text)]">{selectedLPPosition.token1Symbol}</span>
+                      </div>
+                      <div className="flex flex-col items-end">
+                        <span className="text-sm font-bold text-[color:var(--sf-text)]">{removeExpectedToken1}</span>
+                        {removeExpectedFiat1 && (
+                          <span className="text-xs font-medium text-[color:var(--sf-text)]/50">{removeExpectedFiat1}</span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
+              )}
 
               {/* Transaction Details - collapsible panel */}
               <div className="sf-panel relative z-[5] overflow-visible mt-3 mb-3">
