@@ -30,16 +30,20 @@ import type { Network } from '@/utils/constants';
 
 const NETWORK_STORAGE_KEY = 'subfrost_selected_network';
 
-// Detect network from localStorage, hostname, or env variable
+// Detect network from storage, hostname, or env variable.
+// Devnet is stored in sessionStorage (tab-scoped) — survives in-tab navigation
+// but resets to mainnet on a new tab/page load. All other networks use localStorage.
 function detectNetwork(): Network {
   if (typeof window === 'undefined') return 'mainnet';
 
-  // First check localStorage for user selection
-  // JOURNAL (2026-03-31): Added 'devnet' to the allowlist — it was missing, so
-  // selecting devnet in the balances page would be saved to localStorage but
-  // detectNetwork() would ignore it, reverting to mainnet on next load.
+  // Check sessionStorage first for devnet (tab-scoped, does not persist across tabs)
+  if (sessionStorage.getItem(NETWORK_STORAGE_KEY) === 'devnet') {
+    return 'devnet';
+  }
+
+  // Restore other network selections from localStorage
   const stored = localStorage.getItem(NETWORK_STORAGE_KEY);
-  if (stored && ['mainnet', 'testnet', 'signet', 'regtest', 'regtest-local', 'qubitcoin-regtest', 'subfrost-regtest', 'oylnet', 'devnet'].includes(stored)) {
+  if (stored && ['mainnet', 'testnet', 'signet', 'regtest', 'regtest-local', 'qubitcoin-regtest', 'subfrost-regtest', 'oylnet'].includes(stored)) {
     return stored as Network;
   }
 
@@ -84,6 +88,10 @@ export default function Providers({ children }: { children: ReactNode }) {
 
   // Initialize network on mount and listen for storage changes
   useEffect(() => {
+    // Clear any stale devnet value from localStorage (legacy cleanup — devnet now uses sessionStorage)
+    if (localStorage.getItem(NETWORK_STORAGE_KEY) === 'devnet') {
+      localStorage.removeItem(NETWORK_STORAGE_KEY);
+    }
     const initialNetwork = detectNetwork();
     setNetwork(initialNetwork);
 

@@ -141,7 +141,15 @@ export default function WalletSettings() {
   ];
 
   const handleSave = () => {
-    localStorage.setItem('subfrost_selected_network', network);
+    // Devnet is tab-scoped: store in sessionStorage so it stays active during
+    // in-tab navigation but resets to mainnet on a new tab or fresh page load.
+    if (network === 'devnet') {
+      sessionStorage.setItem('subfrost_selected_network', 'devnet');
+      localStorage.removeItem('subfrost_selected_network');
+    } else {
+      localStorage.setItem('subfrost_selected_network', network);
+      sessionStorage.removeItem('subfrost_selected_network');
+    }
     window.dispatchEvent(new CustomEvent('network-changed', { detail: network }));
 
     setInitialNetwork(network);

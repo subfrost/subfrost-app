@@ -718,14 +718,15 @@ export function usePools(params: UsePoolsParams = {}) {
       let items: PoolsListItem[] = [];
       let tokenMetaMap: Map<string, { name: string; symbol: string }> = new Map();
 
-      // regtest-local: skip REST/SDK fallbacks (all return 503 or hang 30s).
-      // Go directly to metashrew_view simulate which is the only working path.
-      if (network === 'regtest-local' || network === 'qubitcoin-regtest') {
+      // regtest-local / devnet: skip REST/SDK fallbacks (devnet's quspo may not
+      // have indexed the pool yet; regtest-local REST returns 503 or hangs 30s).
+      // Go directly to metashrew_view simulate which reads live on-chain state.
+      if (network === 'regtest-local' || network === 'qubitcoin-regtest' || network === 'devnet') {
         try { tokenMetaMap = await tokenMetaPromise; } catch { /* ignore */ }
         try {
           items = await fetchPoolsFromDirectSimulate(ALKANE_FACTORY_ID, network);
         } catch (e) {
-          console.warn('[usePools] regtest-local: Direct simulate failed:', e);
+          console.warn('[usePools] regtest-local/devnet: Direct simulate failed:', e);
         }
         return { items, total: items.length };
       }
@@ -896,7 +897,7 @@ export function usePools(params: UsePoolsParams = {}) {
       // the curated/on-chain fallback paths where reserves come from
       // opcode-999 directly and pricing isn't joined yet. Filtering those
       // out would silently nuke the curated set whenever espo is empty.
-      if (!network?.includes('regtest') && network !== 'devnet') {
+      if (!network?.includes('regtest')) {
         const MIN_TVL_USD = 5;
         items = items.filter(p => p.tvlUsd === undefined || p.tvlUsd >= MIN_TVL_USD);
       }

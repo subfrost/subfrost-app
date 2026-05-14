@@ -240,7 +240,6 @@ export default function SwapShell() {
   const { FRBTC_ALKANE_ID, BUSD_ALKANE_ID } = config;
   const FRZEC_ALKANE_ID = (config as any).FRZEC_ALKANE_ID as string | undefined;
   const FRETH_ALKANE_ID = (config as any).FRETH_ALKANE_ID as string | undefined;
-  const FIRE_TOKEN_ID = (config as any).FIRE_TOKEN_ID as string | undefined;
   const FRUSD_TOKEN_ID = (config as any).FRUSD_TOKEN_ID as string | undefined;
   const VOLBTC_POOL_ID = (config as any).DXBTC_NORMAL_POOL_ID as string | undefined;
 
@@ -250,11 +249,10 @@ export default function SwapShell() {
   // Protocol tokens that should always appear in the token selector
   const protocolTokens = useMemo(() => {
     const tokens: { id: string; symbol: string; name: string }[] = [];
-    if (FIRE_TOKEN_ID) tokens.push({ id: FIRE_TOKEN_ID, symbol: 'FIRE', name: 'FIRE Token' });
     if (FRUSD_TOKEN_ID) tokens.push({ id: FRUSD_TOKEN_ID, symbol: 'frUSD', name: 'frUSD Stablecoin' });
     if (VOLBTC_POOL_ID) tokens.push({ id: VOLBTC_POOL_ID, symbol: 'volBTC', name: 'volBTC Pool' });
     return tokens;
-  }, [FIRE_TOKEN_ID, FRUSD_TOKEN_ID, VOLBTC_POOL_ID]);
+  }, [FRUSD_TOKEN_ID, VOLBTC_POOL_ID]);
 
   // User tokens — reuse alkane balances from useEnrichedWalletData (already cached, ~1s).
   // Previously used useSellableCurrencies → alkanes_protorunesbyaddress (30s).
@@ -1718,10 +1716,10 @@ export default function SwapShell() {
     // Build full list of all allowed tokens for LP
     const opts: TokenOption[] = [];
     
-    // Add BTC first. Hide only if counterpart is BTC itself — frBTC on the
-    // other side is allowed (user picks between BTC and frBTC for the same
-    // BTC-equivalent input; mutation handles atomic wrap when BTC is picked).
-    const btcHidden = counterpartId === 'btc';
+    // Add BTC first. Hide if counterpart is BTC or frBTC — BTC and frBTC
+    // cannot be paired together in Add Liquidity (they represent the same
+    // underlying asset and no pool exists for that pair).
+    const btcHidden = counterpartId === 'btc' || counterpartId === FRBTC_ALKANE_ID;
     let btcIsAvailable = counterpartToken
       ? isAllowedPair('btc', counterpartToken.id)
       : true; // If no counterpart, BTC is always available
@@ -1741,9 +1739,9 @@ export default function SwapShell() {
     // Get whitelisted pool tokens only
     const seen = new Set(['btc']); // BTC already added above
 
-    // Always add frBTC as a base token. Hide only if counterpart is frBTC
-    // itself; counterpart=BTC is allowed (user can choose the unwrapped form).
-    const frbtcHidden = counterpartId === FRBTC_ALKANE_ID;
+    // Always add frBTC as a base token. Hide if counterpart is frBTC or BTC
+    // — BTC and frBTC cannot be paired together in Add Liquidity.
+    const frbtcHidden = counterpartId === FRBTC_ALKANE_ID || counterpartId === 'btc';
     if (FRBTC_ALKANE_ID && !seen.has(FRBTC_ALKANE_ID)) {
       seen.add(FRBTC_ALKANE_ID);
       if (!frbtcHidden) {

@@ -320,7 +320,13 @@ export async function alkanesExecuteTyped(
   }
   if (!isLocalNetwork && typeof window !== 'undefined') {
     try {
-      const stored = localStorage.getItem('subfrost_selected_network') ?? '';
+      // Devnet is tab-scoped and stored in sessionStorage (not localStorage).
+      // Without this check, devnet swaps take the PSBT path instead of
+      // alkanesExecuteFull and hang waiting for a wallet-signing popup.
+      const stored =
+        sessionStorage.getItem('subfrost_selected_network') ??
+        localStorage.getItem('subfrost_selected_network') ??
+        '';
       isLocalNetwork = LOCAL_NETWORKS.includes(stored);
     } catch { /* ignore */ }
   }
