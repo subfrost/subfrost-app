@@ -565,8 +565,18 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
         const utxoCheck = JSON.parse(harnessRef.current.server.handleRpc(JSON.stringify({
           jsonrpc: '2.0', method: 'esplora_address::utxo', params: [address], id: 99,
         })));
-        const dustUtxos = (utxoCheck?.result || []).filter((u: any) => u.value <= 1000);
-        console.log('[devnet] faucetDiesel: UTXOs at address after mint:', (utxoCheck?.result || []).length, 'total,', dustUtxos.length, 'dust');
+        const allUtxos = utxoCheck?.result || [];
+        const dustUtxos = allUtxos.filter((u: any) => u.value <= 1000);
+        console.log('[devnet] faucetDiesel: UTXOs at address after mint:', allUtxos.length, 'total,', dustUtxos.length, 'dust');
+        // Query each dust UTXO for alkane contents
+        for (const utxo of dustUtxos.slice(0, 5)) {
+          const prCheck = JSON.parse(harnessRef.current.server.handleRpc(JSON.stringify({
+            jsonrpc: '2.0', method: 'alkanes_protorunesbyoutpoint',
+            params: [{ txid: utxo.txid, vout: utxo.vout }], id: 100,
+          })));
+          const balances = prCheck?.result?.balances || prCheck?.result?.outpoints?.[0]?.balance_sheet?.cached?.balances || [];
+          console.log('[devnet] faucetDiesel: outpoint', utxo.txid.slice(0,8), 'vout', utxo.vout, 'alkanes:', JSON.stringify(balances).slice(0, 200));
+        }
       } catch (diagErr: any) {
         console.warn('[devnet] faucetDiesel: UTXO diagnostic failed:', diagErr?.message);
       }

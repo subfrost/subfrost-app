@@ -1149,9 +1149,15 @@ async function deployFullProtocol(
   const frbtcAmount = effectiveFrbtc / BigInt(2);
   const [fBlock, fTx] = factoryId.split(':');
   console.log('[devnet-boot] Creating pool with DIESEL:', dieselAmount.toString(), 'frBTC:', frbtcAmount.toString());
+  // Use taproot-only from_addresses so protect_taproot=false is set (isTaprootOnly path
+  // in executeCall). DIESEL and frBTC both live on taproot dust UTXOs — with the default
+  // [segwit, taproot] + protect_taproot=true, the SDK treats taproot UTXOs as ineligible
+  // for spending and reports "Insufficient alkanes: have 0" even though they exist.
   await executeCall(provider, harness, segwit, taproot,
     `[${fBlock},${fTx},1,2,0,32,0,${dieselAmount},${frbtcAmount}]:v0:v0`,
-    `2:0:${dieselAmount},32:0:${frbtcAmount}`);
+    `2:0:${dieselAmount},32:0:${frbtcAmount}`,
+    undefined,
+    [taproot]);
   harness.mineBlocks(1);
   await new Promise(r => setTimeout(r, 50));
 
