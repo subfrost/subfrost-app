@@ -279,15 +279,18 @@ describe('Devnet E2E: CPFP atomic wrap+swap bundle', () => {
       }
     }
 
-    // Mint DIESEL three times for plenty of liquidity
+    // Mint DIESEL three times for plenty of liquidity. Each iteration:
+    //   - mine a block first (gives `executeAlkanesSetup` a fresh coinbase
+    //     to spend in the mint tx),
+    //   - broadcast the mint (the helper mines 1 more block to confirm it).
     for (let i = 0; i < 3; i++) {
       mineBlocks(harness, 1);
       await executeAlkanesSetup('[2,0,77]:v0:v0', 'B:10000:v0');
     }
     mineBlocks(harness, 1);
 
-    // Wrap a chunk of BTC → frBTC so we have liquidity to seed the pool
-    await executeAlkanesSetup('[32,0,77]:v1:v1', 'B:5000000:v0', {
+    // Wrap a chunk of BTC → frBTC so we have frBTC liquidity for the pool.
+    await executeAlkanesSetup('[32,0,77]:v1:v1', 'B:1000000:v0', {
       toAddresses: [frbtcSignerAddress, taprootAddress],
     });
     mineBlocks(harness, 1);
@@ -295,13 +298,43 @@ describe('Devnet E2E: CPFP atomic wrap+swap bundle', () => {
     const dieselBalance = await getAlkaneBalance(provider, taprootAddress, DEVNET.DIESEL_ID);
     const frbtcBalance = await getAlkaneBalance(provider, taprootAddress, DEVNET.FRBTC_ID);
 
-    // Seed a fat pool so a 100k-sat wrap+swap doesn't drain reserves.
-    // Use about half of each balance for the pool.
     const dieselSeed = dieselBalance / 3n;
     const frbtcSeed = frbtcBalance / 2n;
     const [fBlock, fTx] = factoryId.split(':');
-    const createPoolProtostone = `[${fBlock},${fTx},1,2,0,32,0,${dieselSeed},${frbtcSeed}]:v0:v0`;
-    const createPoolReqs = `2:0:${dieselSeed},32:0:${frbtcSeed}`;
+
+    // ── Priming calls A & B — copied verbatim from e2e-swaps.test.ts line
+    // 208-244. Empirically required: pool-create-in-beforeAll fails with
+    // "Insufficient alkanes: have 0" without these, even though the JS-side
+    // `getAlkaneBalance` reports the minted DIESEL correctly. The
+    // executeAlkanesSetup helper's signAndBroadcast fallback path
+    // (when alkanesExecuteFull returns ReadyToSign) does something during
+    // these priming calls — likely refreshes the SDK's spendable-UTXO view
+    // — that the mint-only sequence doesn't trigger on its own.
+    // Future: investigate which specific code path makes the difference;
+    // until then we mirror the known-working harness pattern.
+    try {
+      await executeAlkanesSetup(`[${fBlock},${fTx},4]:v0:v0`, `2:0:1000`);
+      mineBlocks(harness, 1);
+    } catch (e: any) {
+      console.log('[cpfp setup] priming-A error (non-fatal):', (e?.message || e)?.toString()?.slice(0, 120));
+    }
+    mineBlocks(harness, 1);
+    try {
+      await executeAlkanesSetup('[2,0,77]:v0:v0', '2:0:1000000');
+      mineBlocks(harness, 1);
+    } catch (e: any) {
+      console.log('[cpfp setup] priming-B (consolidation mint) error:', (e?.message || e)?.toString()?.slice(0, 120));
+    }
+
+    // Now re-read balances and recompute seed amounts — the priming calls
+    // may have consumed/produced DIESEL.
+    const dieselAfterPrime = await getAlkaneBalance(provider, taprootAddress, DEVNET.DIESEL_ID);
+    const frbtcAfterPrime = await getAlkaneBalance(provider, taprootAddress, DEVNET.FRBTC_ID);
+    const dieselSeedFinal = dieselAfterPrime / 3n;
+    const frbtcSeedFinal = frbtcAfterPrime / 2n;
+
+    const createPoolProtostone = `[${fBlock},${fTx},1,2,0,32,0,${dieselSeedFinal},${frbtcSeedFinal}]:v0:v0`;
+    const createPoolReqs = `2:0:${dieselSeedFinal},32:0:${frbtcSeedFinal}`;
     await executeAlkanesSetup(createPoolProtostone, createPoolReqs);
     mineBlocks(harness, 1);
 
