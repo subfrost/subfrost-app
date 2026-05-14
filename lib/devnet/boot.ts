@@ -1086,7 +1086,10 @@ async function deployFullProtocol(
   onProgress('Minting DIESEL...', 40);
   console.log('[devnet-boot] Phase 2: Seeding tokens...');
 
-  for (let i = 0; i < 3; i++) {
+  // Mint 20x to accumulate thick DIESEL reserves. Each opcode-77 call yields
+  // 5,000,000,000 units (50 DIESEL at 1e8 precision) → 20 mints = 1000 DIESEL.
+  // Multiple UTXOs are fine — SDK aggregates across all dust outpoints.
+  for (let i = 0; i < 20; i++) {
     harness.mineBlocks(1);
     await executeCall(provider, harness, segwit, taproot,
       '[2,0,77]:v0:v0', 'B:546:v0');
@@ -1095,6 +1098,9 @@ async function deployFullProtocol(
   await new Promise(r => setTimeout(r, 50));
 
   // Wrap BTC → frBTC
+  // Wrap 100M sats (1 BTC) to get thick frBTC reserves.
+  // Target pool ratio: 1000 DIESEL : 1 BTC → 1 BTC = 1000 DIESEL
+  // (at $100k BTC that prices DIESEL at $100, reasonable for devnet).
   onProgress('Wrapping BTC to frBTC...', 42);
   let signerAddr = taproot;
   try {
@@ -1116,8 +1122,9 @@ async function deployFullProtocol(
   } catch (e: any) {
     console.warn('[devnet-boot] Failed to get frBTC signer, using taproot:', e?.message);
   }
+  // 100,000,000 sats = 1 BTC
   await executeCall(provider, harness, segwit, taproot,
-    '[32,0,77]:v1:v1', 'B:1000000:v0', [signerAddr, taproot]);
+    '[32,0,77]:v1:v1', 'B:100000000:v0', [signerAddr, taproot]);
   harness.mineBlocks(1);
   await new Promise(r => setTimeout(r, 50));
 
@@ -1136,17 +1143,17 @@ async function deployFullProtocol(
   console.log('[devnet-boot] frBTC taproot:', frbtcBalTaproot.toString(), 'segwit:', frbtcBalSegwit.toString(), 'total:', frbtcBal.toString());
 
   // Fallback: if balance query returns 0 (protorunesbyaddress phantom issue),
-  // use conservative fixed amounts. 3x mints of DIESEL at 546-sat each;
-  // wrap of 1000000 sats frBTC should yield ~1000000 units.
-  const effectiveDiesel = dieselBal > BigInt(0) ? dieselBal : BigInt(10000);
-  const effectiveFrbtc = frbtcBal > BigInt(0) ? frbtcBal : BigInt(500000);
+  // use half of expected: 10 mints × 5e9 = 50e9 DIESEL, 0.5 BTC frBTC.
+  const effectiveDiesel = dieselBal > BigInt(0) ? dieselBal : BigInt(50_000_000_000);
+  const effectiveFrbtc = frbtcBal > BigInt(0) ? frbtcBal : BigInt(50_000_000);
   if (dieselBal === BigInt(0) || frbtcBal === BigInt(0)) {
     console.warn('[devnet-boot] Balance query returned 0 — using fallback amounts for pool creation. diesel=', effectiveDiesel.toString(), 'frbtc=', effectiveFrbtc.toString());
   }
 
   let poolId = '';
-  const dieselAmount = effectiveDiesel / BigInt(3);
-  const frbtcAmount = effectiveFrbtc / BigInt(2);
+  // Seed with 80% of holdings so the deployer retains some for faucet/CLOB seeding.
+  const dieselAmount = effectiveDiesel * BigInt(80) / BigInt(100);
+  const frbtcAmount = effectiveFrbtc * BigInt(80) / BigInt(100);
   const [fBlock, fTx] = factoryId.split(':');
   console.log('[devnet-boot] Creating pool with DIESEL:', dieselAmount.toString(), 'frBTC:', frbtcAmount.toString());
   // Use taproot-only from_addresses so protect_taproot=false is set (isTaprootOnly path
