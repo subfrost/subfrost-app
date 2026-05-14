@@ -523,15 +523,19 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
       const boot = getBootAddresses();
       harnessRef.current.mineBlocks(1);
       await new Promise(r => setTimeout(r, 50));
+      // Use taproot-only from_addresses with protect_taproot:false.
+      // After a full boot the segwit address has 300+ UTXOs — the SDK's PSBT
+      // builder is O(n²) and hangs indefinitely when both addresses are passed.
       await providerRef.current.alkanesExecuteFull(
         JSON.stringify([address]),
         'B:10000:v0',
         '[2,0,77]:v0:v0',
         '1', null,
         JSON.stringify({
-          from_addresses: [boot.segwit, boot.taproot],
-          change_address: boot.segwit,
+          from_addresses: [boot.taproot],
+          change_address: boot.taproot,
           alkanes_change_address: address,
+          protect_taproot: false,
           mine_enabled: true,
         }),
       );
@@ -561,9 +565,10 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
         '[4,7000,77]:v0:v0',
         '1', null,
         JSON.stringify({
-          from_addresses: [boot.segwit, boot.taproot],
-          change_address: boot.segwit,
+          from_addresses: [boot.taproot],
+          change_address: boot.taproot,
           alkanes_change_address: address,
+          protect_taproot: false,
           mine_enabled: true,
         }),
       );
@@ -627,9 +632,10 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
         '[32,0,77]:v1:v1',
         '1', null,
         JSON.stringify({
-          from_addresses: [boot.segwit, boot.taproot],
-          change_address: boot.segwit,
+          from_addresses: [boot.taproot],
+          change_address: boot.taproot,
           alkanes_change_address: address,
+          protect_taproot: false,
           mine_enabled: true,
         }),
       );
