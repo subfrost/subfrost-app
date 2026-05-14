@@ -1,17 +1,21 @@
 /**
  * BTC price query: pin canonical-source behavior after the 2026-05-14
- * no-fallbacks strip.
+ * subpricer-via-backend swap.
  *
- * Removed three-way fallback chain (subpricer → rpc.ts /api/btc-price →
- * CoinGecko) in favor of subpricer as the only source. These tests pin
- * the new wire shape: exactly one fetch to subpricer, return 0 on any
- * failure (which downstream renders as "—" instead of a mismatched
- * fallback price).
+ * The frontend calls the same-origin `/api/btc-price` proxy, which the
+ * backend fans out to subpricer (`mainnet.subfrost.io/v4/subfrost/
+ * get-bitcoin-price` from subkube). No fallback chain — on failure we
+ * return 0 and downstream USD displays render "—" instead of a
+ * mismatched aggregator price.
+ *
+ * These tests pin: (1) the proxy is the only URL hit, (2) the response
+ * shape `{usd: number}` is parsed correctly, and (3) failure modes
+ * return 0 instead of bubbling.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { btcPriceQueryOptions } from '../market';
 
-const SUBPRICER_URL = 'https://mainnet.subfrost.io/v4/subfrost/api/v1/bitcoin-price';
+const PROXY_URL = '/api/btc-price';
 
 function stubFetch(handler: (url: string) => Response | Promise<Response>) {
   const calls: { url: string }[] = [];
@@ -37,33 +41,25 @@ afterEach(() => {
 });
 
 describe('btcPriceQueryOptions — canonical source only', () => {
-  it('queries the subpricer endpoint and returns the usd price', async () => {
-    const calls = stubFetch(() => jsonResponse({ usd: 92_345.67 }));
+  it('queries /api/btc-price proxy and returns the usd price', async () => {
+    const calls = stubFetch(() => jsonResponse({ usd: 92_345.67, timestamp: 1 }));
     const opts = btcPriceQueryOptions('mainnet', {} as never, true, null);
     const result = await opts.queryFn!({} as never);
     expect(result).toBe(92_345.67);
     expect(calls).toHaveLength(1);
-    expect(calls[0].url).toBe(SUBPRICER_URL);
+    expect(calls[0].url).toBe(PROXY_URL);
   });
 
-  it('accepts {price: N} response shape too', async () => {
-    stubFetch(() => jsonResponse({ price: 80_000 }));
-    const opts = btcPriceQueryOptions('mainnet', {} as never, true, null);
-    const result = await opts.queryFn!({} as never);
-    expect(result).toBe(80_000);
-  });
-
-  it('returns 0 on HTTP error (no CoinGecko fallback)', async () => {
-    const calls = stubFetch(() => new Response('upstream down', { status: 503 }));
+  it('returns 0 on HTTP 502 (proxy reports subpricer outage)', async () => {
+    const calls = stubFetch(() => jsonResponse({ usd: 0, error: 'subpricer down' }, 502));
     const opts = btcPriceQueryOptions('mainnet', {} as never, true, null);
     const result = await opts.queryFn!({} as never);
     expect(result).toBe(0);
-    // Critical invariant: ONE fetch call, no fallback chain.
     expect(calls).toHaveLength(1);
-    expect(calls[0].url).toBe(SUBPRICER_URL);
+    expect(calls[0].url).toBe(PROXY_URL);
   });
 
-  it('returns 0 on network throw (no rpc.ts fallback)', async () => {
+  it('returns 0 on network throw', async () => {
     const calls = stubFetch(() => {
       throw new Error('network unreachable');
     });
@@ -73,7 +69,7 @@ describe('btcPriceQueryOptions — canonical source only', () => {
     expect(calls).toHaveLength(1);
   });
 
-  it('returns 0 when subpricer returns ok but price = 0 (no fallback chain)', async () => {
+  it('returns 0 when proxy returns usd=0', async () => {
     const calls = stubFetch(() => jsonResponse({ usd: 0 }));
     const opts = btcPriceQueryOptions('mainnet', {} as never, true, null);
     const result = await opts.queryFn!({} as never);
@@ -81,7 +77,7 @@ describe('btcPriceQueryOptions — canonical source only', () => {
     expect(calls).toHaveLength(1);
   });
 
-  it('returns 0 when subpricer returns malformed JSON (no fallback chain)', async () => {
+  it('returns 0 when proxy returns malformed JSON', async () => {
     const calls = stubFetch(() =>
       new Response('not-json', {
         status: 200,
@@ -92,6 +88,20 @@ describe('btcPriceQueryOptions — canonical source only', () => {
     const result = await opts.queryFn!({} as never);
     expect(result).toBe(0);
     expect(calls).toHaveLength(1);
+  });
+
+  it('NEVER calls subpricer direct (regression guard — must route through proxy)', async () => {
+    const subpricerCalls: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.includes('subfrost.io')) subpricerCalls.push(url);
+        return new Response('down', { status: 503 });
+      }),
+    );
+    const opts = btcPriceQueryOptions('mainnet', {} as never, true, null);
+    await opts.queryFn!({} as never);
+    expect(subpricerCalls).toEqual([]);
   });
 
   it('NEVER calls coingecko (regression guard for the deleted fallback)', async () => {
@@ -106,19 +116,5 @@ describe('btcPriceQueryOptions — canonical source only', () => {
     const opts = btcPriceQueryOptions('mainnet', {} as never, true, null);
     await opts.queryFn!({} as never);
     expect(coingeckoCalls).toEqual([]);
-  });
-
-  it('NEVER calls /api/btc-price (regression guard for the deleted rpc.ts fallback)', async () => {
-    const proxyCalls: string[] = [];
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (url: string) => {
-        if (url.includes('/api/btc-price')) proxyCalls.push(url);
-        return new Response('down', { status: 503 });
-      }),
-    );
-    const opts = btcPriceQueryOptions('mainnet', {} as never, true, null);
-    await opts.queryFn!({} as never);
-    expect(proxyCalls).toEqual([]);
   });
 });

@@ -10,8 +10,6 @@ import { queryKeys } from './keys';
 import { FRBTC_WRAP_FEE_PER_1000, FRBTC_UNWRAP_FEE_PER_1000 } from '@/constants/alkanes';
 import { encodeSimulateCalldata } from '@/utils/simulateCalldata';
 import { getAlkanesDataSource } from '@/lib/alkanes/dataSource';
-// Pricing data is global — always use mainnet subpricer regardless of connected network
-const SUBPRICER_BASE = 'https://mainnet.subfrost.io/v4/subfrost';
 
 // Re-export the premium type so hooks can use it
 export type FrbtcPremiumData = {
@@ -83,24 +81,27 @@ export function btcPriceQueryOptions(
     staleTime: Infinity,
     refetchOnWindowFocus: false,
     queryFn: async () => {
-      // Canonical source: subpricer (protocol price endpoint, mainnet
-      // global — always queried regardless of connected network).
+      // Same-origin proxy `/api/btc-price` forwards to the canonical
+      // subpricer endpoint `mainnet.subfrost.io/v4/subfrost/get-bitcoin-price`
+      // (implemented in subkube). Going through the proxy avoids CORS,
+      // gets CDN-edge caching, and keeps the canonical URL in one place
+      // (the route handler) so a future endpoint change is a one-file
+      // edit.
       //
-      // No fallback chain (rpc.ts /api/btc-price and CoinGecko removed
-      // 2026-05-14 per the no-fallbacks campaign). If subpricer is
-      // unreachable we return 0; downstream USD display renders "—"
-      // and TVL math safely no-ops rather than showing a stale or
-      // mismatched price from a different aggregator.
+      // No fallback chain — if subpricer is unreachable, the proxy
+      // returns { usd: 0 } with a 502 and we propagate 0 to the UI so
+      // USD displays render "—" instead of mixing stale numbers from
+      // a different aggregator.
       try {
-        const resp = await fetch(`${SUBPRICER_BASE}/api/v1/bitcoin-price`, {
+        const resp = await fetch('/api/btc-price', {
           signal: AbortSignal.timeout(5000),
         });
         if (resp.ok) {
           const data = await resp.json();
-          const price = data?.usd ?? data?.price ?? 0;
+          const price = data?.usd ?? 0;
           if (price > 0) return price;
         }
-      } catch { /* subpricer down — return 0 below */ }
+      } catch { /* proxy/subpricer down — return 0 below */ }
       return 0;
     },
   });
