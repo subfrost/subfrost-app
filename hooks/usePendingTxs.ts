@@ -233,14 +233,20 @@ export function usePendingTxs(): UsePendingTxsResult {
       }
 
       const confirmedTxids: string[] = [];
+      const isDevnet = (network ?? '') === 'devnet';
       const statuses = await Promise.all(
         merged.map(async ({ txid, hex }) => {
           const tx = await getEsploraTx(network ?? 'mainnet', txid);
           if (tx?.status?.confirmed) {
             return { txid, hex, confirmed: true };
-          } else {
-            return { txid, hex, confirmed: false };
           }
+          // On devnet, autoConfirm=true mines txs immediately. The in-browser
+          // esplora may return null (not indexed) or unconfirmed for txs that
+          // are already past the tip. Treat null as confirmed so pending clears.
+          if (isDevnet && tx === null) {
+            return { txid, hex, confirmed: true };
+          }
+          return { txid, hex, confirmed: false };
         }),
       );
       const stillPending = statuses

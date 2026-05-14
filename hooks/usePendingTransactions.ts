@@ -30,7 +30,12 @@ export type { PendingTxRecord } from '@/lib/pendingTxStorage';
 async function isTxConfirmed(network: string, txid: string): Promise<boolean> {
   try {
     const tx = await getEsploraTx(network, txid);
-    return !!tx?.status?.confirmed;
+    if (tx?.status?.confirmed) return true;
+    // On devnet, autoConfirm=true mines txs immediately. Esplora may return
+    // null for txs already past the indexed tip — treat as confirmed so the
+    // pending notification clears instead of persisting forever.
+    if (network === 'devnet' && tx === null) return true;
+    return false;
   } catch {
     return false;
   }
