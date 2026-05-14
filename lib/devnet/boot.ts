@@ -1089,7 +1089,7 @@ async function deployFullProtocol(
   for (let i = 0; i < 3; i++) {
     harness.mineBlocks(1);
     await executeCall(provider, harness, segwit, taproot,
-      '[2,0,77]:v0:v0', 'B:10000:v0');
+      '[2,0,77]:v0:v0', 'B:546:v0');
   }
   harness.mineBlocks(1);
   await new Promise(r => setTimeout(r, 50));
@@ -1136,7 +1136,7 @@ async function deployFullProtocol(
   console.log('[devnet-boot] frBTC taproot:', frbtcBalTaproot.toString(), 'segwit:', frbtcBalSegwit.toString(), 'total:', frbtcBal.toString());
 
   // Fallback: if balance query returns 0 (protorunesbyaddress phantom issue),
-  // use conservative fixed amounts. 3x mints of 10000 DIESEL = 30000 total;
+  // use conservative fixed amounts. 3x mints of DIESEL at 546-sat each;
   // wrap of 1000000 sats frBTC should yield ~1000000 units.
   const effectiveDiesel = dieselBal > BigInt(0) ? dieselBal : BigInt(10000);
   const effectiveFrbtc = frbtcBal > BigInt(0) ? frbtcBal : BigInt(500000);
@@ -1681,7 +1681,7 @@ async function deployFullProtocol(
     // Fix: mint fresh tokens specifically for seeding.
     console.log('[devnet-boot] Minting fresh DIESEL for CLOB seeding...');
     await executeCall(provider, harness, segwit, taproot,
-      '[2,0,77]:v0:v0', 'B:10000:v0', [taproot]);
+      '[2,0,77]:v0:v0', 'B:546:v0', [taproot]);
 
     // Wrap fresh frBTC
     console.log('[devnet-boot] Wrapping fresh frBTC for CLOB seeding...');
@@ -1835,7 +1835,7 @@ async function deployFullProtocol(
     console.log('[devnet-boot] Minting fresh tokens for FIRE seeding...');
     for (let i = 0; i < 3; i++) {
       await executeCall(provider, harness, segwit, taproot,
-        '[2,0,77]:v0:v0', 'B:10000:v0', [taproot]);
+        '[2,0,77]:v0:v0', 'B:546:v0', [taproot]);
     }
     await executeCall(provider, harness, segwit, taproot,
       '[32,0,77]:v1:v1', 'B:500000:v0', [signerAddr, taproot]);
