@@ -260,6 +260,14 @@ export function useSwapMutation() {
         throw new Error('Provider not available');
       }
 
+      // Guard: if the WASM provider has no wallet loaded, alkanesExecuteFull
+      // returns an unsigned PSBT instead of broadcasting — which falls through
+      // to signTaprootPsbt and fails at finalizeAllInputs with "Can not finalize
+      // taproot input 0". Fail early with a clear message instead.
+      if (walletType === 'keystore' && !provider.walletIsLoaded()) {
+        throw new Error('Provider wallet not loaded. Please reconnect your wallet.');
+      }
+
       // Get addresses — use the consolidated `txContext` for fee/change addresses
       // and only keep the wallet-type-specific receive address (taproot when
       // available) for `toAddresses`. See `WalletContext.TxContext` jsdoc for the
