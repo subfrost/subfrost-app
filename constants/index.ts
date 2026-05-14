@@ -2,6 +2,7 @@ export const SANDSHREW_PROJECT_ID =
   process.env.SANDSHREW_PROJECT_ID ?? 'd6aebfed1769128379aca7d215f0b689';
 export const OYL_PROJECT_ID =
   process.env.OYL_PROJECT_ID ?? 'd6aebfed1769128379aca7d215f0b689';
+export const NEXT_PUBLIC_DEMO_MODE = 0;
 
 /**
  * FACTORY_OPCODES - AMM Factory Contract Operations
@@ -107,15 +108,15 @@ export const FIRE_STAKING_OPCODES = {
   Stake: '1',
   Unstake: '2',
   ClaimRewards: '3',
-  ExtendLock: '4',
+  // No opcode 4 — ExtendLock does not exist in the contract
   UpdateEpoch: '5',
   // Read
-  GetUserPositions: '10',
-  GetUserPendingRewards: '11',
   GetTotalStaked: '12',
-  GetPositionDetails: '13',
   GetCurrentEpoch: '14',
   GetEmissionRate: '15',
+  GetPositionTemplate: '30',
+  GetPositionCount: '31',
+  IsRegisteredChild: '36',
 };
 
 export const FIRE_TREASURY_OPCODES = {
@@ -132,11 +133,12 @@ export const FIRE_BONDING_OPCODES = {
   ClaimVested: '2',
   ClaimAllVested: '3',
   SetDiscount: '4',
-  SetPaused: '5',
-  SetVestingPeriod: '6',
+  SetVestingPeriod: '5',
+  SetPaused: '6',
+  Deposit: '10',
   // Read
-  GetUserBonds: '20',
-  GetBondCount: '21',
+  GetBondInfo: '20',
+  GetUserBondCount: '21',
   GetClaimableAmount: '22',
   GetCurrentDiscount: '23',
   GetFirePrice: '24',
@@ -147,12 +149,12 @@ export const FIRE_REDEMPTION_OPCODES = {
   // Write
   Redeem: '1',
   SetFee: '2',
-  SetMinRedemption: '3',
-  SetPaused: '4',
+  SetPaused: '3',
+  SetMinRedemption: '4',
   // Read
   GetRedemptionRate: '20',
   GetRedemptionFee: '21',
-  GetCooldownRemaining: '22',
+  GetUserCooldown: '22',
   PreviewRedemption: '23',
   GetTotalRedeemed: '24',
 };
@@ -160,17 +162,20 @@ export const FIRE_REDEMPTION_OPCODES = {
 export const FIRE_DISTRIBUTOR_OPCODES = {
   // Write
   Contribute: '1',
-  AdvancePhase: '2',
+  SetMerkleRoot: '2',
   Claim: '3',
-  SetMerkleRoot: '4',
-  WithdrawUnclaimed: '5',
-  SetDeadline: '6',
+  AdvancePhase: '4',
+  SetClaimDeadline: '5',
+  WithdrawUnclaimed: '6',
+  Deposit: '10',
+  WithdrawContributions: '11',
   // Read
   GetPhase: '20',
   GetTotalContributed: '21',
   GetUserContribution: '22',
   GetTotalClaimed: '23',
-  GetUserClaimed: '24',
+  GetAvailableFire: '24',
+  GetMerkleRoot: '25',
 };
 
 

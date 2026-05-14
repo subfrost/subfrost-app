@@ -5,25 +5,11 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useWallet } from '@/context/WalletContext';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { useSandshrewProvider } from '@/hooks/useSandshrewProvider';
-import { Pickaxe, Clock, Zap, Fuel } from 'lucide-react';
-import * as bitcoin from 'bitcoinjs-lib';
+import { Pickaxe, Clock, Zap, Fuel, Snowflake } from 'lucide-react';
 import { useTranslation } from '@/hooks/useTranslation';
 
-// DIESEL token ID (2:0) - the free-mint alkane token
-const DIESEL_ID = '2:0';
-const DIESEL_MINT_OPCODE = 77;
-
-// Helper to convert Uint8Array to base64
-function uint8ArrayToBase64(bytes: Uint8Array): string {
-  let binary = '';
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return btoa(binary);
-}
-
 export default function RegtestControls() {
-  const { network, account, signTaprootPsbt } = useWallet();
+  const { network, account } = useWallet();
   const { provider, isWalletLoaded } = useAlkanesSDK();
   const extendedProvider = useSandshrewProvider();
   const queryClient = useQueryClient();
@@ -31,8 +17,13 @@ export default function RegtestControls() {
   const [mining, setMining] = useState(false);
   const [message, setMessage] = useState('');
 
-  // Only show for regtest networks (local regtest, subfrost-regtest, oylnet, regtest-local)
-  if (network !== 'regtest' && network !== 'subfrost-regtest' && network !== 'oylnet' && network !== 'regtest-local') {
+  // Only show for non-devnet regtest networks.
+  // devnet is an in-process node — its controls (mine, faucet, reset) are handled
+  // entirely by DevnetControlPanel which talks to the in-process harness directly.
+  // Showing RegtestControls for devnet caused ERR_CONNECTION_REFUSED because
+  // mineBlocks() calls /api/regtest/mine which tries localhost:18888 server-side.
+  const REGTEST_NETWORKS = ['regtest', 'subfrost-regtest', 'oylnet', 'regtest-local', 'qubitcoin-regtest'] as const;
+  if (!REGTEST_NETWORKS.includes(network as typeof REGTEST_NETWORKS[number])) {
     return null;
   }
 
@@ -63,7 +54,7 @@ export default function RegtestControls() {
         const response = await fetch('/api/regtest/mine', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ blocks: remaining, address }),
+          body: JSON.stringify({ blocks: remaining, address, network }),
         });
 
         const result = await response.json();
@@ -110,12 +101,14 @@ export default function RegtestControls() {
       // Dynamic import WASM to avoid SSR issues
       const wasm = await import('@alkanes/ts-sdk/wasm');
 
-      // Create WebProvider with network preset and subfrost URL overrides
+      // Create WebProvider with network preset and appropriate URL overrides.
+      // JOURNAL (2026-03-31): devnet uses localhost:18888 (in-process qubitcoin).
+      // The browser fetch interceptor routes calls to the in-process node for devnet.
       const providerName = network === 'subfrost-regtest' ? 'subfrost-regtest' : 'regtest';
-      const configOverrides = {
-        jsonrpc_url: 'https://regtest.subfrost.io/v4/subfrost',
-        data_api_url: 'https://regtest.subfrost.io/v4/subfrost',
-      };
+      const isLocalNetwork = network === 'regtest-local' || network === 'devnet';
+      const configOverrides = isLocalNetwork
+        ? { jsonrpc_url: 'http://localhost:18888', data_api_url: 'http://localhost:18888' }
+        : { jsonrpc_url: 'https://regtest.subfrost.io/v4/subfrost', data_api_url: 'https://regtest.subfrost.io/v4/subfrost' };
       const provider = new wasm.WebProvider(providerName, configOverrides);
 
       // Call bitcoindGenerateFuture (automatically computes Subfrost address from frBTC signer)
@@ -140,99 +133,85 @@ export default function RegtestControls() {
   const mineDiesel = async () => {
     setMining(true);
     try {
-      if (!provider) {
-        throw new Error('Provider not initialized');
-      }
-      if (!isWalletLoaded) {
-        throw new Error('Wallet not loaded into provider. Please reconnect.');
-      }
+      if (!extendedProvider) throw new Error('Provider not initialized');
 
       const taprootAddress = account?.taproot?.address;
-      if (!taprootAddress) {
-        throw new Error('No taproot address available');
-      }
+      const segwitAddress = account?.nativeSegwit?.address;
+      if (!taprootAddress) throw new Error('No taproot address available');
 
-      console.log('[DIESEL] Starting DIESEL mint for:', taprootAddress);
-
-      // Build protostone: [2,0,77]:v0:v0
-      // - [2,0,77]: call DIESEL contract (2:0) with opcode 77 (mint)
-      // - v0: pointer - minted tokens go to output 0 (user)
-      // - v0: refund - any refunds go to output 0 (user)
-      const [dieselBlock, dieselTx] = DIESEL_ID.split(':');
-      const protostone = `[${dieselBlock},${dieselTx},${DIESEL_MINT_OPCODE}]:v0:v0`;
-
-      console.log('[DIESEL] Protostone:', protostone);
-
-      if (!extendedProvider) {
-        throw new Error('Extended provider not initialized');
-      }
-
-      // Execute the DIESEL mint using alkanesExecuteTyped
+      // execute.ts routes regtest-local through alkanesExecuteFull
+      // which handles signing, broadcasting, and mining automatically
+      // qubitcoin requires higher min relay fee than standard regtest
+      const isQubitcoin = network === 'qubitcoin-regtest';
       const result = await extendedProvider.alkanesExecuteTyped({
         inputRequirements: '',
-        protostones: protostone,
-        feeRate: 10,
+        protostones: '[2,0,77]:v0:v0',
+        feeRate: isQubitcoin ? 5 : 1,
         toAddresses: [taprootAddress],
         fromAddresses: [taprootAddress],
         changeAddress: taprootAddress,
         alkanesChangeAddress: taprootAddress,
-        autoConfirm: false, // We'll handle signing ourselves
+        protectTaproot: false,
       });
 
-      console.log('[DIESEL] Execution result:', result);
+      const txId = result?.txid || result?.reveal_txid || '';
+      showMessage(txId ? `✅ DIESEL minted! TX: ${txId.slice(0, 16)}...` : '✅ DIESEL minted!');
 
-      // Handle readyToSign response
-      if (result?.readyToSign) {
-        const readyToSign = result.readyToSign;
-
-        // The PSBT comes as Uint8Array from serde_wasm_bindgen
-        let psbtBase64: string;
-        if (readyToSign.psbt instanceof Uint8Array) {
-          psbtBase64 = uint8ArrayToBase64(readyToSign.psbt);
-        } else if (typeof readyToSign.psbt === 'string') {
-          psbtBase64 = readyToSign.psbt;
-        } else {
-          throw new Error('Unexpected PSBT format');
-        }
-
-        console.log('[DIESEL] Signing PSBT...');
-
-        // Sign with taproot key
-        const signedPsbtBase64 = await signTaprootPsbt(psbtBase64);
-
-        // Parse the signed PSBT, finalize, and extract the raw transaction
-        const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtBase64, { network: bitcoin.networks.regtest });
-        signedPsbt.finalizeAllInputs();
-
-        // Extract the raw transaction
-        const tx = signedPsbt.extractTransaction();
-        const txHex = tx.toHex();
-        const txid = tx.getId();
-
-        console.log('[DIESEL] Transaction built:', txid);
-
-        // Broadcast the transaction
-        const broadcastTxid = await provider.broadcastTransaction(txHex);
-        console.log('[DIESEL] Broadcast successful:', broadcastTxid);
-
-        showMessage(`✅ DIESEL minted! TX: ${(broadcastTxid || txid).slice(0, 16)}... Mine a block to confirm.`);
-
-      } else if (result?.complete) {
-        const txId = result.complete?.reveal_txid || result.complete?.commit_txid;
-        console.log('[DIESEL] Complete, txid:', txId);
-        showMessage(`✅ DIESEL minted! TX: ${txId?.slice(0, 16)}...`);
-      } else {
-        throw new Error('Unexpected result format');
-      }
-
-      // Refresh balances (fire and forget to prevent hanging)
-      queryClient.invalidateQueries().catch((err) => {
-        console.warn('[DIESEL] Query invalidation error (non-fatal):', err);
-      });
-
+      queryClient.invalidateQueries().catch(() => {});
     } catch (error) {
-      console.error('[DIESEL] Mining error:', error);
+      console.error('[DIESEL] Error:', error);
       showMessage(`❌ Failed to mint DIESEL: ${error instanceof Error ? error.message : 'Unknown error'}`, 5000);
+    } finally {
+      setMining(false);
+    }
+  };
+
+  const mintFrBtc = async () => {
+    setMining(true);
+    try {
+      const taprootAddress = account?.taproot?.address;
+      const segwitAddress = account?.nativeSegwit?.address;
+      if (!taprootAddress) throw new Error('No taproot address available');
+
+      const wasm = await import('@alkanes/ts-sdk/wasm');
+      const providerName = network === 'subfrost-regtest' ? 'subfrost-regtest' : 'regtest';
+      const isLocalNetwork = network === 'regtest-local' || network === 'devnet';
+      const isQubitcoin = network === 'qubitcoin-regtest';
+      const rpcUrl = isLocalNetwork
+        ? 'http://localhost:18888'
+        : isQubitcoin
+          ? `${window.location.origin}/api/rpc/qubitcoin-regtest`
+          : 'https://regtest.subfrost.io/v4/subfrost';
+      const configOverrides = { jsonrpc_url: rpcUrl, data_api_url: rpcUrl };
+      const execProvider = new wasm.WebProvider(providerName, configOverrides);
+
+      const sessionMnemonic = sessionStorage.getItem('subfrost_session_mnemonic')
+        || 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
+      execProvider.walletLoadMnemonic(sessionMnemonic, null);
+
+      // Use SDK's alkanesWrapBtc which handles the special frBTC wrap flow:
+      // sends BTC to the frBTC signer address, calls opcode 77 (exchange)
+      const result = await execProvider.alkanesWrapBtc(JSON.stringify({
+        amount: 10_000_000, // 0.1 BTC in sats
+        to_address: taprootAddress,
+        from_addresses: [taprootAddress],
+        change_address: taprootAddress,
+        fee_rate: isQubitcoin ? 5 : 1,
+        lock_alkanes: true,
+        mine_enabled: true,
+        auto_confirm: true,
+        raw_output: false,
+        trace_enabled: false,
+      }));
+
+      const parsed = typeof result === 'string' ? JSON.parse(result) : result;
+      const txId = parsed?.txid || '';
+      showMessage(txId ? `✅ frBTC minted (0.1 BTC)! TX: ${txId.slice(0, 16)}...` : '✅ frBTC minted!');
+
+      queryClient.invalidateQueries().catch(() => {});
+    } catch (error) {
+      console.error('[frBTC] Error:', error);
+      showMessage(`❌ Failed to mint frBTC: ${error instanceof Error ? error.message : 'Unknown error'}`, 5000);
     } finally {
       setMining(false);
     }
@@ -240,7 +219,9 @@ export default function RegtestControls() {
 
   const networkLabel = network === 'subfrost-regtest' ? 'Subfrost Regtest' :
                        network === 'regtest' ? 'Local Regtest' :
-                       network === 'regtest-local' ? 'Local Docker' : 'Oylnet';
+                       network === 'regtest-local' ? 'Local Docker' :
+                       network === 'qubitcoin-regtest' ? 'Qubitcoin Regtest' :
+                       network === 'devnet' ? 'Devnet' : 'Oylnet';
 
   return (
     <div className="mt-8 rounded-xl bg-[color:var(--sf-primary)]/5 p-6">
@@ -256,15 +237,15 @@ export default function RegtestControls() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Mine 200 Blocks */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+        {/* Mine 101 Blocks (coinbase maturity) */}
         <button
-          onClick={() => mineBlocks(200)}
+          onClick={() => mineBlocks(101)}
           disabled={mining}
           className="flex flex-col items-center gap-2 p-4 rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 border border-[color:var(--sf-outline)] hover:border-orange-500/50 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none disabled:opacity-50 disabled:cursor-not-allowed text-[color:var(--sf-text)]"
         >
           <Pickaxe size={32} className="text-orange-400" />
-          <span className="font-semibold">{t('regtest.mine200Blocks')}</span>
+          <span className="font-semibold">Mine 101 Blocks</span>
           <span className="text-sm text-[color:var(--sf-text)]/60">{t('regtest.generateBulk')}</span>
         </button>
 
@@ -288,6 +269,17 @@ export default function RegtestControls() {
           <Fuel size={32} className="text-green-500" />
           <span className="font-semibold">{t('regtest.mintDiesel')}</span>
           <span className="text-sm text-[color:var(--sf-text)]/60">{t('regtest.freeMintDiesel')}</span>
+        </button>
+
+        {/* Mint frBTC */}
+        <button
+          onClick={mintFrBtc}
+          disabled={mining}
+          className="flex flex-col items-center gap-2 p-4 rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 border border-[color:var(--sf-outline)] hover:border-blue-500/50 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none disabled:opacity-50 disabled:cursor-not-allowed text-[color:var(--sf-text)]"
+        >
+          <Snowflake size={32} className="text-blue-400" />
+          <span className="font-semibold">Mint frBTC</span>
+          <span className="text-sm text-[color:var(--sf-text)]/60">Wrap 0.1 BTC</span>
         </button>
 
         {/* Generate Future */}

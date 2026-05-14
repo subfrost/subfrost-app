@@ -15,7 +15,7 @@
 /**
  * Encode a single unsigned integer as LEB128 bytes.
  */
-function encodeLeb128(value: number): number[] {
+export function encodeLeb128(value: number): number[] {
   if (value === 0) return [0];
   const bytes: number[] = [];
   let v = value;

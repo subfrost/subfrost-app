@@ -3,6 +3,26 @@ import { getConfig, SUBFROST_API_URLS } from '@/utils/getConfig';
 
 export const dynamic = 'force-dynamic';
 
+// Per flex (alkanes-rs maintainer, 2026-05-10): "All of the /v4/subfrost/*
+// routes other than BTC pricing are espo routes. They should be bypassed and
+// go directly to espo." Canon espo lives on alkanode for mainnet. Subfrost.io
+// is the reverse-proxy this route deliberately bypasses — no fallback to it,
+// because falling back would re-introduce the broken path the bypass exists
+// to avoid.
+//
+// Other networks (testnet/signet/regtest/etc.) only have a subfrost.io espo
+// deployment available, so they continue to use that. There is no canon
+// alkanode for non-mainnet espo.
+//
+// Override mainnet with ESPO_MAINNET_PRIMARY_URL if alkanode itself goes down.
+const ALKANODE_OYL_MAINNET = 'https://oyl.alkanode.com';
+function getEspoBase(network: string): string {
+  if (network === 'mainnet') {
+    return process.env.ESPO_MAINNET_PRIMARY_URL || ALKANODE_OYL_MAINNET;
+  }
+  return SUBFROST_API_URLS[network] || SUBFROST_API_URLS.mainnet;
+}
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -113,8 +133,34 @@ export async function GET(request: NextRequest) {
     const dashboardParam = searchParams.get('dashboard');
     const network = searchParams.get('network') || 'mainnet';
 
+    // Devnet runs in-browser only — server-side API routes can't reach it.
+    // Return empty data for devnet; the frontend will query the in-browser
+    // devnet directly via fetch interceptor.
+    if (network === 'devnet' || network === 'regtest-local') {
+      const emptyStats = {
+        success: true,
+        data: dashboardParam === 'true'
+          ? {
+              marketStats: {
+                totalSupply: '0',
+                totalSupplyFormatted: 0,
+                priceUsd: 0,
+                priceBtc: 0,
+                marketCapUsd: 0,
+                timestamp: Date.now(),
+              },
+              tvlStats: { pools: {}, totalTvlUsd: 0, timestamp: Date.now() },
+              btcPrice: { usd: 100000, timestamp: Date.now() },
+              pools: {},
+              timestamp: Date.now(),
+            }
+          : {},
+      };
+      return NextResponse.json(emptyStats);
+    }
+
     const config = getConfig(network);
-    const apiUrl = SUBFROST_API_URLS[network] || SUBFROST_API_URLS.mainnet;
+    const apiUrl = getEspoBase(network);
     const [factoryBlock, factoryTx] = config.ALKANE_FACTORY_ID.split(':');
 
     // Fetch all pools via OylAPI REST endpoint (same pattern as @alkanes/ts-sdk OylApiClient)
@@ -128,9 +174,9 @@ export async function GET(request: NextRequest) {
 
     if (!response.ok) {
       const text = await response.text().catch(() => '');
-      console.error(`[API /pools/stats] Subfrost API error: ${response.status}`, text);
+      console.error(`[API /pools/stats] Espo API error (${apiUrl}): ${response.status}`, text);
       return NextResponse.json(
-        { success: false, error: `Subfrost API error: ${response.status}` },
+        { success: false, error: `Espo API error: ${response.status}` },
         { status: 502 },
       );
     }

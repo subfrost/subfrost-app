@@ -194,9 +194,11 @@ describe('wallet-state lua script via RPC', () => {
   const RPC_URL = 'https://regtest.subfrost.io/v4/subfrost';
   const TEST_ADDRESS = 'bcrt1pqjwdlfg4lht3jwl0p5u58yn8fc2ksqx5v44g6ekcru5szdm2u32qum3gpe';
 
-  it('should execute and return confirmed/pending structure', async () => {
+  it('should execute and return confirmed/pending structure', { timeout: 10000 }, async () => {
     let result: any;
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
       const response = await fetch(RPC_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -206,7 +208,9 @@ describe('wallet-state lua script via RPC', () => {
           params: [WALLET_STATE_SCRIPT, [TEST_ADDRESS]],
           id: 1,
         }),
+        signal: controller.signal,
       });
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
         console.warn(`[walletState.lua.test] RPC returned ${response.status}, skipping integration test`);

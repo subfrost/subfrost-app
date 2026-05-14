@@ -25,6 +25,17 @@ export async function GET(request: NextRequest) {
     const heightParam = searchParams.get('height');
     const network = searchParams.get('network') || undefined;
 
+    // Devnet runs in-browser only — server-side API routes can't reach it.
+    // Return empty data for devnet; the frontend will query directly.
+    if (network === 'devnet' || network === 'regtest-local') {
+      return NextResponse.json({
+        success: true,
+        data: poolParam === 'all'
+          ? { currentHeight: 0, pools: {} }
+          : { poolId: '', poolName: '', price: 0, priceInverse: 0, reserve0: '0', reserve1: '0', blockHeight: 0 },
+      });
+    }
+
     const pools = getPools(network);
 
     if (poolParam === 'all') {

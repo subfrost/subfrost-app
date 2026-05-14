@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useEffect, useMemo, useRef, useState, useCallback, memo } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { usePathname } from "next/navigation";
 import { useWallet } from "@/context/WalletContext";
 import { useTheme } from "@/context/ThemeContext";
@@ -12,73 +12,8 @@ import AddressAvatar from "./AddressAvatar";
 import ThemeToggle from "./ThemeToggle";
 import LanguageToggle from "./LanguageToggle";
 import { useTranslation } from "@/hooks/useTranslation";
+import { useDemoGate } from "@/hooks/useDemoGate";
 
-const FallingSnowflakes = memo(function FallingSnowflakes({
-  white = false,
-}: {
-  white?: boolean;
-}) {
-  const snowflakes = useMemo(() => {
-    const positions = [15, 30, 45, 60, 75, 90];
-    const delays = [0, 1, 2, 3, 4, 5];
-    const durations = [5.5, 6.5, 7, 6, 5.8, 6.2];
-    const sizes = [12, 14, 11, 13, 12, 10];
-
-    return Array.from({ length: 6 }, (_, i) => ({
-      id: i,
-      left: positions[i],
-      delay: delays[i],
-      duration: durations[i],
-      size: sizes[i],
-    }));
-  }, []);
-
-  return (
-    <>
-      <style
-        dangerouslySetInnerHTML={{
-          __html: `
-           @keyframes snowfall {
-             0% {
-               transform: translateY(-30px) rotate(0deg);
-               opacity: 0;
-             }
-             10% {
-               opacity: 1;
-             }
-             90% {
-               opacity: 1;
-             }
-             100% {
-               transform: translateY(80px) rotate(360deg);
-               opacity: 0;
-             }
-           }
-         `,
-        }}
-      />
-      {snowflakes.map((flake) => (
-        <Image
-          key={flake.id}
-          src="/brand/snowflake-mark.svg"
-          alt=""
-          width={flake.size}
-          height={flake.size}
-          className="pointer-events-none absolute"
-          style={{
-            left: `${flake.left}%`,
-            top: "-10px",
-            opacity: 0,
-            animation: `snowfall ${flake.duration}s linear ${flake.delay}s infinite`,
-            filter: white
-              ? "brightness(0) invert(1)"
-              : "drop-shadow(0 0 2px rgba(255,255,255,0.8)) brightness(1.5)",
-          }}
-        />
-      ))}
-    </>
-  );
-});
 
 export default function Header() {
   const {
@@ -88,22 +23,32 @@ export default function Header() {
     onConnectModalOpenChange,
     disconnect,
     account,
+    browserWallet,
+    walletType,
   } = useWallet() as any;
   const { theme } = useTheme();
   const { t } = useTranslation();
-  const { balances, isLoading: isBalanceLoading } = useEnrichedWalletData();
+  const isDemoGated = useDemoGate();
+  const { balances, btcFast, isBtcFastLoading: isBalanceLoading } = useEnrichedWalletData();
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [swapMenuOpen, setSwapMenuOpen] = useState(false);
   const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
   const menuRootRef = useRef<HTMLDivElement | null>(null);
   const mobileWalletRef = useRef<HTMLDivElement | null>(null);
   const menuCloseTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const swapMenuCloseTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const truncate = (a: string) => (a ? `${a.slice(0, 6)}…${a.slice(-4)}` : "");
   const walletConnected =
     typeof connected === "boolean" ? connected : isConnected;
-  const btcBalance = balances?.bitcoin?.total
-    ? (balances.bitcoin.total / 1e8).toFixed(5)
-    : "0.00000";
+  // Wallet icon: browser wallet icon from SDK/constants, keystore gets a generic key icon
+  const walletIcon = walletType === 'browser' ? (browserWallet?.info?.icon || null) : null;
+  const isDualAddress = !!account?.nativeSegwit?.address && !!account?.taproot?.address;
+  const hasFast = btcFast && btcFast.total > 0;
+  const fastSats = isDualAddress ? (btcFast?.p2wpkh ?? 0) : (btcFast?.total ?? 0);
+  const enrichedSats = isDualAddress ? (balances?.bitcoin?.p2wpkh ?? 0) : (balances?.bitcoin?.total ?? 0);
+  const spendableSats = hasFast ? fastSats : enrichedSats;
+  const btcBalance = spendableSats > 0 ? (spendableSats / 1e8).toFixed(5) : "0.00000";
 
   const copyToClipboard = useCallback(async (text: string, type: string) => {
     await navigator.clipboard.writeText(text);
@@ -135,10 +80,27 @@ export default function Header() {
     }, 100);
   }, []);
 
+  const handleSwapMenuMouseEnter = useCallback(() => {
+    if (swapMenuCloseTimeoutRef.current) {
+      clearTimeout(swapMenuCloseTimeoutRef.current);
+      swapMenuCloseTimeoutRef.current = null;
+    }
+    setSwapMenuOpen(true);
+  }, []);
+
+  const handleSwapMenuMouseLeave = useCallback(() => {
+    swapMenuCloseTimeoutRef.current = setTimeout(() => {
+      setSwapMenuOpen(false);
+    }, 100);
+  }, []);
+
   useEffect(() => {
     return () => {
       if (menuCloseTimeoutRef.current) {
         clearTimeout(menuCloseTimeoutRef.current);
+      }
+      if (swapMenuCloseTimeoutRef.current) {
+        clearTimeout(swapMenuCloseTimeoutRef.current);
       }
     };
   }, []);
@@ -199,11 +161,7 @@ export default function Header() {
                   onClick={() => setMenuOpen((v) => !v)}
                   className="flex items-center gap-1.5 rounded-full bg-[color:var(--sf-panel-bg)] px-2 py-2 shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.12)]"
                 >
-                  <AddressAvatar
-                    address={address}
-                    size={20}
-                    className="shrink-0"
-                  />
+                  <AddressAvatar address={address} size={20} className="shrink-0" />
                   <span className="text-sm font-semibold text-[color:var(--sf-text)] whitespace-nowrap">
                     {isBalanceLoading ? "..." : btcBalance} BTC
                   </span>
@@ -240,7 +198,8 @@ export default function Header() {
                     )}
                     {account?.taproot?.address && (
                       <div className="px-4 py-3 border-b border-[color:var(--sf-glass-border)]">
-                        <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">
+                        <div className="flex items-center gap-1.5 text-xs text-[color:var(--sf-text)]/60 mb-1">
+                          {walletIcon && !account?.nativeSegwit?.address && <img src={walletIcon} alt="" width={12} height={12} className="rounded-sm" />}
                           {t("header.taproot")}
                         </div>
                         <div className="flex items-center justify-between gap-2">
@@ -289,14 +248,9 @@ export default function Header() {
                     </Link>
                     <button
                       type="button"
-                      onClick={async () => {
-                        try {
-                          await disconnect();
-                        } catch (e) {
-                          // noop
-                        } finally {
-                          setMenuOpen(false);
-                        }
+                      onClick={() => {
+                        disconnect();
+                        setMenuOpen(false);
                       }}
                       className="w-full px-4 py-3 text-left text-sm font-medium text-red-500 hover:bg-[color:var(--sf-primary)]/10"
                     >
@@ -314,9 +268,6 @@ export default function Header() {
                 <span className="relative z-10">
                   {t("header.connectWallet")}
                 </span>
-                <div className="absolute inset-0 pointer-events-none">
-                  <FallingSnowflakes white={theme === "dark"} />
-                </div>
               </button>
             )}
           </div>
@@ -358,18 +309,41 @@ export default function Header() {
             >
               {t("nav.home")}
             </Link>
-            <Link
-              href="/swap"
-              className={`text-sm font-semibold hover:opacity-80 outline-none whitespace-nowrap transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
-                isActive("/swap")
-                  ? theme === "light"
-                    ? "text-[color:var(--sf-text)]/60"
-                    : "text-[color:var(--sf-primary)]"
-                  : "text-[color:var(--sf-text)]"
-              }`}
+            <div
+              className="relative"
+              onMouseEnter={handleSwapMenuMouseEnter}
+              onMouseLeave={handleSwapMenuMouseLeave}
             >
-              {t("nav.swap")}
-            </Link>
+              <Link
+                href="/swap"
+                className={`text-sm font-semibold hover:opacity-80 outline-none whitespace-nowrap transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
+                  isActive("/swap")
+                    ? theme === "light"
+                      ? "text-[color:var(--sf-text)]/60"
+                      : "text-[color:var(--sf-primary)]"
+                    : "text-[color:var(--sf-text)]"
+                }`}
+              >
+                {t("nav.swap")}
+              </Link>
+              {swapMenuOpen && !isDemoGated && (
+                <div className="absolute left-0 top-full z-50 pt-1 w-44">
+                  <div className="overflow-hidden rounded-xl bg-[color:var(--sf-surface)] backdrop-blur-xl shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
+                    <Link
+                      href="/swap/advanced"
+                      onClick={() => setSwapMenuOpen(false)}
+                      className={`block w-full px-4 py-1.5 text-left text-sm font-medium transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
+                        pathname === "/swap/advanced"
+                          ? "bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]"
+                          : "text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10"
+                      }`}
+                    >
+                      {t("nav.advancedTrader")}
+                    </Link>
+                  </div>
+                </div>
+              )}
+            </div>
             <Link
               href="/vaults"
               className={`text-sm font-semibold hover:opacity-80 outline-none whitespace-nowrap transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
@@ -382,18 +356,27 @@ export default function Header() {
             >
               {t("nav.vaults")}
             </Link>
-            <Link
-              href="/futures"
-              className={`text-sm font-semibold hover:opacity-80 outline-none whitespace-nowrap transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
-                isActive("/futures")
-                  ? theme === "light"
-                    ? "text-[color:var(--sf-text)]/60"
-                    : "text-[color:var(--sf-primary)]"
-                  : "text-[color:var(--sf-text)]"
-              }`}
-            >
-              {t("nav.futures")}
-            </Link>
+            {isDemoGated ? (
+              <span
+                aria-disabled="true"
+                className="text-sm font-semibold whitespace-nowrap text-[color:var(--sf-text)]/30 cursor-not-allowed"
+              >
+                {t("nav.futures")}
+              </span>
+            ) : (
+              <Link
+                href="/futures"
+                className={`text-sm font-semibold hover:opacity-80 outline-none whitespace-nowrap transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
+                  isActive("/futures")
+                    ? theme === "light"
+                      ? "text-[color:var(--sf-text)]/60"
+                      : "text-[color:var(--sf-primary)]"
+                    : "text-[color:var(--sf-text)]"
+                }`}
+              >
+                {t("nav.futures")}
+              </Link>
+            )}
           </nav>
 
           {/* Desktop CTA */}
@@ -449,7 +432,8 @@ export default function Header() {
                     )}
                     {account?.taproot?.address && (
                       <div className="px-4 py-3 border-b border-[color:var(--sf-glass-border)]">
-                        <div className="text-xs text-[color:var(--sf-text)]/60 mb-1">
+                        <div className="flex items-center gap-1.5 text-xs text-[color:var(--sf-text)]/60 mb-1">
+                          {walletIcon && !account?.nativeSegwit?.address && <img src={walletIcon} alt="" width={12} height={12} className="rounded-sm" />}
                           {t("header.taproot")}
                         </div>
                         <div className="flex items-center justify-between gap-2">
@@ -498,14 +482,9 @@ export default function Header() {
                     </Link>
                     <button
                       type="button"
-                      onClick={async () => {
-                        try {
-                          await disconnect();
-                        } catch (e) {
-                          // noop
-                        } finally {
-                          setMenuOpen(false);
-                        }
+                      onClick={() => {
+                        disconnect();
+                        setMenuOpen(false);
                       }}
                       className="w-full px-4 py-3 text-left text-sm font-medium text-red-500 hover:bg-[color:var(--sf-primary)]/10"
                     >
@@ -524,9 +503,6 @@ export default function Header() {
                   <span className="relative z-10">
                     {t("header.connectWallet")}
                   </span>
-                  <div className="absolute inset-0 pointer-events-none">
-                    <FallingSnowflakes white={theme === "dark"} />
-                  </div>
                 </button>
               </div>
             )}

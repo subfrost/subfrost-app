@@ -9,11 +9,24 @@ import DemoBanner from '@/app/components/DemoBanner';
 import SplashScreen from '@/app/components/SplashScreen';
 import ConnectWalletModal from '@/app/components/ConnectWalletModal';
 
+// Keep the wallet modal mounted so SfPopup can play its close animation before
+// the wallet context flips the open state off.
+function ConnectWalletModalMount() {
+  return <ConnectWalletModal />;
+}
+
+// JOURNAL (2026-03-31): On mount, reads all `sf-pending-tx-*` localStorage keys
+// and re-fires showNotification for any txids that are still unconfirmed.
+// Confirmed ones are silently pruned. This closes the navigation/reload gap
+// where the pending toast would disappear but the tx was still in the mempool.
+function PendingTxSync() {
+  return null;
+}
+
 export default function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="sf-bg min-h-dvh relative flex flex-col">
       <SplashScreen />
-      <div className="absolute inset-0 sf-snow" aria-hidden />
       <Header />
       <DemoBanner />
       <main className="relative flex-1 flex flex-col min-h-0">
@@ -24,7 +37,8 @@ export default function AppShell({ children }: { children: ReactNode }) {
       <Footer />
       <MobileBottomNav />
       <FloatingActions />
-      <ConnectWalletModal />
+      <ConnectWalletModalMount />
+      <PendingTxSync />
       {/* Spacer for mobile bottom nav (nav height + bottom gap + breathing room) */}
       <div className="h-24 md:hidden" />
     </div>

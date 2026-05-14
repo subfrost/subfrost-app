@@ -93,13 +93,16 @@ type AmmRow =
     };
 
 function formatAmount(raw: string, decimals = 8, tokenSymbol?: string) {
-  const n = Number(raw ?? "0");
+  // If amount is missing or zero from trace data, show dash
+  if (!raw || raw === '0' || raw === '') return '—';
+
+  const n = Number(raw);
   const scaled = n / Math.pow(10, decimals);
-  if (!Number.isFinite(scaled)) return "0";
+  if (!Number.isFinite(scaled) || scaled === 0) return "—";
 
   // Use 4 decimals for BTC/frBTC, 2 for other tokens
   const fractionDigits =
-    tokenSymbol === "BTC" || tokenSymbol === "frBTC" ? 4 : 2;
+    tokenSymbol === "BTC" || tokenSymbol === "frBTC" ? 5 : 2;
 
   if (scaled > 0 && scaled < Math.pow(10, -fractionDigits)) {
     return `<${Math.pow(10, -fractionDigits).toFixed(fractionDigits)}`;
@@ -175,10 +178,9 @@ export default function ActivityFeed({
     label: string;
   }[] = [
     { value: "all", label: t("activity.allTypes") },
-    { value: "swap", label: t("activity.swaps") },
-    { value: "mint", label: t("activity.supply") },
-    { value: "burn", label: t("activity.withdraw") },
-    { value: "creation", label: t("activity.createPool") },
+    { value: "swap", label: t("activity.market") },
+    { value: "mint", label: t("activity.addLiquidity") },
+    { value: "burn", label: t("activity.removeLiquidity") },
     { value: "wrap", label: t("activity.wrap") },
     { value: "unwrap", label: t("activity.unwrap") },
   ];
@@ -234,8 +236,6 @@ export default function ActivityFeed({
   }, [items]);
   const {
     data: displayMap,
-    isLoading: namesLoading,
-    isFetching: namesFetching,
   } = useTokenDisplayMap(tokenIds);
 
   const loadingRef = useRef<HTMLDivElement | null>(null);
@@ -299,11 +299,9 @@ export default function ActivityFeed({
     const d = displayMap?.[id];
     return Boolean(d && (d.name || d.symbol));
   };
-  const namesPending = namesLoading || namesFetching || !displayMap;
-
   return (
-    <div className="rounded-2xl bg-[color:var(--sf-glass-bg)] backdrop-blur-md overflow-hidden shadow-[0_4px_20px_rgba(0,0,0,0.2)] border-t border-[color:var(--sf-top-highlight)]">
-      <div className="px-6 py-4 border-b-2 border-[color:var(--sf-row-border)] bg-[color:var(--sf-surface)]/40">
+    <div className="rounded-2xl bg-[color:var(--sf-glass-bg)] backdrop-blur-md shadow-[0_4px_20px_rgba(0,0,0,0.2)] border-t border-[color:var(--sf-top-highlight)]">
+      <div className="rounded-t-2xl px-6 py-4 border-b-2 border-[color:var(--sf-row-border)] bg-[color:var(--sf-surface)]/40">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <h3 className="text-base font-bold text-[color:var(--sf-text)]">
@@ -418,7 +416,7 @@ export default function ActivityFeed({
       </div>
 
       <div
-        className={`no-scrollbar overflow-auto ${
+        className={`no-scrollbar rounded-b-2xl overflow-auto ${
           isFullPage
             ? "max-h-[calc(100vh-200px)]"
             : maxHeightClass ?? "max-h-[70vh]"
@@ -427,22 +425,16 @@ export default function ActivityFeed({
         <div className="sm:min-w-fit">
           {/* Rows */}
           {items.map((row, idx) => {
-            const time = new Date(row.timestamp);
-            const timeLabel = new Intl.DateTimeFormat(undefined, {
-              month: "2-digit",
-              day: "2-digit",
-              hour: "2-digit",
-              minute: "2-digit",
-            }).format(time);
-            // Separate date and time for responsive display
-            const dateLabel = new Intl.DateTimeFormat(undefined, {
-              month: "2-digit",
-              day: "2-digit",
-            }).format(time);
-            const hourMinLabel = new Intl.DateTimeFormat(undefined, {
-              hour: "2-digit",
-              minute: "2-digit",
-            }).format(time);
+            // Guard against missing/invalid timestamps (e.g. quspo activity
+            // records have `height` but no `timestamp` — use height as fallback)
+            const rawTs = row.timestamp || (row as any).height;
+            const time = rawTs ? new Date(typeof rawTs === 'number' && rawTs < 1e10 ? rawTs * 1000 : rawTs) : null;
+            const isValidTime = time && !isNaN(time.getTime());
+            const fmt = (opts: Intl.DateTimeFormatOptions) =>
+              isValidTime ? new Intl.DateTimeFormat(undefined, opts).format(time) : '—';
+            const timeLabel = fmt({ month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+            const dateLabel = fmt({ month: "2-digit", day: "2-digit" });
+            const hourMinLabel = fmt({ hour: "2-digit", minute: "2-digit" });
             const address =
               (row as any).address ||
               (row as any).sellerAddress ||
@@ -455,9 +447,9 @@ export default function ActivityFeed({
               row.type === "swap"
                 ? t("myActivity.swap")
                 : row.type === "mint"
-                ? t("myActivity.supply")
+                ? t("myActivity.addLiquidity")
                 : row.type === "burn"
-                ? t("myActivity.withdraw")
+                ? t("myActivity.removeLiquidity")
                 : row.type === "creation"
                 ? t("myActivity.create")
                 : row.type === "wrap"
@@ -498,22 +490,25 @@ export default function ActivityFeed({
               }
             })();
             const pairLoaded =
-              !namesPending &&
               nameResolved(pairNames.leftId) &&
               nameResolved(pairNames.rightId);
+
+            const txExplorerHref = network === 'devnet' || network === 'regtest' || network === 'regtest-local'
+              ? '#' // No block explorer for devnet/regtest
+              : `https://espo.sh/tx/${(row as any).transactionId}`;
 
             return (
               <Link
                 key={(row as any).transactionId + "-" + idx}
-                href={`https://espo.sh/tx/${(row as any).transactionId}`}
-                target="_blank"
-                className="block px-6 py-4 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-primary)]/10 border-b border-[color:var(--sf-row-border)]"
+                href={txExplorerHref}
+                target={txExplorerHref === '#' ? undefined : '_blank'}
+                className="block px-6 py-2 text-[11px] leading-[20px] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-primary)]/10 border-b border-[color:var(--sf-row-border)]"
               >
                 {/* Mobile layout (xs only) - 2 rows */}
                 <div className="sm:hidden">
                   {/* Row 1: Txn, Pair, Amounts */}
                   <div className="grid grid-cols-[0.6fr_1fr_auto] items-center gap-2">
-                    <div className="text-sm text-[color:var(--sf-text)]/80">
+                    <div className="text-[color:var(--sf-text)]/80">
                       {typeLabel}
                     </div>
 
@@ -527,7 +522,7 @@ export default function ActivityFeed({
                       />
                       <div className="min-w-0">
                         {pairLoaded ? (
-                          <div className="truncate text-sm text-[color:var(--sf-text)]">
+                          <div className="truncate text-[color:var(--sf-text)]">
                             {row.type === "mint" || row.type === "burn"
                               ? `${pairNames.leftName} / ${pairNames.rightName}`
                               : row.type === "wrap" ||
@@ -542,7 +537,7 @@ export default function ActivityFeed({
                       </div>
                     </div>
 
-                    <div className="text-right text-xs text-[color:var(--sf-text)]">
+                    <div className="text-right text-[color:var(--sf-text)]">
                       {!pairLoaded ? (
                         <div className="space-y-1">
                           <LineSkeleton widthClass="w-20 ml-auto" />
@@ -649,10 +644,10 @@ export default function ActivityFeed({
 
                   {/* Row 2: Address (left) and Date (right) */}
                   <div className="flex justify-between items-center mt-1">
-                    <div className="text-xs text-[color:var(--sf-text)]/50">
+                    <div className="text-[color:var(--sf-text)]/50">
                       {truncateAddress(address || "", 6, 4)}
                     </div>
-                    <div className="text-xs text-[color:var(--sf-text)]/50">
+                    <div className="text-[color:var(--sf-text)]/50">
                       {timeLabel}
                     </div>
                   </div>
@@ -660,7 +655,7 @@ export default function ActivityFeed({
 
                 {/* Desktop layout (sm+) - single row with 5 columns */}
                 <div className="hidden sm:grid sm:grid-cols-[minmax(60px,0.8fr)_minmax(120px,1.2fr)_minmax(100px,1.2fr)_minmax(80px,1fr)_minmax(70px,0.8fr)] lg:grid-cols-[minmax(80px,1fr)_minmax(160px,1.5fr)_minmax(120px,1.2fr)_minmax(90px,1fr)_minmax(80px,1fr)] xl:grid-cols-[minmax(100px,1fr)_220px_150px_minmax(90px,1fr)_minmax(80px,1fr)] items-center gap-2 lg:gap-3 xl:gap-4">
-                  <div className="text-sm text-[color:var(--sf-text)]/80">
+                  <div className="text-[color:var(--sf-text)]/80">
                     {typeLabel}
                   </div>
 
@@ -674,7 +669,7 @@ export default function ActivityFeed({
                     />
                     <div className="min-w-0">
                       {pairLoaded ? (
-                        <div className="truncate text-sm text-[color:var(--sf-text)]">
+                        <div className="truncate text-[color:var(--sf-text)]">
                           {row.type === "mint" || row.type === "burn"
                             ? `${pairNames.leftName} / ${pairNames.rightName}`
                             : row.type === "wrap" ||
@@ -689,7 +684,7 @@ export default function ActivityFeed({
                     </div>
                   </div>
 
-                  <div className="text-right text-xs text-[color:var(--sf-text)]">
+                  <div className="text-right text-[color:var(--sf-text)]">
                     {!pairLoaded ? (
                       <div className="space-y-1">
                         <LineSkeleton widthClass="w-20 ml-auto" />
@@ -791,7 +786,7 @@ export default function ActivityFeed({
                     )}
                   </div>
 
-                  <div className="truncate text-right text-sm text-[color:var(--sf-text)]/60">
+                  <div className="truncate text-right text-[color:var(--sf-text)]/60">
                     <span className="lg:hidden">
                       {truncateAddress(address || "", 5, 3)}
                     </span>
@@ -799,7 +794,7 @@ export default function ActivityFeed({
                       {truncateAddress(address || "")}
                     </span>
                   </div>
-                  <div className="text-right text-sm text-[color:var(--sf-text)]/60">
+                  <div className="text-right text-[color:var(--sf-text)]/60">
                     <span className="lg:hidden">{dateLabel}</span>
                     <span className="hidden lg:inline">{timeLabel}</span>
                   </div>
@@ -808,7 +803,7 @@ export default function ActivityFeed({
             );
           })}
           {(isLoading || isFetchingNextPage) && (
-            <div className="px-4 py-3 text-center text-[color:var(--sf-text)]/60">
+            <div className="px-4 py-3 text-center text-[11px] leading-[20px] text-[color:var(--sf-text)]/60">
               {t("activity.loading")}
             </div>
           )}

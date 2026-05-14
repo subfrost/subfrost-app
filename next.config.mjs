@@ -15,12 +15,12 @@ const __dirname = path.dirname(__filename);
 //   cp node_modules/@alkanes/ts-sdk/wasm/*.js lib/oyl/alkanes/
 //   cp node_modules/@alkanes/ts-sdk/wasm/*.d.ts lib/oyl/alkanes/
 //
-// LAST SYNCED: 2026-02-07 with @alkanes/ts-sdk@0.1.4-d0c3a16
+// LAST SYNCED: 2026-05-04 with @alkanes/ts-sdk@0.1.5-138a9cf
 // ================================================
 const localWasmPath = './lib/oyl/alkanes/alkanes_web_sys.js';
 
 const nextConfig = {
-  reactStrictMode: true,
+  reactStrictMode: false,
   output: 'standalone',
   outputFileTracingRoot: path.join(__dirname, '.'),
   // Transpile local file: linked packages
@@ -43,6 +43,8 @@ const nextConfig = {
       '@alkanes/ts-sdk/wasm': localWasmPath,
       // Prevent Node.js-specific loader from being bundled for browser
       '@alkanes/ts-sdk/wasm/node-loader.cjs': { browser: './lib/empty-module.js' },
+      // Exclude qubitcoin SDK from Turbopack (only used for in-browser devnet, loaded dynamically)
+      '@qubitcoin/sdk': { browser: './lib/empty-module.js' },
       // Stub out Node.js built-in modules for browser builds
       fs: { browser: './lib/empty-module.js' },
       path: { browser: './lib/empty-module.js' },
@@ -67,6 +69,11 @@ const nextConfig = {
         ...config.resolve.alias,
         '@alkanes/ts-sdk/wasm/node-loader.cjs': path.join(__dirname, 'lib/empty-module.js'),
       };
+      // Exclude qubitcoin SDK from webpack build (loaded dynamically for devnet only)
+      config.externals = [
+        ...(config.externals || []),
+        '@qubitcoin/sdk',
+      ];
     }
 
     // WASM support
@@ -121,7 +128,9 @@ const nextConfig = {
   // Environment variables exposed to the browser
   env: {
     NEXT_PUBLIC_NETWORK: process.env.NEXT_PUBLIC_NETWORK || 'subfrost-regtest',
-    NEXT_PUBLIC_DEMO_MODE: process.env.NEXT_PUBLIC_DEMO_MODE || '',
+    NEXT_PUBLIC_DEVNET_AUTOSTART: process.env.NEXT_PUBLIC_DEVNET_AUTOSTART || '',
+    SWAP_TEST_MODE: process.env.SWAP_TEST_MODE || '0',
+    SWAP_TX_TEST: process.env.SWAP_TX_TEST || '0',
   },
 };
 

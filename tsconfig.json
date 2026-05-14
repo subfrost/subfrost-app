@@ -39,11 +39,12 @@
   ],
   "exclude": [
     "node_modules",
-    "reference",
-    "lib/api-provider",
-    "scripts",
-    "e2e",
-    "tools",
-    "e2e-tests"
+    "e2e-tests",
+    "__tests__/devnet",
+    "agent-context",
+    "agent-repos",
+    "__tests__/brc20-prog",
+    "vendor",
+    "services"
   ]
 }

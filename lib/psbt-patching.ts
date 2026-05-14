@@ -58,16 +58,11 @@
  * - General output address replacement (use actual addresses in SDK call instead)
  * - "Fixing" dummy wallet addresses (use actual addresses in SDK call instead)
  *
- * ## FILES THAT WERE FIXED (2026-03-01)
+ * ## CURRENT USAGE (2026-03-31)
  *
- * All these files now use actual addresses for browser wallets:
- * - hooks/useSwapMutation.ts
- * - hooks/useSwapUnwrapMutation.ts
- * - hooks/useRemoveLiquidityMutation.ts
- * - hooks/useAddLiquidityMutation.ts
- * - hooks/useWrapSwapMutation.ts
- * - hooks/useUnwrapMutation.ts
- * - hooks/useWrapMutation.ts (special case: uses fixedOutputs for signer)
+ * All mutation hooks now use useActualAddresses for address resolution.
+ * PSBT patching is only used for input-level fixes (witnessUtxo scripts,
+ * redeemScript injection for P2SH-P2WPKH).
  *
  * ============================================================================
  *
@@ -256,6 +251,13 @@ export function patchInputWitnessScripts(
 
   for (let i = 0; i < psbt.data.inputs.length; i++) {
     const input = psbt.data.inputs[i];
+
+    // Script-path taproot spends include their own control block and must be
+    // signed against the actual prevout script. Rewriting the script to the
+    // connected wallet's P2TR address makes the Schnorr signature invalid.
+    if (input.tapLeafScript?.length) {
+      continue;
+    }
 
     // If witnessUtxo exists, patch the script
     if (input.witnessUtxo) {
@@ -502,6 +504,20 @@ export function patchInputsOnly(params: PatchInputsOnlyParams): {
     segwitAddress,
     paymentPubkeyHex,
   } = params;
+
+  if (!taprootAddress) {
+    // Without this guard the failure mode is `bitcoin.address.toOutputScript(undefined)`
+    // → "undefined has no matching Script" — useless to the user. Connect-time
+    // refusal in WalletContext should make this unreachable for UniSat/OKX, but
+    // we re-check here so any future regression surfaces a clear message instead
+    // of a cryptic bitcoinjs error. (See unisat-single-address-bugs.test.ts.)
+    throw new Error(
+      'patchInputsOnly: taprootAddress is required. The connected wallet ' +
+      'does not expose a taproot (P2TR) address — alkanes cannot be sent or ' +
+      'received from a non-taproot address. Switch your wallet extension ' +
+      'to Taproot mode and reconnect.'
+    );
+  }
 
   const psbt = bitcoin.Psbt.fromBase64(psbtBase64, { network });
 

@@ -114,10 +114,37 @@ export async function getAllFutures(
         const blocksLeft = Math.max(0, height + 100 - currentBlock); // Assume 100 block expiry
         const timeLeft = formatBlocksToTime(blocksLeft);
         
-        // Mock supply data - in real impl, would query contract storage
-        const totalSupply = 100.0; // Mock: 100 BTC per future
-        const exercised = Math.random() * 30; // Mock: random exercised amount
-        const mempoolQueue = Math.random() * 5; // Mock: random queue amount
+        // Supply data: query the future contract's opcode 4 (GetTotalSupply) if available.
+        // Default to 0 when contract does not expose supply queries.
+        let totalSupply = 0;
+        let exercised = 0;
+        let mempoolQueue = 0;
+        try {
+          const supplyResult = await provider.alkanes._call('alkanes_simulate', [{
+            target: { block: '31', tx: String(height) },
+            inputs: ['4'], // GetTotalSupply opcode
+            alkanes: [],
+            transaction: '0x',
+            block: '0x',
+            height: String(currentBlock),
+            txindex: 0,
+            vout: 0,
+          }]);
+          const exec = supplyResult?.execution ?? supplyResult?.result?.execution;
+          if (exec?.data && !exec.error) {
+            const bytes = Array.from(Buffer.from(exec.data.replace(/^0x/, ''), 'hex'));
+            if (bytes.length >= 16) {
+              // Parse u128 little-endian total supply in sats
+              let rawSupply = BigInt(0);
+              for (let b = 0; b < 16 && b < bytes.length; b++) {
+                rawSupply |= BigInt(bytes[b]) << BigInt(b * 8);
+              }
+              totalSupply = Number(rawSupply) / 1e8;
+            }
+          }
+        } catch {
+          // Contract may not support supply queries — leave at 0
+        }
         
         futures.push({
           id: `ftrBTC[31:${height}]`,
@@ -187,9 +214,8 @@ export async function claimFutures(
   };
   
   // Build and sign transaction with cellpack
-  // This would use the wallet's PSBT signing capabilities
-  // For now, return a mock txid
-  throw new Error('Claiming futures not yet implemented - need PSBT builder with cellpack support');
+  // Requires PSBT builder with cellpack support — not yet implemented
+  throw new Error('Claiming futures not yet implemented — need PSBT builder with cellpack support');
 }
 
 /**

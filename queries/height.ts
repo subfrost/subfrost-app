@@ -18,6 +18,7 @@
 import { useEffect, useRef } from 'react';
 import { queryOptions, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
+import { getHeight as rpcGetHeight } from '@/lib/alkanes/rpc';
 import { queryKeys } from './keys';
 
 type WebProvider = import('@alkanes/ts-sdk/wasm').WebProvider;
@@ -26,64 +27,21 @@ type WebProvider = import('@alkanes/ts-sdk/wasm').WebProvider;
 // Query options factory
 // ---------------------------------------------------------------------------
 
-async function fetchHeightViaSDK(provider: WebProvider): Promise<number> {
-  // Try espoGetHeight first (Espo service), then dataApiGetBlockHeight, then metashrewGetHeight
-  try {
-    const height = await provider.espoGetHeight();
-    if (typeof height === 'number' && height > 0) return height;
-  } catch { /* fall through */ }
-
-  try {
-    const result = await provider.dataApiGetBlockHeight();
-    const parsed = typeof result === 'string' ? JSON.parse(result) : result;
-    const h = parsed?.height ?? parsed?.data?.height ?? parsed;
-    if (typeof h === 'number' && h > 0) return h;
-  } catch { /* fall through */ }
-
-  try {
-    const result = await provider.metashrewHeight();
-    const h = typeof result === 'number' ? result : parseInt(String(result), 10);
-    if (h > 0) return h;
-  } catch { /* fall through */ }
-
-  throw new Error('All SDK height methods failed');
-}
-
-async function fetchHeightViaRPC(network: string): Promise<number> {
-  const networkSlug = network === 'mainnet' ? 'mainnet'
-    : network === 'testnet' ? 'testnet'
-    : network === 'signet' ? 'signet'
-    : network === 'regtest' || network === 'subfrost-regtest' || network === 'regtest-local' ? 'regtest'
-    : 'mainnet';
-
-  const res = await fetch(`/api/rpc/${networkSlug}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      method: 'metashrew_height',
-      params: [],
-      id: 1,
-    }),
-  });
-  const json = await res.json();
-  const result = json.result;
-  return typeof result === 'number' ? result : (typeof result === 'string' ? parseInt(result, 10) || 0 : 0);
-}
-
-export function espoHeightQueryOptions(network: string, provider?: WebProvider | null) {
+export function espoHeightQueryOptions(network: string, _provider?: WebProvider | null) {
   return queryOptions({
     queryKey: queryKeys.height.espo(network),
     queryFn: async () => {
-      // Prefer SDK provider when available
-      if (provider) {
-        try {
-          return await fetchHeightViaSDK(provider);
-        } catch {
-          // Fall back to raw RPC
-        }
+      // Single SDK-mediated entry point — `rpc.getHeight()` calls
+      // `metashrew_height` against the proxy (which routes mainnet to
+      // /v6/subfrost). No internal hedge or fallback (stripped 2026-05-11
+      // per flex's "no fallbacks" rule). Catch-and-return-0 below stays
+      // because HeightPoller treats 0 as "couldn't fetch, retry next
+      // tick", not as "tip is at block 0".
+      try {
+        return await rpcGetHeight(network);
+      } catch {
+        return 0;
       }
-      return fetchHeightViaRPC(network);
     },
     // This is the ONE query that polls
     refetchInterval: 10_000,
@@ -95,19 +53,46 @@ export function espoHeightQueryOptions(network: string, provider?: WebProvider |
 // HeightPoller component
 // ---------------------------------------------------------------------------
 
+const HEIGHT_STORAGE_KEY = 'subfrost_last_block_height';
+
 export function HeightPoller({ network }: { network: string }) {
   const queryClient = useQueryClient();
-  const prevHeight = useRef<number | null>(null);
+  const storedHeight = typeof window !== 'undefined'
+    ? parseInt(localStorage.getItem(HEIGHT_STORAGE_KEY) || '0', 10) || null
+    : null;
+  const prevHeight = useRef<number | null>(storedHeight);
   const { provider } = useAlkanesSDK();
 
   const { data: height } = useQuery(espoHeightQueryOptions(network, provider));
 
   useEffect(() => {
-    if (height == null) return;
+    if (height == null || height === 0) return; // height 0 = RPC error, not real
 
-    // First mount — just record the height, don't invalidate
-    if (prevHeight.current === null) {
+    // First poll result — compare with stored height from localStorage.
+    // If height hasn't changed since last visit, skip initial invalidation
+    // to avoid duplicate queries (queries already running from mount).
+    if (prevHeight.current === null || prevHeight.current === storedHeight) {
+      if (prevHeight.current !== null && height <= prevHeight.current) {
+        // Same or lower height — no new block, just record and skip
+        console.log(`[HeightPoller] Initial height: ${height} (stored: ${prevHeight.current}), skipping invalidation`);
+        prevHeight.current = height;
+        return;
+      }
+      // Either first time ever (null) or new block since last visit
+      console.log(`[HeightPoller] Initial height: ${height} (stored: ${prevHeight.current}), invalidating`);
       prevHeight.current = height;
+      if (typeof window !== 'undefined') localStorage.setItem(HEIGHT_STORAGE_KEY, String(height));
+      queryClient.invalidateQueries({
+        predicate: (query) => {
+          const key = query.queryKey;
+          if (!Array.isArray(key)) return true;
+          if (key[0] === 'height') return false;
+          if (key[0] === 'frbtc-premium') return false;
+          // Token names/symbols are immutable — no need to refetch on new block
+          if (key[0] === 'token-display') return false;
+          return true;
+        },
+      });
       return;
     }
 
@@ -120,6 +105,7 @@ export function HeightPoller({ network }: { network: string }) {
         `[HeightPoller] Height changed ${prevHeight.current} → ${height}, invalidating queries`,
       );
       prevHeight.current = height;
+      if (typeof window !== 'undefined') localStorage.setItem(HEIGHT_STORAGE_KEY, String(height));
 
       queryClient.invalidateQueries({
         predicate: (query) => {
@@ -130,6 +116,8 @@ export function HeightPoller({ network }: { network: string }) {
           // frBTC premium is a contract config that rarely changes — no need
           // to re-simulate on every block.
           if (key[0] === 'frbtc-premium') return false;
+          // Token names/symbols are immutable — no need to refetch on new block
+          if (key[0] === 'token-display') return false;
           return true;
         },
       });

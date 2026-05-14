@@ -14,22 +14,41 @@ import { LanguageProvider } from '@/context/LanguageContext';
 import { TransactionConfirmProvider } from '@/context/TransactionConfirmContext';
 import { NotificationProvider } from '@/context/NotificationContext';
 import { HeightPoller } from '@/queries/height';
+import { WalletStatePrewarmer } from '@/components/WalletStatePrewarmer';
+import { IndexerSyncProvider } from '@/context/IndexerSyncContext';
+import { IndexerSyncOverlay } from '@/components/IndexerSyncOverlay';
+import { DevnetProvider } from '@/context/DevnetContext';
+import { DevnetBootModal, DevnetErrorModal } from '@/components/DevnetBootModal';
+import { DevnetControlPanel, DevnetNetworkBanner } from '@/components/DevnetControlPanel';
 import TransactionConfirmModal from '@/app/components/TransactionConfirmModal';
 import GlobalNotificationArea from '@/app/components/GlobalNotificationArea';
+import { DEMO_MODE_ENABLED } from '@/utils/demoMode';
+
 
 // Define Network type locally
 import type { Network } from '@/utils/constants';
 
 const NETWORK_STORAGE_KEY = 'subfrost_selected_network';
 
-// Detect network from localStorage, hostname, or env variable
-function detectNetwork(): Network {
-  if (typeof window === 'undefined') return 'subfrost-regtest';
+function normalizeNetworkForDemo(network: Network): Network {
+  return DEMO_MODE_ENABLED && network === 'devnet' ? 'mainnet' : network;
+}
 
-  // First check localStorage for user selection
+// Detect network from storage, hostname, or env variable.
+// Devnet is stored in sessionStorage (tab-scoped) — survives in-tab navigation
+// but resets to mainnet on a new tab/page load. All other networks use localStorage.
+function detectNetwork(): Network {
+  if (typeof window === 'undefined') return 'mainnet';
+
+  // Check sessionStorage first for devnet (tab-scoped, does not persist across tabs)
+  if (!DEMO_MODE_ENABLED && sessionStorage.getItem(NETWORK_STORAGE_KEY) === 'devnet') {
+    return 'devnet';
+  }
+
+  // Restore other network selections from localStorage
   const stored = localStorage.getItem(NETWORK_STORAGE_KEY);
-  if (stored && ['mainnet', 'testnet', 'signet', 'regtest', 'regtest-local', 'subfrost-regtest', 'oylnet'].includes(stored)) {
-    return stored as Network;
+  if (stored && ['mainnet', 'testnet', 'signet', 'regtest', 'regtest-local', 'qubitcoin-regtest', 'subfrost-regtest', 'oylnet'].includes(stored)) {
+    return normalizeNetworkForDemo(stored as Network);
   }
 
   // Then check hostname
@@ -39,18 +58,16 @@ function detectNetwork(): Network {
       return 'signet';
     } else if (host.startsWith('regtest.') || host.startsWith('staging-regtest.')) {
       return 'subfrost-regtest';
-    } else if (host.includes('localhost') || host.includes('127.0.0.1')) {
-      // Default to subfrost-regtest for local development
-      return 'subfrost-regtest';
     }
+    // Default to mainnet for all other cases (including localhost)
     return 'mainnet';
   }
-  return process.env.NEXT_PUBLIC_NETWORK as Network;
+  return normalizeNetworkForDemo(process.env.NEXT_PUBLIC_NETWORK as Network);
 }
 
 export default function Providers({ children }: { children: ReactNode }) {
   const [mounted, setMounted] = useState(false);
-  const [network, setNetwork] = useState<Network>('subfrost-regtest');
+  const [network, setNetwork] = useState<Network>('mainnet');
 
   // Memoize QueryClient to prevent recreation on re-renders
   // All queries use staleTime: Infinity and never self-refresh.
@@ -75,13 +92,20 @@ export default function Providers({ children }: { children: ReactNode }) {
 
   // Initialize network on mount and listen for storage changes
   useEffect(() => {
+    // Clear any stale devnet value from localStorage (legacy cleanup — devnet now uses sessionStorage)
+    if (localStorage.getItem(NETWORK_STORAGE_KEY) === 'devnet') {
+      localStorage.removeItem(NETWORK_STORAGE_KEY);
+    }
+    if (DEMO_MODE_ENABLED && sessionStorage.getItem(NETWORK_STORAGE_KEY) === 'devnet') {
+      sessionStorage.removeItem(NETWORK_STORAGE_KEY);
+    }
     const initialNetwork = detectNetwork();
     setNetwork(initialNetwork);
 
     // Listen for network changes from other tabs/components
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === NETWORK_STORAGE_KEY && e.newValue) {
-        setNetwork(e.newValue as Network);
+        setNetwork(normalizeNetworkForDemo(e.newValue as Network));
         // Invalidate all queries to refetch with new network
         queryClient.invalidateQueries();
       }
@@ -89,7 +113,7 @@ export default function Providers({ children }: { children: ReactNode }) {
 
     // Listen for custom events from same tab
     const handleNetworkChange = (e: CustomEvent) => {
-      const newNetwork = e.detail as Network;
+      const newNetwork = normalizeNetworkForDemo(e.detail as Network);
       setNetwork(newNetwork);
       // Invalidate all queries to refetch with new network
       queryClient.invalidateQueries();
@@ -112,8 +136,8 @@ export default function Providers({ children }: { children: ReactNode }) {
 
   return (
     <ProgressProvider
-      height="1px"
-      color="#00E5FF"
+      height="2px"
+      color="#FFFFFF"
       options={{ showSpinner: false }}
       shallowRouting
     >
@@ -123,16 +147,26 @@ export default function Providers({ children }: { children: ReactNode }) {
             <ThemeProvider>
               <LanguageProvider>
                 <AlkanesSDKProvider network={network}>
-                  <HeightPoller network={network} />
-                  <WalletProvider network={network}>
-                    <TransactionConfirmProvider>
-                      <NotificationProvider>
-                        {children}
-                        <TransactionConfirmModal />
-                        <GlobalNotificationArea />
-                      </NotificationProvider>
-                    </TransactionConfirmProvider>
-                  </WalletProvider>
+                  <DevnetProvider network={network}>
+                    <HeightPoller network={network} />
+                    <WalletProvider network={network}>
+                      <WalletStatePrewarmer />
+                      <IndexerSyncProvider>
+                        <IndexerSyncOverlay />
+                        <TransactionConfirmProvider>
+                          <NotificationProvider>
+                            <DevnetNetworkBanner />
+                            {children}
+                            <DevnetBootModal />
+                            <DevnetErrorModal />
+                            <DevnetControlPanel />
+                            <TransactionConfirmModal />
+                            <GlobalNotificationArea />
+                          </NotificationProvider>
+                        </TransactionConfirmProvider>
+                      </IndexerSyncProvider>
+                    </WalletProvider>
+                  </DevnetProvider>
                 </AlkanesSDKProvider>
               </LanguageProvider>
             </ThemeProvider>

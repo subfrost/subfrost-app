@@ -2,18 +2,24 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, ArrowLeftRight, Vault, TrendingUp } from 'lucide-react';
+import { Home, ArrowLeftRight, Vault, TrendingUp, type LucideIcon } from 'lucide-react';
 import { useTranslation } from '@/hooks/useTranslation';
+import { useDemoGate } from '@/hooks/useDemoGate';
 
 export default function MobileBottomNav() {
   const pathname = usePathname();
   const { t } = useTranslation();
+  const isDemoGated = useDemoGate();
 
-  const navItems = [
+  const navItems: Array<{ href: string; label: string; icon: LucideIcon }> = [
     { href: '/', label: t('nav.home'), icon: Home },
     { href: '/swap', label: t('nav.swap'), icon: ArrowLeftRight },
     { href: '/vaults', label: t('nav.vaults'), icon: Vault },
-    { href: '/futures', label: t('nav.futures'), icon: TrendingUp },
+    ...(!isDemoGated
+      ? [
+          { href: '/futures', label: t('nav.futures'), icon: TrendingUp },
+        ]
+      : []),
   ];
 
   const isActive = (path: string) => {

@@ -5,10 +5,12 @@ import { useEnrichedWalletData } from '@/hooks/useEnrichedWalletData';
 import { Box, ChevronDown, ChevronUp, ExternalLink, Loader2, RefreshCw, Filter, Lock, Unlock, Scissors } from 'lucide-react';
 import InscriptionRenderer from '@/app/components/InscriptionRenderer';
 import SplitUtxoModal from './SplitUtxoModal';
+import { useTranslation } from '@/hooks/useTranslation';
 
 type UTXOFilterType = 'all' | 'p2wpkh' | 'p2tr' | 'protorunes' | 'runes' | 'brc20';
 
 export default function UTXOManagement() {
+  const { t } = useTranslation();
   const { utxos, isLoading, error, refresh } = useEnrichedWalletData();
   const [expandedUtxo, setExpandedUtxo] = useState<string | null>(null);
   const [selectedFilters, setSelectedFilters] = useState<Set<UTXOFilterType>>(new Set(['all']));
@@ -119,7 +121,7 @@ export default function UTXOManagement() {
     return (
       <div className="flex items-center justify-center py-12">
         <Loader2 className="animate-spin text-[color:var(--sf-text)]/60" size={32} />
-        <div className="ml-3 text-[color:var(--sf-text)]/60">Loading UTXOs...</div>
+        <div className="ml-3 text-[color:var(--sf-text)]/60">{t('utxo.loading')}</div>
       </div>
     );
   }
@@ -132,7 +134,7 @@ export default function UTXOManagement() {
           onClick={refresh}
           className="px-4 py-2 rounded-lg bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white"
         >
-          Try Again
+          {t('common.tryAgain')}
         </button>
       </div>
     );
@@ -145,14 +147,14 @@ export default function UTXOManagement() {
         <div className="flex items-center gap-2">
           <Box size={24} className="text-[color:var(--sf-primary)]" />
           <h3 className="text-lg font-bold text-[color:var(--sf-text)]">
-            {filteredUtxos.length} UTXO{filteredUtxos.length !== 1 ? 's' : ''}
+            {t(filteredUtxos.length === 1 ? 'utxo.countSingular' : 'utxo.countPlural', { count: filteredUtxos.length })}
           </h3>
         </div>
         <button
           onClick={handleRefresh}
           disabled={isLoading || isRefreshing}
           className="p-2 rounded-lg hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]/80 disabled:opacity-50"
-          title="Refresh UTXOs"
+          title={t('utxo.refresh')}
         >
           <RefreshCw size={20} className={isLoading || isRefreshing ? 'animate-spin' : ''} />
         </button>
@@ -162,17 +164,17 @@ export default function UTXOManagement() {
       <div className="space-y-3">
         <div className="flex items-center gap-2 text-[color:var(--sf-text)]/80">
           <Filter size={16} />
-          <span className="text-sm font-medium">Filter by:</span>
-          <span className="text-xs text-[color:var(--sf-text)]/50">(multi-select)</span>
+          <span className="text-sm font-medium">{t('utxo.filterBy')}</span>
+          <span className="text-xs text-[color:var(--sf-text)]/50">{t('utxo.multiSelect')}</span>
         </div>
         <div className="flex gap-2 flex-wrap">
           {[
-            { id: 'all', label: 'All' },
-            { id: 'p2wpkh', label: 'Native SegWit' },
-            { id: 'p2tr', label: 'Taproot' },
-            { id: 'runes', label: 'Runes' },
-            { id: 'protorunes', label: 'Protorunes (Alkanes)' },
-            { id: 'brc20', label: 'Inscriptions (BRC20)' },
+            { id: 'all', label: t('utxo.filterAll') },
+            { id: 'p2wpkh', label: t('utxo.filterNativeSegwit') },
+            { id: 'p2tr', label: t('utxo.filterTaproot') },
+            { id: 'runes', label: t('utxo.filterRunes') },
+            { id: 'protorunes', label: t('utxo.filterAlkanes') },
+            { id: 'brc20', label: t('utxo.filterInscriptions') },
           ].map((f) => (
             <button
               key={f.id}
@@ -211,7 +213,7 @@ export default function UTXOManagement() {
                       <div className="text-sm flex items-center gap-2 text-[color:var(--sf-text)]">
                         <span>{utxo.txid.slice(0, 8)}...{utxo.txid.slice(-8)}:{utxo.vout}</span>
                         {isFrozen(utxoKey) && (
-                          <span title="Frozen UTXO">
+                          <span title={t('utxo.frozen')}>
                             <Lock size={14} className="text-yellow-400" />
                           </span>
                         )}
@@ -222,17 +224,17 @@ export default function UTXOManagement() {
                     </div>
                     {utxo.alkanes && Object.keys(utxo.alkanes).length > 0 && (
                       <span className="px-2 py-1 rounded bg-[color:var(--sf-primary)]/20 text-[color:var(--sf-primary)] text-xs">
-                        {Object.keys(utxo.alkanes).length} Protorune{Object.keys(utxo.alkanes).length > 1 ? 's' : ''}
+                        {t(Object.keys(utxo.alkanes).length === 1 ? 'utxo.protoruneCountSingular' : 'utxo.protoruneCountPlural', { count: Object.keys(utxo.alkanes).length })}
                       </span>
                     )}
                     {utxo.runes && Object.keys(utxo.runes).length > 0 && (
                       <span className="px-2 py-1 rounded bg-purple-500/20 text-purple-500 dark:text-purple-400 text-xs">
-                        {Object.keys(utxo.runes).length} Rune{Object.keys(utxo.runes).length > 1 ? 's' : ''}
+                        {t(Object.keys(utxo.runes).length === 1 ? 'utxo.runeCountSingular' : 'utxo.runeCountPlural', { count: Object.keys(utxo.runes).length })}
                       </span>
                     )}
                     {utxo.inscriptions && utxo.inscriptions.length > 0 && (
                       <span className="px-2 py-1 rounded bg-orange-500/20 text-orange-500 dark:text-orange-400 text-xs">
-                        {utxo.inscriptions.length} BRC20/Inscription{utxo.inscriptions.length > 1 ? 's' : ''}
+                        {t(utxo.inscriptions.length === 1 ? 'utxo.inscriptionCountSingular' : 'utxo.inscriptionCountPlural', { count: utxo.inscriptions.length })}
                       </span>
                     )}
                   </div>
@@ -254,12 +256,12 @@ export default function UTXOManagement() {
                         {isFrozen(utxoKey) ? (
                           <>
                             <Lock size={16} />
-                            Frozen
+                            {t('utxo.frozen')}
                           </>
                         ) : (
                           <>
                             <Unlock size={16} />
-                            Freeze
+                            {t('utxo.freeze')}
                           </>
                         )}
                       </button>
@@ -270,7 +272,7 @@ export default function UTXOManagement() {
                           className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[color:var(--sf-primary)]/5 text-[color:var(--sf-text)]/80 hover:bg-[color:var(--sf-primary)]/10 text-sm transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
                         >
                           <Scissors size={16} />
-                          Split Ordinals
+                          {t('utxo.splitOrdinals')}
                         </button>
                       )}
                     </div>
@@ -278,7 +280,7 @@ export default function UTXOManagement() {
                     {/* UTXO Details */}
                     <div className="space-y-2 text-sm">
                       <div>
-                        <span className="text-[color:var(--sf-text)]/60">Transaction ID:</span>
+                        <span className="text-[color:var(--sf-text)]/60">{t('utxo.transactionId')}</span>
                         <div className="flex items-center gap-2 mt-1">
                           <span className="text-xs break-all text-[color:var(--sf-text)]">{utxo.txid}</span>
                           <a
@@ -292,14 +294,14 @@ export default function UTXOManagement() {
                         </div>
                       </div>
                       <div className="text-[color:var(--sf-text)]">
-                        <span className="text-[color:var(--sf-text)]/60">Output Index:</span> {utxo.vout}
+                        <span className="text-[color:var(--sf-text)]/60">{t('utxo.outputIndex')}</span> {utxo.vout}
                       </div>
                       <div className="text-[color:var(--sf-text)]">
-                        <span className="text-[color:var(--sf-text)]/60">Value:</span> {(utxo.value / 100000000).toFixed(8)} BTC
+                        <span className="text-[color:var(--sf-text)]/60">{t('utxo.value')}</span> {(utxo.value / 100000000).toFixed(8)} BTC
                       </div>
                       {utxo.status.block_height && (
                         <div className="text-[color:var(--sf-text)]">
-                          <span className="text-[color:var(--sf-text)]/60">Block Height:</span> {utxo.status.block_height}
+                          <span className="text-[color:var(--sf-text)]/60">{t('utxo.blockHeight')}</span> {utxo.status.block_height}
                         </div>
                       )}
                     </div>
@@ -307,7 +309,7 @@ export default function UTXOManagement() {
                     {/* Protorunes/Alkanes */}
                     {utxo.alkanes && Object.keys(utxo.alkanes).length > 0 && (
                       <div>
-                        <div className="text-sm font-medium text-[color:var(--sf-text)]/80 mb-2">Protorunes/Alkanes:</div>
+                        <div className="text-sm font-medium text-[color:var(--sf-text)]/80 mb-2">{t('utxo.protorunesAlkanes')}</div>
                         <div className="space-y-1">
                           {Object.entries(utxo.alkanes).map(([alkaneId, alkane]) => (
                             <div key={alkaneId} className="flex justify-between text-sm p-2 rounded bg-[color:var(--sf-primary)]/5">
@@ -325,7 +327,7 @@ export default function UTXOManagement() {
                     {/* Runes */}
                     {utxo.runes && Object.keys(utxo.runes).length > 0 && (
                       <div>
-                        <div className="text-sm font-medium text-[color:var(--sf-text)]/80 mb-2">Runes:</div>
+                        <div className="text-sm font-medium text-[color:var(--sf-text)]/80 mb-2">{t('utxo.runes')}</div>
                         <div className="space-y-1">
                           {Object.entries(utxo.runes).map(([runeId, rune]) => (
                             <div key={runeId} className="flex justify-between text-sm p-2 rounded bg-[color:var(--sf-primary)]/5">
@@ -340,7 +342,7 @@ export default function UTXOManagement() {
                     {/* BRC20/Inscriptions */}
                     {utxo.inscriptions && utxo.inscriptions.length > 0 && (
                       <div>
-                        <div className="text-sm font-medium text-[color:var(--sf-text)]/80 mb-2">BRC20/Inscriptions:</div>
+                        <div className="text-sm font-medium text-[color:var(--sf-text)]/80 mb-2">{t('utxo.brc20Inscriptions')}</div>
                         <div className="space-y-3">
                           {utxo.inscriptions.map((inscription, idx) => (
                             <InscriptionRenderer
@@ -360,7 +362,7 @@ export default function UTXOManagement() {
           })
         ) : (
           <div className="text-center py-12 text-[color:var(--sf-text)]/60">
-            No UTXOs found
+            {t('utxo.noneFound')}
           </div>
         )}
       </div>

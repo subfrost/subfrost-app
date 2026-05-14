@@ -52,6 +52,224 @@ function mapToObject(value: any): any {
   return value;
 }
 
+/**
+ * Normalize activity items into the shape ActivityFeed expects.
+ *
+ * Two formats arrive here:
+ *
+ * 1. **Mainnet alkanode REST** — fully enriched camelCase items with type,
+ *    amounts, token IDs, addresses. These pass through with minimal changes.
+ *
+ * 2. **Devnet quspo traces** — raw execution traces with only:
+ *    { height, kind, opcode, success, target, txid, vout }
+ *    We derive `type` from target+opcode and fill in what we can.
+ */
+function normalizeActivityItem(item: any): any {
+  if (!item || typeof item !== 'object') return item;
+
+  // ── Already-enriched items (mainnet alkanode) ────────────────────────
+  // If the item already has a recognized `type` field, it's from the
+  // alkanode REST API. Just do light normalization.
+  if (item.type === 'swap' || item.type === 'mint' || item.type === 'burn'
+      || item.type === 'creation' || item.type === 'wrap' || item.type === 'unwrap') {
+    const mapped = { ...item };
+    // snake_case rename pass for any mixed-format edge cases
+    const renames: Record<string, string> = {
+      sold_amount: 'soldAmount', bought_amount: 'boughtAmount',
+      transaction_id: 'transactionId', tx_id: 'transactionId', txid: 'transactionId',
+      sold_token_block_id: 'soldTokenBlockId', sold_token_tx_id: 'soldTokenTxId',
+      bought_token_block_id: 'boughtTokenBlockId', bought_token_tx_id: 'boughtTokenTxId',
+      pool_block_id: 'poolBlockId', pool_tx_id: 'poolTxId',
+      token0_amount: 'token0Amount', token1_amount: 'token1Amount',
+      token0_block_id: 'token0BlockId', token0_tx_id: 'token0TxId',
+      token1_block_id: 'token1BlockId', token1_tx_id: 'token1TxId',
+      token0_block: 'token0BlockId', token0_tx: 'token0TxId',
+      token1_block: 'token1BlockId', token1_tx: 'token1TxId',
+      amount0_in: 'amount0In', amount1_in: 'amount1In',
+      amount0_out: 'amount0Out', amount1_out: 'amount1Out',
+      seller_address: 'sellerAddress', minter_address: 'minterAddress',
+      burner_address: 'burnerAddress', creator_address: 'creatorAddress',
+    };
+    for (const [snake, camel] of Object.entries(renames)) {
+      if (mapped[snake] !== undefined && mapped[camel] === undefined) {
+        mapped[camel] = mapped[snake];
+      }
+    }
+    if (!mapped.transactionId) mapped.transactionId = mapped.txid || mapped.tx_id || '';
+    if (mapped.type === 'swap') {
+      const token0BlockId = mapped.token0BlockId ?? mapped.soldTokenBlockId;
+      const token0TxId = mapped.token0TxId ?? mapped.soldTokenTxId;
+      const token1BlockId = mapped.token1BlockId ?? mapped.boughtTokenBlockId;
+      const token1TxId = mapped.token1TxId ?? mapped.boughtTokenTxId;
+
+      const amount0In = mapped.amount0In ?? mapped.amount0_in;
+      const amount1In = mapped.amount1In ?? mapped.amount1_in;
+      const amount0Out = mapped.amount0Out ?? mapped.amount0_out;
+      const amount1Out = mapped.amount1Out ?? mapped.amount1_out;
+      const isPositive = (value: any) => Number(value ?? 0) > 0;
+      const soldSide = isPositive(amount1In) ? 1 : 0;
+      const boughtSide = soldSide === 1 ? 0 : 1;
+      const setIfPresent = (key: string, value: any) => {
+        if (mapped[key] === undefined && value !== undefined && value !== null) {
+          mapped[key] = String(value);
+        }
+      };
+
+      setIfPresent('soldTokenBlockId', soldSide === 1 ? token1BlockId : token0BlockId);
+      setIfPresent('soldTokenTxId', soldSide === 1 ? token1TxId : token0TxId);
+      setIfPresent('boughtTokenBlockId', boughtSide === 1 ? token1BlockId : token0BlockId);
+      setIfPresent('boughtTokenTxId', boughtSide === 1 ? token1TxId : token0TxId);
+
+      if (mapped.soldAmount === undefined) mapped.soldAmount = soldSide === 1 ? amount1In : amount0In;
+      if (mapped.boughtAmount === undefined) mapped.boughtAmount = boughtSide === 1 ? amount1Out : amount0Out;
+    }
+    return mapped;
+  }
+
+  // ── Raw quspo execution traces ───────────────────────────────────────
+  // Shape: { height, kind, opcode, success, target, txid, vout }
+  // We derive the activity type from target (contract ID) + opcode.
+  if (item.target !== undefined && item.opcode !== undefined) {
+    return normalizeQuspoTrace(item);
+  }
+
+  // ── Unknown format — pass through with basic fixes ───────────────────
+  const mapped = { ...item };
+  if (!mapped.transactionId) {
+    mapped.transactionId = mapped.txid || mapped.tx_id || mapped.transaction_id
+      || mapped.hash || `unknown-${Math.random().toString(36).slice(2)}`;
+  }
+  if (!mapped.timestamp) mapped.timestamp = Date.now();
+  return mapped;
+}
+
+function getHistoryRoute(address: string | null | undefined, transactionType?: AmmTransactionType) {
+  if (transactionType === 'wrap') {
+    return {
+      endpoint: address ? 'get-address-wrap-history' : 'get-all-wrap-history',
+      body: address ? { address } : {},
+      resultKey: 'wraps',
+      forcedType: 'wrap' as const,
+    };
+  }
+
+  if (transactionType === 'unwrap') {
+    return {
+      endpoint: address ? 'get-address-unwrap-history' : 'get-all-unwrap-history',
+      body: address ? { address } : {},
+      resultKey: 'unwraps',
+      forcedType: 'unwrap' as const,
+    };
+  }
+
+  return {
+    endpoint: address ? 'get-all-address-amm-tx-history' : 'get-all-amm-tx-history',
+    body: address ? { address } : {},
+    resultKey: 'transactions',
+    forcedType: undefined,
+  };
+}
+
+function extractHistoryItems(payload: any, resultKey: string) {
+  if (Array.isArray(payload?.[resultKey])) return payload[resultKey];
+  if (Array.isArray(payload?.transactions)) return payload.transactions;
+  if (Array.isArray(payload?.items)) return payload.items;
+  if (Array.isArray(payload?.wraps)) return payload.wraps;
+  if (Array.isArray(payload?.unwraps)) return payload.unwraps;
+  if (Array.isArray(payload)) return payload;
+  return [];
+}
+
+/**
+ * Transform a raw quspo execution trace into an ActivityFeed-compatible item.
+ *
+ * Known contract targets and opcodes (from CLAUDE.md):
+ * - Factory [4:65522] opcode 1 → creation (CreateNewPool)
+ * - Factory [4:65522] opcode 13 → swap (SwapExactTokensForTokens)
+ * - Pool [2:N] opcode 1 → mint (AddLiquidity)
+ * - Pool [2:N] opcode 2 → burn (WithdrawAndBurn)
+ * - Pool [2:N] opcode 3 → swap (direct pool swap)
+ * - frBTC [32:0] opcode 77 → wrap
+ * - frBTC [32:0] opcode 78 → unwrap
+ * - DIESEL [2:0] opcode 77 → mint (faucet, not shown)
+ * - Deploy [kind=19, opcode=0] → contract deployment
+ */
+function normalizeQuspoTrace(trace: any): any {
+  const target = String(trace.target || '');
+  const opcode = Number(trace.opcode ?? -1);
+  const [targetBlock, targetTx] = target.split(':').map(Number);
+
+  let type: string = 'unknown';
+
+  // frBTC contract [32:0]
+  if (targetBlock === 32 && targetTx === 0) {
+    type = opcode === 77 ? 'wrap' : opcode === 78 ? 'unwrap' : 'unknown';
+  }
+  // Factory contract [4:65522] (devnet default factory proxy)
+  else if (targetBlock === 4 && (targetTx === 65522 || targetTx === 65498)) {
+    if (opcode === 1) type = 'creation';
+    else if (opcode === 13 || opcode === 14 || opcode === 29) type = 'swap';
+    else if (opcode === 11) type = 'mint'; // AddLiquidity via factory router
+    else if (opcode === 12) type = 'burn'; // Burn via factory router
+    else if (opcode === 0) type = 'creation'; // Factory init (deploy)
+  }
+  // Pool instances [2:N where N > 0]
+  else if (targetBlock === 2 && targetTx > 0) {
+    if (opcode === 1) type = 'mint';
+    else if (opcode === 2) type = 'burn';
+    else if (opcode === 3) type = 'swap';
+  }
+  // DIESEL [2:0] opcode 77 = faucet mint — skip or show as "mint"
+  else if (targetBlock === 2 && targetTx === 0 && opcode === 77) {
+    type = 'wrap'; // Show DIESEL mints as wraps for visibility
+  }
+  // Vault, FIRE, Gauge, Fujin — show as generic contract calls
+  else if (targetBlock === 4) {
+    // Contract deployments (kind=19, opcode=0) — skip
+    if (opcode === 0 && trace.kind === 19) {
+      return null; // Will be filtered out
+    }
+    type = 'creation'; // Generic contract interaction
+  }
+
+  // Filter out unrecognized traces
+  if (type === 'unknown') return null;
+
+  // Build the normalized item
+  const result: any = {
+    type,
+    transactionId: trace.txid || '',
+    timestamp: Date.now(), // Devnet has no wall-clock time; use current time
+    address: '', // Not available in trace data
+  };
+
+  if (type === 'swap') {
+    // We know the factory handles DIESEL↔frBTC swaps on devnet
+    result.soldTokenBlockId = '2';
+    result.soldTokenTxId = '0';
+    result.boughtTokenBlockId = '32';
+    result.boughtTokenTxId = '0';
+    result.soldAmount = '0'; // Not available from trace
+    result.boughtAmount = '0';
+    result.poolBlockId = String(targetBlock);
+    result.poolTxId = String(targetTx);
+  } else if (type === 'mint' || type === 'burn' || type === 'creation') {
+    result.token0BlockId = '2';
+    result.token0TxId = '0';
+    result.token1BlockId = '32';
+    result.token1TxId = '0';
+    result.token0Amount = '0';
+    result.token1Amount = '0';
+    result.lpTokenAmount = '0';
+    result.poolBlockId = String(targetBlock);
+    result.poolTxId = String(targetTx);
+  } else if (type === 'wrap' || type === 'unwrap') {
+    result.amount = '0'; // Not available from trace
+  }
+
+  return result;
+}
+
 // Hook to fetch pool metadata via dataApiGetAllPoolsDetails (single REST call)
 function usePoolsMetadata(network: string, poolIds: string[]) {
   const { ALKANE_FACTORY_ID } = getConfig(network);
@@ -122,7 +340,7 @@ function usePoolsMetadata(network: string, poolIds: string[]) {
 
 export function useInfiniteAmmTxHistory({
   address,
-  count = 50,
+  count = 10,
   enabled = true,
   transactionType,
 }: {
@@ -145,31 +363,55 @@ export function useInfiniteAmmTxHistory({
     enabled: enabled && isInitialized && !!network && !!provider,
     queryFn: async ({ pageParam }) => {
       if (!provider) return { items: [], nextPage: undefined, total: 0 };
+      // On devnet, the REST data API returns HTTP 400 — skip entirely
+      if (network === 'devnet' || network === 'regtest-local' || network === 'qubitcoin-regtest') return { items: [], nextPage: undefined, total: 0 };
       const offset = pageParam * count;
 
       try {
-        let raw: any;
-        if (address) {
-          raw = await provider.dataApiGetAllAddressAmmTxHistory(address, BigInt(count), BigInt(offset));
-        } else {
-          raw = await provider.dataApiGetAllAmmTxHistory(BigInt(count), BigInt(offset));
+        // Direct REST fetch — no WASM overhead. Same espo endpoint the SDK calls internally.
+        const rpcBase = `/api/rpc/${network || 'mainnet'}`;
+        const route = getHistoryRoute(address, transactionType);
+        const body: Record<string, any> = {
+          ...route.body,
+          count,
+          offset,
+          successful: true,
+        };
+        if (
+          transactionType &&
+          transactionType !== 'wrap' &&
+          transactionType !== 'unwrap'
+        ) {
+          body.transactionType = transactionType;
         }
 
-        const result = mapToObject(raw);
+        const resp = await fetch(`${rpcBase}/${route.endpoint}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          signal: AbortSignal.timeout(10000),
+          body: JSON.stringify(body),
+        });
+        if (!resp.ok) throw new Error(`AMM history HTTP ${resp.status}`);
+        const result = await resp.json();
 
-        // API may return { data: { items, total, count, offset } } or { items, ... } directly
         const payload = result?.data ?? result;
-        const rawItems = Array.isArray(payload?.items) ? payload.items
-          : Array.isArray(payload) ? payload
-          : [];
+        const rawItemsRaw = extractHistoryItems(payload, route.resultKey)
+          .map((item: any) => route.forcedType ? { ...item, type: route.forcedType } : item);
+
+        // Normalize items (handles both mainnet enriched format and devnet raw traces)
+        // Filter out nulls (traces we want to skip, e.g. contract deployments)
+        const rawItems = rawItemsRaw
+          .map(normalizeActivityItem)
+          .filter((item: any) => item != null);
         const total = payload?.total ?? rawItems.length;
 
-        // Client-side category filter if the API doesn't support it
-        const filteredItems = transactionType && transactionType !== 'wrap' && transactionType !== 'unwrap'
+        // Client-side category filter — the API returns all types mixed together,
+        // Keep a local type check in case an upstream ignores transactionType.
+        const filteredItems = transactionType
           ? rawItems.filter((item: any) => item?.type === transactionType)
           : rawItems;
 
-        console.log(`[useAmmHistory] DataApi returned ${rawItems.length} items (total: ${total})`);
+        console.log(`[useAmmHistory] ${rawItems.length} items (${rawItemsRaw.length} raw, endpoint: ${route.endpoint}, type filter: ${transactionType || 'all'})`);
 
         return {
           items: filteredItems,

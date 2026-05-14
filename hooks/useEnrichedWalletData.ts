@@ -2,22 +2,58 @@
  * useEnrichedWalletData - Fetches enriched wallet data including UTXOs and alkane balances
  *
  * Flow:
- * 1. provider.getEnrichedBalances(address) - Calls balances.lua for UTXOs + inscriptions + runes
- * 2. provider.dataApi.getAlkanesByAddress(address) - SDK dataApi for alkane token balances
+ * 1. enrichedWalletQueryOptions — BTC UTXOs + runes via provider.getEnrichedBalances (Lua)
+ * 2. alkaneBalanceQueryOptions — Alkane balances via provider.alkanesByAddress (SDK WASM)
  *
- * JOURNAL ENTRY (2026-02-03):
- * Migrated from deprecated fetchAlkaneBalances to SDK's dataApi.getAlkanesByAddress.
+ * These are separate React Query instances so alkane failures never block BTC display.
+ * Each has its own retry, staleTime, and error lifecycle.
  *
  * JOURNAL ENTRY (2026-02-02):
  * Converted from useEffect+useState to useQuery. The query is invalidated by the
  * central HeightPoller when block height changes.
+ *
+ * JOURNAL ENTRY (2026-02-03):
+ * Migrated from deprecated fetchAlkaneBalances to SDK's dataApi.getAlkanesByAddress.
+ *
+ * JOURNAL ENTRY (2026-03-22):
+ * Fixed intermittent balance loading — protorunes would sometimes not appear on
+ * wallet dashboard, requiring refresh or disconnect/reconnect. Root causes:
+ *   - No retry logic: transient API failures returned empty data permanently
+ *   - No explicit refetch on wallet connection state change
+ *   - No staleTime: unnecessary refetches racing with each other
+ *   - 15s auto-refresh band-aid in AlkanesBalancesCard was insufficient
+ * Fix: Added retry(3), staleTime(30s), refetchOnMount('always') to query options,
+ * plus an effect here that triggers refetch when isConnected transitions to true
+ * with a ready provider.
+ *
+ * JOURNAL ENTRY (2026-03-22):
+ * Decoupled alkane balance fetching into its own query (alkaneBalanceQueryOptions)
+ * using the SDK's provider.dataApiGetAlkanesByAddress() — Espo-backed data API
+ * that returns enriched metadata (name, symbol, balance, price, tokenImage).
+ * Removes the /api/alkane-balances server-side proxy dependency and the
+ * _alkanesFetchFailed monkey-patch retry logic.
+ * Each query now has independent TanStack Query lifecycle (retry, error, staleTime).
+ *
+ * Note: Initially tried provider.alkanesByAddress() (raw WASM protorunesbyaddress)
+ * but that returns only a flat alkaneId→balance Map without name/symbol metadata.
+ * The data API returns full token info including names from on-chain contract metadata.
  */
 
-import { useCallback } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useWallet } from '@/context/WalletContext';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
-import { enrichedWalletQueryOptions } from '@/queries/account';
+import {
+  enrichedWalletQueryOptions,
+  alkaneBalanceQueryOptions,
+  btcBalanceFastQueryOptions,
+  getWalletBalanceAddresses,
+  getWalletBtcBalanceAddresses,
+} from '@/queries/account';
+import type { BtcBalanceFast } from '@/queries/account';
+import { queryKeys } from '@/queries/keys';
+import { getAlkanesDataSource } from '@/lib/alkanes/dataSource';
+import { useWalletUtxoCache } from '@/hooks/useWalletUtxoCache';
 
 export interface AlkaneAsset {
   alkaneId: string;
@@ -70,14 +106,22 @@ export interface WalletBalances {
 
 export interface EnrichedWalletData {
   balances: WalletBalances;
+  addressAlkanes: AlkaneAsset[];
+  spendableAlkanes: AlkaneAsset[];
+  btcFast: BtcBalanceFast | null;
   utxos: {
     p2wpkh: EnrichedUTXO[];
     p2tr: EnrichedUTXO[];
     all: EnrichedUTXO[];
   };
   isLoading: boolean;
+  isBtcLoading: boolean;
+  isBtcFastLoading: boolean;
+  isAlkanesLoading: boolean;
   error: string | null;
   refresh: () => Promise<void>;
+  refreshAlkanes: () => Promise<void>;
+  refreshBtcFast: () => Promise<void>;
 }
 
 const EMPTY_BALANCES: WalletBalances = {
@@ -88,31 +132,267 @@ const EMPTY_BALANCES: WalletBalances = {
 };
 
 const EMPTY_UTXOS = { p2wpkh: [] as EnrichedUTXO[], p2tr: [] as EnrichedUTXO[], all: [] as EnrichedUTXO[] };
+const EMPTY_ALKANES: AlkaneAsset[] = [];
 
 export function useEnrichedWalletData(): EnrichedWalletData {
-  const { account, isConnected, network } = useWallet() as any;
+  const { account, isConnected, network, walletType, paymentAddress } = useWallet() as any;
   const { provider, isInitialized } = useAlkanesSDK();
   const queryClient = useQueryClient();
+  const prevConnectedRef = useRef(false);
+  const dataSource = getAlkanesDataSource(network || 'mainnet');
+  const walletUtxoCache = useWalletUtxoCache();
+  const balanceAccount = useMemo(() => ({
+    ...account,
+    paymentAddress: account?.paymentAddress || paymentAddress || undefined,
+    payerAddress: account?.payerAddress || paymentAddress || undefined,
+  }), [account, paymentAddress]);
 
-  const opts = enrichedWalletQueryOptions({
+  const sharedDeps = {
     provider,
     isInitialized,
-    account,
+    account: balanceAccount,
     isConnected,
     network: network || 'mainnet',
-  });
+  };
 
-  const { data, isLoading, error, refetch } = useQuery(opts);
+  // Query 0: Fast BTC balance. In ESPO mode this is derived from the same
+  // populated spendable-outpoint cache used by swap/send builders, so the app
+  // does not issue a separate esplora_address::utxo request for display.
+  const btcFastQuery = useQuery(btcBalanceFastQueryOptions({
+    account: balanceAccount,
+    isConnected,
+    network: network || 'mainnet',
+    walletType,
+  }));
+
+  // Query 1: BTC UTXOs + runes (via Lua script — slow, enriched details)
+  const btcQuery = useQuery(enrichedWalletQueryOptions(sharedDeps));
+
+  // Query 2: Alkane balances (via SDK WASM — alkanes_protorunesbyaddress RPC)
+  const alkaneQuery = useQuery(alkaneBalanceQueryOptions(sharedDeps));
+  const refetchBtcFast = btcFastQuery.refetch;
+  const refetchBtc = btcQuery.refetch;
+  const refetchAlkanes = alkaneQuery.refetch;
+
+  // Trigger an immediate refetch when the wallet transitions to connected state
+  // AND the SDK provider is ready. This covers:
+  //   - Initial page load with cached wallet (SDK may init after wallet restores)
+  //   - Fresh wallet connection (isConnected flips from false to true)
+  //   - Disconnect + reconnect cycle
+  useEffect(() => {
+    const isReady = isConnected && isInitialized && !!provider && !!account;
+    const wasDisconnected = !prevConnectedRef.current;
+
+    // Update ref immediately to prevent multiple firings from rapid re-renders
+    prevConnectedRef.current = isReady;
+
+    if (isReady && wasDisconnected) {
+      const timer = setTimeout(() => {
+        const addressKey = getWalletBalanceAddresses(balanceAccount).sort().join(',');
+        const btcAddressKey = getWalletBtcBalanceAddresses(balanceAccount).sort().join(',');
+        if (addressKey) {
+          queryClient.invalidateQueries({
+            queryKey: ['btc-balance-fast'],
+          });
+          queryClient.invalidateQueries({
+            queryKey: queryKeys.account.enrichedWallet(network || 'mainnet', addressKey),
+          });
+          queryClient.invalidateQueries({
+            queryKey: queryKeys.account.alkaneBalances(network || 'mainnet', addressKey),
+          });
+          queryClient.invalidateQueries({
+            queryKey: queryKeys.account.walletUtxoCache(network || 'mainnet', addressKey),
+          });
+        }
+        if (btcAddressKey && btcAddressKey !== addressKey) {
+          queryClient.invalidateQueries({
+            queryKey: queryKeys.account.enrichedWallet(network || 'mainnet', btcAddressKey),
+          });
+        }
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [isConnected, isInitialized, provider, account, balanceAccount, network, queryClient]);
+
+  const addressKey = useMemo(() => {
+    return getWalletBalanceAddresses(balanceAccount).sort().join(',');
+  }, [balanceAccount]);
+
+  const btcAddressSet = useMemo(() => new Set(getWalletBtcBalanceAddresses(balanceAccount)), [balanceAccount]);
+
+  const btcFastFromWalletCache = useMemo<BtcBalanceFast | null>(() => {
+    if (dataSource !== 'espo') return null;
+    if (!addressKey) return null;
+    if (walletUtxoCache.utxos.length === 0 && walletUtxoCache.height === 0) return null;
+    const p2trAddress = balanceAccount?.taproot?.address;
+    let p2wpkh = 0;
+    let p2tr = 0;
+    for (const utxo of walletUtxoCache.utxos) {
+      if (!btcAddressSet.has(utxo.address)) continue;
+      if (utxo.address === p2trAddress) p2tr += utxo.value;
+      else p2wpkh += utxo.value;
+    }
+    return {
+      p2wpkh,
+      p2tr,
+      total: p2wpkh + p2tr,
+      spendable: p2wpkh + p2tr,
+      pendingIn: 0,
+      pendingOut: 0,
+    };
+  }, [balanceAccount, addressKey, btcAddressSet, dataSource, walletUtxoCache.height, walletUtxoCache.utxos]);
+
+  const btcFast = btcFastQuery.data ?? btcFastFromWalletCache ?? null;
+
+  const espoAlkanesFromWalletCache = useMemo<AlkaneAsset[] | null>(() => {
+    if (dataSource !== 'espo') return null;
+    if (!addressKey) return null;
+    if (walletUtxoCache.utxos.length === 0 && walletUtxoCache.height === 0) return null;
+
+    const cachedBalances = walletUtxoCache.balances;
+    const metadataById = new Map<string, AlkaneAsset>();
+    for (const alkane of alkaneQuery.data ?? []) {
+      metadataById.set(alkane.alkaneId, alkane);
+    }
+
+    const seen = new Set<string>();
+    const out: AlkaneAsset[] = [];
+
+    for (const alkane of alkaneQuery.data ?? []) {
+      const amount = cachedBalances.get(alkane.alkaneId) ?? 0n;
+      if (amount <= 0n) continue;
+      seen.add(alkane.alkaneId);
+      out.push({
+        ...alkane,
+        balance: amount.toString(),
+      });
+    }
+
+    const extraIds = [...cachedBalances.entries()]
+      .filter(([id, amount]) => amount > 0n && !seen.has(id))
+      .map(([id]) => id)
+      .sort((a, b) => {
+        const [aBlock, aTx] = a.split(':').map(Number);
+        const [bBlock, bTx] = b.split(':').map(Number);
+        return (aBlock - bBlock) || (aTx - bTx);
+      });
+
+    for (const id of extraIds) {
+      const amount = cachedBalances.get(id) ?? 0n;
+      const metadata = metadataById.get(id);
+      out.push({
+        alkaneId: id,
+        name: metadata?.name || id,
+        symbol: metadata?.symbol || id,
+        balance: amount.toString(),
+        decimals: metadata?.decimals ?? 8,
+        logo: metadata?.logo,
+        priceUsd: metadata?.priceUsd,
+        priceInSatoshi: metadata?.priceInSatoshi,
+      });
+    }
+
+    return out;
+  }, [
+    addressKey,
+    dataSource,
+    alkaneQuery.data,
+    walletUtxoCache.balances,
+    walletUtxoCache.height,
+    walletUtxoCache.utxos.length,
+  ]);
+
+  const addressAlkanes = alkaneQuery.data ?? EMPTY_ALKANES;
+  const displayAlkanes = espoAlkanesFromWalletCache ?? addressAlkanes;
 
   const refresh = useCallback(async () => {
-    await refetch();
-  }, [refetch]);
+    const tasks: Promise<unknown>[] = [refetchBtc(), refetchAlkanes(), refetchBtcFast()];
+    if (dataSource === 'espo') {
+      tasks.push(queryClient.refetchQueries({
+        queryKey: queryKeys.account.walletUtxoCache(network || 'mainnet', addressKey),
+      }));
+    }
+    await Promise.all(tasks);
+  }, [addressKey, dataSource, network, queryClient, refetchAlkanes, refetchBtc, refetchBtcFast]);
 
-  return {
-    balances: data?.balances ?? EMPTY_BALANCES,
-    utxos: data?.utxos ?? EMPTY_UTXOS,
-    isLoading,
-    error: error ? (error instanceof Error ? error.message : 'Failed to fetch wallet data') : null,
+  const refreshAlkanes = useCallback(async () => {
+    await refetchAlkanes();
+  }, [refetchAlkanes]);
+
+  const refreshBtcFast = useCallback(async () => {
+    const tasks: Promise<unknown>[] = [refetchBtcFast()];
+    if (dataSource === 'espo') {
+      tasks.push(queryClient.refetchQueries({
+        queryKey: queryKeys.account.walletUtxoCache(network || 'mainnet', addressKey),
+      }));
+    }
+    await Promise.all(tasks);
+  }, [addressKey, dataSource, network, queryClient, refetchBtcFast]);
+
+  // Merge BTC data + alkane data into the unified WalletBalances shape.
+  // Memoized to prevent new object references on every render — both
+  // BitcoinBalanceCard and AlkanesBalancesCard consume this hook, so
+  // unstable refs cascade re-renders through the entire wallet page.
+  const balances: WalletBalances = useMemo(() => {
+    const fastBitcoin = btcFast
+      ? {
+        ...EMPTY_BALANCES.bitcoin,
+        p2wpkh: btcFast.p2wpkh,
+        p2tr: btcFast.p2tr,
+        total: btcFast.total,
+        spendable: btcFast.spendable,
+        pendingP2wpkh: btcFast.p2wpkh > 0 && btcFast.p2tr === 0 ? btcFast.pendingIn : 0,
+        pendingP2tr: btcFast.p2tr > 0 && btcFast.p2wpkh === 0 ? btcFast.pendingIn : 0,
+        pendingTotal: btcFast.pendingIn,
+        pendingOutgoingTotal: btcFast.pendingOut,
+      }
+      : undefined;
+    if (btcQuery.data) {
+      return {
+        ...btcQuery.data.balances,
+        bitcoin: fastBitcoin ?? btcQuery.data.balances.bitcoin,
+        alkanes: displayAlkanes,
+      };
+    }
+    return {
+      ...EMPTY_BALANCES,
+      bitcoin: fastBitcoin ?? EMPTY_BALANCES.bitcoin,
+      alkanes: displayAlkanes,
+    };
+  }, [btcFast, btcQuery.data, displayAlkanes]);
+
+  const errorMsg = btcQuery.error
+    ? (btcQuery.error instanceof Error ? btcQuery.error.message : 'Failed to fetch wallet data')
+    : alkaneQuery.error
+      ? (alkaneQuery.error instanceof Error ? alkaneQuery.error.message : 'Failed to fetch alkane balances')
+      : null;
+
+  return useMemo(() => ({
+    balances,
+    addressAlkanes,
+    spendableAlkanes: displayAlkanes,
+    btcFast,
+    utxos: btcQuery.data?.utxos ?? EMPTY_UTXOS,
+    isLoading: btcQuery.isLoading || alkaneQuery.isLoading,
+    isBtcLoading: btcQuery.isLoading,
+    isBtcFastLoading: btcFastQuery.isLoading,
+    isAlkanesLoading: alkaneQuery.isLoading,
+    error: errorMsg,
     refresh,
-  };
+    refreshAlkanes,
+    refreshBtcFast,
+  }), [
+    addressAlkanes,
+    balances,
+    btcFast,
+    btcQuery.data?.utxos,
+    btcQuery.isLoading,
+    alkaneQuery.isLoading,
+    btcFastQuery.isLoading,
+    errorMsg,
+    displayAlkanes,
+    refresh,
+    refreshAlkanes,
+    refreshBtcFast,
+  ]);
 }

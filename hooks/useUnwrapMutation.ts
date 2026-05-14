@@ -13,11 +13,13 @@
  * including the transaction that lost user tokens:
  * TX: 985436b5c5c850bd121cd4862f32413f467145b121d34c006417724d71588db9
  *
- * REQUIRED PATTERN:
+ * REQUIRED PATTERN (2026-04-30: now consolidated into `txContext`):
  * ```typescript
- * const toAddresses = isBrowserWallet ? [segwitAddress] : ['p2wpkh:0'];
- * const changeAddr = isBrowserWallet ? segwitAddress : 'p2wpkh:0';
- * const alkanesChangeAddr = isBrowserWallet ? taprootAddress : 'p2tr:0';
+ * const { txContext } = useWallet();
+ * if (!txContext) throw new Error('Wallet not connected');
+ * await provider.alkanesExecuteTyped({
+ *   txContext,                    // wrapper unpacks fee/change/strategy fields
+ * });
  * ```
  * ============================================================================
  *
@@ -25,6 +27,42 @@
  *
  * Uses `@alkanes/ts-sdk/wasm` aliased to `lib/oyl/alkanes/` (see next.config.mjs).
  * If "Insufficient alkanes" errors occur, sync WASM: see docs/SDK_DEPENDENCY_MANAGEMENT.md
+ *
+ * ## frBTC Unwrap (opcode 78) — network-dependent (2026-03-26)
+ *
+ * Opcode 78 WORKS on devnet (fresh deploy from prod_wasms/fr_btc.wasm).
+ * Opcode 78 does NOT work on regtest.subfrost.io — the deployed frBTC [32:0]
+ * there is an older build missing this opcode. The regtest contract returns:
+ *   "ALKANES: revert: Error: Unrecognized opcode" (status: 1)
+ * The tier1/unwrap-frbtc.test.ts skip comment applies to REGTEST only.
+ *
+ * ## Calldata Bug Fix (2026-04-29) — `Cannot burn less than dust amount`
+ *
+ * Pre-fix this hook built `buildUnwrapProtostone({ frbtcId })` which produced
+ * the cellpack `[32, 0, 78]` with NO arguments. The contract's signature is
+ * `unwrap(vout: u128, amount_requested: u128)` (see `fr-btc/contract.wit` and
+ * `fr-btc/alkanes.toml`). With the args missing, runtime read `vout = 0`,
+ * `amount_requested = 0`, then `min(0, frbtc_sent) = 0` triggered the
+ * `actual_amount_burn < 546` branch in `fr-btc/src/lib.rs:531-532` →
+ * "Cannot burn less than dust amount" (espo renders this as "dust limit
+ * underflow"). All incoming frBTC was refunded via the `Refund` pointer, so
+ * tokens were never destroyed — the unwrap simply never settled.
+ *
+ * Real-world repro: tx
+ *   `a95597ad69209615a519929b0cc2fb7bddbadd4bce302ec200a838302bfb7eef`
+ * confirmed at block 947162 with the malformed cellpack; the user's frBTC
+ * bounced to vout 1 (verified via `alkanes_protorunesbyoutpoint`).
+ *
+ * Fix: the cellpack must be `[32, 0, 78, dustVout, amount]` AND the tx must
+ * include a P2TR signer dust output at index `dustVout` (the contract's
+ * `burn()` enforces `tx.output[dustVout].script_pubkey == signer_script` —
+ * see `fr-btc/src/lib.rs:262-267`). The signer later spends that dust UTXO
+ * to settle the BTC payment recorded under `/payments/byheight/`.
+ *
+ * Output layout (matches `alkanes-cli/src/main.rs:3192-3197`):
+ *   - output 0: alkanes refund (taproot)         ← refund=v0
+ *   - output 1: BTC recipient (segwit)           ← pointer=v1
+ *   - output 2: signer P2TR dust                 ← dustVout=2
  */
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import * as bitcoin from 'bitcoinjs-lib';
@@ -35,9 +73,11 @@ import { patchInputsOnly } from '@/lib/psbt-patching';
 import { useWallet } from '@/context/WalletContext';
 import { useTransactionConfirm } from '@/context/TransactionConfirmContext';
 import { useSandshrewProvider } from './useSandshrewProvider';
+import { useWalletUtxoCache } from './useWalletUtxoCache';
 import { getConfig } from '@/utils/getConfig';
-import { buildUnwrapProtostone, buildUnwrapInputRequirements } from '@/lib/alkanes/builders';
-import { getBitcoinNetwork, extractPsbtBase64, toAlks } from '@/lib/alkanes/helpers';
+import { buildPlanFromTx } from '@/lib/alkanes/planBuilder';
+import { buildUnwrapProtostones, buildUnwrapInputRequirements } from '@/lib/alkanes/builders';
+import { getBitcoinNetwork, extractPsbtBase64, toAlks, getSignerAddressDynamic } from '@/lib/alkanes/helpers';
 
 bitcoin.initEccLib(ecc);
 
@@ -47,30 +87,33 @@ export type UnwrapTransactionBaseData = {
 };
 
 export function useUnwrapMutation() {
-  const { account, network, isConnected, signSegwitPsbt, signTaprootPsbt, walletType } = useWallet();
+  const { account, network, isConnected, signTaprootPsbt, walletType, browserWallet, txContext } = useWallet();
   const provider = useSandshrewProvider();
   const queryClient = useQueryClient();
   const { requestConfirmation } = useTransactionConfirm();
   const { FRBTC_ALKANE_ID } = getConfig(network);
-
+  // Pre-warmed UTXO cache + sync gate.
+  const utxoCache = useWalletUtxoCache();
   return useMutation({
     mutationFn: async (unwrapData: UnwrapTransactionBaseData) => {
       if (!isConnected) throw new Error('Wallet not connected');
+      // Ensure browser wallet session is active before building PSBT
+      if (walletType === 'browser') {
+        const { ensureWalletSession } = await import('@/lib/wallet/browserWalletSigning');
+        await ensureWalletSession();
+      }
       if (!provider) throw new Error('Provider not available');
 
-      // Get addresses - use actual addresses instead of SDK descriptors
-      // This fixes the "Available: []" issue where SDK couldn't find alkane UTXOs
-      //
-      // JOURNAL ENTRY (2026-03-01): Support single-address wallets (UniSat, OKX)
-      // UniSat/OKX only provide one address type at a time (user-configurable).
-      // We need at least ONE address, but don't require both taproot AND segwit.
-      const taprootAddress = account?.taproot?.address;
-      const segwitAddress = account?.nativeSegwit?.address;
-      if (!taprootAddress && !segwitAddress) {
+      // Get addresses — use the consolidated `txContext` for fee/change addresses.
+      // See `WalletContext.TxContext` jsdoc for the wallet-type semantics this codifies.
+      if (!txContext) {
         throw new Error('No wallet address available. Please connect a wallet first.');
       }
-      // For alkane operations, prefer taproot if available (alkanes use P2TR)
-      const primaryAddress = taprootAddress || segwitAddress;
+      const taprootAddress = account?.taproot?.address;
+      const segwitAddress = account?.nativeSegwit?.address;
+      // For alkane operations, prefer taproot if available (alkanes use P2TR).
+      // Falls back to segwit on single-address segwit-only wallets.
+      const primaryAddress = (taprootAddress || segwitAddress)!;
       console.log('[useUnwrapMutation] Using addresses:', { taprootAddress, segwitAddress, primaryAddress });
 
       // Verify wallet is loaded in provider
@@ -80,71 +123,93 @@ export function useUnwrapMutation() {
 
       const unwrapAmount = toAlks(unwrapData.amount);
 
-      // Build protostone for unwrap operation
-      const protostone = buildUnwrapProtostone({
-        frbtcId: FRBTC_ALKANE_ID,
-      });
-
-      // Input requirements: frBTC amount to unwrap
+      // Input requirements select the frBTC UTXO. The protostones below
+      // explicitly include p0 as the edict into the p1 unwrap call.
       const inputRequirements = buildUnwrapInputRequirements({
         frbtcId: FRBTC_ALKANE_ID,
         amount: unwrapAmount,
       });
 
-      // Get recipient address (taproot for alkanes, but BTC goes to segwit)
-      const recipientAddress = account?.nativeSegwit?.address || account?.taproot?.address;
+      // BTC recipient. `txContext.btcChangeAddress` is the payer/payment
+      // address when the wallet exposes one, falling back to taproot only for
+      // single-address wallets.
+      const recipientAddress = txContext.btcChangeAddress;
       if (!recipientAddress) throw new Error('No recipient address available');
 
       // Determine btcNetwork for PSBT operations
       const btcNetwork = getBitcoinNetwork(network);
 
+      // ----------------------------------------------------------------------
+      // Resolve the FROST signer's tweaked P2TR address (the dust output).
+      // ----------------------------------------------------------------------
+      // The contract's `burn()` requires `tx.output[dustVout].script_pubkey ==
+      // signer_script` — i.e. one of our outputs MUST be this exact P2TR
+      // script (see fr-btc/src/lib.rs:262-267).
+      //
+      // ALWAYS query dynamically. Opcode 103 returns the internal x-only
+      // pubkey; `getSignerAddressDynamic` derives the BIP341-tweaked P2TR via
+      // bitcoinjs `payments.p2tr`, which is exactly what the on-chain
+      // signer_script encodes. The hardcoded `SIGNER_ADDRESSES.mainnet` was
+      // historically the UNTWEAKED address (bc1p09qw7w...) — using it sends
+      // dust to the wrong script and the contract reverts with
+      // "signer pubkey must be targeted with supplementary output".
+      // Mirrors the perf-branch fix `b3b3a1bf` ("frBTC wrap signer address —
+      // apply BIP341 taproot tweak") for the wrap path.
+      const signerAddress = await getSignerAddressDynamic(network);
+
       console.log('[useUnwrapMutation] Executing unwrap:', {
         amount: unwrapAmount,
         frbtcId: FRBTC_ALKANE_ID,
         recipient: recipientAddress,
+        signer: signerAddress,
         feeRate: unwrapData.feeRate,
       });
 
       const isBrowserWallet = walletType === 'browser';
 
-      // ============================================================================
-      // ⚠️ CRITICAL: Browser wallets need ACTUAL addresses, not symbolic ⚠️
-      // ============================================================================
-      // Symbolic addresses (p2tr:0, p2wpkh:0) resolve to the SDK's DUMMY wallet.
-      // Bug fixed: 2026-03-01 - see useSwapMutation.ts for full documentation.
-      // ============================================================================
-      const fromAddresses = isBrowserWallet
-        ? [segwitAddress, taprootAddress].filter(Boolean) as string[]
-        : ['p2wpkh:0', 'p2tr:0'];
+      // ----------------------------------------------------------------------
+      // Three-output unwrap layout (CLI canonical):
+      //   v0: alkanes refund (taproot)          ← refund=v0  (txContext.alkanesChangeAddress)
+      //   v1: BTC recipient (segwit / taproot)  ← pointer=v1 (txContext.btcChangeAddress)
+      //   v2: FROST signer P2TR dust            ← dustVout=2
+      //
+      // Symbolic addresses (`p2tr:0`, `p2wpkh:0`) used to resolve to the SDK's
+      // dummy wallet — see useSwapMutation.ts header for the 2026-03-01
+      // token-loss tx that motivated `txContext`. Always actual addresses now.
+      // ----------------------------------------------------------------------
+      const DUST_VOUT = 2;
+      const toAddresses = [
+        txContext.alkanesChangeAddress,
+        recipientAddress,
+        signerAddress,
+      ];
 
-      // Unwrap outputs BTC to segwit address (or taproot if no segwit)
-      // TypeScript can't infer from the early return that at least one address exists
-      const toAddresses = isBrowserWallet
-        ? [(segwitAddress || taprootAddress)!]
-        : ['p2wpkh:0'];
+      // Build protostones for unwrap operation:
+      //   p0: [frBTC:amount:p1]:v0:v0
+      //   p1: [frBTC,78,dustVout,amount]:v1:v0
+      // The unwrap cellpack MUST include dustVout + amount — see header
+      // comment ("Calldata Bug Fix 2026-04-29").
+      const protostone = buildUnwrapProtostones({
+        frbtcId: FRBTC_ALKANE_ID,
+        dustVout: DUST_VOUT,
+        amount: unwrapAmount,
+        pointer: 'v1', // unwrap call points at the payer/BTC recipient output
+        refund: 'v0',  // unspent frBTC bounces back to alkanes recipient
+      });
 
-      const changeAddr = isBrowserWallet
-        ? (segwitAddress || taprootAddress)
-        : 'p2wpkh:0';
+      console.log('[useUnwrapMutation] From addresses:', txContext.feeSourceAddresses, '(browser:', isBrowserWallet, ')');
+      console.log('[useUnwrapMutation] To addresses (v0=alkanes-refund, v1=btc-recipient, v2=signer-dust):', toAddresses);
+      console.log('[useUnwrapMutation] Change address:', txContext.btcChangeAddress);
 
-      // JOURNAL ENTRY (2026-03-01): For single-address wallets, use primaryAddress
-      const alkanesChangeAddr = isBrowserWallet
-        ? primaryAddress
-        : 'p2tr:0';
-
-      console.log('[useUnwrapMutation] From addresses:', fromAddresses, '(browser:', isBrowserWallet, ')');
-      console.log('[useUnwrapMutation] To addresses:', toAddresses);
-      console.log('[useUnwrapMutation] Change address:', changeAddr);
 
       const result = await provider.alkanesExecuteTyped({
+        txContext,
         toAddresses,
         inputRequirements,
         protostones: protostone,
         feeRate: unwrapData.feeRate,
         autoConfirm: false,
-        fromAddresses,
-        changeAddress: changeAddr,
-        alkanesChangeAddress: alkanesChangeAddr,
+        cachedUtxos: utxoCache.utxos,
       });
 
       console.log('[useUnwrapMutation] Called alkanesExecuteTyped (browser:', isBrowserWallet, ')');
@@ -204,9 +269,24 @@ export function useUnwrapMutation() {
           }
         }
 
-        // For keystore wallets, request user confirmation before signing
+        // For keystore wallets, request user confirmation before signing.
+        // The plan visualizes the actual built PSBT — what UTXOs are
+        // being consumed and which outputs are created. Edicts route
+        // the alkane carrier so the input side is exact; the unwrap
+        // BTC return amount is also exact (1:1 minus protocol fee).
         if (walletType === 'keystore') {
-          console.log('[useUnwrapMutation] Keystore wallet - requesting user confirmation...');
+          const plan = buildPlanFromTx({
+            psbtBase64: finalPsbtBase64,
+            cache: utxoCache,
+            ourAddresses: [
+              account?.taproot?.address,
+              account?.nativeSegwit?.address,
+            ].filter((a): a is string => !!a),
+            network: btcNetwork,
+            feeRateSatVb: unwrapData.feeRate,
+            label: 'Unwrap frBTC → BTC',
+            summary: `Burns ${unwrapData.amount} frBTC and releases the corresponding BTC from the protocol reserve.`,
+          });
           const approved = await requestConfirmation({
             type: 'unwrap',
             title: 'Confirm Unwrap',
@@ -215,30 +295,33 @@ export function useUnwrapMutation() {
             toAmount: unwrapData.amount,
             toSymbol: 'BTC',
             feeRate: unwrapData.feeRate,
+            plan: [plan],
           });
 
           if (!approved) {
-            console.log('[useUnwrapMutation] User rejected transaction');
             throw new Error('Transaction rejected by user');
           }
-          console.log('[useUnwrapMutation] User approved transaction');
         }
 
-        // Sign PSBT — browser wallets sign all input types in a single call,
-        // so we must NOT call signPsbt twice (causes "inputType: sh without redeemScript").
-        let signedPsbtBase64: string;
-        if (isBrowserWallet) {
-          console.log('[useUnwrapMutation] Browser wallet: signing PSBT once (all input types)...');
-          signedPsbtBase64 = await signTaprootPsbt(finalPsbtBase64);
-        } else {
-          console.log('[useUnwrapMutation] Keystore: signing PSBT with SegWit, then Taproot...');
-          signedPsbtBase64 = await signSegwitPsbt(finalPsbtBase64);
-          signedPsbtBase64 = await signTaprootPsbt(signedPsbtBase64);
-        }
+        // Single signing path. Browser wallets sign all input types via the wallet
+        // adapter; keystore is taproot-only (BIP86) — `signSegwitPsbt` throws.
+        const signedPsbtBase64 = await signTaprootPsbt(finalPsbtBase64);
 
-        // Finalize and extract transaction
+        // Finalize and extract transaction. Some wallets (UniSat with
+        // autoFinalized: true) return PSBTs that are already finalized —
+        // calling finalizeAllInputs() on those is at best wasteful and at
+        // worst throws because there's nothing left to finalize. Match the
+        // pattern used by useSwapMutation / useWrapMutation: only finalize
+        // if no input has finalScriptWitness or finalScriptSig set.
         const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtBase64, { network: btcNetwork });
-        signedPsbt.finalizeAllInputs();
+        const alreadyFinalized = signedPsbt.data.inputs.every(
+          input => input.finalScriptWitness || input.finalScriptSig,
+        );
+        if (alreadyFinalized) {
+          console.log('[useUnwrapMutation] PSBT already finalized by wallet, skipping finalizeAllInputs');
+        } else {
+          signedPsbt.finalizeAllInputs();
+        }
 
         const tx = signedPsbt.extractTransaction();
         const txHex = tx.toHex();

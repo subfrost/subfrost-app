@@ -8,8 +8,8 @@
 /** Total FIRE max supply */
 export const FIRE_MAX_SUPPLY = 2_100_000;
 
-/** Emission pool = 30% of max supply */
-export const FIRE_EMISSION_POOL = FIRE_MAX_SUPPLY * 0.3; // 630,000
+/** Emission pool = 100% of max supply (no premine) */
+export const FIRE_EMISSION_POOL = FIRE_MAX_SUPPLY; // 2,100,000
 
 /** Blocks per epoch (~2 years at 10min blocks) */
 export const BLOCKS_PER_EPOCH = 105_120;
@@ -170,11 +170,21 @@ export function estimateDailyRewards(
 }
 
 /**
- * Format large numbers with K/M/B suffixes.
+ * Format large numbers with K/M/B/T/Q suffixes; falls back to 2-decimal
+ * scientific notation for anything beyond 1e18 to avoid raw exponent strings
+ * like "1.4771249801895418e+24M".
  */
 export function formatCompact(value: number): string {
-  if (value >= 1e9) return `${(value / 1e9).toFixed(2)}B`;
-  if (value >= 1e6) return `${(value / 1e6).toFixed(2)}M`;
-  if (value >= 1e3) return `${(value / 1e3).toFixed(2)}K`;
+  const abs = Math.abs(value);
+  if (abs >= 1e18) {
+    const exp = Math.floor(Math.log10(abs));
+    const mantissa = value / Math.pow(10, exp);
+    return `${mantissa.toFixed(2)}e${exp}`;
+  }
+  if (abs >= 1e15) return `${(value / 1e15).toFixed(2)}Q`;
+  if (abs >= 1e12) return `${(value / 1e12).toFixed(2)}T`;
+  if (abs >= 1e9) return `${(value / 1e9).toFixed(2)}B`;
+  if (abs >= 1e6) return `${(value / 1e6).toFixed(2)}M`;
+  if (abs >= 1e3) return `${(value / 1e3).toFixed(2)}K`;
   return value.toFixed(2);
 }

@@ -28,6 +28,11 @@ interface Stats {
   }>;
   allParentRedemptions: number[];
   allCodeRedemptions: number[];
+  topCodesByRedemptions: Array<{
+    code: string;
+    redemptions: number;
+    isParent: boolean;
+  }>;
 }
 
 function formatLabel(dateStr: string): string {
@@ -218,24 +223,33 @@ function computeMedian(nums: number[]): number {
   return s.length % 2 !== 0 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
 }
 
-function CommunityFuelChart({ data, mode, heightScale = 1 }: { data: CommunityFuel[]; mode: FuelAggMode; heightScale?: number }) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [width, setWidth] = useState(0);
+/** Strip trailing digits to get the parent code (e.g. liujin07 → liujin, liujin01 → liujin, liujin → liujin) */
+function getParentCode(community: string): string {
+  return community.replace(/\d+$/, '') || community;
+}
 
-  const updateWidth = useCallback(() => {
-    if (containerRef.current) {
-      setWidth(containerRef.current.clientWidth);
-    }
-  }, []);
+/** Aggregate child communities into their parent code */
+function aggregateCommunities(data: CommunityFuel[]): CommunityFuel[] {
+  const parentMap: Record<string, { total: number; addressCount: number; amounts: number[] }> = {};
+  for (const item of data) {
+    const parent = getParentCode(item.community);
+    if (!parentMap[parent]) parentMap[parent] = { total: 0, addressCount: 0, amounts: [] };
+    parentMap[parent].total += item.total;
+    parentMap[parent].addressCount += item.addressCount;
+    parentMap[parent].amounts.push(...item.amounts);
+  }
+  return Object.entries(parentMap).map(([community, { total, addressCount, amounts }]) => ({
+    community,
+    total: Math.round(total * 100) / 100,
+    addressCount,
+    amounts,
+  }));
+}
 
-  useEffect(() => {
-    updateWidth();
-    const observer = new ResizeObserver(updateWidth);
-    if (containerRef.current) observer.observe(containerRef.current);
-    return () => observer.disconnect();
-  }, [updateWidth]);
+function CommunityFuelChart({ data, mode }: { data: CommunityFuel[]; mode: FuelAggMode }) {
+  const aggregated = aggregateCommunities(data);
 
-  const withValue = data.map((item) => {
+  const withValue = aggregated.map((item) => {
     let value: number;
     if (mode === 'average') {
       value = item.addressCount > 0 ? item.total / item.addressCount : 0;
@@ -250,107 +264,41 @@ function CommunityFuelChart({ data, mode, heightScale = 1 }: { data: CommunityFu
   const sorted = [...withValue].sort((a, b) => b.value - a.value);
   const maxVal = sorted.length > 0 ? sorted[0].value : 1;
 
-  const height = Math.round(220 * heightScale);
-  const padLeft = 50;
-  const padRight = 12;
-  const padTop = 12;
-  const padBottom = 60;
-  const chartW = Math.max(width - padLeft - padRight, 1);
-  const chartH = height - padTop - padBottom;
-
-  const barCount = sorted.length;
-  const gap = Math.max(4, chartW * 0.02);
-  const barWidth = barCount > 0 ? Math.max(8, (chartW - gap * (barCount + 1)) / barCount) : 0;
-
-  // Y-axis ticks
-  const yTicks: number[] = [];
-  if (maxVal <= 5) {
-    for (let i = 0; i <= maxVal; i++) yTicks.push(i);
-  } else {
-    const step = Math.ceil(maxVal / 4);
-    for (let v = 0; v <= maxVal; v += step) yTicks.push(v);
-    if (yTicks[yTicks.length - 1] !== maxVal) yTicks.push(maxVal);
-  }
+  const rowHeight = 28;
+  const gap = 4;
 
   return (
-    <div ref={containerRef} className="w-full">
-      {width > 0 && (
-        <svg width={width} height={height} className="overflow-visible">
-          {/* Grid lines */}
-          {yTicks.map((v) => {
-            const y = padTop + chartH - (maxVal > 0 ? (v / maxVal) * chartH : 0);
-            return (
-              <line
-                key={v}
-                x1={padLeft}
-                y1={y}
-                x2={padLeft + chartW}
-                y2={y}
-                stroke="var(--sf-glass-border)"
-                strokeDasharray="3,3"
+    <div className="flex w-full flex-col" style={{ gap }}>
+      {sorted.map((item) => {
+        const pct = maxVal > 0 ? (item.value / maxVal) * 100 : 0;
+        return (
+          <div key={item.community} className="flex items-center" style={{ height: rowHeight, gap: 8 }}>
+            {/* Label */}
+            <div
+              className="shrink-0 truncate text-right text-xs text-[color:var(--sf-muted)]"
+              style={{ width: 100 }}
+              title={`${item.community} (${item.addressCount} addresses)`}
+            >
+              {item.community} ({item.addressCount})
+            </div>
+            {/* Bar */}
+            <div className="relative h-5 flex-1 overflow-hidden rounded" style={{ background: 'var(--sf-glass-border)' }}>
+              <div
+                className="absolute inset-y-0 left-0 rounded"
+                style={{
+                  width: `${Math.max(pct, 1)}%`,
+                  background: 'rgb(59,130,246)',
+                  transition: 'width 400ms cubic-bezier(0,0,0,1)',
+                }}
               />
-            );
-          })}
-          {/* Y-axis labels */}
-          {yTicks.map((v) => {
-            const y = padTop + chartH - (maxVal > 0 ? (v / maxVal) * chartH : 0);
-            return (
-              <text
-                key={v}
-                x={padLeft - 6}
-                y={y}
-                textAnchor="end"
-                dominantBaseline="middle"
-                fill="var(--sf-muted)"
-                fontSize={10}
-              >
-                {v.toLocaleString()}
-              </text>
-            );
-          })}
-          {/* Bars */}
-          {sorted.map((item, i) => {
-            const barH = maxVal > 0 ? (item.value / maxVal) * chartH : 0;
-            const x = padLeft + gap + i * (barWidth + gap);
-            const y = padTop + chartH - barH;
-            return (
-              <g key={item.community}>
-                <rect
-                  x={x}
-                  y={y}
-                  width={barWidth}
-                  height={barH}
-                  fill="rgb(59,130,246)"
-                  rx={2}
-                />
-                {/* Value label on top of bar */}
-                <text
-                  x={x + barWidth / 2}
-                  y={y - 4}
-                  textAnchor="middle"
-                  fill="var(--sf-text)"
-                  fontSize={9}
-                  fontWeight="bold"
-                >
-                  {item.value.toLocaleString()}
-                </text>
-                {/* Community label below bar (with address count) */}
-                <text
-                  x={x + barWidth / 2}
-                  y={padTop + chartH + 12}
-                  textAnchor="end"
-                  dominantBaseline="hanging"
-                  fill="var(--sf-muted)"
-                  fontSize={10}
-                  transform={`rotate(-45, ${x + barWidth / 2}, ${padTop + chartH + 12})`}
-                >
-                  {item.community} ({item.addressCount})
-                </text>
-              </g>
-            );
-          })}
-        </svg>
-      )}
+            </div>
+            {/* Value */}
+            <div className="shrink-0 text-right text-xs font-bold text-[color:var(--sf-text)]" style={{ width: 60 }}>
+              {item.value.toLocaleString()}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -362,9 +310,24 @@ const PIE_COLORS = [
 ];
 
 function CommunityFuelPie({ data, showValues, sizeScale = 1 }: { data: CommunityFuel[]; showValues?: boolean; sizeScale?: number }) {
-  const sorted = [...data].sort((a, b) => b.total - a.total);
-  const grandTotal = sorted.reduce((s, d) => s + d.total, 0);
+  const allSorted = [...data].sort((a, b) => b.total - a.total);
+  const grandTotal = allSorted.reduce((s, d) => s + d.total, 0);
   if (grandTotal === 0) return null;
+
+  // Top 5 communities + "Other" bucket aggregating the rest
+  const top5 = allSorted.slice(0, 5);
+  const rest = allSorted.slice(5);
+  const sorted: CommunityFuel[] = rest.length > 0
+    ? [
+        ...top5,
+        {
+          community: 'Other',
+          total: Math.round(rest.reduce((s, d) => s + d.total, 0) * 100) / 100,
+          addressCount: rest.reduce((s, d) => s + d.addressCount, 0),
+          amounts: rest.flatMap((d) => d.amounts),
+        },
+      ]
+    : top5;
 
   const size = Math.round(200 * sizeScale);
   const cx = size / 2;
@@ -559,6 +522,148 @@ function TopParentsBarChart({ data, heightScale = 1 }: { data: Stats['topParents
   );
 }
 
+function Top25CodesChart({
+  data,
+  heightScale = 1,
+}: {
+  data: Stats['topCodesByRedemptions'];
+  heightScale?: number;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(0);
+
+  const updateWidth = useCallback(() => {
+    if (containerRef.current) {
+      setWidth(containerRef.current.clientWidth);
+    }
+  }, []);
+
+  useEffect(() => {
+    updateWidth();
+    const observer = new ResizeObserver(updateWidth);
+    if (containerRef.current) observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, [updateWidth]);
+
+  const sorted = [...data].sort((a, b) => b.redemptions - a.redemptions).slice(0, 25);
+  const maxVal = sorted.length > 0 ? sorted[0].redemptions : 1;
+
+  const PARENT_COLOR = 'rgb(59,130,246)';
+  const CHILD_COLOR = 'rgb(168,85,247)';
+
+  const height = Math.round(360 * heightScale);
+  const padLeft = 56;
+  const padRight = 12;
+  const padTop = 20;
+  const padBottom = 100;
+  const chartW = Math.max(width - padLeft - padRight, 1);
+  const chartH = height - padTop - padBottom;
+
+  const barCount = sorted.length;
+  const gap = Math.max(4, chartW * 0.008);
+  const barWidth = barCount > 0 ? Math.max(8, (chartW - gap * (barCount + 1)) / barCount) : 0;
+
+  const yTicks: number[] = [];
+  if (maxVal <= 5) {
+    for (let i = 0; i <= maxVal; i++) yTicks.push(i);
+  } else {
+    const step = Math.ceil(maxVal / 4);
+    for (let v = 0; v <= maxVal; v += step) yTicks.push(v);
+    if (yTicks[yTicks.length - 1] !== maxVal) yTicks.push(maxVal);
+  }
+
+  return (
+    <div ref={containerRef} className="w-full">
+      {width > 0 && (
+        <>
+          <svg width={width} height={height} className="overflow-visible">
+            {yTicks.map((v) => {
+              const y = padTop + chartH - (maxVal > 0 ? (v / maxVal) * chartH : 0);
+              return (
+                <line
+                  key={v}
+                  x1={padLeft}
+                  y1={y}
+                  x2={padLeft + chartW}
+                  y2={y}
+                  stroke="var(--sf-glass-border)"
+                  strokeDasharray="3,3"
+                />
+              );
+            })}
+            {yTicks.map((v) => {
+              const y = padTop + chartH - (maxVal > 0 ? (v / maxVal) * chartH : 0);
+              return (
+                <text
+                  key={v}
+                  x={padLeft - 8}
+                  y={y}
+                  textAnchor="end"
+                  dominantBaseline="middle"
+                  fill="var(--sf-muted)"
+                  fontSize={11}
+                >
+                  {v.toLocaleString()}
+                </text>
+              );
+            })}
+            {sorted.map((item, i) => {
+              const barH = maxVal > 0 ? (item.redemptions / maxVal) * chartH : 0;
+              const x = padLeft + gap + i * (barWidth + gap);
+              const y = padTop + chartH - barH;
+              const color = item.isParent ? PARENT_COLOR : CHILD_COLOR;
+              return (
+                <g key={`${item.code}-${i}`}>
+                  <rect
+                    x={x}
+                    y={y}
+                    width={barWidth}
+                    height={barH}
+                    fill={color}
+                    rx={3}
+                  />
+                  <text
+                    x={x + barWidth / 2}
+                    y={y - 5}
+                    textAnchor="middle"
+                    fill="var(--sf-text)"
+                    fontSize={10}
+                    fontWeight="bold"
+                  >
+                    {item.redemptions}
+                  </text>
+                  <text
+                    x={x + barWidth / 2}
+                    y={padTop + chartH + 8}
+                    textAnchor="end"
+                    dominantBaseline="middle"
+                    fill="var(--sf-muted)"
+                    fontSize={10}
+                    transform={`rotate(-45, ${x + barWidth / 2}, ${padTop + chartH + 8})`}
+                  >
+                    {item.code.toUpperCase()}
+                  </text>
+                </g>
+              );
+            })}
+          </svg>
+          {/* Legend */}
+          <div className="mt-2 flex items-center justify-center gap-6">
+            <div className="flex items-center gap-2 text-xs text-[color:var(--sf-muted)]">
+              <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: PARENT_COLOR }} />
+              Parent
+            </div>
+            <div className="flex items-center gap-2 text-xs text-[color:var(--sf-muted)]">
+              <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: CHILD_COLOR }} />
+              Child
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 type DashboardView = 'FUEL' | 'CODES' | 'BOTH';
 
 export default function DashboardTab() {
@@ -707,7 +812,7 @@ export default function DashboardTab() {
               {communityFuel.length === 0 ? (
                 <div className="text-sm text-[color:var(--sf-muted)]">No allocations yet</div>
               ) : (
-                <CommunityFuelChart data={communityFuel} mode={fuelAggMode} heightScale={dashboardView === 'BOTH' ? 1.5 : 1.875} />
+                <CommunityFuelChart data={communityFuel} mode={fuelAggMode} />
               )}
             </div>
             {/* Pie chart */}
@@ -797,6 +902,18 @@ export default function DashboardTab() {
                 <CumulativeRedemptionsGraph data={stats.redemptionsByDay} heightScale={dashboardView === 'BOTH' ? 1.5 : 1.875} />
               )}
             </div>
+          </div>
+
+          {/* Top 25 Codes by Redemptions */}
+          <div className="rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-6">
+            <h3 className="mb-4 text-sm font-semibold text-[color:var(--sf-text)]">
+              Top 25 Codes by Redemptions
+            </h3>
+            {!stats.topCodesByRedemptions || stats.topCodesByRedemptions.length === 0 ? (
+              <div className="text-sm text-[color:var(--sf-muted)]">No redemptions yet</div>
+            ) : (
+              <Top25CodesChart data={stats.topCodesByRedemptions} />
+            )}
           </div>
         </>
       )}

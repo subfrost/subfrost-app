@@ -1,8 +1,11 @@
 /**
- * Sign-and-broadcast utility for regtest integration tests.
+ * Sign-and-broadcast utility for regtest/devnet integration tests.
  *
  * Extracted from __tests__/sdk/e2e-swap-flow.test.ts.
- * Handles PSBT format variants returned by the WASM SDK.
+ * Handles all PSBT format variants and execution states returned by the SDK:
+ * - ReadyToSign: single-step tx (no envelope)
+ * - ReadyToSignCommit + ReadyToSignReveal: two-step commit/reveal envelope pattern
+ * - Complete: already broadcast
  */
 
 import * as bitcoin from 'bitcoinjs-lib';
@@ -11,61 +14,45 @@ import type { TestSignerResult } from '../sdk/test-utils/createTestSigner';
 type WebProvider = import('@alkanes/ts-sdk/wasm').WebProvider;
 
 /**
- * Sign a PSBT returned by alkanesExecuteTyped, broadcast it, mine a block,
- * and return the txid.
- *
- * Handles three PSBT formats the SDK may return:
- * - Uint8Array
- * - Object with numeric keys (JSON-serialized Uint8Array)
- * - Already-broadcast result with txid
+ * Extract PSBT bytes from the various formats the SDK may return.
  */
-export async function signAndBroadcast(
+function extractPsbtBytes(psbt: any): Uint8Array {
+  if (psbt instanceof Uint8Array) {
+    return psbt;
+  } else if (typeof psbt === 'object' && psbt !== null) {
+    const keys = Object.keys(psbt)
+      .map(Number)
+      .sort((a: number, b: number) => a - b);
+    const bytes = new Uint8Array(keys.length);
+    for (let i = 0; i < keys.length; i++) {
+      bytes[i] = psbt[keys[i]];
+    }
+    return bytes;
+  } else if (typeof psbt === 'string') {
+    const isHex = /^[0-9a-fA-F]+$/.test(psbt);
+    return isHex
+      ? Buffer.from(psbt, 'hex')
+      : Buffer.from(psbt, 'base64');
+  }
+  throw new Error(`Unexpected PSBT format: ${typeof psbt}`);
+}
+
+/**
+ * Sign a PSBT, finalize, extract transaction, broadcast, and mine a block.
+ * Returns the txid.
+ */
+async function signBroadcastAndMine(
   provider: WebProvider,
-  result: any,
+  psbtData: any,
   signerResult: TestSignerResult,
   mineAddress: string
 ): Promise<string> {
-  // If the SDK already broadcast (auto-confirm mode), just return the txid
-  if (result?.txid || result?.reveal_txid) {
-    return result.txid || result.reveal_txid;
-  }
-
-  if (!result?.readyToSign) {
-    throw new Error(
-      `No readyToSign or txid in result: ${JSON.stringify(result).slice(0, 200)}`
-    );
-  }
-
-  const readyToSign = result.readyToSign;
-
-  // Convert PSBT to hex for signAllInputs
-  let psbtBytes: Uint8Array;
-  if (readyToSign.psbt instanceof Uint8Array) {
-    psbtBytes = readyToSign.psbt;
-  } else if (typeof readyToSign.psbt === 'object') {
-    const keys = Object.keys(readyToSign.psbt)
-      .map(Number)
-      .sort((a: number, b: number) => a - b);
-    psbtBytes = new Uint8Array(keys.length);
-    for (let i = 0; i < keys.length; i++) {
-      psbtBytes[i] = readyToSign.psbt[keys[i]];
-    }
-  } else if (typeof readyToSign.psbt === 'string') {
-    // base64 or hex string
-    const isHex = /^[0-9a-fA-F]+$/.test(readyToSign.psbt);
-    psbtBytes = isHex
-      ? Buffer.from(readyToSign.psbt, 'hex')
-      : Buffer.from(readyToSign.psbt, 'base64');
-  } else {
-    throw new Error(`Unexpected PSBT format: ${typeof readyToSign.psbt}`);
-  }
-
+  const psbtBytes = extractPsbtBytes(psbtData);
   const rawPsbtHex = Buffer.from(psbtBytes).toString('hex');
   const { signedHexPsbt } = await signerResult.signer.signAllInputs({
     rawPsbtHex,
   });
 
-  // signAllInputs already finalizes — extract and broadcast
   const signedPsbt = bitcoin.Psbt.fromHex(signedHexPsbt, {
     network: bitcoin.networks.regtest,
   });
@@ -79,4 +66,99 @@ export async function signAndBroadcast(
   await provider.bitcoindGenerateToAddress(1, mineAddress);
 
   return broadcastTxid || txid;
+}
+
+/**
+ * Sign a PSBT returned by alkanesExecuteTyped/alkanesExecuteWithStrings,
+ * broadcast it, mine a block, and return the txid.
+ *
+ * Handles all SDK execution states:
+ * - readyToSign: single-step tx
+ * - readyToSignCommit: commit/reveal envelope (signs commit, resumes to get reveal, signs reveal)
+ * - complete/txid: already broadcast
+ */
+export async function signAndBroadcast(
+  provider: WebProvider,
+  result: any,
+  signerResult: TestSignerResult,
+  mineAddress: string
+): Promise<string> {
+  // If the SDK already broadcast (auto-confirm mode), just return the txid
+  if (result?.txid || result?.reveal_txid) {
+    return result.txid || result.reveal_txid;
+  }
+
+  // Complete state
+  if (result?.complete) {
+    return result.complete.reveal_txid || result.complete.commit_txid || '';
+  }
+
+  // Single-step: ReadyToSign
+  if (result?.readyToSign) {
+    return signBroadcastAndMine(
+      provider,
+      result.readyToSign.psbt,
+      signerResult,
+      mineAddress
+    );
+  }
+
+  // Two-step commit/reveal: ReadyToSignCommit
+  if (result?.readyToSignCommit) {
+    console.log('[signAndBroadcast] Commit/reveal flow: signing commit...');
+
+    // Step 1: Sign and broadcast the commit transaction
+    const commitTxid = await signBroadcastAndMine(
+      provider,
+      result.readyToSignCommit.psbt,
+      signerResult,
+      mineAddress
+    );
+    console.log('[signAndBroadcast] Commit broadcast:', commitTxid);
+
+    // Step 2: Resume execution to get the reveal transaction
+    // The provider needs the commit state to build the reveal
+    const commitStateJson = JSON.stringify(result.readyToSignCommit);
+    const revealState = await (provider as any).alkanesResumeCommitExecution(commitStateJson);
+    console.log('[signAndBroadcast] Resume result keys:', Object.keys(revealState || {}));
+
+    // Step 3: Handle the reveal state
+    if (revealState?.readyToSignReveal) {
+      console.log('[signAndBroadcast] Signing reveal...');
+      const revealTxid = await signBroadcastAndMine(
+        provider,
+        revealState.readyToSignReveal.psbt,
+        signerResult,
+        mineAddress
+      );
+      console.log('[signAndBroadcast] Reveal broadcast:', revealTxid);
+      return revealTxid;
+    }
+
+    // If resume returned a complete state or txid
+    if (revealState?.txid || revealState?.reveal_txid) {
+      return revealState.txid || revealState.reveal_txid;
+    }
+    if (revealState?.complete) {
+      return revealState.complete.reveal_txid || revealState.complete.commit_txid || commitTxid;
+    }
+
+    // Fallback: return commit txid
+    console.warn('[signAndBroadcast] No reveal state returned, returning commit txid');
+    return commitTxid;
+  }
+
+  // ReadyToSignReveal (mid-flow resume)
+  if (result?.readyToSignReveal) {
+    return signBroadcastAndMine(
+      provider,
+      result.readyToSignReveal.psbt,
+      signerResult,
+      mineAddress
+    );
+  }
+
+  throw new Error(
+    `No readyToSign, readyToSignCommit, or txid in result: ${JSON.stringify(result).slice(0, 200)}`
+  );
 }

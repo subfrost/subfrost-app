@@ -10,7 +10,14 @@
 import { useQuery } from '@tanstack/react-query';
 import { useWallet } from '@/context/WalletContext';
 
-export type TokenNameEntry = { name: string; symbol: string };
+export type TokenNameEntry = {
+  name: string;
+  symbol: string;
+  /** Espo-derived USD price. Undefined for frBTC (peg-drift on its bUSD pool). */
+  priceUsd?: number;
+  /** Espo-derived satoshi price. */
+  priceInSatoshi?: number;
+};
 
 async function fetchTokenNames(
   network: string,
@@ -25,12 +32,23 @@ async function fetchTokenNames(
     }
     const data = await resp.json();
     const names: Record<string, { name: string; symbol: string }> = data?.names || {};
+    const prices: Record<string, { priceUsd?: number; priceInSatoshi?: number }> = data?.prices || {};
 
-    for (const [alkaneId, entry] of Object.entries(names)) {
-      map.set(alkaneId, entry as TokenNameEntry);
+    // Merge names + prices into a single entry. Tokens with a price but
+    // no name (rare) still get an entry so consumers can use the price.
+    // Omit price fields when undefined so existing tests using
+    // `toEqual({ name, symbol })` strict-match don't break.
+    const allIds = new Set([...Object.keys(names), ...Object.keys(prices)]);
+    for (const alkaneId of allIds) {
+      const n = names[alkaneId];
+      const p = prices[alkaneId];
+      const entry: TokenNameEntry = { name: n?.name ?? '', symbol: n?.symbol ?? '' };
+      if (p?.priceUsd != null) entry.priceUsd = p.priceUsd;
+      if (p?.priceInSatoshi != null) entry.priceInSatoshi = p.priceInSatoshi;
+      map.set(alkaneId, entry);
     }
 
-    console.log(`[useTokenNames] Loaded ${map.size} token names`);
+    console.log(`[useTokenNames] Loaded ${map.size} token entries (${Object.keys(prices).length} priced)`);
   } catch (err) {
     console.warn('[useTokenNames] Failed to fetch token names:', err);
   }

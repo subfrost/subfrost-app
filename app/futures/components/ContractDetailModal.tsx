@@ -1,7 +1,9 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
+import { X } from 'lucide-react';
 import NumberField from '@/app/components/NumberField';
+import SfPopup, { type SfPopupHandle } from '@/app/components/SfPopup';
 import TokenIcon from '@/app/components/TokenIcon';
 import { useBtcPrice } from '@/hooks/useBtcPrice';
 import { useTranslation } from '@/hooks/useTranslation';
@@ -53,55 +55,39 @@ export default function ContractDetailModal({
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showBuyComingSoon, setShowBuyComingSoon] = useState(false);
   const [showSellComingSoon, setShowSellComingSoon] = useState(false);
-  const modalRef = useRef<HTMLDivElement>(null);
+  const popupRef = useRef<SfPopupHandle>(null);
   const { data: btcPrice } = useBtcPrice();
+  const handleClose = () => popupRef.current?.close();
 
   // Calculate exercise values
   const exercisePremium = calculateExercisePremium(blocksLeft);
   const exercisePrice = calculateExercisePrice(blocksLeft);
   
-  // Mock calculations
+  // Derived values from on-chain data
   const timeLeft = t('futures.nBlocks', { count: blocksLeft });
   const exerciseValue = `${exercisePrice.toFixed(3)} BTC`;
-  const marketPrice = '0.948 BTC';
-  const estimatedCost = (parseFloat(amount) * 0.948).toFixed(3);
+  const marketPrice = `${exercisePrice.toFixed(3)} BTC`;
+  const estimatedCost = (parseFloat(amount) * exercisePrice).toFixed(3);
 
-  // Mock chart data (simple trend)
-  const chartData = [
-    { time: 0, value: 0.5 },
-    { time: 2, value: 0.6 },
-    { time: 4, value: 0.75 },
-    { time: 6, value: 0.942 },
-    { time: 8, value: 1.0 },
-  ];
-
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (modalRef.current && !modalRef.current.contains(e.target as Node)) {
-        onClose();
-      }
-    };
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose();
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    document.addEventListener('keydown', handleEscape);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('keydown', handleEscape);
-    };
-  }, [onClose]);
+  // Linear chart from 0.92 → 1.00 BTC
+  const chartPoints = 50;
+  const chartMin = 0.92;
+  const chartMax = 1.0;
+  const chartData = Array.from({ length: chartPoints }, (_, i) => ({
+    x: i / (chartPoints - 1),
+    value: chartMin + (chartMax - chartMin) * (i / (chartPoints - 1)),
+  }));
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 px-4 backdrop-blur-sm">
-      <div
-        ref={modalRef}
-        className="relative w-full max-w-6xl max-h-[90vh] flex flex-col rounded-3xl bg-[color:var(--sf-glass-bg)] shadow-[0_24px_96px_rgba(0,0,0,0.4)] backdrop-blur-xl"
-      >
+    <SfPopup
+      ref={popupRef}
+      isOpen
+      onClose={onClose}
+      overlayClassName="px-4"
+      panelClassName="relative w-full max-w-6xl max-h-[90vh] flex flex-col"
+    >
         {/* Header */}
-        <div className="shrink-0 bg-[color:var(--sf-panel-bg)] px-6 py-5 shadow-[0_2px_8px_rgba(0,0,0,0.15)] rounded-t-3xl flex items-center justify-between">
+        <div className="shrink-0 bg-[color:var(--sf-panel-bg)] px-6 py-5 shadow-[0_2px_8px_rgba(0,0,0,0.15)] flex items-center justify-between">
           <div>
             <h2 className="text-xl sm:text-2xl font-extrabold tracking-wider uppercase text-[color:var(--sf-text)]">{contractId}</h2>
             <p className="text-xs sm:text-sm font-medium text-[color:var(--sf-text)]/60 mt-1">
@@ -110,49 +96,67 @@ export default function ContractDetailModal({
           </div>
           <button
             type="button"
-            onClick={onClose}
-            className="flex h-8 w-8 items-center justify-center rounded-lg bg-[color:var(--sf-input-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-[color:var(--sf-text)]/70 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)] hover:text-[color:var(--sf-text)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] focus:outline-none"
+            onClick={handleClose}
+            className="sf-popup-close"
             aria-label="Close"
           >
-            <svg
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <path d="M18 6L6 18M6 6l12 12" />
-            </svg>
+            <X size={18} />
           </button>
         </div>
 
         <div className="overflow-y-auto p-4 sm:p-6 space-y-4 sm:space-y-6">
           {/* Chart Section */}
-          <div className="rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 sm:p-6 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
+          <div className="sf-panel p-4 sm:p-6">
             <h3 className="text-base sm:text-lg font-semibold text-[color:var(--sf-text)] mb-4">
               {t('contractModal.unlockValueOverTime')}
             </h3>
-            {/* Simple chart visualization */}
-            <div className="h-36 flex items-end justify-between gap-2">
-              {chartData.map((point, i) => (
-                <div key={i} className="flex-1 flex flex-col items-center gap-2">
-                  <div
-                    className="w-full rounded-t bg-[color:var(--sf-primary)]/60 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-primary)]"
-                    style={{ height: `${point.value * 100}%` }}
+            {/* Linear chart: 0.92 → 1.00 BTC */}
+            <div className="relative h-40">
+              {/* Y-axis labels */}
+              <div className="absolute left-0 top-0 bottom-0 flex flex-col justify-between text-[10px] font-medium text-[color:var(--sf-text)]/50 pr-2">
+                <span>1.00</span>
+                <span>0.96</span>
+                <span>0.92</span>
+              </div>
+              {/* Chart area */}
+              <div className="ml-8 h-full relative">
+                <svg viewBox="0 0 400 160" preserveAspectRatio="none" className="w-full h-full">
+                  <defs>
+                    <linearGradient id="chartFill" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="var(--sf-primary)" stopOpacity="0.3" />
+                      <stop offset="100%" stopColor="var(--sf-primary)" stopOpacity="0.02" />
+                    </linearGradient>
+                  </defs>
+                  {/* Grid lines */}
+                  <line x1="0" y1="0" x2="400" y2="0" stroke="var(--sf-text)" strokeOpacity="0.06" strokeWidth="1" />
+                  <line x1="0" y1="80" x2="400" y2="80" stroke="var(--sf-text)" strokeOpacity="0.06" strokeWidth="1" />
+                  <line x1="0" y1="160" x2="400" y2="160" stroke="var(--sf-text)" strokeOpacity="0.06" strokeWidth="1" />
+                  {/* Fill area */}
+                  <polygon
+                    points={`0,160 ${chartData.map((p) => `${p.x * 400},${(1 - (p.value - chartMin) / (chartMax - chartMin)) * 160}`).join(' ')} 400,160`}
+                    fill="url(#chartFill)"
                   />
-                  <div className="text-xs text-[color:var(--sf-text)]/70">{point.time}d</div>
-                </div>
-              ))}
+                  {/* Line */}
+                  <polyline
+                    points={chartData.map((p) => `${p.x * 400},${(1 - (p.value - chartMin) / (chartMax - chartMin)) * 160}`).join(' ')}
+                    fill="none"
+                    stroke="var(--sf-primary)"
+                    strokeWidth="2.5"
+                    vectorEffect="non-scaling-stroke"
+                  />
+
+                </svg>
+              </div>
             </div>
-            <div className="mt-4 text-xs text-[color:var(--sf-text)]/70 text-center">
-              {t('contractModal.timeToFullBtc')}
+            <div className="mt-3 flex justify-between ml-8 text-[10px] font-medium text-[color:var(--sf-text)]/50">
+              <span>{t('contractModal.timeToFullBtc')}</span>
+              <span>1.00 BTC</span>
             </div>
           </div>
 
           {/* Buy / Sell Panel */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
-            <div className="sm:col-span-2 rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 sm:p-6 shadow-[0_2px_8px_rgba(0,0,0,0.15)] space-y-4">
+            <div className="sm:col-span-2 sf-panel p-4 sm:p-6 space-y-4">
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-[color:var(--sf-text)]/70">{t('contractModal.exercisePrice')}</span>
@@ -168,7 +172,7 @@ export default function ContractDetailModal({
                 </div>
               </div>
 
-              <div className="relative rounded-2xl bg-[color:var(--sf-input-bg)] p-4 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
+              <div className="relative sf-panel p-4">
                 {/* Token display - floating top-right */}
                 <div className="absolute right-4 top-4 z-10">
                   <div className="inline-flex items-center gap-2 rounded-xl bg-white/[0.03] px-3 py-2 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
@@ -197,7 +201,7 @@ export default function ContractDetailModal({
                 </div>
               </div>
 
-              <div className="rounded-xl bg-[color:var(--sf-primary)]/20 p-4 shadow-[0_2px_8px_rgba(0,0,0,0.1)]">
+              <div className="sf-panel p-4 bg-[color:var(--sf-primary)]/10">
                 <div className="flex justify-between text-sm">
                   <span className="text-[color:var(--sf-text)]/70">{t('contractModal.estimatedCost')}</span>
                   <span className="font-medium text-[color:var(--sf-text)]">
@@ -219,7 +223,7 @@ export default function ContractDetailModal({
                       setTimeout(() => setShowBuyComingSoon(false), 1000);
                     }
                   }}
-                  className={`px-4 sm:px-6 py-3 rounded-xl font-bold text-sm sm:text-base tracking-[0.08em] uppercase transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:scale-[1.02] active:scale-[0.98] ${isDemoGated ? 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)]/30 cursor-not-allowed' : 'bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] text-white shadow-[0_4px_12px_rgba(0,0,0,0.2)] hover:shadow-[0_6px_16px_rgba(0,0,0,0.25)]'}`}
+                  className={`px-4 sm:px-6 py-3 ${isDemoGated ? 'sf-btn-secondary text-[color:var(--sf-text)]/30 cursor-not-allowed' : 'sf-btn-primary'}`}
                 >
                   {showBuyComingSoon ? (
                     <span className="animate-pulse">{t('badge.comingSoon')}</span>
@@ -239,7 +243,7 @@ export default function ContractDetailModal({
                       setTimeout(() => setShowSellComingSoon(false), 1000);
                     }
                   }}
-                  className={`px-4 sm:px-6 py-3 rounded-xl font-bold text-sm sm:text-base tracking-[0.08em] uppercase transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:scale-[1.02] active:scale-[0.98] ${isDemoGated ? 'bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)]/30 cursor-not-allowed' : 'bg-[color:var(--sf-input-bg)] text-[color:var(--sf-text)] shadow-[0_2px_8px_rgba(0,0,0,0.15)]'}`}
+                  className={`px-4 sm:px-6 py-3 ${isDemoGated ? 'sf-btn-secondary text-[color:var(--sf-text)]/30 cursor-not-allowed' : 'sf-btn-secondary'}`}
                 >
                   {showSellComingSoon ? (
                     <span className="animate-pulse">{t('badge.comingSoon')}</span>
@@ -251,7 +255,7 @@ export default function ContractDetailModal({
             </div>
 
             {/* Advanced Info */}
-            <div className="rounded-2xl bg-[color:var(--sf-panel-bg)] p-4 sm:p-6 shadow-[0_2px_8px_rgba(0,0,0,0.15)] self-end">
+            <div className="sf-panel p-4 sm:p-6 self-end">
               {/* Dropdown toggle - only visible on small screens */}
               <button
                 type="button"
@@ -317,8 +321,7 @@ export default function ContractDetailModal({
             </div>
           </div>
         </div>
-      </div>
-    </div>
+    </SfPopup>
   );
 }
 

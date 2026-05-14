@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
+import SfPopup, { type SfPopupHandle } from './SfPopup';
 import TokenIcon from './TokenIcon';
 import { Search, X } from 'lucide-react';
 import { useTranslation } from '@/hooks/useTranslation';
-import { useDemoGate } from '@/hooks/useDemoGate';
+
 
 // Import Network type from constants
 import type { Network } from '@/utils/constants';
@@ -12,7 +13,7 @@ import type { Network } from '@/utils/constants';
 /**
  * Format alkane token balance for display
  * Handles large numbers with proper decimal precision
- * Matches the formatting logic in BalancesPanel.tsx
+ * Matches the formatting logic in AlkanesBalancesCard.tsx
  */
 function formatAlkaneBalance(balance: string, decimals: number = 8): string {
   if (!balance || balance === '0') return '0';
@@ -80,10 +81,10 @@ type Props = {
 
 // Bridge token definitions
 const BRIDGE_TOKENS = [
-  { symbol: 'USDT', name: 'USDT', enabled: false },
-  { symbol: 'ETH', name: 'ETH', enabled: false },
-  { symbol: 'SOL', name: 'SOL', enabled: false },
-  { symbol: 'ZEC', name: 'ZEC', enabled: false },
+  { symbol: 'USDT', name: 'USDT', enabled: true },
+  { symbol: 'USDC', name: 'USDC', enabled: true },
+  { symbol: 'ETH', name: 'ETH', enabled: true },
+  { symbol: 'ZEC', name: 'ZEC', enabled: true },
 ] as const;
 
 export default function TokenSelectorModal({
@@ -102,10 +103,11 @@ export default function TokenSelectorModal({
   activePercent,
 }: Props) {
   const { t } = useTranslation();
-  const isDemoGated = useDemoGate();
   const [searchQuery, setSearchQuery] = useState('');
   const [showComingSoon, setShowComingSoon] = useState(false);
   const [showAlreadySelected, setShowAlreadySelected] = useState(false);
+  const popupRef = useRef<SfPopupHandle>(null);
+  const handleClose = () => popupRef.current?.close();
 
   const filteredTokens = useMemo(() => {
     if (!searchQuery.trim()) return tokens;
@@ -121,30 +123,27 @@ export default function TokenSelectorModal({
 
   const handleSelect = (tokenId: string) => {
     onSelectToken(tokenId);
-    onClose();
+    handleClose();
     setSearchQuery('');
   };
 
-  if (!isOpen) return null;
-
   return (
-    <div
-      className="fixed inset-0 z-50 grid place-items-center bg-black/50 px-4 backdrop-blur-sm"
-      onClick={onClose}
+    <SfPopup
+      ref={popupRef}
+      isOpen={isOpen}
+      onClose={onClose}
+      overlayClassName="px-4"
+      panelClassName="h-[80vh] max-h-[600px] max-w-[480px]"
     >
-      <div
-        className="flex h-[80vh] max-h-[600px] w-full max-w-[480px] flex-col overflow-hidden rounded-3xl bg-[color:var(--sf-glass-bg)] shadow-[0_24px_96px_rgba(0,0,0,0.4)] backdrop-blur-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
         {/* Header */}
-        <div className="bg-[color:var(--sf-panel-bg)] px-6 py-5 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
+        <div className="sf-popup-header px-6 py-5">
           <div className="flex items-center justify-between mb-2">
             <h2 className="text-xl font-extrabold tracking-wider uppercase text-[color:var(--sf-text)]">
               {title || t('tokenSelector.selectToken')}
             </h2>
             <button
-              onClick={onClose}
-              className="flex h-8 w-8 items-center justify-center rounded-lg bg-[color:var(--sf-input-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-[color:var(--sf-text)]/70 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)] hover:text-[color:var(--sf-text)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] focus:outline-none"
+              onClick={handleClose}
+              className="sf-popup-close"
               aria-label="Close"
             >
               <X size={18} />
@@ -247,7 +246,7 @@ export default function TokenSelectorModal({
         </div>
 
         {/* Token List */}
-        <div className="flex-1 overflow-y-auto px-4 py-3">
+        <div className="sf-popup-body px-4 py-3">
           {filteredTokens.length === 0 ? (
             <div className="flex h-full items-center justify-center">
               <p className="text-sm font-medium text-[color:var(--sf-text)]/50">
@@ -303,29 +302,18 @@ export default function TokenSelectorModal({
                           {token.id}
                         </p>
                       </div>
+                      {!isAvailable && (mode === 'from' || mode === 'to') && (
+                        <span className="text-xs font-medium text-[color:var(--sf-text)]/50">
+                          {t('tokenSelector.notAvailable')}
+                        </span>
+                      )}
                       <div className="flex flex-col items-end gap-0.5">
-                        {formattedBalance && (
-                          <>
-                            <span className="text-sm font-bold text-[color:var(--sf-text)]">
-                              {formattedBalance}
-                            </span>
-                            {valueUsd && (
-                              <span className="text-xs font-medium text-[color:var(--sf-text)]/50">
-                                ${valueUsd}
-                              </span>
-                            )}
-                          </>
-                        )}
-                        {token.price && !token.balance && (
-                          <span className="text-xs font-medium text-[color:var(--sf-text)]/60">
-                            ${token.price.toFixed(4)}
-                          </span>
-                        )}
-                        {!isAvailable && mode === 'from' && (
-                          <span className="text-xs font-medium text-[color:var(--sf-text)]/50">
-                            {t('tokenSelector.notAvailable')}
-                          </span>
-                        )}
+                        <span className="text-sm font-bold text-[color:var(--sf-text)]">
+                          {formattedBalance || '0'}
+                        </span>
+                        <span className="text-xs font-medium text-[color:var(--sf-text)]/50">
+                          ${valueUsd || '0.00'}
+                        </span>
                       </div>
                     </div>
                   </button>
@@ -334,7 +322,6 @@ export default function TokenSelectorModal({
             </div>
           )}
         </div>
-      </div>
-    </div>
+    </SfPopup>
   );
 }

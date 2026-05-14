@@ -1,9 +1,12 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { X, Search } from 'lucide-react';
 import type { LPPosition } from './LiquidityInputs';
 import { useTranslation } from '@/hooks/useTranslation';
+import { useWallet } from '@/context/WalletContext';
+import TokenIcon from '@/app/components/TokenIcon';
+import SfPopup, { type SfPopupHandle } from '@/app/components/SfPopup';
 
 type Props = {
   isOpen: boolean;
@@ -21,7 +24,10 @@ export default function LPPositionSelectorModal({
   selectedPositionId,
 }: Props) {
   const { t } = useTranslation();
+  const { network } = useWallet();
   const [searchQuery, setSearchQuery] = useState('');
+  const popupRef = useRef<SfPopupHandle>(null);
+  const handleClose = () => popupRef.current?.close();
 
   const filteredPositions = useMemo(() => {
     if (!searchQuery.trim()) return positions;
@@ -36,29 +42,26 @@ export default function LPPositionSelectorModal({
 
   const handleSelect = (position: LPPosition) => {
     onSelectPosition(position);
-    onClose();
+    handleClose();
     setSearchQuery('');
   };
 
-  if (!isOpen) return null;
-
   return (
-    <div
-      className="fixed inset-0 z-50 grid place-items-center bg-black/50 px-4 backdrop-blur-sm"
-      onClick={onClose}
+    <SfPopup
+      ref={popupRef}
+      isOpen={isOpen}
+      onClose={onClose}
+      overlayClassName="px-4"
+      panelClassName="w-full max-w-[480px] h-[80vh] max-h-[600px]"
     >
-      <div
-        className="flex h-[80vh] max-h-[600px] w-full max-w-[480px] flex-col overflow-hidden rounded-3xl bg-[color:var(--sf-glass-bg)] shadow-[0_24px_96px_rgba(0,0,0,0.4)] backdrop-blur-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
         {/* Header */}
-        <div className="flex items-center justify-between bg-[color:var(--sf-panel-bg)] px-6 py-5 shadow-[0_2px_12px_rgba(0,0,0,0.08)]">
+        <div className="sf-popup-header flex items-center justify-between px-6 py-5">
           <h2 className="text-xl font-extrabold tracking-wider uppercase text-[color:var(--sf-text)]">
             {t('lpSelector.title')}
           </h2>
           <button
-            onClick={onClose}
-            className="flex h-8 w-8 items-center justify-center rounded-lg bg-[color:var(--sf-input-bg)] shadow-[0_2px_12px_rgba(0,0,0,0.08)] text-[color:var(--sf-text)]/70 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)] hover:text-[color:var(--sf-text)] focus:outline-none"
+            onClick={handleClose}
+            className="sf-popup-close"
             aria-label="Close"
           >
             <X size={18} />
@@ -83,7 +86,7 @@ export default function LPPositionSelectorModal({
         </div>
 
         {/* Position List */}
-        <div className="flex-1 overflow-y-auto px-4 py-3">
+        <div className="sf-popup-body px-4 py-3">
           {filteredPositions.length === 0 ? (
             <div className="flex h-full items-center justify-center">
               <p className="text-sm font-medium text-[color:var(--sf-text)]/50">
@@ -99,37 +102,49 @@ export default function LPPositionSelectorModal({
                   <button
                     key={position.id}
                     onClick={() => handleSelect(position)}
-                    className={`group w-full rounded-xl p-4 text-left shadow-[0_2px_12px_rgba(0,0,0,0.08)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none focus:outline-none ${
-                      isSelected
-                        ? 'bg-[color:var(--sf-primary)]/10 hover:shadow-md'
-                        : 'bg-[color:var(--sf-input-bg)] hover:bg-[color:var(--sf-surface)]/60 hover:shadow-md'
+                    className={`sf-popup-row group p-4 ${
+                      isSelected ? 'bg-[color:var(--sf-primary)]/10' : ''
                     }`}
                   >
-                    <div className="flex items-center gap-3">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-[color:var(--sf-text)] group-hover:text-[color:var(--sf-primary)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none">
-                            {position.token0Symbol}/{position.token1Symbol}
-                          </span>
-                          {isSelected && (
-                            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[color:var(--sf-primary)] text-white">
-                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                <path d="M20 6L9 17l-5-5" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
-                              </svg>
-                            </span>
-                          )}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="flex -space-x-2 shrink-0">
+                          <div className="relative z-10">
+                            <TokenIcon symbol={position.token0Symbol} id={position.token0Id} size="md" network={network} />
+                          </div>
+                          <div className="relative">
+                            <TokenIcon symbol={position.token1Symbol} id={position.token1Id} size="md" network={network} />
+                          </div>
                         </div>
-                        <p className="text-xs font-medium text-[color:var(--sf-text)]/60 truncate">
-                          {t('lpSelector.lpPosition')}
-                        </p>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-sm text-[color:var(--sf-text)] group-hover:text-[color:var(--sf-primary)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none truncate">
+                              {position.token0Symbol}/{position.token1Symbol} LP
+                            </span>
+                            {isSelected && (
+                              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[color:var(--sf-primary)] text-white shrink-0">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                  <path d="M20 6L9 17l-5-5" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
+                                </svg>
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[10px] text-[color:var(--sf-text)]/40 truncate">
+                            LP · {position.id}
+                          </div>
+                        </div>
                       </div>
-                      <div className="flex flex-col items-end gap-0.5">
-                        <span className="text-sm font-bold text-[color:var(--sf-text)]">
+                      <div className="text-right shrink-0 ml-2">
+                        <div className="font-bold text-sm text-[color:var(--sf-text)]">
                           {position.amount}
-                        </span>
-                        <span className="text-xs font-medium text-[color:var(--sf-text)]/50">
-                          ${position.valueUSD}
-                        </span>
+                        </div>
+                        {position.valueUSD > 0 && (
+                          <div className="text-[10px] text-[color:var(--sf-text)]/60">
+                            ${position.valueUSD < 0.01 ? '<0.01' : position.valueUSD > 999.99
+                              ? Math.round(position.valueUSD).toLocaleString()
+                              : position.valueUSD.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </div>
+                        )}
                       </div>
                     </div>
                   </button>
@@ -138,7 +153,6 @@ export default function LPPositionSelectorModal({
             </div>
           )}
         </div>
-      </div>
-    </div>
+    </SfPopup>
   );
 }

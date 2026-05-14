@@ -1,10 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from '@/hooks/useTranslation';
-import { mockContracts, type Contract } from '../data/mockContracts';
-
-// Use Contract type from mockContracts.ts
+import { type Contract } from '../data/contracts';
 
 // Calculate exercise cost premium (fee percentage) based on blocks left
 // Premiums: ~5% at start (100 blocks left), 3% at 30 blocks left, 0.1% at expiry (0 blocks left)
@@ -42,9 +40,83 @@ type MarketsTableProps = {
   onContractSelect: (contract: { id: string; blocksLeft: number }) => void;
 };
 
+function PositionsInfoModal({ onClose }: { onClose: () => void }) {
+  const modalRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (modalRef.current && !modalRef.current.contains(e.target as Node)) {
+        onClose();
+      }
+    };
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [onClose]);
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 px-4 backdrop-blur-sm">
+      <div
+        ref={modalRef}
+        className="relative w-full max-w-lg flex flex-col rounded-3xl bg-[color:var(--sf-glass-bg)] shadow-[0_24px_96px_rgba(0,0,0,0.4)] backdrop-blur-xl"
+      >
+        {/* Header */}
+        <div className="shrink-0 bg-[color:var(--sf-panel-bg)] px-6 py-5 shadow-[0_2px_8px_rgba(0,0,0,0.15)] rounded-t-3xl flex items-center justify-between">
+          <h2 className="text-lg sm:text-xl font-extrabold tracking-wider uppercase text-[color:var(--sf-text)]">
+            How ftrBTC Positions Work
+          </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex h-8 w-8 items-center justify-center rounded-lg bg-[color:var(--sf-input-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-[color:var(--sf-text)]/70 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)] hover:text-[color:var(--sf-text)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] focus:outline-none"
+            aria-label="Close"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M18 6L6 18M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="p-6 space-y-5">
+          <div className="sf-panel p-4">
+            <div className="text-sm font-semibold text-[color:var(--sf-text)] mb-1">Time-Locked Positions</div>
+            <p className="text-xs sm:text-sm text-[color:var(--sf-text)]/70">
+              Each <span className="font-mono font-semibold text-[color:var(--sf-text)]">ftrBTC[xxxxxx]</span> is a time-locked BTC position with a deterministic exercise value defined by the polynomial fee curve.
+            </p>
+          </div>
+
+          <div className="sf-panel p-4">
+            <div className="text-sm font-semibold text-[color:var(--sf-text)] mb-1">Exercise Value</div>
+            <p className="text-xs sm:text-sm text-[color:var(--sf-text)]/70">
+              Exercise value is what you get if you exercise right now. It only depends on time to expiry, not on secondary market prices.
+            </p>
+          </div>
+
+          <div className="sf-panel p-4">
+            <div className="text-sm font-semibold text-[color:var(--sf-text)] mb-1">Last Trade</div>
+            <p className="text-xs sm:text-sm text-[color:var(--sf-text)]/70">
+              Last trade is the latest price from the futures market. It can trade above or below spot — premiums are constant regardless of secondary prices.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function MarketsTable({ contracts, onContractSelect }: MarketsTableProps) {
   const { t } = useTranslation();
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+  const [showPositionsInfo, setShowPositionsInfo] = useState(false);
+  const mempoolTextClass = "mempool-queue-text ml-1";
+  const mempoolDetailTextClass = "mempool-queue-text ml-2";
 
   const toggleRow = (contractId: string) => {
     const newExpanded = new Set(expandedRows);
@@ -59,14 +131,37 @@ export default function MarketsTable({ contracts, onContractSelect }: MarketsTab
   const filteredContracts = contracts;
 
   return (
-    <div className="rounded-2xl bg-[color:var(--sf-glass-bg)] backdrop-blur-md overflow-hidden shadow-[0_4px_20px_rgba(0,0,0,0.2)] border-t border-[color:var(--sf-top-highlight)]">
-      {/* Header */}
-      <div className="px-6 py-4 border-b-2 border-[color:var(--sf-row-border)] bg-[color:var(--sf-surface)]/40">
-        <h3 className="text-base font-bold text-[color:var(--sf-text)]">{t('markets.activePositions')}</h3>
+    <div className="sf-card overflow-hidden">
+      {/* Header — overflow-visible so the tooltip isn't clipped */}
+      <div className="sf-card-header overflow-visible">
+        <div className="flex items-center gap-2">
+          <h3 className="text-base font-bold text-[color:var(--sf-text)]">{t('markets.activePositions')}</h3>
+          {/* Lightbulb info button */}
+          <div className="relative group">
+            <button
+              type="button"
+              onClick={() => setShowPositionsInfo(true)}
+              className="flex items-center justify-center w-6 h-6 rounded-full border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] text-[color:var(--sf-text)]/70 hover:text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/50 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
+              aria-label="How ftrBTC positions work"
+            >
+              <svg width="14" height="14" viewBox="0 0 256 256" fill="currentColor">
+                <path d="M176,232a8,8,0,0,1-8,8H88a8,8,0,0,1,0-16h80A8,8,0,0,1,176,232Zm40-128a87.55,87.55,0,0,1-33.64,69.21A16.24,16.24,0,0,0,176,186v6a16,16,0,0,1-16,16H96a16,16,0,0,1-16-16v-6a16,16,0,0,0-6.23-12.66A87.59,87.59,0,0,1,40,104.49C39.74,56.83,78.26,17.14,125.88,16A88,88,0,0,1,216,104Zm-16,0a72,72,0,0,0-73.74-72c-39,.92-70.47,33.39-70.26,72.39a71.65,71.65,0,0,0,27.64,56.3A32,32,0,0,1,96,186v6h24V147.31L90.34,117.66a8,8,0,0,1,11.32-11.32L128,132.69l26.34-26.35a8,8,0,0,1,11.32,11.32L136,147.31V192h24v-6a32.12,32.12,0,0,1,12.47-25.35A71.65,71.65,0,0,0,200,104Z"/>
+              </svg>
+            </button>
+            {/* Tooltip on hover — positioned below to avoid clipping by the card's overflow-hidden */}
+            <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-2 py-1 text-xs font-medium text-white bg-[color:var(--sf-primary)] rounded-md whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-50">
+              How positions work
+              <div className="absolute bottom-full left-1/2 -translate-x-1/2 border-4 border-transparent border-b-[color:var(--sf-primary)]" />
+            </div>
+          </div>
+        </div>
       </div>
 
+      {/* Positions Info Modal */}
+      {showPositionsInfo && <PositionsInfoModal onClose={() => setShowPositionsInfo(false)} />}
+
       {/* Mobile Card View */}
-      <div className="md:hidden divide-y divide-[color:var(--sf-row-border)]">
+      <div className="md:hidden divide-y divide-[color:var(--sf-row-border,rgba(255,255,255,0.04))]">
         {filteredContracts.map((contract) => {
           const isExpanded = expandedRows.has(contract.id);
           return (
@@ -97,7 +192,7 @@ export default function MarketsTable({ contracts, onContractSelect }: MarketsTab
                       e.stopPropagation();
                       onContractSelect({ id: contract.id, blocksLeft: contract.blocksLeft });
                     }}
-                    className="px-3 py-1.5 text-[10px] font-bold tracking-[0.08em] uppercase rounded-lg bg-[color:var(--sf-primary)] text-white hover:opacity-90 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none whitespace-nowrap"
+                    className="sf-btn-primary px-3 py-1.5 text-[10px] whitespace-nowrap"
                   >
                     {t('markets.buySell')}
                   </button>
@@ -148,7 +243,7 @@ export default function MarketsTable({ contracts, onContractSelect }: MarketsTab
                     <span>
                       {contract.remaining.toFixed(1)} BTC ({((contract.remaining / contract.totalSupply) * 100).toFixed(1)}%) {t('markets.remaining')}
                       {contract.mempoolQueue > 0 && (
-                        <span className="ml-1 text-[color:var(--sf-primary)]/90">
+                        <span className={mempoolTextClass}>
                           ({contract.mempoolQueue.toFixed(1)} {t('markets.inMempool')})
                         </span>
                       )}
@@ -177,7 +272,7 @@ export default function MarketsTable({ contracts, onContractSelect }: MarketsTab
                         <div className="font-medium">
                           {contract.remaining.toFixed(1)} BTC
                           {contract.mempoolQueue > 0 && (
-                            <span className="ml-1 text-[color:var(--sf-primary)]/90 text-xs">
+                            <span className={`${mempoolTextClass} text-xs`}>
                               ({contract.mempoolQueue.toFixed(1)} {t('markets.inQueue')})
                             </span>
                           )}
@@ -216,11 +311,11 @@ export default function MarketsTable({ contracts, onContractSelect }: MarketsTab
       <div className="hidden md:block overflow-x-auto">
           <table className="w-full">
             <thead>
-              <tr className="border-b border-[color:var(--sf-row-border)]">
-                <th className="px-6 py-4 text-left text-xs font-bold tracking-[0.08em] uppercase text-[color:var(--sf-text)]/70" colSpan={3}>
+              <tr className="sf-table-header">
+                <th className="px-6 py-4 text-left" colSpan={3}>
                   {t('markets.contractDetails')}
                 </th>
-                <th className="px-6 py-4 text-left text-xs font-bold tracking-[0.08em] uppercase text-[color:var(--sf-text)]/70">
+                <th className="px-6 py-4 text-left">
                   {t('markets.actions')}
                 </th>
               </tr>
@@ -231,7 +326,7 @@ export default function MarketsTable({ contracts, onContractSelect }: MarketsTab
                 const rows = [
                   <tr
                     key={`${contract.id}-desktop`}
-                    className="border-b border-[color:var(--sf-row-border)] hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none cursor-pointer"
+                    className="sf-row cursor-pointer"
                     onClick={() => toggleRow(contract.id)}
                   >
                     {/* Contract + Distribution Bar */}
@@ -302,7 +397,7 @@ export default function MarketsTable({ contracts, onContractSelect }: MarketsTab
                             <span>
                               {contract.remaining.toFixed(1)} BTC ({((contract.remaining / contract.totalSupply) * 100).toFixed(1)}%) {t('markets.remaining')}
                               {contract.mempoolQueue > 0 && (
-                                <span className="ml-1 text-[color:var(--sf-primary)]/90">
+                                <span className={mempoolTextClass}>
                                   ({contract.mempoolQueue.toFixed(1)} {t('markets.inMempool')})
                                 </span>
                               )}
@@ -322,7 +417,7 @@ export default function MarketsTable({ contracts, onContractSelect }: MarketsTab
                           e.stopPropagation();
                           onContractSelect({ id: contract.id, blocksLeft: contract.blocksLeft });
                         }}
-                        className="px-4 py-2 text-xs font-bold tracking-[0.08em] uppercase rounded-lg bg-[color:var(--sf-primary)] text-white hover:opacity-90 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
+                        className="sf-btn-primary px-4 py-2"
                       >
                         {t('markets.buySell')}
                       </button>
@@ -353,7 +448,7 @@ export default function MarketsTable({ contracts, onContractSelect }: MarketsTab
                                 <div className="font-medium">
                                   {contract.remaining.toFixed(1)} BTC
                                   {contract.mempoolQueue > 0 && (
-                                    <span className="ml-2 text-[color:var(--sf-primary)]/90">
+                                    <span className={mempoolDetailTextClass}>
                                       ({contract.mempoolQueue.toFixed(1)} BTC {t('markets.inQueue')})
                                     </span>
                                   )}

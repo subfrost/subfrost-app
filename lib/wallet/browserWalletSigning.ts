@@ -20,6 +20,82 @@
 
 import * as bitcoin from 'bitcoinjs-lib';
 
+/** Standard wallet connection/session check timeout (10 seconds) */
+const SESSION_TIMEOUT_MS = 10000;
+
+/**
+ * Ensure the browser wallet extension has an active session.
+ *
+ * Auto-reconnect from localStorage restores UI state (addresses, walletType)
+ * but doesn't activate the extension session. Without this, signPsbt() fails
+ * or shows a connect-only popup without proceeding to sign.
+ *
+ * Call this at the start of every mutation (swap, wrap, liquidity, etc.)
+ * before building the PSBT.
+ */
+export async function ensureWalletSession(): Promise<void> {
+  if (typeof window === 'undefined') return;
+
+  // Check which wallet is actually connected (not just installed)
+  const connectedId = localStorage.getItem('subfrost_browser_wallet_id');
+
+  if (connectedId === 'unisat') {
+    const unisat = (window as any).unisat;
+    if (unisat) {
+      let accounts: string[] = [];
+
+      if (typeof unisat.getAccounts === 'function') {
+        try {
+          accounts = await withTimeout(
+            Promise.resolve(unisat.getAccounts()),
+            SESSION_TIMEOUT_MS,
+            'UniSat',
+            'connection check'
+          ) || [];
+        } catch (error) {
+          console.warn('[browserWalletSigning] UniSat getAccounts failed or timed out:', error);
+        }
+      }
+
+      if (!accounts.length && typeof unisat.requestAccounts === 'function') {
+        accounts = await withTimeout(
+          Promise.resolve(unisat.requestAccounts()),
+          SESSION_TIMEOUT_MS,
+          'UniSat',
+          'connection request'
+        ) || [];
+      }
+
+      if (!accounts.length) {
+        throw new Error('UniSat is not connected. Unlock UniSat and connect this site before signing.');
+      }
+    }
+  } else if (connectedId === 'okx') {
+    const okx = (window as any).okxwallet?.bitcoin;
+    if (okx?.connect) {
+      try { await okx.connect(); } catch { /* already connected */ }
+    }
+  } else if (connectedId === 'xverse') {
+    const xverse = (window as any).XverseProviders?.BitcoinProvider;
+    if (xverse?.request) {
+      try {
+        // wallet_getAccount is the silent check (no popup if already authorized)
+        await xverse.request('wallet_getAccount', null);
+      } catch {
+        // Not authorized or method not supported — try legacy getAccounts
+        try {
+          await xverse.request('getAccounts', { purposes: ['ordinals', 'payment'] });
+        } catch { /* user denied or extension not ready */ }
+      }
+    }
+  } else if (connectedId === 'oyl') {
+    const oyl = (window as any).oyl;
+    if (oyl?.getAddresses) {
+      try { await oyl.getAddresses(); } catch { /* already connected */ }
+    }
+  }
+}
+
 /** Standard signing timeout (60 seconds) */
 const SIGNING_TIMEOUT_MS = 60000;
 
@@ -58,10 +134,59 @@ export interface BrowserWalletAddresses {
   nativeSegwit?: { address: string; publicKey?: string };
 }
 
+export interface BrowserWalletSessionStatus {
+  walletId: string | null;
+  isBrowserWallet: boolean;
+  isActive: boolean;
+  accounts: string[];
+  error?: string;
+}
+
+type UnisatSigningAddresses = string | {
+  taprootAddress?: string;
+  paymentAddress?: string;
+  fallbackAddress?: string;
+  network?: bitcoin.Network;
+};
+
+function normalizeUnisatAddresses(
+  addresses: UnisatSigningAddresses,
+  paymentAddress?: string,
+  network?: bitcoin.Network,
+) {
+  if (typeof addresses === 'string') {
+    return {
+      taprootAddress: addresses,
+      paymentAddress,
+      fallbackAddress: addresses,
+      network,
+    };
+  }
+
+  return {
+    ...addresses,
+    fallbackAddress: addresses.fallbackAddress || addresses.taprootAddress || addresses.paymentAddress,
+  };
+}
+
+function isPaymentAddress(address: string): boolean {
+  const lower = address.toLowerCase();
+  return lower.startsWith('bc1q')
+    || lower.startsWith('tb1q')
+    || lower.startsWith('bcrt1q')
+    || address.startsWith('3')
+    || address.startsWith('2');
+}
+
 /**
  * Helper: Create a promise that times out after specified milliseconds
  */
-function withTimeout<T>(promise: Promise<T>, ms: number, walletId: string): Promise<T> {
+function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  walletId: string,
+  action = 'signing'
+): Promise<T> {
   return Promise.race([
     promise,
     new Promise<T>((_, reject) =>
@@ -69,7 +194,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number, walletId: string): Prom
         () =>
           reject(
             new Error(
-              `${walletId} signing timed out after ${ms / 1000}s. ` +
+              `${walletId} ${action} timed out after ${ms / 1000}s. ` +
                 'Check if: (1) popup blocker is active, (2) wallet extension icon has pending request, ' +
                 '(3) wallet is locked, (4) popup opened behind browser window.'
             )
@@ -78,6 +203,47 @@ function withTimeout<T>(promise: Promise<T>, ms: number, walletId: string): Prom
       )
     ),
   ]);
+}
+
+async function getUnisatAccounts(action = 'connection check'): Promise<string[]> {
+  const unisat = (window as any).unisat;
+  if (!unisat || typeof unisat.getAccounts !== 'function') return [];
+  const accounts = await withTimeout(
+    Promise.resolve(unisat.getAccounts()),
+    SESSION_TIMEOUT_MS,
+    'UniSat',
+    action
+  );
+  return Array.isArray(accounts) ? accounts : [];
+}
+
+export async function getBrowserWalletSessionStatus(): Promise<BrowserWalletSessionStatus> {
+  if (typeof window === 'undefined') {
+    return { walletId: null, isBrowserWallet: false, isActive: true, accounts: [] };
+  }
+
+  const walletId = localStorage.getItem('subfrost_browser_wallet_id');
+  if (!walletId) {
+    return { walletId: null, isBrowserWallet: false, isActive: true, accounts: [] };
+  }
+
+  if (walletId === 'unisat') {
+    try {
+      const accounts = await getUnisatAccounts();
+      return {
+        walletId,
+        isBrowserWallet: true,
+        isActive: accounts.length > 0,
+        accounts,
+        error: accounts.length > 0 ? undefined : 'UniSat is locked or not connected.',
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { walletId, isBrowserWallet: true, isActive: false, accounts: [], error: message };
+    }
+  }
+
+  return { walletId, isBrowserWallet: true, isActive: true, accounts: [] };
 }
 
 /**
@@ -177,22 +343,61 @@ export async function signWithXverse(
  */
 export async function signWithUnisat(
   psbt: bitcoin.Psbt,
-  unisatAddress: string
+  addresses: UnisatSigningAddresses,
+  paymentAddressArg?: string,
+  networkArg?: bitcoin.Network,
 ): Promise<SigningResult> {
   const unisat = (window as any).unisat;
   if (!unisat) {
     throw new Error('UniSat wallet not available');
   }
 
+  await ensureWalletSession();
+
+  const {
+    taprootAddress,
+    paymentAddress,
+    fallbackAddress,
+    network,
+  } = normalizeUnisatAddresses(addresses, paymentAddressArg, networkArg);
+
+  if (!fallbackAddress) {
+    throw new Error('UniSat address not found');
+  }
+
   const psbtHex = psbt.toHex();
   console.log('[browserWalletSigning] UniSat: PSBT hex length:', psbtHex.length);
-  console.log('[browserWalletSigning] UniSat: connected address:', unisatAddress);
+  console.log('[browserWalletSigning] UniSat: taproot address:', taprootAddress || '(none)');
+  console.log('[browserWalletSigning] UniSat: payment address:', paymentAddress || '(none)');
+  console.log('[browserWalletSigning] UniSat: fallback address:', fallbackAddress);
 
-  // Build toSignInputs - tell UniSat which inputs to sign
-  const toSignInputs = psbt.data.inputs.map((_, index) => ({
-    index,
-    address: unisatAddress,
-  }));
+  // Build toSignInputs with the address that matches each input script. Mixed
+  // split PSBTs can contain both taproot alkane inputs and native segwit BTC
+  // inputs; assigning every input to taproot can make UniSat never open.
+  const toSignInputs = psbt.data.inputs.map((input, index) => {
+    let address = fallbackAddress;
+
+    if (network && input.witnessUtxo) {
+      try {
+        const inputAddress = bitcoin.address.fromOutputScript(
+          Buffer.from(input.witnessUtxo.script),
+          network,
+        );
+
+        if (inputAddress === taprootAddress || inputAddress === paymentAddress) {
+          address = inputAddress;
+        } else if (paymentAddress && isPaymentAddress(inputAddress)) {
+          address = paymentAddress;
+        } else if (taprootAddress) {
+          address = taprootAddress;
+        }
+      } catch (error) {
+        console.warn(`[browserWalletSigning] UniSat: could not resolve input ${index} address:`, error);
+      }
+    }
+
+    return { index, address };
+  });
 
   console.log('[browserWalletSigning] UniSat: toSignInputs:', JSON.stringify(toSignInputs));
 
@@ -202,30 +407,38 @@ export async function signWithUnisat(
 
   let signedHex: string | null = null;
 
-  if (hasSignPsbts) {
-    console.log('[browserWalletSigning] UniSat: calling signPsbts (autoFinalized: true)...');
-    const signedHexArray: string[] = await withTimeout(
-      unisat.signPsbts([psbtHex], {
-        autoFinalized: true, // Let UniSat finalize taproot inputs
-        toSignInputs,
-      }),
-      SIGNING_TIMEOUT_MS,
-      'UniSat'
-    );
-    console.log('[browserWalletSigning] UniSat: signPsbts returned:', signedHexArray?.length, 'results');
-    signedHex = signedHexArray?.[0] || null;
-  } else if (hasSignPsbt) {
-    console.log('[browserWalletSigning] UniSat: calling signPsbt (autoFinalized: true)...');
-    signedHex = await withTimeout(
-      unisat.signPsbt(psbtHex, {
-        autoFinalized: true,
-        toSignInputs,
-      }),
-      SIGNING_TIMEOUT_MS,
-      'UniSat'
-    );
-  } else {
-    throw new Error('UniSat wallet does not expose signPsbt or signPsbts');
+  try {
+    if (hasSignPsbts) {
+      console.log('[browserWalletSigning] UniSat: calling signPsbts (autoFinalized: true)...');
+      const signedHexArray: string[] = await withTimeout(
+        unisat.signPsbts([psbtHex], {
+          autoFinalized: true, // Let UniSat finalize taproot inputs
+          toSignInputs,
+        }),
+        SIGNING_TIMEOUT_MS,
+        'UniSat'
+      );
+      console.log('[browserWalletSigning] UniSat: signPsbts returned:', signedHexArray?.length, 'results');
+      signedHex = signedHexArray?.[0] || null;
+    } else if (hasSignPsbt) {
+      console.log('[browserWalletSigning] UniSat: calling signPsbt (autoFinalized: true)...');
+      signedHex = await withTimeout(
+        unisat.signPsbt(psbtHex, {
+          autoFinalized: true,
+          toSignInputs,
+        }),
+        SIGNING_TIMEOUT_MS,
+        'UniSat'
+      );
+    } else {
+      throw new Error('UniSat wallet does not expose signPsbt or signPsbts');
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (/user rejected/i.test(message)) {
+      throw new Error('UniSat rejected the signing request. If no popup appeared, unlock UniSat and try again.');
+    }
+    throw error;
   }
 
   if (!signedHex) {
@@ -432,6 +645,9 @@ export function patchTapInternalKeys(psbt: bitcoin.Psbt, xOnlyPubKeyHex: string)
 
   for (let i = 0; i < psbt.data.inputs.length; i++) {
     const input = psbt.data.inputs[i];
+    if (input.tapLeafScript?.length) {
+      continue;
+    }
     // Only patch taproot inputs (those that have or should have tapInternalKey)
     if (input.witnessUtxo) {
       const script = input.witnessUtxo.script;

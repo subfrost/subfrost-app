@@ -65,13 +65,17 @@
  *   : 'p2tr:0';
  * ```
  *
+ * ### DEVNET NOTE
+ *
+ * Symbolic addresses resolve to the SDK wallet's derivation, not the connected
+ * wallet's. The `useActualAddresses` pattern (isBrowserWallet || network === 'devnet')
+ * ensures actual addresses are always used on devnet.
+ *
  * ### FILES AFFECTED (ALL MUST USE THIS PATTERN)
  *
  * - hooks/useSwapMutation.ts ✅ Fixed 2026-03-01
- * - hooks/useSwapUnwrapMutation.ts ✅ Fixed 2026-03-01
  * - hooks/useRemoveLiquidityMutation.ts ✅ Fixed 2026-03-01
  * - hooks/useAddLiquidityMutation.ts ✅ Fixed 2026-03-01
- * - hooks/useWrapSwapMutation.ts ✅ Fixed 2026-03-01
  * - hooks/useUnwrapMutation.ts ✅ Fixed 2026-03-01
  * - hooks/useWrapMutation.ts - Uses different pattern (fixedOutputs for signer)
  *
@@ -136,8 +140,7 @@
  *
  * FIX: Changed buildSwapProtostone from calling pool with opcode 3 to calling
  * factory with opcode 13 (SwapExactTokensForTokens). Same two-protostone pattern,
- * but p1 now targets the factory instead of the pool. Applied same fix to
- * useWrapSwapMutation (BTC→token) and useSwapUnwrapMutation (token→BTC).
+ * but p1 now targets the factory instead of the pool.
  *
  * VERIFIED: User-tested DIESEL → frBTC swap — correct frBTC amount received.
  *
@@ -149,6 +152,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import BigNumber from 'bignumber.js';
 import { useWallet } from '@/context/WalletContext';
 import { useSandshrewProvider } from '@/hooks/useSandshrewProvider';
+import { useWalletUtxoCache } from '@/hooks/useWalletUtxoCache';
 import { useTransactionConfirm } from '@/context/TransactionConfirmContext';
 import { getConfig } from '@/utils/getConfig';
 import { getTokenSymbol } from '@/lib/alkanes-client';
@@ -163,9 +167,15 @@ import * as ecc from '@bitcoinerlab/secp256k1';
 // NOTE: Only patching INPUTS (witnessUtxo + redeemScript), NOT outputs
 // Output patching was removed - see comment at line 442 for why
 import { patchInputsOnly } from '@/lib/psbt-patching';
-import { buildSwapProtostone, buildSwapInputRequirements } from '@/lib/alkanes/builders';
+import { buildSwapProtostone, buildSwapExactOutputProtostone, buildSwapInputRequirements, buildRouterSwapProtostone } from '@/lib/alkanes/builders';
 import { FACTORY_SWAP_OPCODE } from '@/lib/alkanes/constants';
 import { uint8ArrayToBase64, getBitcoinNetwork, extractPsbtBase64 } from '@/lib/alkanes/helpers';
+import { buildPlanFromTx } from '@/lib/alkanes/planBuilder';
+import {
+  broadcastTransaction as broadcastRawTransaction,
+  broadcastTransactions as broadcastRawTransactions,
+} from '@/lib/alkanes/rpc';
+import type { PlanAlkaneEntry } from '@/context/TransactionConfirmContext';
 
 bitcoin.initEccLib(ecc);
 
@@ -179,12 +189,14 @@ export type SwapTransactionBaseData = {
   feeRate: number; // sats/vB
   tokenPath?: string[]; // optional explicit path
   poolId?: { block: string | number; tx: string | number }; // Pool reference (not used for routing)
-  deadlineBlocks?: number; // default 3
+  deadlineBlocks?: number; // default 5
   isDieselMint?: boolean;
   // For confirmation modal display (optional)
   sellSymbol?: string;
   buySymbol?: string;
   skipConfirmation?: boolean; // For browser wallets that handle their own confirmation
+  /** When set to 'clob' or 'router', route through Universal Router instead of AMM factory */
+  routeSource?: 'amm' | 'clob' | 'router';
 };
 
 /**
@@ -218,57 +230,53 @@ export type SwapTransactionBaseData = {
  */
 
 export function useSwapMutation() {
-  const { account, network, isConnected, signTaprootPsbt, signSegwitPsbt, walletType, browserWallet } = useWallet();
+  const { account, network, isConnected, signTaprootPsbt, walletType, browserWallet, txContext } = useWallet();
   const provider = useSandshrewProvider();
   const queryClient = useQueryClient();
   const { requestConfirmation } = useTransactionConfirm();
   const { FRBTC_ALKANE_ID, ALKANE_FACTORY_ID } = getConfig(network);
-
+  // Pre-warmed UTXO snapshot — passed into alkanesExecuteTyped so the
+  // SDK skips its internal BTC-fee fanout. Per-click latency win on
+  // wallets with many UTXOs (user-reported, 2026-05-05).
+  const utxoCache = useWalletUtxoCache();
   // Fetch dynamic frBTC wrap/unwrap fees
   const { data: premiumData } = useFrbtcPremium();
   const wrapFee = premiumData?.wrapFeePerThousand ?? FRBTC_WRAP_FEE_PER_1000;
 
   return useMutation({
     mutationFn: async (swapData: SwapTransactionBaseData) => {
-      console.log('═══════════════════════════════════════════════════════════════');
-      console.log('[useSwapMutation] ████ MUTATION STARTED ████');
-      console.log('═══════════════════════════════════════════════════════════════');
-      console.log('[useSwapMutation] Input swapData:', JSON.stringify(swapData, null, 2));
-      console.log('[useSwapMutation] Network:', network);
-      console.log('[useSwapMutation] FRBTC_ALKANE_ID:', FRBTC_ALKANE_ID);
-      console.log('[useSwapMutation] wrapFee:', wrapFee);
-      console.log('[useSwapMutation] isConnected:', isConnected);
-      console.log('[useSwapMutation] hasProvider:', !!provider);
-      console.log('───────────────────────────────────────────────────────────────');
 
       if (!isConnected) {
         console.error('[useSwapMutation] ❌ Wallet not connected');
         throw new Error('Wallet not connected');
+      }
+      // Ensure browser wallet session is active before building PSBT
+      if (walletType === 'browser') {
+        const { ensureWalletSession } = await import('@/lib/wallet/browserWalletSigning');
+        await ensureWalletSession();
       }
       if (!provider) {
         console.error('[useSwapMutation] ❌ Provider not available');
         throw new Error('Provider not available');
       }
 
-      // Get addresses - use actual addresses instead of SDK descriptors
-      // This fixes the "Available: []" issue where SDK couldn't find alkane UTXOs
-      //
-      // JOURNAL ENTRY (2026-03-01): Support single-address wallets (UniSat, OKX)
-      // UniSat/OKX only provide one address type at a time (user-configurable).
-      // We need at least ONE address, but don't require both taproot AND segwit.
-      const taprootAddress = account?.taproot?.address;
-      const segwitAddress = account?.nativeSegwit?.address;
-      if (!taprootAddress && !segwitAddress) {
+      // Get addresses — use the consolidated `txContext` for fee/change addresses
+      // and only keep the wallet-type-specific receive address (taproot when
+      // available) for `toAddresses`. See `WalletContext.TxContext` jsdoc for the
+      // semantics of feeSourceAddresses / btcChangeAddress / alkanesChangeAddress.
+      if (!txContext) {
         throw new Error('No wallet address available. Please connect a wallet first.');
       }
-      // For alkane operations, prefer taproot if available (alkanes use P2TR)
-      const primaryAddress = taprootAddress || segwitAddress;
-      console.log('[useSwapMutation] Using addresses:', { taprootAddress, segwitAddress, primaryAddress });
+      const taprootAddress = account?.taproot?.address;
+      const segwitAddress = account?.nativeSegwit?.address;
+      // For alkane operations, prefer taproot if available (alkanes use P2TR).
+      // Falls back to segwit on single-address segwit-only wallets.
+      const primaryAddress = (taprootAddress || segwitAddress)!;
 
-      // NOTE: BTC → token swaps (other than frBTC) should be handled in SwapShell.tsx
-      // by first wrapping BTC to frBTC, then calling swapMutation with frBTC.
-      // If we reach here with BTC as sellCurrency for a non-frBTC target, something is wrong.
-      if (swapData.sellCurrency === 'btc' && swapData.buyCurrency !== FRBTC_ALKANE_ID) {
+      // BTC → non-frBTC: only allowed with override protostones (atomic wrap+swap).
+      // Without overrides, this would try to swap BTC directly which is impossible.
+      const hasOverrides = !!(swapData as any).overrideProtostones;
+      if (swapData.sellCurrency === 'btc' && swapData.buyCurrency !== FRBTC_ALKANE_ID && !hasOverrides) {
         console.error('[useSwapMutation] ❌ BTC → non-frBTC swap reached mutation!');
         console.error('[useSwapMutation] sellCurrency:', swapData.sellCurrency);
         console.error('[useSwapMutation] buyCurrency:', swapData.buyCurrency);
@@ -281,9 +289,6 @@ export function useSwapMutation() {
       const sellCurrency = swapData.sellCurrency === 'btc' ? FRBTC_ALKANE_ID : swapData.sellCurrency;
       const buyCurrency = swapData.buyCurrency === 'btc' ? FRBTC_ALKANE_ID : swapData.buyCurrency;
 
-      console.log('[useSwapMutation] Resolved currencies:');
-      console.log('[useSwapMutation]   sellCurrency:', swapData.sellCurrency, '→', sellCurrency);
-      console.log('[useSwapMutation]   buyCurrency:', swapData.buyCurrency, '→', buyCurrency);
 
       // Adjust amounts for wrap fee when selling BTC
       const ammSellAmount =
@@ -303,47 +308,64 @@ export function useSwapMutation() {
               .toString()
           : swapData.buyAmount;
 
-      console.log('[useSwapMutation] AMM amounts (after wrap fee adjustment):');
-      console.log('[useSwapMutation]   ammSellAmount:', ammSellAmount);
-      console.log('[useSwapMutation]   ammBuyAmount:', ammBuyAmount);
 
-      // Calculate slippage limits
+      // Slippage is applied to the quote the user actually saw in the UI.
+      // The quote is already kept fresh on each block via usePoolStateLive in
+      // useSwapQuotes — we should NOT recompute it here from a newer snapshot.
+      // If the price moves further than the user's tolerance between submit
+      // and mining, the contract reverts on min-out and the user retries with
+      // a fresh quote (standard Uniswap-style UX). Recomputing here would
+      // silently deliver less than what the user agreed to.
       const minAmountOut = calculateMinimumFromSlippage({ amount: ammBuyAmount, maxSlippage: swapData.maxSlippage });
 
-      console.log('[useSwapMutation] Slippage calculations:');
-      console.log('[useSwapMutation]   maxSlippage:', swapData.maxSlippage);
-      console.log('[useSwapMutation]   minAmountOut:', minAmountOut);
 
       // Get deadline block height (regtest uses large offset so deadline never expires)
-      const isRegtest = network === 'regtest' || network === 'subfrost-regtest' || network === 'regtest-local';
-      const deadlineBlocks = isRegtest ? 1000 : (swapData.deadlineBlocks || 3);
-      console.log('[useSwapMutation] Fetching deadline block height...');
+      const isRegtest = network === 'regtest' || network === 'subfrost-regtest' || network === 'regtest-local' || network === 'qubitcoin-regtest';
+      const deadlineBlocks = isRegtest ? 1000 : (swapData.deadlineBlocks || 5);
       const deadline = await getFutureBlockHeight(deadlineBlocks, provider as any);
-      console.log('[useSwapMutation] Deadline:', deadline, `(+${deadlineBlocks} blocks)`);
 
-      console.log('[useSwapMutation] Factory ID:', ALKANE_FACTORY_ID);
-      console.log('[useSwapMutation] Using factory opcode 13 (SwapExactTokensForTokens):');
-      console.log('[useSwapMutation]   p0: SDK auto-edict (from inputRequirements) → sends sell tokens to p1');
-      console.log('[useSwapMutation]   p1: Factory cellpack (our protostone)');
+      // Determine routing: Universal Router (hybrid CLOB+AMM) vs AMM factory direct
+      const useRouter = swapData.routeSource === 'clob' || swapData.routeSource === 'router';
+      const routerId = (getConfig(network) as any).UNIVERSAL_ROUTER_ID as string | undefined;
 
-      // Build protostone for the swap using factory-routed two-protostone pattern
-      const protostoneParams = {
-        factoryId: ALKANE_FACTORY_ID,
-        sellTokenId: sellCurrency,
-        buyTokenId: buyCurrency,
-        sellAmount: new BigNumber(ammSellAmount).toFixed(0),
-        minOutput: new BigNumber(minAmountOut).toFixed(0),
-        deadline: deadline.toString(),
-      };
-
-      console.log('[useSwapMutation] Protostone params:', JSON.stringify(protostoneParams, null, 2));
-
-      const protostone = buildSwapProtostone(protostoneParams);
-      console.log('[useSwapMutation] Built protostone (factory-routed):', protostone);
+      let protostone: string;
+      if (useRouter && routerId) {
+        // Universal Router only supports exact-in (useSwapQuotes forces
+        // direction='sell' when fetching router quotes).
+        protostone = buildRouterSwapProtostone({
+          routerId,
+          sellTokenId: sellCurrency,
+          buyTokenId: buyCurrency,
+          sellAmount: new BigNumber(ammSellAmount).toFixed(0),
+          minOutput: new BigNumber(minAmountOut).toFixed(0),
+        });
+      } else if (swapData.direction === 'buy') {
+        // User typed in the BUY field — exact-out swap via factory opcode 14.
+        // useSwapQuotes already populated swapData.sellAmount with the
+        // slippage-adjusted maxSentInAlks; opcode 14 refunds any unused input
+        // to alkanes_change_address.
+        protostone = buildSwapExactOutputProtostone({
+          factoryId: ALKANE_FACTORY_ID,
+          sellTokenId: sellCurrency,
+          buyTokenId: buyCurrency,
+          amountOut: new BigNumber(ammBuyAmount).toFixed(0),
+          amountInMax: new BigNumber(ammSellAmount).toFixed(0),
+          deadline: deadline.toString(),
+        });
+      } else {
+        // Default: exact-in via factory opcode 13 (slippage applied to output).
+        protostone = buildSwapProtostone({
+          factoryId: ALKANE_FACTORY_ID,
+          sellTokenId: sellCurrency,
+          buyTokenId: buyCurrency,
+          sellAmount: new BigNumber(ammSellAmount).toFixed(0),
+          minOutput: new BigNumber(minAmountOut).toFixed(0),
+          deadline: deadline.toString(),
+        });
+      }
 
       // Build input requirements
       const isBtcSell = swapData.sellCurrency === 'btc';
-      console.log('[useSwapMutation] isBtcSell:', isBtcSell);
 
       const inputReqParams = {
         bitcoinAmount: isBtcSell ? new BigNumber(swapData.sellAmount).toFixed(0) : undefined,
@@ -353,110 +375,249 @@ export function useSwapMutation() {
         }] : undefined,
       };
 
-      console.log('[useSwapMutation] Input requirements params:', JSON.stringify(inputReqParams, null, 2));
 
       const inputRequirements = buildSwapInputRequirements(inputReqParams);
-      console.log('[useSwapMutation] Built inputRequirements:', inputRequirements);
 
-      console.log('═══════════════════════════════════════════════════════════════');
-      console.log('[useSwapMutation] ████ EXECUTING SWAP ████');
-      console.log('═══════════════════════════════════════════════════════════════');
-      console.log('[useSwapMutation] alkanesExecuteTyped params:');
-      console.log('[useSwapMutation]   inputRequirements:', inputRequirements);
-      console.log('[useSwapMutation]   protostone:', protostone);
-      console.log('[useSwapMutation]   feeRate:', swapData.feeRate);
-      console.log('═══════════════════════════════════════════════════════════════');
 
       const btcNetwork = getBitcoinNetwork(network);
 
       const isBrowserWallet = walletType === 'browser';
 
-      // ============================================================================
-      // ⚠️ CRITICAL: Browser wallets need ACTUAL addresses, not symbolic ⚠️
-      // ============================================================================
-      // For browser wallets, ALL address parameters must use actual user addresses.
-      // Symbolic addresses (p2tr:0, p2wpkh:0) resolve to the SDK's DUMMY wallet,
-      // causing tokens and BTC to be sent to the wrong addresses!
-      //
-      // Bug discovered: 2026-03-01
-      // TX 985436b5... sent 0.3 DIESEL + BTC change to dummy wallet addresses
-      // instead of user's addresses. User lost tokens and BTC.
-      //
-      // For keystore wallets, symbolic addresses work because the user's mnemonic
-      // is loaded into the provider, so p2tr:0 resolves to their actual address.
-      // ============================================================================
-      const fromAddresses = isBrowserWallet
-        ? [segwitAddress, taprootAddress].filter(Boolean) as string[]
-        : ['p2wpkh:0', 'p2tr:0'];
-
-      // Output addresses: where swapped tokens and BTC change should go
-      // JOURNAL ENTRY (2026-03-01): For single-address wallets (UniSat, OKX), use
-      // the available address. Prefer taproot for alkane outputs but fall back to segwit.
-      // TypeScript can't infer from the early return that primaryAddress is defined, use assertion
-      const toAddresses = isBrowserWallet
-        ? [primaryAddress!]
-        : ['p2tr:0'];
-
-      const changeAddr = isBrowserWallet
-        ? (segwitAddress || taprootAddress)
-        : 'p2wpkh:0';
-
-      const alkanesChangeAddr = isBrowserWallet
-        ? primaryAddress
-        : 'p2tr:0';
-
-      console.log('[useSwapMutation] Address configuration:');
-      console.log('[useSwapMutation]   isBrowserWallet:', isBrowserWallet);
-      console.log('[useSwapMutation]   toAddresses:', toAddresses);
-      console.log('[useSwapMutation]   changeAddress:', changeAddr);
-      console.log('[useSwapMutation]   alkanesChangeAddress:', alkanesChangeAddr);
+      // Symbolic addresses (`p2tr:0`, `p2wpkh:0`) used to resolve to the SDK's
+      // dummy wallet whenever no real mnemonic was loaded — that's how
+      // tx 985436b5… sent 0.3 DIESEL + BTC change to dummy addresses on
+      // 2026-03-01. `txContext` always carries actual user addresses now,
+      // so this whole class of bug is closed structurally.
+      const toAddresses = [primaryAddress];
 
       try {
-        const result = await provider.alkanesExecuteTyped({
-          inputRequirements,
-          protostones: protostone,
+        // ordinals_strategy + paymentUtxos auto-applied by alkanesExecuteTyped
+        // from txContext.walletType. Browser → 'preserve' + UniSat-clean-utxos
+        // (when capability available); keystore → 'burn'. See lib/alkanes/execute.ts.
+        const isKeystoreWallet = walletType === 'keystore';
+
+        // Indexer sync probe lives in lib/alkanes/execute.ts (the central
+        // alkanesExecuteTyped wrapper) — every mutation gets it for free.
+        // The retry-on-error block below remains as a safety net for the
+        // case where the indexer takes longer than waitForIndexer's own
+        // internal budget.
+        const wantsSplit = (swapData as any).splitTransactions === true;
+        const useAutoConfirm = isKeystoreWallet;
+
+        const buildExecuteOpts = () => ({
+          txContext,
+          // Support overrides for atomic wrap+swap (SwapShell passes custom protostones/addresses)
+          inputRequirements: (swapData as any).overrideInputRequirements || inputRequirements,
+          protostones: (swapData as any).overrideProtostones || protostone,
           feeRate: swapData.feeRate,
-          autoConfirm: false,
-          fromAddresses,
-          toAddresses,
-          changeAddress: changeAddr,
-          alkanesChangeAddress: alkanesChangeAddr,
-          // UTXO protection strategy for inscriptions:
-          // - 'split': Protects inscriptions by splitting UTXOs (default when detection works)
-          // - 'burn': Treats all UTXOs as spendable, ignoring inscriptions
-          // Currently 'burn' because the "Ignore Ordinals" setting is hardcoded enabled
-          // (ord backend still syncing). When inscription detection is available,
-          // this should conditionally use 'split' based on user's WalletSettings toggle.
-          ordinalsStrategy: 'burn',
+          // Browser wallets must stay on the unsigned-PSBT path so the user
+          // gets wallet signing prompts. Keystore wallets can use SDK-side
+          // signing/broadcasting via execute_full.
+          autoConfirm: useAutoConfirm,
+          toAddresses: (swapData as any).overrideToAddresses || toAddresses,
+          network,
+          // Pre-warmed UTXO snapshot. alkanesExecuteTyped derives clean
+          // BTC payment_utxos from this and skips the WASM's internal
+          // fanout. Click-to-popup latency win.
+          cachedUtxos: utxoCache.utxos,
+          // Opt-in CPFP-chained 2-tx flow when caller knows the combined wrap
+          // + execute fuel cost would exceed the per-tx floor. The SDK splits
+          // the wrap into Tx A and the execute into Tx B; each gets its own
+          // 3.5M MINIMUM_FUEL budget. Required for atomic BTC→Token swaps on
+          // mainnet where block-fuel-share starvation is real.
+          // `splitTransactions` is honored by the WASM provider through the
+          // options JSON. Keystore reaches that through execute_full; browser
+          // wallets must still receive unsigned PSBTs for wallet prompts.
+          splitTransactions: wantsSplit,
         });
 
-        console.log('[useSwapMutation] Called alkanesExecuteTyped (browser:', isBrowserWallet, ')');
+        const isIndexerSyncError = (e: unknown): boolean => {
+          const msg = e instanceof Error ? e.message : String(e ?? '');
+          return /indexer sync timed out/i.test(msg);
+        };
 
-        console.log('[useSwapMutation] ✓ Execute result:', JSON.stringify(result, null, 2));
+        // Safety net: if the SDK's internal waitForIndexer still trips
+        // inside alkanesExecuteTyped, retry once more after a short
+        // re-probe of provider.waitForIndexer(). Bounded to 2 retries.
+        const RETRY_BACKOFF_MS = [3_000, 8_000];
+        let result: any;
+        let attempt = 0;
+        while (true) {
+          try {
+            result = await provider.alkanesExecuteTyped(buildExecuteOpts() as any);
+            break;
+          } catch (err) {
+            if (!isIndexerSyncError(err) || attempt >= RETRY_BACKOFF_MS.length) {
+              throw err;
+            }
+            const delay = RETRY_BACKOFF_MS[attempt];
+            console.warn(`[swap] indexer sync timeout (attempt ${attempt + 1}/${RETRY_BACKOFF_MS.length}), reprobing in ${delay}ms…`);
+            await new Promise((resolve) => setTimeout(resolve, delay));
+            try { await provider.waitForIndexer(); } catch { /* continue to retry */ }
+            attempt++;
+          }
+        }
 
-        // Check if SDK auto-completed the transaction
-        if (result?.txid || result?.reveal_txid) {
-          const txId = result.txid || result.reveal_txid;
-          console.log('[useSwapMutation] Transaction auto-completed, txid:', txId);
+        const broadcastSignedTx = async (txHex: string, fallbackTxid: string): Promise<string> => {
+          let broadcastTxid: string;
+          try {
+            broadcastTxid = await broadcastRawTransaction(network, txHex) || fallbackTxid;
+          } catch (directErr) {
+            console.warn('[useSwapMutation] sendrawtransaction broadcast failed, falling back to provider.broadcastTransaction:', directErr);
+            broadcastTxid = await provider.broadcastTransaction(txHex) || fallbackTxid;
+          }
+          if (typeof window !== 'undefined') {
+            try {
+              const { pendingTxStore } = await import('@/lib/alkanes/pendingTxStore');
+              await pendingTxStore.add(txHex);
+            } catch (error) {
+              console.warn('[useSwapMutation] pendingTxStore.add failed:', error);
+            }
+          }
+          return broadcastTxid;
+        };
+
+        const signPsbtToTx = async (rawPsbt: unknown): Promise<{ txHex: string; txid: string }> => {
+          let psbtBase64 = extractPsbtBase64(rawPsbt);
+          if (isBrowserWallet) {
+            if (!taprootAddress) {
+              throw new Error(
+                'Connected wallet has no taproot address. Switch your wallet ' +
+                'extension to Taproot (P2TR) mode and reconnect — alkanes only ' +
+                'live at P2TR addresses.'
+              );
+            }
+            const patchResult = patchInputsOnly({
+              psbtBase64,
+              network: btcNetwork,
+              taprootAddress,
+              segwitAddress,
+              paymentPubkeyHex: account?.nativeSegwit?.pubkey,
+            });
+            psbtBase64 = patchResult.psbtBase64;
+          }
+
+          const signedPsbtBase64 = await signTaprootPsbt(psbtBase64);
+          const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtBase64, { network: btcNetwork });
+          const alreadyFinalized = signedPsbt.data.inputs.every(input =>
+            input.finalScriptWitness || input.finalScriptSig
+          );
+          if (!alreadyFinalized) {
+            signedPsbt.finalizeAllInputs();
+          }
+          const tx = signedPsbt.extractTransaction();
+          const txHex = tx.toHex();
+          return { txHex, txid: tx.getId() };
+        };
+
+        const signAndBroadcastPsbt = async (rawPsbt: unknown): Promise<string> => {
+          const tx = await signPsbtToTx(rawPsbt);
+          return await broadcastSignedTx(tx.txHex, tx.txid);
+        };
+
+        const broadcastSignedPackage = async (
+          txs: Array<{ txHex: string; txid: string }>,
+        ): Promise<string[]> => {
+          const txids = await broadcastRawTransactions(network, txs.map((tx) => tx.txHex));
+          if (typeof window !== 'undefined') {
+            try {
+              const { pendingTxStore } = await import('@/lib/alkanes/pendingTxStore');
+              await Promise.all(txs.map((tx) => pendingTxStore.add(tx.txHex)));
+            } catch (error) {
+              console.warn('[useSwapMutation] pendingTxStore.add package failed:', error);
+            }
+          }
+          return txs.map((tx, index) => txids[index] || tx.txid);
+        };
+
+        const getSplitPsbts = (value: any): unknown[] => {
+          const arrayCandidates = [
+            value?.readyToSign?.psbts,
+            value?.ready_to_sign?.psbts,
+            value?.readyToSignSplit?.psbts,
+            value?.ready_to_sign_split?.psbts,
+            value?.split?.psbts,
+            value?.psbts,
+          ];
+          for (const candidate of arrayCandidates) {
+            if (Array.isArray(candidate) && candidate.length >= 2) {
+              return candidate;
+            }
+          }
+
+          const parent =
+            value?.readyToSign?.split_psbt ??
+            value?.ready_to_sign?.split_psbt ??
+            value?.split_psbt ??
+            value?.parent_psbt ??
+            value?.parentPsbt ??
+            value?.wrap_psbt ??
+            value?.wrapPsbt;
+          const child =
+            (parent ? (value?.readyToSign?.psbt ?? value?.ready_to_sign?.psbt) : undefined) ??
+            value?.readyToSign?.execute_psbt ??
+            value?.ready_to_sign?.execute_psbt ??
+            value?.execute_psbt ??
+            value?.child_psbt ??
+            value?.childPsbt ??
+            value?.swap_psbt ??
+            value?.swapPsbt;
+          return parent && child ? [parent, child] : [];
+        };
+
+        const splitPsbts = getSplitPsbts(result);
+        if (splitPsbts.length >= 2) {
+          // CPFP split transactions must be pre-signed first and submitted as
+          // one ordered package. Broadcasting the parent alone can fail mempool
+          // policy because the child carries the package fee.
+          const signedPackage = [
+            await signPsbtToTx(splitPsbts[0]),
+            await signPsbtToTx(splitPsbts[1]),
+          ];
+          const [wrapTxId, txId] = await broadcastSignedPackage(signedPackage);
           return {
             success: true,
             transactionId: txId,
+            wrapTxId,
             frbtcUnwrapTxId: undefined,
           } as {
             success: boolean;
             transactionId?: string;
+            wrapTxId?: string;
+            frbtcUnwrapTxId?: string;
+          };
+        }
+
+
+        // Check if SDK auto-completed the transaction.
+        //
+        // splitTransactions=true returns an EnhancedExecuteResult with both
+        // `wrap_txid` (parent CPFP-payable tx) and `reveal_txid` (child).
+        // Surface both so the UI stepper can label and confirm-poll each leg
+        // independently — without this, callers only see `reveal_txid` and
+        // lose track of the wrap leg entirely.
+        if (result?.txid || result?.reveal_txid) {
+          const txId = result.txid || result.reveal_txid;
+          const wrapTxId = result.wrap_txid || result.split_txid;
+          return {
+            success: true,
+            transactionId: txId,
+            wrapTxId: wrapTxId || undefined,
+            frbtcUnwrapTxId: undefined,
+          } as {
+            success: boolean;
+            transactionId?: string;
+            wrapTxId?: string;
             frbtcUnwrapTxId?: string;
           };
         }
 
         // Check if we got a readyToSign state (need to sign PSBT manually)
         if (result?.readyToSign) {
-          console.log('[useSwapMutation] Got readyToSign state, signing transaction...');
           const readyToSign = result.readyToSign;
 
           // The PSBT comes as Uint8Array from serde_wasm_bindgen (or as object with indices)
           const psbtBase64 = extractPsbtBase64(readyToSign.psbt);
-          console.log('[useSwapMutation] PSBT base64 length:', psbtBase64.length);
 
           // Helper to classify script type from raw bytes
           const classifyScript = (script: Uint8Array | Buffer): string => {
@@ -469,19 +630,15 @@ export function useSwapMutation() {
           };
 
           const logSwapInputDetails = (psbt: bitcoin.Psbt, label: string) => {
-            console.log(`[SWAP-DIAG] === ${label} — ${psbt.data.inputs.length} inputs, ${psbt.txOutputs.length} outputs ===`);
             psbt.data.inputs.forEach((input, idx) => {
               const ws = input.witnessUtxo?.script;
               const scriptHex = ws ? Buffer.from(ws).toString('hex') : 'NONE';
               const scriptType = ws ? classifyScript(ws) : 'NO_WITNESS_UTXO';
-              console.log(`  Input ${idx}: type=${scriptType} script=${scriptHex} nonWitnessUtxo=${!!input.nonWitnessUtxo} redeemScript=${!!input.redeemScript} tapInternalKey=${input.tapInternalKey ? Buffer.from(input.tapInternalKey).toString('hex') : 'NONE'}`);
             });
             psbt.txOutputs.forEach((out, idx) => {
               try {
                 const addr = bitcoin.address.fromOutputScript(out.script, btcNetwork);
-                console.log(`  Output ${idx}: ${out.value} sats -> ${addr}`);
               } catch {
-                console.log(`  Output ${idx}: ${out.value} sats -> [OP_RETURN or non-standard]`);
               }
             });
           };
@@ -505,22 +662,27 @@ export function useSwapMutation() {
           // ============================================================================
           let finalPsbtBase64 = psbtBase64;
           if (isBrowserWallet) {
+            if (!taprootAddress) {
+              throw new Error(
+                'Connected wallet has no taproot address. Switch your wallet ' +
+                'extension to Taproot (P2TR) mode and reconnect — alkanes only ' +
+                'live at P2TR addresses.'
+              );
+            }
             const result = patchInputsOnly({
               psbtBase64,
               network: btcNetwork,
-              taprootAddress: taprootAddress!,
+              taprootAddress,
               segwitAddress,
               paymentPubkeyHex: account?.nativeSegwit?.pubkey,
             });
             finalPsbtBase64 = result.psbtBase64;
             if (result.inputsPatched > 0) {
-              console.log(`[SWAP] Patched ${result.inputsPatched} input(s) for browser wallet compatibility`);
             }
           }
 
           {
             const tempPsbt = bitcoin.Psbt.fromBase64(finalPsbtBase64, { network: btcNetwork });
-            console.log('[SWAP] PSBT inputs:');
             tempPsbt.data.inputs.forEach((inp, idx) => {
               if (inp.witnessUtxo) {
                 try {
@@ -529,21 +691,15 @@ export function useSwapMutation() {
                     btcNetwork
                   );
                   const hasRedeemScript = inp.redeemScript ? ' [has redeemScript]' : '';
-                  console.log(`  Input ${idx}: ${inp.witnessUtxo.value} sats from ${addr}${hasRedeemScript}`);
                 } catch (e) {
-                  console.log(`  Input ${idx}: ${inp.witnessUtxo.value} sats from [unknown script]`);
                 }
               } else {
-                console.log(`  Input ${idx}: [no witnessUtxo]`);
               }
             });
-            console.log('[SWAP] PSBT outputs:');
             tempPsbt.txOutputs.forEach((out, idx) => {
               try {
                 const addr = bitcoin.address.fromOutputScript(out.script, btcNetwork);
-                console.log(`  Output ${idx}: ${out.value} sats -> ${addr}`);
               } catch (e) {
-                console.log(`  Output ${idx}: ${out.value} sats -> [OP_RETURN or invalid]`);
               }
             });
           }
@@ -554,27 +710,82 @@ export function useSwapMutation() {
             logSwapInputDetails(tempPsbt, 'AFTER PATCHING');
           }
 
-          // For keystore wallets, request user confirmation before signing
-          // Browser wallets handle confirmation via their own popup
+          // For keystore wallets, request user confirmation before signing.
+          // Browser wallets handle confirmation via their own popup.
+          //
+          // We render the actual built PSBT via planBuilder, then annotate
+          // the cellpack-receiving output with the predicted alkane payout
+          // from the quote (with `uncertain: true` because the AMM may
+          // move between quote-time and inclusion-time — slippage protects
+          // the *minimum*, not the displayed value).
           if (walletType === 'keystore' && !swapData.skipConfirmation) {
-            console.log('[useSwapMutation] Keystore wallet - requesting user confirmation...');
+            const ourAddresses = [taprootAddress, segwitAddress].filter(
+              (a): a is string => !!a,
+            );
+            const isBuyBtc = swapData.buyCurrency === 'btc';
+            const isSellBtc = swapData.sellCurrency === 'btc';
+            const buySymbol = getTokenSymbol(
+              swapData.buyCurrency,
+              swapData.buySymbol,
+            );
+            const sellSymbol = getTokenSymbol(
+              swapData.sellCurrency,
+              swapData.sellSymbol,
+            );
+            const plan = buildPlanFromTx({
+              psbtBase64: finalPsbtBase64,
+              cache: utxoCache,
+              ourAddresses,
+              network: btcNetwork,
+              feeRateSatVb: swapData.feeRate,
+              label: `Swap ${sellSymbol} → ${buySymbol}`,
+              summary:
+                `Sells ${(parseFloat(swapData.sellAmount) / 1e8).toString()} ${sellSymbol} for ` +
+                `≥${(parseFloat(minAmountOut) / 1e8).toFixed(8)} ${buySymbol} ` +
+                `(slippage tolerance ${swapData.maxSlippage}%).`,
+            });
+            // Predicted alkane receive lands on the first cellpack-bound
+            // output — by SDK convention this is the first non-OP_RETURN
+            // output paying us (dust for token receives, BTC payout for
+            // Token→BTC). For Token→BTC we don't add an alkane override
+            // (the receive is BTC sats, already shown on the output).
+            if (!isBuyBtc) {
+              const buyId = swapData.buyCurrency === 'btc'
+                ? FRBTC_ALKANE_ID
+                : swapData.buyCurrency;
+              const targetIdx = plan.outputs.findIndex(
+                (o) => o.isOurs && !o.isOpReturn,
+              );
+              if (targetIdx >= 0) {
+                plan.outputs[targetIdx].alkanes = [
+                  ...(plan.outputs[targetIdx].alkanes ?? []),
+                  {
+                    alkaneId: buyId,
+                    symbol: buySymbol,
+                    amount: BigInt(
+                      Math.floor(parseFloat(swapData.buyAmount)),
+                    ),
+                    uncertain: true,
+                  } satisfies PlanAlkaneEntry,
+                ];
+              }
+            }
             const approved = await requestConfirmation({
               type: 'swap',
               title: 'Confirm Swap',
               fromAmount: (parseFloat(swapData.sellAmount) / 1e8).toString(),
-              fromSymbol: getTokenSymbol(swapData.sellCurrency, swapData.sellSymbol),
-              fromId: swapData.sellCurrency === 'btc' ? undefined : swapData.sellCurrency,
+              fromSymbol: sellSymbol,
+              fromId: isSellBtc ? undefined : swapData.sellCurrency,
               toAmount: (parseFloat(swapData.buyAmount) / 1e8).toString(),
-              toSymbol: getTokenSymbol(swapData.buyCurrency, swapData.buySymbol),
-              toId: swapData.buyCurrency === 'btc' ? undefined : swapData.buyCurrency,
+              toSymbol: buySymbol,
+              toId: isBuyBtc ? undefined : swapData.buyCurrency,
               feeRate: swapData.feeRate,
+              plan: [plan],
             });
 
             if (!approved) {
-              console.log('[useSwapMutation] User rejected transaction');
               throw new Error('Transaction rejected by user');
             }
-            console.log('[useSwapMutation] User approved transaction');
           }
 
           // ============================================================================
@@ -606,50 +817,28 @@ export function useSwapMutation() {
           //
           // See WalletContext.tsx OYL WALLET BEHAVIOR DOCUMENTATION for full details.
           // ============================================================================
+          // Single signing path. Browser wallets sign all input types via the wallet
+          // adapter; keystore is taproot-only (BIP86) — `signSegwitPsbt` throws.
           let signedPsbtBase64: string;
-          if (isBrowserWallet) {
-            console.log('[useSwapMutation][OYL-DEBUG] ===== BROWSER WALLET SIGN START =====');
-            console.log('[useSwapMutation][OYL-DEBUG] walletType:', walletType);
-            console.log('[useSwapMutation][OYL-DEBUG] browserWallet?.info?.id:', browserWallet?.info?.id);
-            console.log('[useSwapMutation][OYL-DEBUG] PSBT base64 length:', finalPsbtBase64.length);
-            console.log('[useSwapMutation][OYL-DEBUG] About to call signTaprootPsbt()...');
-
-            const signStartTime = Date.now();
-            try {
-              signedPsbtBase64 = await signTaprootPsbt(finalPsbtBase64);
-              console.log(`[useSwapMutation][OYL-DEBUG] signTaprootPsbt SUCCESS in ${Date.now() - signStartTime}ms`);
-            } catch (signErr: any) {
-              console.error('[useSwapMutation][OYL-DEBUG] ===== signTaprootPsbt FAILED =====');
-              console.error('[useSwapMutation][OYL-DEBUG] Error:', signErr?.message || signErr);
-              console.error('[useSwapMutation][OYL-DEBUG] Error type:', signErr?.constructor?.name);
-              console.error('[useSwapMutation][OYL-DEBUG] Full error:', signErr);
-              throw signErr;
-            }
-            console.log('[useSwapMutation][OYL-DEBUG] ===== BROWSER WALLET SIGN END =====');
-          } else {
-            console.log('[useSwapMutation] Keystore: signing PSBT with SegWit, then Taproot...');
-            signedPsbtBase64 = await signSegwitPsbt(finalPsbtBase64);
-            signedPsbtBase64 = await signTaprootPsbt(signedPsbtBase64);
+          const signStartTime = Date.now();
+          try {
+            signedPsbtBase64 = await signTaprootPsbt(finalPsbtBase64);
+          } catch (signErr: any) {
+            console.error('[useSwapMutation][OYL-DEBUG] ===== signTaprootPsbt FAILED =====');
+            console.error('[useSwapMutation][OYL-DEBUG] Error:', signErr?.message || signErr);
+            console.error('[useSwapMutation][OYL-DEBUG] Error type:', signErr?.constructor?.name);
+            console.error('[useSwapMutation][OYL-DEBUG] Full error:', signErr);
+            throw signErr;
           }
-          console.log('[useSwapMutation] PSBT signed');
 
           // Parse the signed PSBT, finalize, and extract the raw transaction
           const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtBase64, { network: btcNetwork });
 
           // DIAGNOSTIC: Log per-input state after signing
-          console.log(`[SWAP-DIAG] === AFTER SIGNING — ${signedPsbt.data.inputs.length} inputs ===`);
           signedPsbt.data.inputs.forEach((inp, idx) => {
             const ws = inp.witnessUtxo?.script;
             const scriptType = ws ? classifyScript(ws) : 'NO_WITNESS_UTXO';
             const scriptHex = ws ? Buffer.from(ws).toString('hex') : 'NONE';
-            console.log(`  Input ${idx}: type=${scriptType} script=${scriptHex}`, {
-              tapKeySig: inp.tapKeySig ? `${Buffer.from(inp.tapKeySig).length}B` : undefined,
-              partialSig: inp.partialSig?.length || undefined,
-              finalScriptWitness: inp.finalScriptWitness ? `${Buffer.from(inp.finalScriptWitness).length}B` : undefined,
-              finalScriptSig: inp.finalScriptSig ? `${Buffer.from(inp.finalScriptSig).length}B` : undefined,
-              redeemScript: inp.redeemScript ? `${Buffer.from(inp.redeemScript).length}B` : undefined,
-              tapInternalKey: inp.tapInternalKey ? Buffer.from(inp.tapInternalKey).toString('hex') : undefined,
-            });
           });
 
           // Check if already finalized by the wallet
@@ -659,9 +848,7 @@ export function useSwapMutation() {
 
           // Finalize all inputs
           if (alreadyFinalized) {
-            console.log('[useSwapMutation] PSBT already finalized by wallet, skipping finalization');
           } else {
-            console.log('[useSwapMutation] Finalizing PSBT...');
             try {
               signedPsbt.finalizeAllInputs();
             } catch (e: any) {
@@ -683,14 +870,9 @@ export function useSwapMutation() {
           const txHex = tx.toHex();
           const txid = tx.getId();
 
-          console.log('[useSwapMutation] Transaction ID:', txid);
-          console.log('[useSwapMutation] Transaction hex length:', txHex.length);
 
           // Broadcast the transaction
-          console.log('[useSwapMutation] Broadcasting transaction...');
-          const broadcastTxid = await provider.broadcastTransaction(txHex);
-          console.log('[useSwapMutation] Transaction broadcast successful');
-          console.log('[useSwapMutation] Broadcast returned txid:', broadcastTxid);
+          const broadcastTxid = await broadcastSignedTx(txHex, txid);
 
           if (txid !== broadcastTxid) {
             console.warn('[useSwapMutation] WARNING: Computed txid !== broadcast txid!');
@@ -701,10 +883,12 @@ export function useSwapMutation() {
           return {
             success: true,
             transactionId: broadcastTxid || txid,
+            wrapTxId: undefined,
             frbtcUnwrapTxId: undefined,
           } as {
             success: boolean;
             transactionId?: string;
+            wrapTxId?: string;
             frbtcUnwrapTxId?: string;
           };
         }
@@ -712,14 +896,16 @@ export function useSwapMutation() {
         // Check if execution completed directly
         if (result?.complete) {
           const txId = result.complete?.reveal_txid || result.complete?.commit_txid;
-          console.log('[useSwapMutation] Execution complete, txid:', txId);
+          const wrapTxId = result.complete?.wrap_txid || result.complete?.split_txid;
           return {
             success: true,
             transactionId: txId,
+            wrapTxId: wrapTxId || undefined,
             frbtcUnwrapTxId: undefined,
           } as {
             success: boolean;
             transactionId?: string;
+            wrapTxId?: string;
             frbtcUnwrapTxId?: string;
           };
         }
@@ -740,22 +926,21 @@ export function useSwapMutation() {
       }
     },
     onSuccess: (data) => {
-      console.log('[useSwapMutation] Swap successful, txid:', data.transactionId);
-      console.log('[useSwapMutation] Invalidating balance queries...');
 
       // Invalidate all balance-related queries to refresh UI
       queryClient.invalidateQueries({ queryKey: ['sellable-currencies'] });
+      queryClient.invalidateQueries({ queryKey: ['wallet-utxo-cache'] });
+      queryClient.invalidateQueries({ queryKey: ['btc-balance-fast'] });
       queryClient.invalidateQueries({ queryKey: ['btc-balance'] });
       queryClient.invalidateQueries({ queryKey: ['frbtc-premium'] });
       queryClient.invalidateQueries({ queryKey: ['dynamic-pools'] });
       queryClient.invalidateQueries({ queryKey: ['poolFee'] });
-      queryClient.invalidateQueries({ queryKey: ['alkane-balance'] });
+      queryClient.invalidateQueries({ queryKey: ['alkane-balances'] });
       queryClient.invalidateQueries({ queryKey: ['enriched-wallet'] });
       queryClient.invalidateQueries({ queryKey: ['alkanesTokenPairs'] });
       // Invalidate activity feed so it shows the new swap transaction
       queryClient.invalidateQueries({ queryKey: ['ammTxHistory'] });
 
-      console.log('[useSwapMutation] Balance queries invalidated - UI should refresh when indexer processes block');
     },
   });
 }

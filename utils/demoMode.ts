@@ -1,1 +1,3 @@
-export const DEMO_MODE_ENABLED = process.env.NEXT_PUBLIC_DEMO_MODE === '1';
+import { NEXT_PUBLIC_DEMO_MODE } from '@/constants';
+
+export const DEMO_MODE_ENABLED = NEXT_PUBLIC_DEMO_MODE === 0;

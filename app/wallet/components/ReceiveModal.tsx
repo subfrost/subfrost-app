@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { Copy, Check, X } from 'lucide-react';
 import QRCode from '@/app/components/QRCode';
 import { useWallet } from '@/context/WalletContext';
 import { useTranslation } from '@/hooks/useTranslation';
+import SfPopup, { type SfPopupHandle } from '@/app/components/SfPopup';
 
 interface ReceiveModalProps {
   isOpen: boolean;
@@ -15,14 +16,23 @@ export default function ReceiveModal({ isOpen, onClose }: ReceiveModalProps) {
   const { t } = useTranslation();
   const { account } = useWallet() as any;
   const [copied, setCopied] = useState(false);
-  const [mode, setMode] = useState<'segwit' | 'taproot'>('segwit');
   const qrSize = 169; // ~56% of original 300
+  const popupRef = useRef<SfPopupHandle>(null);
+  const handleClose = () => popupRef.current?.close();
 
-  const displayAddress = mode === 'taproot'
+  const hasSegwit = !!account?.nativeSegwit?.address;
+  const hasTaproot = !!account?.taproot?.address;
+  const defaultMode = hasSegwit ? 'segwit' : 'taproot';
+  const [mode, setMode] = useState<'segwit' | 'taproot'>(defaultMode);
+
+  // Correct mode if current selection has no address (e.g. wallet changed)
+  const effectiveMode = (mode === 'segwit' && !hasSegwit) ? 'taproot'
+    : (mode === 'taproot' && !hasTaproot) ? 'segwit'
+    : mode;
+
+  const displayAddress = effectiveMode === 'taproot'
     ? account?.taproot?.address
     : account?.nativeSegwit?.address;
-
-  if (!isOpen) return null;
 
   const copyAddress = async () => {
     if (!displayAddress) return;
@@ -36,11 +46,18 @@ export default function ReceiveModal({ isOpen, onClose }: ReceiveModalProps) {
     }
   };
 
-  const isTaproot = mode === 'taproot';
+  const isTaproot = effectiveMode === 'taproot';
+  const showToggle = hasSegwit && hasTaproot;
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 px-4 backdrop-blur-sm">
-      <div className="flex max-h-[90vh] w-full max-w-md flex-col overflow-hidden rounded-3xl bg-[color:var(--sf-glass-bg)] shadow-[0_24px_96px_rgba(0,0,0,0.4)] backdrop-blur-xl">
+    <SfPopup
+      ref={popupRef}
+      isOpen={isOpen}
+      onClose={onClose}
+      overlayClassName="p-4"
+      panelClassName="w-full max-w-md max-h-[90vh]"
+      trackHeight
+    >
         {/* Header */}
         <div className="bg-[color:var(--sf-panel-bg)] px-6 py-5 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
           <div className="flex items-center justify-between">
@@ -48,7 +65,7 @@ export default function ReceiveModal({ isOpen, onClose }: ReceiveModalProps) {
               {isTaproot ? t('receive.titleAssets') : t('receive.title')}
             </h2>
             <button
-              onClick={onClose}
+              onClick={handleClose}
               className="flex h-8 w-8 items-center justify-center rounded-lg bg-[color:var(--sf-input-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-[color:var(--sf-text)]/70 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)] hover:text-[color:var(--sf-text)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] focus:outline-none"
               aria-label="Close"
             >
@@ -70,22 +87,24 @@ export default function ReceiveModal({ isOpen, onClose }: ReceiveModalProps) {
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <label className="text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/60">{t('receive.yourAddress')}</label>
-              {/* SegWit / Taproot toggle */}
-              <div className="flex gap-4">
-                {(['segwit', 'taproot'] as const).map((tab) => (
-                  <button
-                    key={tab}
-                    onClick={() => { setMode(tab); setCopied(false); }}
-                    className={`pb-1 px-1 text-sm font-semibold ${
-                      mode === tab
-                        ? 'text-[color:var(--sf-primary)] border-b-2 border-[color:var(--sf-primary)]'
-                        : 'text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]'
-                    }`}
-                  >
-                    {tab === 'segwit' ? 'SegWit' : 'Taproot'}
-                  </button>
-                ))}
-              </div>
+              {/* SegWit / Taproot toggle — hidden for single-address wallets */}
+              {showToggle && (
+                <div className="flex gap-4">
+                  {(['segwit', 'taproot'] as const).map((tab) => (
+                    <button
+                      key={tab}
+                      onClick={() => { setMode(tab); setCopied(false); }}
+                      className={`pb-1 px-1 text-sm font-semibold ${
+                        effectiveMode === tab
+                          ? 'text-[color:var(--sf-primary)] border-b-2 border-[color:var(--sf-primary)]'
+                          : 'text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]'
+                      }`}
+                    >
+                      {tab === 'segwit' ? 'SegWit' : 'Taproot'}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
             <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] min-h-[4.5rem]">
               <span className="flex-1 text-sm break-all text-[color:var(--sf-text)]">
@@ -110,7 +129,7 @@ export default function ReceiveModal({ isOpen, onClose }: ReceiveModalProps) {
             <div className="text-sm text-[color:var(--sf-info-yellow-text)] space-y-2">
               <div className="font-bold text-[color:var(--sf-info-yellow-title)]">{t('receive.important')}</div>
               <ul className="list-disc list-inside space-y-1 text-xs">
-                <li>{isTaproot ? t('receive.onlySendAssets') : t('receive.onlySendBtc')}</li>
+                <li>{!showToggle ? t('receive.onlySendBtcOrAlkanes') : isTaproot ? t('receive.onlySendAlkanes') : t('receive.onlySendBtc')}</li>
                 <li>{t('receive.otherCrypto')}</li>
                 <li>{t('receive.verifyAddress')}</li>
               </ul>
@@ -118,8 +137,6 @@ export default function ReceiveModal({ isOpen, onClose }: ReceiveModalProps) {
           </div>
 
         </div>
-
-      </div>
-    </div>
+    </SfPopup>
   );
 }

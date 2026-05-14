@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { ExternalLink, Image as ImageIcon, FileText, Code, AlertCircle } from 'lucide-react';
 import { getConfig } from '@/utils/getConfig';
+import { useTranslation } from '@/hooks/useTranslation';
 
 interface InscriptionRendererProps {
   inscriptionId: string;
@@ -32,6 +33,7 @@ export default function InscriptionRenderer({
   className = '',
   showMetadata = true,
 }: InscriptionRendererProps) {
+  const { t } = useTranslation();
   const { provider, network } = useAlkanesSDK();
   const [inscription, setInscription] = useState<InscriptionData | null>(null);
   const [contentUrl, setContentUrl] = useState<string | null>(null);
@@ -240,7 +242,7 @@ export default function InscriptionRenderer({
       <div className={`p-4 rounded-lg bg-white/5 border border-white/10 ${className}`}>
         <div className="flex items-center justify-center gap-2 text-white/60">
           <div className="animate-spin rounded-full h-4 w-4 border-2 border-white/20 border-t-white/60" />
-          <span className="text-sm">Loading inscription...</span>
+          <span className="text-sm">{t('inscription.loading')}</span>
         </div>
       </div>
     );

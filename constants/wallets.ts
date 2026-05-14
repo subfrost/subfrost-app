@@ -51,6 +51,8 @@ const LOCAL_WALLETS: BrowserWalletInfo[] = [
 ];
 
 // Desired display order (by wallet id)
+// OKX is a single-address wallet, so WalletContext requires Taproot mode and
+// txContext disables taproot UTXO protection for that single-address layout.
 const WALLET_ORDER = [
   'oyl',
   'okx',
@@ -59,9 +61,6 @@ const WALLET_ORDER = [
   'phantom',
   'leather',
   'tokeo',
-  'magic-eden',
-  'orange',
-  'wizz',
   'keplr',
 ];
 
@@ -113,6 +112,10 @@ export function isWalletInstalled(wallet: BrowserWalletInfo): boolean {
       case 'xverse':
         // Xverse injects at window.XverseProviders.BitcoinProvider
         return win.XverseProviders?.BitcoinProvider !== undefined;
+
+      case 'okx':
+        // OKX injects a top-level object; the Bitcoin provider is nested.
+        return win.okxwallet?.bitcoin !== undefined;
 
       default:
         // Standard injection key check

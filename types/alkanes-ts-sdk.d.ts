@@ -15,4 +15,6 @@ declare module '@alkanes/ts-sdk' {
   export const btcToSatoshis: any;
   export const satoshisToBtc: any;
   export const DERIVATION_PATHS: any;
+  export const AlkanesClient: any;
+  export const KeystoreSigner: any;
 }

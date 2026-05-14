@@ -88,31 +88,45 @@ const NETWORK_TO_PROVIDER: Record<Network, string> = {
   signet: 'signet',
   regtest: 'regtest',
   'regtest-local': 'regtest',
+  'qubitcoin-regtest': 'regtest',
   oylnet: 'regtest',
   'subfrost-regtest': 'subfrost-regtest',
+  devnet: 'subfrost-regtest', // Devnet uses regtest params, fetch interceptor routes to in-process
 };
+
+const MAINNET_ESPO_RPC_URL =
+  process.env.NEXT_PUBLIC_ESPO_RPC_URL || 'https://api.alkanode.com/rpc';
 
 // Direct URL configurations for each network (used in production or server-side)
 const DIRECT_NETWORK_CONFIG: Record<Network, Record<string, string> | undefined> = {
   mainnet: {
     jsonrpc_url: 'https://mainnet.subfrost.io/v4/subfrost',
+    bitcoin_rpc_url: 'https://mainnet.subfrost.io/v4/jsonrpc',
     data_api_url: 'https://mainnet.subfrost.io/v4/subfrost',
+    espo_rpc_url: MAINNET_ESPO_RPC_URL,
   },
   testnet: {
     jsonrpc_url: 'https://testnet.subfrost.io/v4/subfrost',
+    bitcoin_rpc_url: 'https://testnet.subfrost.io/v4/jsonrpc',
     data_api_url: 'https://testnet.subfrost.io/v4/subfrost',
   },
   signet: {
     jsonrpc_url: 'https://signet.subfrost.io/v4/subfrost',
+    bitcoin_rpc_url: 'https://signet.subfrost.io/v4/jsonrpc',
     data_api_url: 'https://signet.subfrost.io/v4/subfrost',
   },
   regtest: {
     jsonrpc_url: 'https://regtest.subfrost.io/v4/subfrost',
+    bitcoin_rpc_url: 'https://regtest.subfrost.io/v4/jsonrpc',
     data_api_url: 'https://regtest.subfrost.io/v4/subfrost',
   },
   'regtest-local': {
     jsonrpc_url: 'http://localhost:18888',
-    data_api_url: 'http://localhost:4000',
+    data_api_url: 'http://localhost:18888',
+  },
+  'qubitcoin-regtest': {
+    jsonrpc_url: 'https://meta.lake.direct',
+    data_api_url: 'https://meta.lake.direct',
   },
   oylnet: {
     jsonrpc_url: 'https://regtest.subfrost.io/v4/subfrost',
@@ -120,7 +134,12 @@ const DIRECT_NETWORK_CONFIG: Record<Network, Record<string, string> | undefined>
   },
   'subfrost-regtest': {
     jsonrpc_url: 'https://regtest.subfrost.io/v4/subfrost',
+    bitcoin_rpc_url: 'https://regtest.subfrost.io/v4/jsonrpc',
     data_api_url: 'https://regtest.subfrost.io/v4/subfrost',
+  },
+  devnet: {
+    jsonrpc_url: 'http://localhost:18888', // Intercepted by DevnetProvider
+    data_api_url: 'http://localhost:18888',
   },
 };
 
@@ -129,7 +148,7 @@ const DIRECT_NETWORK_CONFIG: Record<Network, Record<string, string> | undefined>
  * These are remote networks whose endpoints may not return proper CORS headers.
  * regtest-local uses local Docker (localhost) which doesn't need a proxy.
  */
-const NETWORKS_NEEDING_PROXY: Network[] = ['regtest', 'oylnet', 'subfrost-regtest', 'mainnet', 'testnet', 'signet'];
+const NETWORKS_NEEDING_PROXY: Network[] = ['regtest', 'oylnet', 'subfrost-regtest', 'qubitcoin-regtest', 'mainnet', 'testnet', 'signet'];
 
 /**
  * Get network configuration, using proxy URL when in browser localhost context
@@ -147,7 +166,9 @@ const getNetworkConfig = (network: Network): Record<string, string> | undefined 
     console.log(`[AlkanesSDK] Using proxy URL for ${network}:`, proxyUrl);
     return {
       jsonrpc_url: proxyUrl,
+      bitcoin_rpc_url: proxyUrl,
       data_api_url: proxyUrl,
+      ...(network === 'mainnet' ? { espo_rpc_url: `${proxyUrl}/espo` } : {}),
     };
   }
 
@@ -178,8 +199,33 @@ export function AlkanesSDKProvider({ children, network }: AlkanesSDKProviderProp
   };
 
   // Initialize provider based on network
+  // On devnet, wait for the fetch interceptor to be installed before creating
+  // the provider — otherwise requests to localhost:18888 go nowhere.
   useEffect(() => {
     const initProvider = async () => {
+      // Devnet: wait for fetch interceptor before making any requests
+      if (network === 'devnet') {
+        const maxWait = 120_000; // 2 min max
+        const start = Date.now();
+        while (Date.now() - start < maxWait) {
+          try {
+            const testResp = await fetch('http://localhost:18888', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ jsonrpc: '2.0', method: 'btc_getblockcount', params: [], id: 0 }),
+            });
+            if (testResp.ok) {
+              const data = await testResp.json();
+              if (data?.result !== undefined) {
+                console.log('[AlkanesSDK] Devnet fetch interceptor ready, height:', data.result);
+                break;
+              }
+            }
+          } catch { /* interceptor not ready yet */ }
+          await new Promise(r => setTimeout(r, 1000));
+        }
+      }
+
       try {
         console.log('[AlkanesSDK] Initializing WASM WebProvider for network:', network);
 
@@ -194,22 +240,23 @@ export function AlkanesSDKProvider({ children, network }: AlkanesSDKProviderProp
         console.log('[AlkanesSDK] WASM WebProvider created successfully');
         console.log('[AlkanesSDK] RPC URL:', providerInstance.sandshrew_rpc_url());
 
-        // JOURNAL ENTRY (2026-02-20): Dummy wallet is required - SDK throws "Wallet not loaded"
-        // without it. However, the dummy wallet causes address resolution issues: the SDK
-        // resolves ALL addresses (including explicit Bitcoin addresses in toAddresses) to
-        // the dummy wallet's addresses, causing funds to be sent to the wrong addresses.
-        //
-        // The root issue is that the SDK's alkanesExecuteWithStrings internally resolves
-        // addresses based on the loaded wallet, even when actual Bitcoin addresses are provided.
-        //
-        // Next steps to investigate:
-        // 1. Check if there's an SDK option to disable address resolution
-        // 2. Check if we can load a wallet from the browser wallet's public keys only
-        // 3. Consider using raw PSBT building instead of the SDK's execution methods
+        // RESOLVED (2026-03-31): Passing actual addresses via useActualAddresses pattern
+        // in all mutation hooks fixes the address resolution issue. See CLAUDE.md Rule 0b.
         try {
-          providerInstance.walletCreate();
+          if (network === 'devnet' || network === 'regtest-local' || network === 'qubitcoin-regtest') {
+            // On local networks, load the session mnemonic so the SDK provider
+            // can find UTXOs for signing. A dummy wallet resolves p2tr:0/p2wpkh:0
+            // to unrelated addresses with no balance.
+            const sessionMnemonic = typeof sessionStorage !== 'undefined'
+              ? sessionStorage.getItem('subfrost_session_mnemonic') : null;
+            const mnemonic = sessionMnemonic || 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
+            providerInstance.walletLoadMnemonic(mnemonic, null);
+            console.log('[AlkanesSDK] Mnemonic loaded for', network);
+          } else {
+            providerInstance.walletCreate();
+            console.log('[AlkanesSDK] Dummy wallet loaded (required by SDK)');
+          }
           setIsWalletLoaded(true);
-          console.log('[AlkanesSDK] Dummy wallet loaded (required by SDK)');
         } catch (e) {
           console.warn('[AlkanesSDK] walletCreate failed (non-fatal):', e);
         }
@@ -224,23 +271,17 @@ export function AlkanesSDKProvider({ children, network }: AlkanesSDKProviderProp
     initProvider();
   }, [network]);
 
-  // BTC price and fee estimates are now managed by TanStack Query (queries/market.ts)
-  // and invalidated by the central HeightPoller. These context methods are kept for
-  // backward compatibility but simply fetch once on init.
-  const refreshBitcoinPrice = async () => {
-    try {
-      const response = await fetch('/api/btc-price');
-      const data = await response.json();
-      if (data?.usd && data.usd > 0) {
-        setBitcoinPrice({
-          usd: data.usd,
-          lastUpdated: data.timestamp || Date.now(),
-        });
-      }
-    } catch (error) {
-      console.error('Failed to fetch Bitcoin price:', error);
-    }
-  };
+  // BTC price is owned by `btcPriceQueryOptions` in queries/market.ts (single
+  // source — subpricer primary, rpc.ts + coingecko fallbacks). Previously this
+  // context fetched `/api/btc-price` directly on init and wrote to the same
+  // `bitcoinPrice` state, producing two parallel writers with different upstream
+  // sources — that's the $79K-vs-$110K oscillation the wallet reports.
+  //
+  // 2026-05-04: refreshBitcoinPrice is now a no-op; the context-level
+  // `bitcoinPrice` state remains null and consumers must migrate to
+  // `useBtcPrice()`. The signature is kept for backwards compat with the
+  // context type, but the function does nothing.
+  const refreshBitcoinPrice = async () => { /* no-op — see comment above */ };
 
   const refreshFeeEstimates = async () => {
     try {

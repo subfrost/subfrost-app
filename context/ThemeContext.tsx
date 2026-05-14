@@ -1,6 +1,7 @@
 'use client';
 
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
+import { DEMO_MODE_ENABLED } from '@/utils/demoMode';
 
 type Theme = 'light' | 'dark';
 
@@ -16,6 +17,11 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<Theme>('dark');
 
   const setTheme = useCallback((newTheme: Theme) => {
+    if (DEMO_MODE_ENABLED) {
+      setThemeState('dark');
+      document.documentElement.setAttribute('data-theme', 'dark');
+      return;
+    }
     setThemeState(newTheme);
     document.documentElement.setAttribute('data-theme', newTheme);
   }, []);
@@ -26,6 +32,10 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const toggleTheme = useCallback(() => {
+    if (DEMO_MODE_ENABLED) {
+      setTheme('dark');
+      return;
+    }
     setTheme(theme === 'light' ? 'dark' : 'light');
   }, [theme, setTheme]);
 

@@ -1,0 +1,11 @@
+{
+  "allPairs(uint256)": "1e3dd18b",
+  "allPairsLength()": "574f2ba3",
+  "createPair(address,address,address)": "76f79738",
+  "feeTo()": "017e7e58",
+  "getPair(address,address)": "e6a43905",
+  "owner()": "8da5cb5b",
+  "renounceOwnership()": "715018a6",
+  "setFeeTo(address)": "f46901ed",
+  "transferOwnership(address)": "f2fde38b"
+}

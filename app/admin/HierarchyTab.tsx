@@ -13,9 +13,52 @@ interface TreeNode {
   children: TreeNode[];
 }
 
+function aggregateRedemptions(node: TreeNode): number {
+  return node._count.redemptions + node.children.reduce((sum, c) => sum + aggregateRedemptions(c), 0);
+}
+
+function countNodes(node: TreeNode): number {
+  return 1 + node.children.reduce((sum, c) => sum + countNodes(c), 0);
+}
+
+function sortTree(nodes: TreeNode[]): TreeNode[] {
+  return [...nodes]
+    .sort((a, b) => a.code.localeCompare(b.code))
+    .map((n) => ({ ...n, children: sortTree(n.children) }));
+}
+
+function LeafRow({ node, depth }: { node: TreeNode; depth: number }) {
+  return (
+    <div
+      className="flex items-center gap-2 rounded-lg px-3 py-2 hover:bg-[color:var(--sf-glass-bg)]"
+      style={{ paddingLeft: `${depth * 24 + 12}px` }}
+    >
+      <span className="w-5" />
+      <span className="font-mono text-sm text-[color:var(--sf-text)]">{node.code}</span>
+      <span
+        className={`rounded-full px-2 py-0.5 text-xs ${
+          node.isActive ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
+        }`}
+      >
+        {node.isActive ? 'Active' : 'Inactive'}
+      </span>
+      <span className="text-xs text-[color:var(--sf-muted)]">
+        {node._count.redemptions} redemptions
+      </span>
+    </div>
+  );
+}
+
 function TreeItem({ node, depth = 0 }: { node: TreeNode; depth?: number }) {
-  const [expanded, setExpanded] = useState(depth < 2);
+  const [expanded, setExpanded] = useState(false);
   const hasChildren = node.children.length > 0;
+
+  if (!hasChildren) {
+    return <LeafRow node={node} depth={depth} />;
+  }
+
+  const totalRedemptions = aggregateRedemptions(node);
+  const totalCodes = countNodes(node);
 
   return (
     <div>
@@ -23,35 +66,23 @@ function TreeItem({ node, depth = 0 }: { node: TreeNode; depth?: number }) {
         className="flex items-center gap-2 rounded-lg px-3 py-2 hover:bg-[color:var(--sf-glass-bg)]"
         style={{ paddingLeft: `${depth * 24 + 12}px` }}
       >
-        {hasChildren ? (
-          <button
-            onClick={() => setExpanded(!expanded)}
-            className="w-5 text-center text-xs text-[color:var(--sf-muted)]"
-          >
-            {expanded ? '\u25BC' : '\u25B6'}
-          </button>
-        ) : (
-          <span className="w-5" />
-        )}
-        <span className="font-mono text-sm text-[color:var(--sf-text)]">{node.code}</span>
-        <span
-          className={`rounded-full px-2 py-0.5 text-xs ${
-            node.isActive ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
-          }`}
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="w-5 text-center text-xs text-[color:var(--sf-muted)]"
         >
-          {node.isActive ? 'Active' : 'Inactive'}
+          {expanded ? '▼' : '▶'}
+        </button>
+        <span className="font-mono text-sm font-semibold text-[color:var(--sf-text)]">{node.code}</span>
+        <span className="text-xs text-[color:var(--sf-muted)]">
+          {totalRedemptions} redemptions
         </span>
         <span className="text-xs text-[color:var(--sf-muted)]">
-          {node._count.redemptions} redemptions
+          {totalCodes} codes
         </span>
-        {node.description && (
-          <span className="truncate text-xs text-[color:var(--sf-muted)] opacity-60">
-            — {node.description}
-          </span>
-        )}
       </div>
-      {expanded && hasChildren && (
+      {expanded && (
         <div>
+          <LeafRow node={node} depth={depth + 1} />
           {node.children.map((child) => (
             <TreeItem key={child.id} node={child} depth={depth + 1} />
           ))}
@@ -92,13 +123,15 @@ export default function HierarchyTab() {
     return <div className="text-[color:var(--sf-muted)]">No codes found</div>;
   }
 
+  const sorted = sortTree(tree);
+
   return (
     <div className="rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-4">
       <h3 className="mb-3 text-sm font-semibold text-[color:var(--sf-text)]">
         Code Hierarchy
       </h3>
       <div className="divide-y divide-[color:var(--sf-row-border)]/30">
-        {tree.map((node) => (
+        {sorted.map((node) => (
           <TreeItem key={node.id} node={node} />
         ))}
       </div>

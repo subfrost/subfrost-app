@@ -10,7 +10,17 @@ export const dynamic = 'force-dynamic';
  * This API route proxies the request server-side to avoid CORS issues
  * when the WASM SDK tries to fetch from mainnet.subfrost.io directly.
  */
-export async function GET() {
+export async function GET(request: Request) {
+  // Check for devnet network param — return mock price
+  try {
+    const url = new URL(request.url);
+    if (url.searchParams.get('network') === 'devnet') {
+      return NextResponse.json({ usd: 100000, timestamp: Date.now() }, {
+        headers: { 'Cache-Control': 'public, s-maxage=60' },
+      });
+    }
+  } catch { /* ignore URL parse errors */ }
+
   try {
     const priceData = await getBitcoinPrice();
 

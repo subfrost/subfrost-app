@@ -23,7 +23,7 @@ const sizeMap = {
 
 // Tokens with known local icons in /public/tokens/
 const TOKENS_WITH_LOCAL_ICONS = new Set([
-  'btc', 'frbtc', 'busd', 'eth', 'ordi', 'sol', 'usdt', 'zec', 'frusd'
+  'btc', 'frbtc', 'busd', 'eth', 'ordi', 'sol', 'usdt', 'usdc', 'zec', 'frusd', 'freth', 'frzec', 'fire'
 ]);
 
 // Alkane IDs with known local icons
@@ -53,7 +53,7 @@ export default function TokenIcon({ symbol, id, iconUrl, size = 'md', className 
     }
 
     // Priority 2: Special handling for BTC
-    if (symbolLower === 'btc' || id === 'btc') {
+    if (symbolLower === 'btc' || id?.toLowerCase() === 'btc') {
       paths.push('/tokens/btc.svg');
       return paths;
     }
@@ -64,7 +64,25 @@ export default function TokenIcon({ symbol, id, iconUrl, size = 'md', className 
       return paths;
     }
 
-    // Priority 4: Special handling for frUSD
+    // Priority 4: Special handling for FIRE
+    if (symbolLower === 'fire' || id === '4:256') {
+      paths.push('/tokens/fire.svg');
+      return paths;
+    }
+
+    // Priority 4a: Special handling for frETH
+    if (symbolLower === 'freth') {
+      paths.push('/tokens/eth_empty.svg');
+      return paths;
+    }
+
+    // Priority 4b: Special handling for frZEC
+    if (symbolLower === 'frzec') {
+      paths.push('/tokens/zec_empty.svg');
+      return paths;
+    }
+
+    // Priority 4c: Special handling for frUSD
     if (symbolLower === 'frusd' || id === 'frUSD') {
       paths.push('/tokens/usdt_empty.svg');
       return paths;
@@ -168,7 +186,7 @@ export default function TokenIcon({ symbol, id, iconUrl, size = 'md', className 
         key={currentPath}
         src={currentPath}
         alt={`${symbol} icon`}
-        className={`${sizeClass} rounded-full object-cover transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${isLoading ? 'opacity-0' : 'opacity-100'}`}
+        className={`${sizeClass} rounded-full object-cover ${isLoading ? 'opacity-0' : 'opacity-100'}`}
         onLoad={() => setIsLoading(false)}
         onError={handleError}
       />

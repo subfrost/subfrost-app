@@ -1,0 +1,17 @@
+{
+  "FACTORY()": "2dd31000",
+  "addLiquidity(address,address,uint256,uint256,uint256,uint256,address,uint256)": "e8e33700",
+  "getAmountIn(uint256,uint256,uint256)": "85f8c259",
+  "getAmountOut(uint256,uint256,uint256)": "054d50d4",
+  "getAmountsIn(uint256,address[])": "1f00ca74",
+  "getAmountsOut(uint256,address[])": "d06ca61f",
+  "owner()": "8da5cb5b",
+  "quote(uint256,uint256,uint256)": "ad615dec",
+  "removeLiquidity(address,address,uint256,uint256,uint256,address,uint256)": "baa2abde",
+  "renounceOwnership()": "715018a6",
+  "sequencerAddress()": "2cee6a6b",
+  "setFeeTo(address)": "f46901ed",
+  "swapExactTokensForTokens(uint256,uint256,address[],address,uint256)": "38ed1739",
+  "swapTokensForExactTokens(uint256,uint256,address[],address,uint256)": "8803dbee",
+  "transferOwnership(address)": "f2fde38b"
+}
