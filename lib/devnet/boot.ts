@@ -1836,7 +1836,7 @@ async function deployFullProtocol(
     console.log('[devnet-boot] Minting fresh tokens for FIRE seeding...');
     for (let i = 0; i < 3; i++) {
       await executeCall(provider, harness, segwit, taproot,
-        '[2,0,77]:v0:v0', 'B:10000:v0', [taproot]);
+        '[2,0,77]:v0:v0', 'B:546:v0', [taproot]);
     }
     await executeCall(provider, harness, segwit, taproot,
       '[32,0,77]:v1:v1', 'B:500000:v0', [signerAddr, taproot]);
@@ -2079,7 +2079,7 @@ async function deployFullProtocol(
     // Fresh mint for activity seeding (prior tokens consumed by Phase 10a-c)
     for (let i = 0; i < 2; i++) {
       await executeCall(provider, harness, segwit, taproot,
-        '[2,0,77]:v0:v0', 'B:10000:v0', [taproot]);
+        '[2,0,77]:v0:v0', 'B:546:v0', [taproot]);
     }
     await executeCall(provider, harness, segwit, taproot,
       '[32,0,77]:v1:v1', 'B:300000:v0', [signerAddr, taproot]);

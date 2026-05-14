@@ -45,7 +45,7 @@ export function DevnetBootModal() {
 }
 
 export function DevnetErrorModal() {
-  const { state, shutdown, controls } = useDevnet();
+  const { state, shutdown } = useDevnet();
   const [resetting, setResetting] = useState(false);
   const oom = isOomError(state.error);
 

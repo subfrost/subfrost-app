@@ -112,7 +112,6 @@ export function useTokenToBtcSwap() {
         });
         const unwrapFeeDevnet = premiumData?.unwrapFeePerThousand ?? FRBTC_UNWRAP_FEE_PER_1000;
         const minimumFrbtcDevnet = grossUpForUnwrapFee(params.minimumReceived || '1', unwrapFeeDevnet);
-        const [frbtcBlockD, frbtcTxD] = config.FRBTC_ALKANE_ID.split(':').map(Number);
         const unwrapProtostoneDevnet = buildUnwrapProtostones({
           frbtcId: config.FRBTC_ALKANE_ID,
           dustVout: 2,

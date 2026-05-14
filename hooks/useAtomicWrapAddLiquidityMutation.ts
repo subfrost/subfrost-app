@@ -89,12 +89,6 @@ export function useAtomicWrapAddLiquidityMutation() {
       // across two transactions which the in-browser devnet cannot orchestrate.
       // Instead execute wrap + addLiquidity/createPool as sequential autoConfirm calls.
       if (network === 'devnet' && provider && txContext) {
-        const { getSignerAddressDynamic } = await import('@/lib/alkanes/helpers');
-        const {
-          buildFactoryAddLiquidityProtostones,
-          buildFactoryCreatePoolProtostone,
-        } = await import('@/lib/alkanes/builders');
-
         const signerAddressDevnet = await getSignerAddressDynamic(network);
         await alkanesExecuteTyped(provider as any, {
           network, txContext,
