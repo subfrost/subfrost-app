@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, lazy, Suspense } from 'react';
+import { useMemo, useState, lazy, Suspense } from 'react';
 import { useRouter } from 'next/navigation';
 import { ChevronRight } from 'lucide-react';
-import { usePoolMarkets } from '@/hooks/usePoolMarkets';
+import { usePools } from '@/hooks/usePools';
+import { useAllPoolStats } from '@/hooks/usePoolData';
 import { saveSwapPair } from '@/app/swap/swapPair';
 import type { PoolSummary } from '@/app/swap/types';
 
@@ -18,7 +19,32 @@ export default function HomeMarketsButton() {
   const [hasOpenedOnce, setHasOpenedOnce] = useState(false);
   const [volumePeriod, setVolumePeriod] = useState<'24h' | '30d'>('30d');
 
-  const { markets } = usePoolMarkets();
+  const { data: poolsData } = usePools({ sortBy: 'tvl', order: 'desc' });
+  const { data: poolStats } = useAllPoolStats();
+
+  const markets = useMemo<PoolSummary[]>(() => {
+    const basePools = poolsData?.items ?? [];
+
+    const statsMap = new Map<string, NonNullable<typeof poolStats>[string]>();
+    if (poolStats) {
+      for (const [, stats] of Object.entries(poolStats)) {
+        statsMap.set(stats.poolId, stats);
+      }
+    }
+
+    return basePools.map(pool => {
+      const stats = statsMap.get(pool.id);
+      return {
+        ...pool,
+        tvlUsd: pool.tvlUsd || stats?.tvlUsd || 0,
+        token0TvlUsd: pool.token0TvlUsd || stats?.tvlToken0 || (pool.tvlUsd || 0) / 2,
+        token1TvlUsd: pool.token1TvlUsd || stats?.tvlToken1 || (pool.tvlUsd || 0) / 2,
+        vol24hUsd: pool.vol24hUsd || stats?.volume24hUsd || 0,
+        vol30dUsd: pool.vol30dUsd || stats?.volume30dUsd || 0,
+        apr: pool.apr || stats?.apr || 0,
+      } as PoolSummary;
+    });
+  }, [poolsData?.items, poolStats]);
 
   const handleSelect = (pool: PoolSummary) => {
     saveSwapPair(pool.token0, pool.token1);

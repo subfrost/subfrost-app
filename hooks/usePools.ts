@@ -4,7 +4,6 @@
  * Primary: provider.dataApiGetAllPoolsDetails (single HTTP call, returns TVL/volume/APR)
  * Fallback: provider.alkanesGetAllPoolsWithDetails (N+1 RPC sims, no TVL/volume)
  */
-import { useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
 import { useWallet } from '@/context/WalletContext';
@@ -699,24 +698,13 @@ export function usePools(params: UsePoolsParams = {}) {
   const { ALKANE_FACTORY_ID } = getConfig(network);
   const { provider } = useAlkanesSDK();
 
-  // Cache key is keyed on `network` only. search/sort/limit/offset are applied
-  // as a post-query selector below, so every consumer in the app — TrendingPairs,
-  // HomeMarketsButton, SwapShell, etc. — shares a single React Query cache entry
-  // and a single upstream fetch per network. Without this, two callers with
-  // different `limit` values raced each other through the fallback chain and
-  // could land on different rungs (REST vs SDK WASM), surfacing different
-  // numbers for the same pool on the same page.
-  const select = useCallback(
-    (rawItems: PoolsListItem[]) => applyFiltersAndPagination(rawItems, params),
-    [params.search, params.sortBy, params.order, params.limit, params.offset],
-  );
+  const paramsKey = `${params.search ?? ''}|${params.limit ?? 100}|${params.offset ?? 0}|${params.sortBy ?? 'tvl'}|${params.order ?? 'desc'}`;
 
-  return useQuery<PoolsListItem[], Error, { items: PoolsListItem[]; total: number }>({
-    queryKey: queryKeys.pools.list(network),
+  return useQuery<{ items: PoolsListItem[]; total: number }>({
+    queryKey: queryKeys.pools.list(network, paramsKey),
     retry: 3,
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10000),
     enabled: !!network && !!ALKANE_FACTORY_ID && !!provider,
-    select,
     queryFn: async () => {
       if (!provider) {
         throw new Error('SDK provider not available');
@@ -740,7 +728,7 @@ export function usePools(params: UsePoolsParams = {}) {
         } catch (e) {
           console.warn('[usePools] regtest-local/devnet: Direct simulate failed:', e);
         }
-        return items;
+        return { items, total: items.length };
       }
 
       // Mainnet: ONLY the static curated pool list. No discovery phase.
@@ -760,34 +748,20 @@ export function usePools(params: UsePoolsParams = {}) {
         return { items, total: items.length };
       }
 
-      // Merge fallback pool entries onto the curated set. New ids get pushed;
-      // existing ids get *enriched* — REST fills in TVL/volume/APR/lpTotalSupply
-      // fields that curated leaves undefined (curated only seeds id, tokens,
-      // and reserves from on-chain opcode 999). Reserves and labels are
-      // never overwritten because curated reads state-trie directly per Rule
-      // SoT-2; aggregator data lags. Without this enrichment the four
-      // curated mainnet pools (DIESEL/frBTC, MIST, Bee, DUST) ended up with
-      // `vol30dUsd === undefined` from `usePools` and could only show real
-      // numbers when `useAllPoolStats` happened to succeed — which it doesn't
-      // when `/api/pools/stats` 502s. Verified 2026-05-09 against the live
-      // payload: REST returns `poolVolume30dInUsd: 1517216…` for `2:77087`.
+      // Merge fallback pool entries onto the curated set instead of replacing
+      // it. The original code overwrote `items = await fallback(...)` whenever
+      // a fallback returned anything non-empty, which silently nuked the
+      // curated DIESEL/MIST/Bee/DUST entries when /api/pools/cached returned
+      // a 2-pool partial list (the espo proxy serves stale partial data
+      // before it's fully populated). Symptom: BTC→Token swap picker only
+      // surfaced frBTC/bUSD/FIRE despite the curated path having succeeded.
       const mergeItems = (extra: PoolsListItem[]) => {
-        const byId = new Map(items.map((p) => [p.id, p]));
+        const seen = new Set(items.map((p) => p.id));
         for (const p of extra) {
-          const existing = byId.get(p.id);
-          if (!existing) {
+          if (!seen.has(p.id)) {
             items.push(p);
-            byId.set(p.id, p);
-            continue;
+            seen.add(p.id);
           }
-          existing.tvlUsd        ??= p.tvlUsd;
-          existing.token0TvlUsd  ??= p.token0TvlUsd;
-          existing.token1TvlUsd  ??= p.token1TvlUsd;
-          existing.vol24hUsd     ??= p.vol24hUsd;
-          existing.vol7dUsd      ??= p.vol7dUsd;
-          existing.vol30dUsd     ??= p.vol30dUsd;
-          existing.apr           ??= p.apr;
-          existing.lpTotalSupply ??= p.lpTotalSupply;
         }
       };
 
@@ -928,9 +902,7 @@ export function usePools(params: UsePoolsParams = {}) {
         items = items.filter(p => p.tvlUsd === undefined || p.tvlUsd >= MIN_TVL_USD);
       }
 
-      // Return raw items — search/sort/limit/offset are applied per consumer
-      // via the `select` selector above so a single fetch serves every caller.
-      return items;
+      return applyFiltersAndPagination(items, params);
     },
   });
 }

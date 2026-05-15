@@ -81,10 +81,10 @@ type Props = {
 
 // Bridge token definitions
 const BRIDGE_TOKENS = [
-  { symbol: 'USDT', name: 'USDT', enabled: false },
-  { symbol: 'USDC', name: 'USDC', enabled: false },
-  { symbol: 'ETH', name: 'ETH', enabled: false },
-  { symbol: 'ZEC', name: 'ZEC', enabled: false },
+  { symbol: 'USDT', name: 'USDT', enabled: true },
+  { symbol: 'USDC', name: 'USDC', enabled: true },
+  { symbol: 'ETH', name: 'ETH', enabled: true },
+  { symbol: 'ZEC', name: 'ZEC', enabled: true },
 ] as const;
 
 export default function TokenSelectorModal({

@@ -1,17 +1,16 @@
 /**
  * useAmmTotalVolume — cumulative AMM volume time-series for the landing page.
  *
- * Hits `/api/amm-volume`, which paginates espo's `ammdata.get_total_volume_amm`
- * server-side and returns a small daily-bucketed series (already forward-filled
- * across days with no events). Values are pre-scaled to USD floats — no
- * fixed-point math required at the call site.
+ * Hits `/api/amm-volume`, which proxies espo's `ammdata.get_total_volume_amm`
+ * (alkanode by default, configurable via env). Values come pre-scaled to USD
+ * floats — no fixed-point math required at the call site.
  */
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
 
 export interface AmmVolumePoint {
-  time: string;     // ISO date 'YYYY-MM-DD'
+  height: number;
   valueUsd: number;
 }
 
@@ -22,8 +21,8 @@ export interface AmmTotalVolumeData {
   points: AmmVolumePoint[];
 }
 
-async function fetchAmmTotalVolume(): Promise<AmmTotalVolumeData> {
-  const resp = await fetch('/api/amm-volume', { cache: 'no-store' });
+async function fetchAmmTotalVolume(limit: number): Promise<AmmTotalVolumeData> {
+  const resp = await fetch(`/api/amm-volume?limit=${limit}`, { cache: 'no-store' });
   if (!resp.ok) {
     const j = await resp.json().catch(() => ({}));
     throw new Error(`amm-volume HTTP ${resp.status}: ${j?.error ?? 'unknown'}`);
@@ -33,10 +32,10 @@ async function fetchAmmTotalVolume(): Promise<AmmTotalVolumeData> {
   return j;
 }
 
-export function useAmmTotalVolume() {
+export function useAmmTotalVolume(limit = 1000) {
   return useQuery({
-    queryKey: ['ammTotalVolume'],
-    queryFn: fetchAmmTotalVolume,
+    queryKey: ['ammTotalVolume', limit],
+    queryFn: () => fetchAmmTotalVolume(limit),
     staleTime: 60_000, // 1 min — landing-page chart, not real-time critical
     refetchOnWindowFocus: false,
   });
