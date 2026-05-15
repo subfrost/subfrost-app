@@ -30,7 +30,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
       <Header />
       <DemoBanner />
       <main className="relative flex-1 flex flex-col min-h-0">
-        <div className="relative w-full flex justify-center px-2 sm:px-4 py-8 flex-1 min-h-0">
+        <div className="relative w-full flex justify-center px-2 sm:px-4 py-3 sm:py-8 flex-1 min-h-0">
           {children}
         </div>
       </main>
@@ -39,8 +39,8 @@ export default function AppShell({ children }: { children: ReactNode }) {
       <FloatingActions />
       <ConnectWalletModalMount />
       <PendingTxSync />
-      {/* Spacer for mobile bottom nav (nav height + bottom gap + breathing room) */}
-      <div className="h-24 md:hidden" />
+      {/* Spacer for mobile bottom nav (nav height + bottom gap) */}
+      <div className="h-20 md:hidden" />
     </div>
   );
 }
