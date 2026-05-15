@@ -17,12 +17,13 @@ import SendModal from './components/SendModal';
 import SpeedUpModal from './components/SpeedUpModal';
 import { useNotification } from '@/context/NotificationContext';
 import { useFuelAllocation } from '@/hooks/useFuelAllocation';
+import { useTransactionHistory } from '@/hooks/useTransactionHistory';
 import SfPopup from '@/app/components/SfPopup';
 
 type WalletSection = AlkaneBalanceFilter | 'history';
 
 export default function WalletDashboardPage() {
-  const { connected, isConnected } = useWallet() as any;
+  const { connected, isConnected, account } = useWallet() as any;
   const { t } = useTranslation();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -70,6 +71,12 @@ export default function WalletDashboardPage() {
     document.addEventListener('pointerdown', handlePointerDown);
     return () => document.removeEventListener('pointerdown', handlePointerDown);
   }, [sectionDropdownOpen]);
+
+  // Prefetch tx history while on balances tab — React Query deduplicates by
+  // queryKey, so TransactionHistory sees cached data the moment it mounts.
+  useTransactionHistory(
+    [account?.nativeSegwit?.address, account?.taproot?.address].filter(Boolean) as string[],
+  );
 
   if (isInitializing || !walletConnected) return null;
 
