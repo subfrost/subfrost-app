@@ -1087,7 +1087,7 @@ async function fetchAddressBalance(rpcPath: string, address: string) {
   const response = await fetch(rpcPath, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    signal: AbortSignal.timeout(5000),
+    signal: AbortSignal.timeout(10_000),
     body: JSON.stringify({
       jsonrpc: '2.0',
       method: 'esplora_address::utxo',
@@ -1095,9 +1095,13 @@ async function fetchAddressBalance(rpcPath: string, address: string) {
       id: 1,
     }),
   });
+  // Throw on HTTP errors — React Query will retry and preserve the last
+  // known balance rather than overwriting it with zeros.
+  if (!response.ok) throw new Error(`esplora_address::utxo HTTP ${response.status} for ${address}`);
   const json = await response.json();
+  if (json.error) throw new Error(`esplora_address::utxo: ${json.error?.message ?? JSON.stringify(json.error)}`);
   const utxos = json.result;
-  if (!Array.isArray(utxos)) return { confirmed: 0, mempool: 0, total: 0 };
+  if (!Array.isArray(utxos)) throw new Error(`esplora_address::utxo: unexpected result shape for ${address}`);
 
   let confirmed = 0;
   let mempool = 0;
@@ -1154,7 +1158,10 @@ export function btcBalanceFastQueryOptions(deps: BtcBalanceFastDeps) {
 
   const isLocal = ['devnet', 'regtest-local', 'qubitcoin-regtest'].includes(deps.network);
 
-  // Show cached balance instantly while the real query loads (eliminates LCP wait)
+  // Use localStorage cache as initialData (not placeholderData) so it persists
+  // through query errors. placeholderData is cleared when a query errors, causing
+  // the balance to flicker to 0 if the RPC call fails on first load. initialData
+  // is treated as real cached data — React Query preserves it on error.
   const cached = getCachedBtcBalance(deps.network, addressKey);
 
   return queryOptions<BtcBalanceFast>({
@@ -1166,7 +1173,11 @@ export function btcBalanceFastQueryOptions(deps: BtcBalanceFastDeps) {
     staleTime: isLocal ? 2_000 : Infinity,
     refetchOnMount: 'always',
     refetchOnWindowFocus: 'always',
-    placeholderData: cached,
+    // initialData: treated as real data — survives query errors.
+    // initialDataUpdatedAt: 0 ensures React Query considers it stale and
+    // always fires a background refetch (refetchOnMount: 'always' also covers this).
+    initialData: cached ?? undefined,
+    initialDataUpdatedAt: cached ? 0 : undefined,
     retry: 3,
     retryDelay: (attempt: number) => Math.min(1000 * 2 ** attempt, 5000),
     queryFn: async () => {
