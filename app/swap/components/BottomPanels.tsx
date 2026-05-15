@@ -124,21 +124,21 @@ export default function BottomPanels({
   return (
     <div className="sf-card overflow-hidden">
       {/* Tab bar */}
-      <div className="flex border-b border-[color:var(--sf-glass-border)]">
+      <div className="flex border-b border-[color:var(--sf-glass-border)] pl-2 sm:pl-0">
         {tabs.map(tab => (
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key)}
-            className={`flex items-center gap-1.5 px-3 sm:px-4 py-2.5 text-[11px] font-bold uppercase tracking-wide transition-colors ${
+            className={`flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-4 py-2.5 text-[10px] sm:text-[11px] font-bold uppercase tracking-wide whitespace-nowrap transition-colors ${
               visibleActiveTab === tab.key
                 ? 'text-[color:var(--sf-text)] border-b-2 border-[color:var(--sf-primary)]'
                 : 'text-[color:var(--sf-text)]/25 hover:text-[color:var(--sf-text)]/50'
             }`}
           >
             {tab.icon}
-            <span className="hidden sm:inline">{tab.label}</span>
+            <span>{tab.label}</span>
             {tab.count !== undefined && tab.count > 0 && (
-              <span className="ml-1 px-1.5 py-0.5 text-[9px] font-bold rounded-full bg-[color:var(--sf-primary)]/20 text-[color:var(--sf-primary)]">
+              <span className="ml-0.5 sm:ml-1 px-1 sm:px-1.5 py-0.5 text-[9px] font-bold rounded-full bg-[color:var(--sf-primary)]/20 text-[color:var(--sf-primary)]">
                 {tab.count}
               </span>
             )}
