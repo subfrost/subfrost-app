@@ -43,10 +43,15 @@ export default function Header() {
     typeof connected === "boolean" ? connected : isConnected;
   // Wallet icon: browser wallet icon from SDK/constants, keystore gets a generic key icon
   const walletIcon = walletType === 'browser' ? (browserWallet?.info?.icon || null) : null;
-  const isDualAddress = !!account?.nativeSegwit?.address && !!account?.taproot?.address;
+  // Header reflects the wallet's TOTAL BTC across every connected address.
+  // For dual-address wallets this previously showed only the segwit balance,
+  // so users who held BTC at the taproot saw "0.00000 BTC" — verified live
+  // 2026-05-15 against bc1psn0925…sjfs7xwmj4 (213k sats clean BTC at the
+  // taproot, 0 at segwit). Spendable-for-fees stays a separate number on
+  // the swap form (`useBtcBalance`).
   const hasFast = btcFast && btcFast.total > 0;
-  const fastSats = isDualAddress ? (btcFast?.p2wpkh ?? 0) : (btcFast?.total ?? 0);
-  const enrichedSats = isDualAddress ? (balances?.bitcoin?.p2wpkh ?? 0) : (balances?.bitcoin?.total ?? 0);
+  const fastSats = btcFast?.total ?? 0;
+  const enrichedSats = balances?.bitcoin?.total ?? 0;
   const spendableSats = hasFast ? fastSats : enrichedSats;
   const btcBalance = spendableSats > 0 ? (spendableSats / 1e8).toFixed(5) : "0.00000";
 
