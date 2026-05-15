@@ -131,9 +131,24 @@ export async function alkanesExecuteTyped(
 
   // Frontend prefetch hint: "known-clean" outpoints the SDK should skip its
   // unisat-ord round-trip for. Only meaningful for `split` / `preserve`
-  // strategies that would otherwise query ord per UTXO. Per-call override
-  // takes precedence; otherwise inherit from txContext.
-  const skipOutpoints = params.skipOutpoints ?? params.txContext?.skipOutpoints;
+  // strategies that would otherwise query ord per UTXO.
+  //
+  // Source precedence (most-specific first):
+  //   1. Per-call `params.skipOutpoints` — atomic flows can override.
+  //   2. `txContext.skipOutpoints` — caller-supplied (rare; WalletProvider
+  //      can't populate this because the prefetch hook depends on context
+  //      that's still being built).
+  //   3. `getOrdinalSkipOutpoints()` — module-level snapshot mirrored from
+  //      React Query by `<WalletStatePrewarmer/>`. This is the always-on
+  //      path: prefetch runs on wallet connect + on every HeightPoller
+  //      invalidation (per block), so by the time the user clicks Swap,
+  //      the skip set is current and PSBT construction does ZERO ord
+  //      round-trips for clean UTXOs.
+  const { getOrdinalSkipOutpoints } = await import('./ordinalSkipStore');
+  const skipOutpoints =
+    params.skipOutpoints ??
+    params.txContext?.skipOutpoints ??
+    getOrdinalSkipOutpoints();
   if (skipOutpoints && skipOutpoints.length > 0) {
     options.skip_outpoints = skipOutpoints;
     options.skipOutpoints = skipOutpoints;
