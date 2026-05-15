@@ -412,6 +412,35 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
           )}
           </div>
           </div>
+
+          {/* Low liquidity warning — always visible, shown outside collapsible */}
+          {quote.priceImpact !== undefined && quote.priceImpact > 0.10 && !isWrapPair && !isUnwrapPair && (
+            <div className={`mt-2 flex items-start gap-2.5 rounded-xl border p-3 ${
+              quote.priceImpact > 0.20
+                ? 'bg-red-500/10 border-red-500/25'
+                : 'bg-orange-500/10 border-orange-500/25'
+            }`}>
+              <svg
+                className={`h-5 w-5 flex-shrink-0 mt-0.5 ${quote.priceImpact > 0.20 ? 'text-red-500' : 'text-orange-400'}`}
+                fill="none" viewBox="0 0 24 24" stroke="currentColor"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-2">
+                  <p className={`text-xs font-bold ${quote.priceImpact > 0.20 ? 'text-red-500' : 'text-orange-400'}`}>
+                    {t('swapSummary.lowLiquidityWarning')}
+                  </p>
+                  <span className={`text-xs font-bold tabular-nums ${quote.priceImpact > 0.20 ? 'text-red-500' : 'text-orange-400'}`}>
+                    {(quote.priceImpact * 100).toFixed(1)}% {t('swapSummary.priceImpact')}
+                  </span>
+                </div>
+                <p className={`text-xs mt-0.5 ${quote.priceImpact > 0.20 ? 'text-red-500/80' : 'text-orange-400/80'}`}>
+                  {t('swapSummary.lowLiquidityMessage')}
+                </p>
+              </div>
+            </div>
+          )}
         </>
       ) : null}
     </div>
