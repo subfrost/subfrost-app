@@ -108,7 +108,7 @@ export default function FireBondingPanel({ vaultDetailsSlot }: FireBondingPanelP
 
           {/* Discount */}
           <div className="rounded-2xl bg-[color:var(--sf-info-green-bg)] flex flex-col items-center justify-center text-center py-3 mb-4">
-            <div className="text-2xl font-bold text-[color:var(--sf-info-green-title)]">{discount}%</div>
+            <div className="text-2xl font-bold text-[color:var(--sf-info-green-title)]">10%</div>
             <div className="text-[10px] font-semibold uppercase tracking-wider text-[color:var(--sf-info-green-title)]">{t('fire.discount')}</div>
           </div>
 
