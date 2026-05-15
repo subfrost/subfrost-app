@@ -45,6 +45,7 @@
     "agent-repos",
     "__tests__/brc20-prog",
     "vendor",
-    "services"
+    "services",
+    "reference"
   ]
 }
