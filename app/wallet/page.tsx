@@ -91,7 +91,7 @@ export default function WalletDashboardPage() {
 
   return (
     <PageContent className="text-[color:var(--sf-text)]">
-      <div className="mx-auto flex w-full max-w-[1204px] flex-col gap-6">
+      <div className="mx-auto flex w-full max-w-[1204px] flex-col gap-3 sm:gap-6">
         <div className="flex w-full flex-col gap-2">
           <div className="flex w-full items-center justify-between gap-4">
             <h1 className="flex items-center gap-2 text-xl sm:text-3xl font-bold text-[color:var(--sf-text)]">
@@ -100,7 +100,7 @@ export default function WalletDashboardPage() {
           </div>
         </div>
 
-        <div className="flex flex-col gap-6 flex-1 min-h-0">
+        <div className="flex flex-col gap-3 sm:gap-6 flex-1 min-h-0">
           <BitcoinBalanceCard
             onSend={() => setShowSendModal(true)}
             onReceive={() => setShowReceiveModal(true)}
@@ -108,8 +108,8 @@ export default function WalletDashboardPage() {
             settingsActive={showSettingsModal}
           />
 
-          <div className="h-full rounded-2xl bg-[color:var(--sf-glass-bg)] p-6 shadow-[0_4px_20px_rgba(0,0,0,0.2)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)] flex flex-col">
-            <div className="mb-4 flex items-center gap-3">
+          <div className="h-full rounded-2xl bg-[color:var(--sf-glass-bg)] p-4 sm:p-6 shadow-[0_4px_20px_rgba(0,0,0,0.2)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)] flex flex-col">
+            <div className="mb-3 sm:mb-4 flex items-center gap-3">
               <div className="sf-tab-group wallet-section-tabs">
                 {walletSections.map((section) => (
                   <button
