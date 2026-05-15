@@ -129,6 +129,16 @@ export async function alkanesExecuteTyped(
   const ordinalsStrategy = params.ordinalsStrategy ?? params.txContext?.defaultOrdinalsStrategy;
   if (ordinalsStrategy !== undefined) options.ordinals_strategy = ordinalsStrategy;
 
+  // Frontend prefetch hint: "known-clean" outpoints the SDK should skip its
+  // unisat-ord round-trip for. Only meaningful for `split` / `preserve`
+  // strategies that would otherwise query ord per UTXO. Per-call override
+  // takes precedence; otherwise inherit from txContext.
+  const skipOutpoints = params.skipOutpoints ?? params.txContext?.skipOutpoints;
+  if (skipOutpoints && skipOutpoints.length > 0) {
+    options.skip_outpoints = skipOutpoints;
+    options.skipOutpoints = skipOutpoints;
+  }
+
   const protectTaproot = params.protectTaproot ?? params.txContext?.shouldProtectTaproot;
   if (protectTaproot !== undefined) options.protect_taproot = protectTaproot;
 

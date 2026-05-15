@@ -48,6 +48,14 @@ export const queryKeys = {
      */
     walletUtxoCache: (network: string, addresses: string) =>
       ['wallet-utxo-cache', network, addresses] as const,
+    /**
+     * Per-outpoint ord state (inscriptions + runes) from the unisat-ord
+     * backend. Keyed on a hash of the outpoint set so HeightPoller can
+     * invalidate-by-prefix without re-running the fanout when only an
+     * unrelated block lands.
+     */
+    ordinalState: (network: string, outpointsKey: string) =>
+      ['ordinal-state', network, outpointsKey] as const,
     sellableCurrencies: (
       network: string,
       walletAddress: string,

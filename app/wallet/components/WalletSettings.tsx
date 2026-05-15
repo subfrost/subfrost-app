@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, useMemo, useRef } from 'react';
-import { useWallet } from '@/context/WalletContext';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { useWallet, ORDINALS_OPTOUT_KEY, resolveOrdinalsStrategyFromStorage } from '@/context/WalletContext';
 import { useTheme } from '@/context/ThemeContext';
 import { Network, Save, Eye, Copy, Check, ChevronDown, Download, Shield, Lock, Cloud, AlertTriangle, X, Settings, RotateCcw, RefreshCw } from 'lucide-react';
 import { initGoogleDrive, isDriveConfigured, backupWalletToDrive } from '@/utils/clientSideDrive';
@@ -34,6 +34,76 @@ function detectNetworkFromAddress(address: string): { network: NetworkType | nul
   }
 
   return { network: null, isRecognized: false };
+}
+
+/**
+ * Single source-of-truth toggle for the app-wide ordinals/runes opt-out.
+ *
+ * Writes to `localStorage[ORDINALS_OPTOUT_KEY]` AND dispatches a custom
+ * `subfrost:ordinals-optout-changed` event so WalletContext re-derives
+ * `txContext.defaultOrdinalsStrategy` in-tab without a reload. Cross-tab
+ * updates ride the native `storage` event.
+ *
+ * Checked = "ignore" (burn strategy, no ord checks, no split-tx).
+ * Unchecked = "protect" (split strategy, full ord+rune refund).
+ *
+ * Both labels render with the same toggle on purpose — the user model is
+ * "protect inscriptions/runes on my UTXOs", which is a single decision.
+ */
+function OrdinalsOptOutToggle(props: {
+  labelOrdinals: string;
+  descOrdinals: string;
+  labelRunes: string;
+  descRunes: string;
+}) {
+  const [optOut, setOptOut] = useState(() => resolveOrdinalsStrategyFromStorage() === 'burn');
+  useEffect(() => {
+    const sync = () => setOptOut(resolveOrdinalsStrategyFromStorage() === 'burn');
+    window.addEventListener('storage', sync);
+    window.addEventListener('subfrost:ordinals-optout-changed', sync);
+    return () => {
+      window.removeEventListener('storage', sync);
+      window.removeEventListener('subfrost:ordinals-optout-changed', sync);
+    };
+  }, []);
+  const onToggle = useCallback((checked: boolean) => {
+    setOptOut(checked);
+    try {
+      if (checked) localStorage.setItem(ORDINALS_OPTOUT_KEY, '1');
+      else localStorage.removeItem(ORDINALS_OPTOUT_KEY);
+    } catch { /* quota / private mode — best-effort */ }
+    window.dispatchEvent(new CustomEvent('subfrost:ordinals-optout-changed'));
+  }, []);
+  return (
+    <>
+      <label className="flex items-start gap-3 cursor-pointer group relative">
+        <input
+          type="checkbox"
+          checked={optOut}
+          onChange={(e) => onToggle(e.target.checked)}
+          className="mt-1 h-4 w-4 rounded border-[color:var(--sf-outline)] bg-[color:var(--sf-panel-bg)] accent-[color:var(--sf-primary)]"
+          aria-describedby="ignore-ordinals-desc"
+        />
+        <div className="flex-1">
+          <div className="font-medium text-[color:var(--sf-text)]">{props.labelOrdinals}</div>
+          <div id="ignore-ordinals-desc" className="text-xs text-[color:var(--sf-text)]/60 mt-1">{props.descOrdinals}</div>
+        </div>
+      </label>
+      <label className="flex items-start gap-3 cursor-pointer group relative">
+        <input
+          type="checkbox"
+          checked={optOut}
+          onChange={(e) => onToggle(e.target.checked)}
+          className="mt-1 h-4 w-4 rounded border-[color:var(--sf-outline)] bg-[color:var(--sf-panel-bg)] accent-[color:var(--sf-primary)]"
+          aria-describedby="ignore-runes-desc"
+        />
+        <div className="flex-1">
+          <div className="font-medium text-[color:var(--sf-text)]">{props.labelRunes}</div>
+          <div id="ignore-runes-desc" className="text-xs text-[color:var(--sf-text)]/60 mt-1">{props.descRunes}</div>
+        </div>
+      </label>
+    </>
+  );
 }
 
 export default function WalletSettings() {
@@ -579,23 +649,16 @@ export default function WalletSettings() {
         )}
 
         {/*
-          Advanced Options — locked-on policy disclosure.
+          Advanced Options — ordinals/runes protection toggle.
 
-          Surfaces the app-wide "no inscriptions / no runes" stance to the
-          user. Both checkboxes are permanently checked: subfrost's indexer
-          doesn't track inscriptions or runes, so we don't have the data to
-          protect them at coin-selection time. Spending an inscribed UTXO
-          for fees would burn the inscription.
+          Default behavior: ordinals-aware ('split' strategy). The subkube
+          `unisat-ord` deployment provides per-outpoint inscription/rune state
+          and alkanes-rs SDK 0.1.6 builds a split-tx that refunds both back to
+          the user wallet while preserving the protostone action.
 
-          Per SDK maintainer direction, the policy ships always-on; this UI
-          exists so users can see it and (a) read the tooltip explaining
-          why, (b) stop wondering why there's no protection, (c) leave the
-          inscription wallets at home.
-
-          Hooked to ORDINALS_STRATEGY in WalletContext.tsx — flipping the
-          checkbox today does nothing (it's force-on); the wiring exists so
-          if subfrost ever ships an indexer for inscriptions/runes, we can
-          let users opt back into protection without rewriting the UI.
+          User can opt out via the "ignore ordinals/runes" toggle below —
+          maps to 'burn' strategy (no ord checks, no split-tx). Use this for
+          fee-sensitive flows on wallets known to be inscription-free.
         */}
         <div className="rounded-xl border border-[color:var(--sf-outline)] bg-[color:var(--sf-panel-bg)] p-6">
           <div className="flex items-center gap-3 mb-4">
@@ -605,42 +668,12 @@ export default function WalletSettings() {
             </h3>
           </div>
           <div className="space-y-4">
-            <label className="flex items-start gap-3 cursor-not-allowed opacity-90 group relative">
-              <input
-                type="checkbox"
-                checked
-                disabled
-                readOnly
-                className="mt-1 h-4 w-4 rounded border-[color:var(--sf-outline)] bg-[color:var(--sf-panel-bg)] accent-[color:var(--sf-primary)]"
-                aria-describedby="ignore-ordinals-desc"
-              />
-              <div className="flex-1">
-                <div className="font-medium text-[color:var(--sf-text)]">
-                  {t('settings.ignoreOrdinals')}
-                </div>
-                <div id="ignore-ordinals-desc" className="text-xs text-[color:var(--sf-text)]/60 mt-1">
-                  {t('settings.ignoreOrdinalsDescription')}
-                </div>
-              </div>
-            </label>
-            <label className="flex items-start gap-3 cursor-not-allowed opacity-90 group relative">
-              <input
-                type="checkbox"
-                checked
-                disabled
-                readOnly
-                className="mt-1 h-4 w-4 rounded border-[color:var(--sf-outline)] bg-[color:var(--sf-panel-bg)] accent-[color:var(--sf-primary)]"
-                aria-describedby="ignore-runes-desc"
-              />
-              <div className="flex-1">
-                <div className="font-medium text-[color:var(--sf-text)]">
-                  {t('settings.ignoreRunes')}
-                </div>
-                <div id="ignore-runes-desc" className="text-xs text-[color:var(--sf-text)]/60 mt-1">
-                  {t('settings.ignoreRunesDescription')}
-                </div>
-              </div>
-            </label>
+            <OrdinalsOptOutToggle
+              labelOrdinals={t('settings.ignoreOrdinals')}
+              descOrdinals={t('settings.ignoreOrdinalsDescription')}
+              labelRunes={t('settings.ignoreRunes')}
+              descRunes={t('settings.ignoreRunesDescription')}
+            />
           </div>
         </div>
       </div>

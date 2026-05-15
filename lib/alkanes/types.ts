@@ -46,10 +46,16 @@ export interface AlkanesExecuteTypedParams {
   forcePsbt?: boolean;
   /** Controls handling of UTXOs that may contain ordinal inscriptions.
    *  - 'exclude': refuse to spend inscribed UTXOs (default — protects inscriptions/runes)
-   *  - 'preserve': split inscribed UTXOs to protect inscriptions
-   *  - 'burn': spend inscribed UTXOs without protection (destroys inscriptions)
+   *  - 'preserve': split inscribed UTXOs to protect inscriptions + alkanes
+   *  - 'split': preserve PLUS non-alkane Runestone rune refund (full ord+rune protection)
+   *  - 'burn': spend inscribed UTXOs without protection (destroys inscriptions/runes)
    */
-  ordinalsStrategy?: 'exclude' | 'preserve' | 'burn';
+  ordinalsStrategy?: 'exclude' | 'preserve' | 'split' | 'burn';
+  /** Frontend-prefetched "known clean" outpoints (txid:vout) — the SDK will
+   *  skip its unisat-ord round-trip for these and treat them as having no
+   *  inscriptions/runes. Populated from `useOrdinalSkipOutpoints` which
+   *  batches /api/ord/outputs against the wallet's dust UTXOs. */
+  skipOutpoints?: string[];
   /** Selects the SDK's UTXO data source. App default is `espo`. */
   utxoSource?: 'metashrew' | 'espo';
   /** Protect taproot UTXOs from being spent for BTC fees (default: true).

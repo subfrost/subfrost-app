@@ -347,33 +347,39 @@ type FormattedUtxo = {
 // ---------------------------------------------------------------------------
 
 /**
- * The ordinals_strategy we send to the alkanes-rs SDK for ALL wallet types.
+ * The default ordinals_strategy we send to the alkanes-rs SDK.
  *
- * Subfrost does not index inscriptions or runes. Per the SDK maintainer's
- * direction (Discord, 2026-05-09), we accept a "no inscriptions / no runes"
- * policy app-wide:
+ * History: previously locked to `'burn'` because subfrost had no ord indexer.
+ * As of 2026-05-15 the subkube `unisat-ord` deployment provides a per-outpoint
+ * inscription/rune lookup with redis 2-epoch caching, and alkanes-rs SDK
+ * `0.1.6-36871c9` introduced a new `'split'` strategy that:
+ *   - detects inscriptions AND non-alkane Runestone runes on input UTXOs
+ *   - builds a split-tx that refunds both back to the user wallet
+ *   - preserves the protostone action of the main tx
  *
- *   "We don't have ord. Don't use a wallet with inscriptions in it, please.
- *    Or any of the other crap."
- *
- * Setting `'burn'` makes the SDK's `OrdinalsHandler::check_utxos_for_inscriptions`
- * return early before any per-UTXO `ord_output` RPC, removing 32+ sequential
- * roundtrips from the swap critical path between user-click and signing-modal
- * popup (empirically ~6-9s of the 16-17s observed for a 32-UTXO wallet).
- *
- * The Send/Swap UI surfaces this policy as a locked "I confirm no inscriptions
- * or runes in this wallet" disclosure (see `i18n/en.ts settings.ignoreOrdinals*`)
- * so the user can't claim they weren't told. The `restoreMnemonicWarning`
- * already covers keystore-imported wallets; the disclosure extends that to
- * browser-extension wallets.
- *
- * Risk: a user holding inscriptions on a UTXO that gets selected for fees
- * would lose the inscription. The keystore path has accepted this risk since
- * its inception (`'burn'` was already its default). With this policy aligned
- * across both wallet types, the SDK never inspects inscription state at all
- * during execute — every selected UTXO is treated as spendable.
+ * The default is `'split'` when the user hasn't opted out via WalletSettings,
+ * falling back to `'burn'` only when the user explicitly checks the
+ * "ignore ordinals / runes" boxes (i.e. "I have nothing valuable on dust
+ * UTXOs, give me the fastest path"). Resolved at runtime by
+ * `resolveOrdinalsStrategyFromStorage()` because the toggle persists in
+ * localStorage and can change without reloading the wallet.
  */
-const ORDINALS_STRATEGY: 'burn' | 'exclude' | 'preserve' = 'burn';
+export type OrdinalsStrategy = 'burn' | 'exclude' | 'preserve' | 'split';
+export const ORDINALS_OPTOUT_KEY = 'subfrost_ordinals_optout';
+
+/**
+ * Reads the user's toggle from localStorage. Returns `'burn'` if the user
+ * has opted out of ordinals protection, `'split'` otherwise. SSR-safe: any
+ * access without `window` returns the protective default.
+ */
+export function resolveOrdinalsStrategyFromStorage(): OrdinalsStrategy {
+  if (typeof window === 'undefined') return 'split';
+  try {
+    return localStorage.getItem(ORDINALS_OPTOUT_KEY) === '1' ? 'burn' : 'split';
+  } catch {
+    return 'split';
+  }
+}
 
 // Storage keys
 const STORAGE_KEYS = {
@@ -426,13 +432,23 @@ export type TxContext = {
    * `alkanesExecuteTyped` to decide what to do when an inscribed UTXO must
    * be spent.
    *
-   * - `'burn'` for keystore: BIP86 taproot-only, wallet-internal, never
-   *   receives inscriptions. Skipping the ord check is a pure perf win.
-   * - `'preserve'` for browser wallets: SDK runs alkane-aware split-tx so
-   *   inscriptions and alkanes survive even if they share a UTXO. Per-call
-   *   overrides take precedence at the call site if needed.
+   * Default `'split'` (full ord+rune refund via unisat-ord backend) unless
+   * the user has opted out via WalletSettings → `'burn'`. Keystore wallets
+   * also default `'split'` now that the ord backend exists; keystore is
+   * still typically inscription-free, but the SDK ord check is fast (~50ms
+   * total for typical wallets with redis cache hits) and gives the user a
+   * safety net if they ever receive an inscription to that address.
    */
-  defaultOrdinalsStrategy: 'burn' | 'exclude' | 'preserve';
+  defaultOrdinalsStrategy: OrdinalsStrategy;
+  /**
+   * Frontend-prefetched "known clean" outpoints (txid:vout) computed from
+   * `useOrdinalSkipOutpoints` against `walletUtxoCache`. The SDK skips its
+   * unisat-ord round-trip for these and treats them as having no
+   * inscriptions/runes, removing ~50ms × dust-UTXO-count from the swap
+   * critical path. Empty/omitted when the prefetch hasn't resolved yet —
+   * SDK falls back to per-UTXO ord queries (still correct, just slower).
+   */
+  skipOutpoints?: string[];
   /**
    * Wallet kind. Lets `alkanesExecuteTyped` apply browser-only auto-defaults
    * (auto `'preserve'` strategy + auto `payment_utxos` from wallet capability)
@@ -537,6 +553,33 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
   } | null>(null);
   // SDK wallet adapter for signing - handles all wallet-specific logic
   const [walletAdapter, setWalletAdapter] = useState<JsWalletAdapter | null>(null);
+
+  // Ordinals strategy toggle from WalletSettings, persisted to localStorage
+  // and reactive to in-tab updates (custom event) + cross-tab updates
+  // (`storage` event). When the user opts out, every mutation degrades to
+  // `'burn'` immediately without a wallet reconnect.
+  const [ordinalsStrategy, setOrdinalsStrategy] = useState<OrdinalsStrategy>(() =>
+    resolveOrdinalsStrategyFromStorage(),
+  );
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const sync = () => setOrdinalsStrategy(resolveOrdinalsStrategyFromStorage());
+    window.addEventListener('subfrost:ordinals-optout-changed', sync);
+    window.addEventListener('storage', sync);
+    return () => {
+      window.removeEventListener('subfrost:ordinals-optout-changed', sync);
+      window.removeEventListener('storage', sync);
+    };
+  }, []);
+
+  // `skipOutpoints` flows through `TxContext` for the type to exist, but the
+  // provider doesn't subscribe to the prefetch directly — that would force
+  // a recursive `useWallet()` call. Mutation hooks that want the perf win
+  // call `useOrdinalSkipOutpoints(network)` themselves and pass it to
+  // `alkanesExecuteTyped` as a per-call `skipOutpoints` override. Correctness
+  // (the SDK still detects inscriptions/runes) is independent of this hint —
+  // the prefetch is pure optimization.
+  const ordinalsSkipOutpoints: string[] = [];
 
   // WalletConnector instance (lazy initialized)
   const walletConnectorRef = useRef<WalletConnector | null>(null);
@@ -972,8 +1015,11 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
         btcChangeAddress: taproot,
         alkanesChangeAddress: taproot,
         shouldProtectTaproot: false,
-        // App-wide policy — see ORDINALS_STRATEGY definition for rationale.
-        defaultOrdinalsStrategy: ORDINALS_STRATEGY,
+        // Reactive — see resolveOrdinalsStrategyFromStorage. Defaults to
+        // 'split' (full ord+rune refund); user opt-out via WalletSettings
+        // degrades to 'burn'.
+        defaultOrdinalsStrategy: ordinalsStrategy,
+        skipOutpoints: ordinalsSkipOutpoints,
         walletType: 'keystore',
       };
     }
@@ -1005,16 +1051,15 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
       // BTC fees from. Single-address wallets must spend taproot UTXOs for
       // both alkanes and fees, so reserving them would block fee selection.
       shouldProtectTaproot: isDualAddress,
-      // App-wide policy — see ORDINALS_STRATEGY definition for rationale.
-      // Previously 'preserve' here. Flipped to 'burn' (via ORDINALS_STRATEGY)
-      // 2026-05-09 per SDK maintainer direction. The Send/Swap UI surfaces
-      // a user-facing disclosure (i18n: settings.ignoreOrdinals*) so users
-      // explicitly acknowledge the policy before the modal pops.
-      defaultOrdinalsStrategy: ORDINALS_STRATEGY,
+      // Reactive default — `'split'` when ordinals-aware (the new default,
+      // backed by the subkube unisat-ord deployment), `'burn'` when the user
+      // has opted out via WalletSettings. See resolveOrdinalsStrategyFromStorage.
+      defaultOrdinalsStrategy: ordinalsStrategy,
+      skipOutpoints: ordinalsSkipOutpoints,
       walletType: 'browser',
       browserWalletId: browserWallet?.info?.id,
     };
-  }, [account, walletType, browserWallet?.info?.id]);
+  }, [account, walletType, browserWallet?.info?.id, ordinalsStrategy, ordinalsSkipOutpoints]);
 
   // Create new wallet
   const createNewWallet = useCallback(async (password: string): Promise<{ mnemonic: string }> => {

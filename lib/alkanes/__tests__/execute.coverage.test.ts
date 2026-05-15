@@ -496,3 +496,98 @@ describe('utxo_source resolution', () => {
     expect(lastOptionsJson(p).utxo_source).toBe('metashrew');
   });
 });
+
+// ===========================================================================
+// New `'split'` ordinals strategy + `skipOutpoints` prefetch hint plumbing
+// (alkanes-rs SDK 0.1.6-36871c9, feat/ordinals-split).
+// ===========================================================================
+
+describe('Split ordinals strategy + skipOutpoints', () => {
+  it('forwards `defaultOrdinalsStrategy: "split"` from txContext into options', async () => {
+    const p = fakeProvider();
+    await alkanesExecuteTyped(p as unknown as WebProvider, baseParams({
+      txContext: {
+        feeSourceAddresses: ['bc1qsegwit', 'bc1ptap'],
+        btcChangeAddress: 'bc1qsegwit',
+        alkanesChangeAddress: 'bc1ptap',
+        shouldProtectTaproot: true,
+        defaultOrdinalsStrategy: 'split',
+        walletType: 'browser',
+        browserWalletId: 'xverse',
+      },
+    }));
+    expect(lastOptionsJson(p).ordinals_strategy).toBe('split');
+  });
+
+  it('per-call `ordinalsStrategy: "split"` override wins over txContext "burn"', async () => {
+    const p = fakeProvider();
+    await alkanesExecuteTyped(p as unknown as WebProvider, baseParams({
+      txContext: {
+        feeSourceAddresses: ['bc1ptaponly'],
+        btcChangeAddress: 'bc1ptaponly',
+        alkanesChangeAddress: 'bc1ptaponly',
+        shouldProtectTaproot: false,
+        defaultOrdinalsStrategy: 'burn',
+        walletType: 'keystore',
+      },
+      ordinalsStrategy: 'split',
+    }));
+    expect(lastOptionsJson(p).ordinals_strategy).toBe('split');
+  });
+
+  it('forwards `skipOutpoints` from txContext into BOTH snake_case AND camelCase option keys', async () => {
+    // The WASM provider parser accepts either key. Emitting both means a
+    // version skew (older SDK with only snake_case parsing, newer with
+    // camelCase) still picks up the hint either way.
+    const p = fakeProvider();
+    const skip = ['aaaa:0', 'bbbb:1'];
+    await alkanesExecuteTyped(p as unknown as WebProvider, baseParams({
+      txContext: {
+        feeSourceAddresses: ['bc1ptap'],
+        btcChangeAddress: 'bc1ptap',
+        alkanesChangeAddress: 'bc1ptap',
+        shouldProtectTaproot: false,
+        defaultOrdinalsStrategy: 'split',
+        skipOutpoints: skip,
+        walletType: 'keystore',
+      },
+    }));
+    const opts = lastOptionsJson(p);
+    expect(opts.skip_outpoints).toEqual(skip);
+    expect(opts.skipOutpoints).toEqual(skip);
+  });
+
+  it('per-call `skipOutpoints` override wins over txContext.skipOutpoints', async () => {
+    const p = fakeProvider();
+    await alkanesExecuteTyped(p as unknown as WebProvider, baseParams({
+      txContext: {
+        feeSourceAddresses: ['bc1ptap'],
+        btcChangeAddress: 'bc1ptap',
+        alkanesChangeAddress: 'bc1ptap',
+        shouldProtectTaproot: false,
+        defaultOrdinalsStrategy: 'split',
+        skipOutpoints: ['fromtxctx:0'],
+        walletType: 'keystore',
+      },
+      skipOutpoints: ['percall:0'],
+    }));
+    expect(lastOptionsJson(p).skip_outpoints).toEqual(['percall:0']);
+  });
+
+  it('omits skip_outpoints entirely when empty / unset (no zero-length hint)', async () => {
+    const p = fakeProvider();
+    await alkanesExecuteTyped(p as unknown as WebProvider, baseParams({
+      txContext: {
+        feeSourceAddresses: ['bc1ptap'],
+        btcChangeAddress: 'bc1ptap',
+        alkanesChangeAddress: 'bc1ptap',
+        shouldProtectTaproot: false,
+        defaultOrdinalsStrategy: 'split',
+        walletType: 'keystore',
+      },
+    }));
+    const opts = lastOptionsJson(p);
+    expect(opts.skip_outpoints).toBeUndefined();
+    expect(opts.skipOutpoints).toBeUndefined();
+  });
+});
