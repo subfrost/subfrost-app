@@ -1,14 +1,21 @@
 'use client';
 
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { Plus, Check, ChevronDown, X } from 'lucide-react';
+import { Plus, Check, ChevronDown, X, Hash } from 'lucide-react';
 import { useWallet } from '@/context/WalletContext';
 import { AddressType } from '@alkanes/ts-sdk';
 import AddressAvatar from './AddressAvatar';
 
 const ADDRESS_INDEX_KEY = 'subfrost_taproot_address_index';
 const ACCOUNT_LIST_KEY = 'subfrost_known_account_indices';
-const MAX_ACCOUNTS = 10;
+
+// No artificial cap. BIP86 allows 2^31 indices; the previous 10-account
+// limit was a placeholder. The list virtualizes via `max-h overflow-y`
+// and a "Jump to index" input lets power users hop without clicking
+// Add many times.
+// Sanity ceiling only — prevents accidental UI lock-up if someone types
+// a huge number. BIP86 standard wallets index in the thousands at most.
+const MAX_INDEX = 1_000_000;
 
 function loadKnownIndices(): number[] {
   if (typeof localStorage === 'undefined') return [0];
@@ -111,11 +118,24 @@ export default function AccountSwitcher({ size = 24, className = '', menuAlign =
       if (idx === next) next++;
       else if (idx > next) break;
     }
-    if (next >= MAX_ACCOUNTS) return;
+    if (next > MAX_INDEX) return;
     const updated = [...knownIndices, next].sort((a, b) => a - b);
     setKnownIndices(updated);
     saveKnownIndices(updated);
     switchTo(next);
+  };
+
+  const jumpToIndex = (raw: string) => {
+    const idx = parseInt(raw, 10);
+    if (!Number.isInteger(idx) || idx < 0 || idx > MAX_INDEX) return;
+    const updated = knownIndices.includes(idx)
+      ? knownIndices
+      : [...knownIndices, idx].sort((a, b) => a - b);
+    if (updated !== knownIndices) {
+      setKnownIndices(updated);
+      saveKnownIndices(updated);
+    }
+    switchTo(idx);
   };
 
   const removeAccount = (idx: number) => {
@@ -206,16 +226,37 @@ export default function AccountSwitcher({ size = 24, className = '', menuAlign =
               );
             })}
           </div>
-          {knownIndices.length < MAX_ACCOUNTS && (
-            <button
-              type="button"
-              onClick={addAccount}
-              className="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-primary)] text-sm font-medium"
+          <button
+            type="button"
+            onClick={addAccount}
+            className="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-primary)] text-sm font-medium"
+          >
+            <Plus size={16} />
+            Add Account
+          </button>
+          <div className="border-t border-[color:var(--sf-outline)]/40">
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const fd = new FormData(e.currentTarget);
+                const raw = String(fd.get('idx') || '');
+                jumpToIndex(raw);
+                e.currentTarget.reset();
+              }}
+              className="flex items-center gap-2 px-3 py-2"
             >
-              <Plus size={16} />
-              Add Account
-            </button>
-          )}
+              <Hash size={14} className="text-[color:var(--sf-text)]/50 shrink-0" />
+              <input
+                name="idx"
+                type="number"
+                min={0}
+                max={MAX_INDEX}
+                placeholder="Jump to index…"
+                className="flex-1 min-w-0 bg-transparent outline-none text-sm font-mono placeholder:text-[color:var(--sf-text)]/40"
+                aria-label="Jump to account index"
+              />
+            </form>
+          </div>
         </div>
       )}
     </div>
