@@ -757,7 +757,7 @@ export function usePools(params: UsePoolsParams = {}) {
       // not pool discovery.
       if (network === 'mainnet') {
         items = getCuratedPoolsListItems();
-        return { items, total: items.length };
+        return items;
       }
 
       // Merge fallback pool entries onto the curated set. New ids get pushed;

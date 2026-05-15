@@ -5,8 +5,6 @@ import { useTheme } from '@/context/ThemeContext';
 import { useAmmTotalVolume, type AmmVolumePoint } from '@/hooks/useAmmTotalVolume';
 import { fillDailyForward } from '@/lib/amm/volumeSeries';
 
-const ASSUMED_SECONDS_PER_BLOCK = 600;
-
 function formatUsd(value: number): string {
   if (!Number.isFinite(value)) return '—';
   if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(2)}M`;
@@ -34,30 +32,20 @@ function pointsToSeries(
   points: AmmVolumePoint[],
   latest: { height: number; valueUsd: number } | null,
 ): { time: string; value: number }[] {
-  if (!points.length) return [];
+  if (!points.length && !latest) return [];
 
-  const anchorHeight = latest?.height ?? points[points.length - 1]!.height;
-  const anchorMs = Date.now();
-
-  const heightToDate = (h: number): string => {
-    const blocksAgo = anchorHeight - h;
-    const ms = anchorMs - blocksAgo * ASSUMED_SECONDS_PER_BLOCK * 1000;
-    return new Date(ms).toISOString().slice(0, 10);
-  };
-
-  // Bucket per ISO date, keeping the *highest* cumulative value seen on that
-  // date — cumulative volume is monotonic so the last point in a bucket wins.
+  // AmmVolumePoint now carries a pre-bucketed ISO date string `time` from the
+  // API — no block-height-to-date estimation needed.
   const byDate = new Map<string, number>();
   for (const p of points) {
-    const t = heightToDate(p.height);
-    const cur = byDate.get(t);
-    if (cur === undefined || p.valueUsd > cur) byDate.set(t, p.valueUsd);
+    const cur = byDate.get(p.time);
+    if (cur === undefined || p.valueUsd > cur) byDate.set(p.time, p.valueUsd);
   }
 
   // If `latest` exists and isn't already in the series, append today's value
   // — important when the indexed series ends mid-day on a low-volume block.
   if (latest) {
-    const today = heightToDate(latest.height);
+    const today = new Date().toISOString().slice(0, 10);
     if (!byDate.has(today) || byDate.get(today)! < latest.valueUsd) {
       byDate.set(today, latest.valueUsd);
     }
@@ -70,7 +58,7 @@ function pointsToSeries(
   // Densify: one point per UTC day from first → today, missing days inherit
   // the most-recent prior value. Cumulative volume is monotonic so this is
   // semantically correct (carry-forward = "no new activity that day").
-  const today = new Date(anchorMs).toISOString().slice(0, 10);
+  const today = new Date().toISOString().slice(0, 10);
   return fillDailyForward(sparse, today);
 }
 
@@ -79,7 +67,7 @@ export default function CumulativeAmmVolume() {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<any>(null);
 
-  const { data, isLoading, isError } = useAmmTotalVolume(1000);
+  const { data, isLoading, isError } = useAmmTotalVolume();
 
   const series = useMemo(
     () => (data ? pointsToSeries(data.points, data.latest) : []),
