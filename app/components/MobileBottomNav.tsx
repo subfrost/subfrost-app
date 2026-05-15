@@ -30,7 +30,7 @@ export default function MobileBottomNav() {
   };
 
   return (
-    <nav className="fixed bottom-4 left-4 right-4 z-50 md:hidden rounded-2xl bg-[color:var(--sf-glass-bg)]/60 backdrop-blur-md shadow-lg">
+    <nav className="fixed bottom-2 left-2 right-2 z-50 md:hidden rounded-2xl bg-[color:var(--sf-glass-bg)]/60 backdrop-blur-md shadow-lg">
       <div className="flex items-center justify-around h-16 px-2">
         {navItems.map((item) => {
           const Icon = item.icon;

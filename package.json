@@ -46,7 +46,9 @@
     "test:tier2:wallets:swap": "TIER2=true vitest run __tests__/tier2/browser-wallet-swap.puppeteer.test.ts --testTimeout=180000",
     "test:tier2:wallets:send": "TIER2=true vitest run __tests__/tier2/browser-wallet-send.puppeteer.test.ts --testTimeout=180000",
     "test:tier2:wallets:send-alkane": "TIER2=true vitest run __tests__/tier2/browser-wallet-send-alkane.puppeteer.test.ts --testTimeout=180000",
-    "test:progressive": "npm run test:tier1 && npm run test:tier2"
+    "test:progressive": "npm run test:tier1 && npm run test:tier2",
+    "test:devnet": "vitest run --config vitest.config.devnet.ts __tests__/devnet/",
+    "test:devnet:cpfp": "vitest run --config vitest.config.devnet.ts __tests__/devnet/e2e-cpfp-wrap-swap.test.ts __tests__/devnet/e2e-cpfp-wrap-addliquidity.test.ts __tests__/devnet/e2e-cpfp-mempool-chain.test.ts"
   },
   "dependencies": {
     "@alkanes/ts-sdk": "https://pkg.alkanes.build/dist/@alkanes/ts-sdk?v=0.1.6-5265053",

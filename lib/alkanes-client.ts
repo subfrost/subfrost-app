@@ -363,7 +363,6 @@ export function getPools(networkName?: string): Record<string, PoolConfig> {
 export const DIESEL_TOKEN = {
   alkaneId: { block: 2, tx: 0 },
   decimals: 8,
-  totalSupplyPayload: '0x20e3ce382a030200653001',
 };
 
 // ============================================================================
@@ -560,54 +559,33 @@ class AlkanesClient {
   // ==========================================================================
 
   async getPoolReserves(pool: PoolConfig, _blockTag: string = 'latest'): Promise<PoolReserves | null> {
+    // Canonical source: SDK dataApi.getReserves (single REST call).
+    //
+    // Caller is `pool-service.ts::getPoolReserves` on the markets-display
+    // path (cached, allowed to be stale per Rule SoT-2). For
+    // slippage-critical reserves the swap-quote path uses
+    // `alkanes_simulate` opcode 97/999 via `lib/alkanes/poolState.ts` —
+    // this method is NOT on that path.
+    //
+    // No REST fallback to /get-pool-details — the deprecated direct-REST
+    // path was a stale infra artifact (2026-05-10). On SDK failure we
+    // return null so the caller's cache-or-skip flow handles it.
     try {
       const provider = await this.ensureProvider();
-
-      // Method 1: dataApi.getReserves — single REST call (preferred)
-      try {
-        const result = await provider.dataApi.getReserves(pool.id);
-        if (result) {
-          const data = typeof result === 'string' ? JSON.parse(result) : result;
-          const r0 = data?.reserve0 ?? data?.token0_amount ?? data?.data?.token0_amount;
-          const r1 = data?.reserve1 ?? data?.token1_amount ?? data?.data?.token1_amount;
-          const ts = data?.totalSupply ?? data?.token_supply ?? data?.data?.token_supply;
-          if (r0 !== undefined && r1 !== undefined) {
-            return {
-              reserve0: BigInt(String(r0 || '0')),
-              reserve1: BigInt(String(r1 || '0')),
-              totalSupply: BigInt(String(ts || '0')),
-            };
-          }
+      const result = await provider.dataApi.getReserves(pool.id);
+      if (result) {
+        const data = typeof result === 'string' ? JSON.parse(result) : result;
+        const r0 = data?.reserve0 ?? data?.token0_amount ?? data?.data?.token0_amount;
+        const r1 = data?.reserve1 ?? data?.token1_amount ?? data?.data?.token1_amount;
+        const ts = data?.totalSupply ?? data?.token_supply ?? data?.data?.token_supply;
+        if (r0 !== undefined && r1 !== undefined) {
+          return {
+            reserve0: BigInt(String(r0 || '0')),
+            reserve1: BigInt(String(r1 || '0')),
+            totalSupply: BigInt(String(ts || '0')),
+          };
         }
-      } catch {
-        // fall through to direct REST
       }
-
-      // Method 2: Direct REST to /get-pool-details (fallback)
-      // JOURNAL ENTRY (2026-02-11): Kept as fallback. SDK dataApi.getReserves is preferred.
-      const baseUrl = this.networkConfig.url;
-      const response = await fetch(`${baseUrl}/get-pool-details`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          poolId: {
-            block: String(pool.alkaneId.block),
-            tx: String(pool.alkaneId.tx),
-          },
-        }),
-      });
-      const result = await response.json();
-
-      if (result?.statusCode === 200 && result?.data) {
-        const data = result.data;
-        return {
-          reserve0: BigInt(data.token0_amount || '0'),
-          reserve1: BigInt(data.token1_amount || '0'),
-          totalSupply: BigInt(data.token_supply || '0'),
-        };
-      }
-
-      console.warn(`[AlkanesClient] Unexpected pool details response for ${pool.id}:`, JSON.stringify(result));
       return null;
     } catch (error) {
       console.error(`[AlkanesClient] Error fetching pool reserves for ${pool.id}:`, error);
@@ -636,68 +614,15 @@ class AlkanesClient {
     }
   }
 
-  async getDieselTotalSupply(): Promise<bigint | null> {
-    const provider = await this.ensureProvider();
-
-    // Method 1: espo.getCirculatingSupply — structured response (preferred)
-    // Note: method exists at runtime but may not be in installed type declarations
-    try {
-      const result = await (provider.espo as any).getCirculatingSupply('2:0');
-      if (result != null) {
-        const val = typeof result === 'object'
-          ? (result as any)?.supply ?? (result as any)?.circulating_supply ?? (result as any)?.data
-          : result;
-        if (val != null) {
-          const n = typeof val === 'string' ? BigInt(val) : BigInt(Number(val));
-          if (n > BigInt(0)) return n;
-        }
-      }
-    } catch {
-      // fall through to metashrew_view
-    }
-
-    // Method 2: metashrewView simulate — raw protobuf hex (fallback)
-    // JOURNAL ENTRY (2026-02-11): Kept as fallback. espo.getCirculatingSupply is preferred.
-    try {
-      const hex = await this.metashrewView('simulate', DIESEL_TOKEN.totalSupplyPayload, 'latest');
-      return this.parseTotalSupplyHex(hex);
-    } catch (error) {
-      console.error('[AlkanesClient] Error fetching DIESEL total supply:', error);
-      return null;
-    }
-  }
-
-  parseTotalSupplyHex(hex: string): bigint | null {
-    try {
-      const data = hex.startsWith('0x') ? hex.slice(2) : hex;
-      if (!data) return null;
-
-      const marker1a = data.indexOf('1a');
-      if (marker1a === -1) return null;
-
-      const valueStart = marker1a + 4;
-      const valueEnd = data.indexOf('10', valueStart);
-
-      if (valueEnd === -1) {
-        const valueHex = data.slice(valueStart, Math.min(valueStart + 32, data.length));
-        return parseU128LE(valueHex);
-      }
-
-      const valueHex = data.slice(valueStart, valueEnd);
-      const paddedHex = valueHex.padEnd(32, '0');
-      return parseU128LE(paddedHex);
-    } catch {
-      return null;
-    }
-  }
-
   // ==========================================================================
   // Data API Methods
   // ==========================================================================
 
   async getBitcoinPrice(): Promise<number> {
-    // Method 1: SDK dataApi.getBitcoinPrice (preferred)
-    // JOURNAL ENTRY (2026-02-11): Try SDK first, fall back to direct REST.
+    // Canonical source: SDK dataApi.getBitcoinPrice. Returns 0 on SDK
+    // failure so the caller (pool-service.ts) degrades gracefully. No REST
+    // fallback — the deprecated `mainnet.subfrost.io/.../get-bitcoin-price`
+    // endpoint was a stale infra artifact and is removed (2026-05-10).
     try {
       const provider = await this.ensureProvider();
       const result = await provider.dataApi.getBitcoinPrice();
@@ -709,27 +634,9 @@ class AlkanesClient {
           return price;
         }
       }
-    } catch {
-      // fall through to direct REST
-    }
-
-    // Method 2: Direct REST (fallback)
-    try {
-      const response = await fetch('https://mainnet.subfrost.io/v4/subfrost/get-bitcoin-price', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
-      });
-      const result = await response.json();
-      const price = result?.data?.bitcoin?.usd;
-      if (typeof price === 'number' && price > 0) {
-        return price;
-      }
-      console.warn('[AlkanesClient] Unexpected BTC price response:', JSON.stringify(result));
     } catch (error) {
       console.error('[AlkanesClient] getBitcoinPrice failed:', error);
     }
-
     return 0;
   }
 }
