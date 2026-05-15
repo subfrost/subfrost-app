@@ -123,59 +123,12 @@ jobs:
             --domain=${{ env.CUSTOM_DOMAIN }} \
             --region=${{ env.REGION }} 2>/dev/null || echo "Domain mapping already exists"
 
-      - name: Update Cloudflare DNS
-        env:
-          CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-        run: |
-          DOMAIN="${{ env.CUSTOM_DOMAIN }}"
-          # Use Google's domain mapping IP (Cloud Run domain mapping)
-          TARGET="216.239.32.21"
-
-          # Get Zone ID for subfrost.io
-          CF_ZONE_ID=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones?name=${{ env.BASE_DOMAIN }}" \
-            -H "Authorization: Bearer ${CF_API_TOKEN}" \
-            -H "Content-Type: application/json" | jq -r '.result[0].id')
-
-          if [ "$CF_ZONE_ID" = "null" ] || [ -z "$CF_ZONE_ID" ]; then
-            echo "Error: Could not find Cloudflare zone for ${{ env.BASE_DOMAIN }}"
-            exit 1
-          fi
-
-          echo "Using Zone ID: ${CF_ZONE_ID}"
-
-          # Check for existing record
-          RESPONSE=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/dns_records?name=${DOMAIN}" \
-            -H "Authorization: Bearer ${CF_API_TOKEN}" \
-            -H "Content-Type: application/json")
-
-          RECORD_ID=$(echo "$RESPONSE" | jq -r '.result[] | select(.type == "A" or .type == "AAAA" or .type == "CNAME") | .id' | head -1)
-          RECORD_TYPE=$(echo "$RESPONSE" | jq -r '.result[] | select(.type == "A" or .type == "AAAA" or .type == "CNAME") | .type' | head -1)
-
-          if [ -n "$RECORD_ID" ]; then
-            echo "Found existing ${RECORD_TYPE} record: ${RECORD_ID}"
-            if [ "$RECORD_TYPE" = "A" ]; then
-              curl -s -X PUT "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/dns_records/${RECORD_ID}" \
-                -H "Authorization: Bearer ${CF_API_TOKEN}" \
-                -H "Content-Type: application/json" \
-                --data "{\"type\":\"A\",\"name\":\"app\",\"content\":\"${TARGET}\",\"ttl\":1,\"proxied\":false}"
-              echo "Updated A record: ${DOMAIN} -> ${TARGET}"
-            else
-              curl -s -X DELETE "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/dns_records/${RECORD_ID}" \
-                -H "Authorization: Bearer ${CF_API_TOKEN}" \
-                -H "Content-Type: application/json" > /dev/null
-              curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/dns_records" \
-                -H "Authorization: Bearer ${CF_API_TOKEN}" \
-                -H "Content-Type: application/json" \
-                --data "{\"type\":\"A\",\"name\":\"app\",\"content\":\"${TARGET}\",\"ttl\":1,\"proxied\":false}"
-              echo "Replaced ${RECORD_TYPE} with A record: ${DOMAIN} -> ${TARGET}"
-            fi
-          else
-            curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/dns_records" \
-              -H "Authorization: Bearer ${CF_API_TOKEN}" \
-              -H "Content-Type: application/json" \
-              --data "{\"type\":\"A\",\"name\":\"app\",\"content\":\"${TARGET}\",\"ttl\":1,\"proxied\":false}"
-            echo "Created A record: ${DOMAIN} -> ${TARGET}"
-          fi
+      # DNS is one-time setup, not a deploy-time concern. The A/AAAA records for
+      # app.subfrost.io point at the fixed Google Cloud Run domain-mapping IPs
+      # (216.239.32.21 + 2001:4860:4802::/64) and never change. Managing them
+      # from CI was idempotent no-op noise that required a CLOUDFLARE_API_TOKEN
+      # in repo secrets — removed 2026-05-15. If the records ever need a real
+      # change, do it once from the Cloudflare dashboard.
 
       - name: Deployment Summary
         run: |
