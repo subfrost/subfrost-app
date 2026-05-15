@@ -41,7 +41,7 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
   const { network: walletNetwork } = useWallet();
   const network = networkProp || walletNetwork;
   const { t } = useTranslation();
-  const { FRBTC_ALKANE_ID, BUSD_ALKANE_ID } = getConfig(network);
+  const { FRBTC_ALKANE_ID } = getConfig(network);
   const { maxSlippage, setMaxSlippage, slippageSelection, setSlippageSelection, deadlineBlocks, setDeadlineBlocks } = useGlobalStore();
   const isCrossChain = isCrossChainFrom || isCrossChainTo;
 
@@ -227,23 +227,6 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
                   </div>
                 ))}
               </div>
-              {(quote?.hops === 2 || sellId === 'btc' || buyId === 'btc') && (
-                <div className="mt-1.5 flex items-start gap-1.5 text-xs text-[color:var(--sf-text)]/60">
-                  <svg className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" viewBox="0 0 256 256" fill="currentColor">
-                    <path d="M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm0,192a88,88,0,1,1,88-88A88.1,88.1,0,0,1,128,216Zm16-40a8,8,0,0,1-8,8,16,16,0,0,1-16-16V128a8,8,0,0,1,0-16,16,16,0,0,1,16,16v40A8,8,0,0,1,144,176ZM112,84a12,12,0,1,1,12,12A12,12,0,0,1,112,84Z"/>
-                  </svg>
-                  <span>
-                    {quote?.hops === 2 && swapRoute.length === 3 && (
-                      <>
-                        {swapRoute[1].id === BUSD_ALKANE_ID && t('swapSummary.bridgeBusd')}
-                        {swapRoute[1].id === FRBTC_ALKANE_ID && t('swapSummary.bridgeFrbtc')}
-                      </>
-                    )}
-                    {sellId === 'btc' && (buyId === 'frbtc' || buyId === FRBTC_ALKANE_ID) && t('swapSummary.wrapNote')}
-                    {quote?.hops === 2 && t('swapSummary.multiHopFeeNote')}
-                  </span>
-                </div>
-              )}
             </div>
           )}
           
