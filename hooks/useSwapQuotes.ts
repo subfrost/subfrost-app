@@ -92,6 +92,12 @@ export type SwapQuote = {
    * nonsense `amount_out_min`. See SoT-2 / 2026-05-05 incident.
    */
   reservesUnavailable?: boolean;
+  /**
+   * Price impact as a fraction (0–1). 0.10 = 10% price impact.
+   * Only set for direct AMM swaps (not wrap/unwrap, not multi-hop).
+   * Computed as: 1 - (buyAmount * reserveIn) / (sellAmount * reserveOut)
+   */
+  priceImpact?: number;
 };
 
 const ALKS_DECIMALS = 8;
@@ -255,6 +261,25 @@ async function calculateSwapPrice(
   const minReceivedInAlks = calculateMinimumFromSlippage({ amount: buyAmount, maxSlippage });
   const maxSentInAlks = calculateMaximumFromSlippage({ amount: sellAmount, maxSlippage });
 
+  // Price impact: how much worse the execution rate is vs the spot rate (AMM mid-price).
+  // Only computed for direct token-to-token AMM swaps — BTC wrap/unwrap fees are
+  // deterministic and small, so excluding them keeps the metric focused on pool depth.
+  // Formula: 1 - (buyAmount * reserveIn) / (sellAmount * reserveOut)
+  let priceImpact: number | undefined;
+  if (
+    effectiveSell !== 'btc' &&
+    effectiveBuy !== 'btc' &&
+    reserveIn > 0 &&
+    reserveOut > 0
+  ) {
+    const buyNum = Number(buyAmount);
+    const sellNum = Number(sellAmount);
+    if (sellNum > 0 && buyNum >= 0) {
+      const impact = 1 - (buyNum * reserveIn) / (sellNum * reserveOut);
+      priceImpact = Math.max(0, impact);
+    }
+  }
+
   return {
     direction,
     inputAmount: amount,
@@ -267,6 +292,7 @@ async function calculateSwapPrice(
     displaySellAmount: direction !== 'sell' ? fromAlks(maxSentInAlks) : fromAlks(sellAmount),
     displayMinimumReceived: fromAlks(minReceivedInAlks),
     displayMaximumSent: fromAlks(maxSentInAlks),
+    priceImpact,
     // Include poolId for the swap mutation to use
     poolId: (() => { const [b, t] = pool.id.split(':'); return { block: b, tx: t }; })(),
   } as SwapQuote;

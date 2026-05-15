@@ -47,6 +47,11 @@ export type SwapQuote = {
   hops?: number; // Number of swaps (1 for direct, 2 for multi-hop)
   /** Routing source: 'amm' (default), 'clob' (orderbook), or 'router' (hybrid best-price) */
   routeSource?: 'amm' | 'clob' | 'router';
+  /**
+   * Price impact as a fraction (0–1). 0.10 = 10% price impact.
+   * Only set for direct AMM swaps (not wrap/unwrap, not multi-hop).
+   */
+  priceImpact?: number;
 };
 
 
