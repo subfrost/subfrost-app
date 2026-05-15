@@ -30,7 +30,7 @@
  * @see useAlkanesTokenPairs.ts - Pool data fetching
  * @see constants/index.ts - Documentation on factory vs pool opcodes
  */
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import BigNumber from 'bignumber.js';
 import { useDebounce } from 'use-debounce';
@@ -46,8 +46,9 @@ import { calculateMaximumFromSlippage, calculateMinimumFromSlippage } from '@/ut
 import { useFrbtcPremium } from '@/hooks/useFrbtcPremium';
 import { fetchRouterQuote } from '@/hooks/useRouterQuote';
 import { usePoolStateLive } from '@/hooks/usePoolStateLive';
-import type { LivePoolState } from '@/lib/alkanes/poolState';
+import { fetchPoolStateFromDataSource, type LivePoolState } from '@/lib/alkanes/poolState';
 import { swapCalculateOut, swapCalculateIn } from '@/lib/alkanes/swapMath';
+import { getAlkanesDataSource } from '@/lib/alkanes/dataSource';
 
 type Direction = 'buy' | 'sell';
 
@@ -142,6 +143,9 @@ async function calculateSwapPrice(
   const amountInAlks = toAlks(amount);
   const amountNumeric = parseFloat(amount);
   if (!amount || !Number.isFinite(amountNumeric) || amountNumeric === 0) {
+    // poolId carried so a click-without-amount doesn't trigger the
+    // "swapFailedPoolNotFound" toast — the pool was found, the user
+    // just hasn't typed an amount yet.
     return {
       direction,
       inputAmount: amount,
@@ -154,12 +158,14 @@ async function calculateSwapPrice(
       displaySellAmount: '0',
       displayMinimumReceived: '0',
       displayMaximumSent: '0',
+      poolId: (() => { const [b, t] = pool.id.split(':'); return { block: b, tx: t }; })(),
     } as SwapQuote;
   }
 
   const isSellToken0 = pool?.token0.id === sellCurrency;
-  // Reserves MUST come from the live state-trie (`alkanes_simulate` opcode
-  // 999 PoolDetails via `usePoolStateLive`). Using cached aggregator data
+  // Reserves MUST come from the live pool-state source selected by
+  // `usePoolStateLive` (ESPO on mainnet, metashrew simulate otherwise).
+  // Using cached aggregator data
   // (`pool.token0Amount`) here is a Rule SoT-2 violation — verified
   // 2026-05-05 by recomputing user-reported failed swaps:
   //   Tx 2c51b734… min_out = 1197 DIESEL, pool actual = 762 DIESEL
@@ -170,7 +176,10 @@ async function calculateSwapPrice(
   //
   // If `liveState` isn't available yet (in-flight, errored, or disabled),
   // return a zero quote so the UI can show "Loading…" / disable the
-  // swap button. Anything else is silently wrong.
+  // swap button. The early-return MUST still carry `poolId` so the
+  // SwapShell click handler's `quote.poolId` guard doesn't spuriously
+  // surface "swapFailedPoolNotFound" — we found the pool, the live
+  // reserves are just still in flight.
   if (!liveState) {
     return {
       direction,
@@ -185,6 +194,7 @@ async function calculateSwapPrice(
       displayMinimumReceived: '0',
       displayMaximumSent: '0',
       reservesUnavailable: true,
+      poolId: (() => { const [b, t] = pool.id.split(':'); return { block: b, tx: t }; })(),
     } as SwapQuote;
   }
   // Chain-aware reserves: replay our pending swaps targeting this
@@ -271,6 +281,7 @@ export function useSwapQuotes(
 ) {
   const [debouncedAmount] = useDebounce(amount, 300);
   const { network } = useWallet();
+  const dataSource = getAlkanesDataSource(network);
   const { provider, isInitialized } = useAlkanesSDK();
   const { BUSD_ALKANE_ID, FRBTC_ALKANE_ID } = getConfig(network);
   const sellCurrencyId = sellCurrency === 'btc' ? FRBTC_ALKANE_ID : sellCurrency;
@@ -311,12 +322,38 @@ export function useSwapQuotes(
     );
   }, [sellPairs, sellCurrencyId, buyCurrencyId]);
 
+  // DIAGNOSTIC 2026-05-11: trace what the engine is seeing when no quote
+  // populates. This logs once per change in the lookup state — not on every
+  // render — so the console isn't spammed.
+  useEffect(() => {
+    if (!poolsData?.items) return;
+    if (!sellCurrencyId || !buyCurrencyId) return;
+    const sellMatch = sellPairs?.length ?? 0;
+    const buyMatch = buyPairs?.length ?? 0;
+    if (directPool) {
+      console.log(
+        `[useSwapQuotes] direct pool found: id=${directPool.id} ` +
+        `token0=${directPool.token0.id} token1=${directPool.token1.id} ` +
+        `(looking for sellId=${sellCurrencyId} buyId=${buyCurrencyId})`,
+      );
+    } else {
+      const head = poolsData.items.slice(0, 5).map(p => `${p.id}[${p.token0.id}/${p.token1.id}]`);
+      console.warn(
+        `[useSwapQuotes] direct pool NOT FOUND for sellId=${sellCurrencyId} buyId=${buyCurrencyId}; ` +
+        `sellPairs=${sellMatch} buyPairs=${buyMatch} totalPools=${poolsData.items.length}; ` +
+        `first5 = ${head.join(', ')}`,
+      );
+    }
+  }, [poolsData, sellPairs, buyPairs, sellCurrencyId, buyCurrencyId, directPool]);
+
   // Live reserves for the direct pool. Only polls while the user has typed an
   // amount (avoids background traffic when the swap form is idle). HeightPoller
   // also invalidates this on every new block.
   const hasAmount = !!debouncedAmount && parseFloat(debouncedAmount) > 0;
   const liveDirect = usePoolStateLive(directPool?.id, {
     enabled: !!directPool && hasAmount,
+    token0Id: directPool?.token0.id,
+    token1Id: directPool?.token1.id,
   });
   const liveReserve0 = liveDirect.data?.reserve0;
   const liveReserve1 = liveDirect.data?.reserve1;
@@ -359,6 +396,7 @@ export function useSwapQuotes(
       maxSlippage,
       wrapFee,
       unwrapFee,
+      dataSource,
       liveReserve0,
       liveReserve1,
       pendingSwapsKey,
@@ -481,6 +519,22 @@ export function useSwapQuotes(
 
       const direct = directPool;
       // console.log('[useSwapQuotes] Direct pool found:', direct ? { poolId: direct.poolId, token0: direct.token0.id, token1: direct.token1.id } : 'NONE');
+      const poolStateCache = new Map<string, Promise<LivePoolState | null>>();
+      const getPoolStateForQuote = (pool: PoolsListItem): Promise<LivePoolState | null> => {
+        const cached = poolStateCache.get(pool.id);
+        if (cached) return cached;
+        const pending = fetchPoolStateFromDataSource(
+          network,
+          factoryId ?? '',
+          pool.id,
+          pool.token0.id,
+          pool.token1.id,
+          dataSource,
+        );
+        poolStateCache.set(pool.id, pending);
+        return pending;
+      };
+
       if (direct) {
         const ammQuote = await calculateSwapPrice(
           sellCurrencyId,
@@ -494,7 +548,7 @@ export function useSwapQuotes(
           unwrapFee,
           sellCurrency,
           buyCurrency,
-          liveDirect.data,
+          liveDirect.data ?? null,
           pendingSwapsForDirect,
         );
 
@@ -565,6 +619,7 @@ export function useSwapQuotes(
         const mid = BUSD_ALKANE_ID;
         if (direction === 'sell') {
           try {
+            const firstHopState = await getPoolStateForQuote(sellToBusd);
             const firstHop = await calculateSwapPrice(
               sellCurrencyId,
               mid,
@@ -576,7 +631,10 @@ export function useSwapQuotes(
               wrapFee,
               unwrapFee,
               sellCurrency,
+              undefined,
+              firstHopState,
             );
+            const secondHopState = await getPoolStateForQuote(buyToBusd);
             const secondHop = await calculateSwapPrice(
               mid,
               buyCurrencyId,
@@ -589,6 +647,7 @@ export function useSwapQuotes(
               unwrapFee,
               undefined,
               buyCurrency,
+              secondHopState,
             );
             const overallSellAmount = toAlks(debouncedAmount);
             const overallExchangeRate = new BigNumber(secondHop.buyAmount || '0').dividedBy(overallSellAmount || '1').toString();
@@ -598,6 +657,7 @@ export function useSwapQuotes(
           }
         } else {
           try {
+            const secondHopState = await getPoolStateForQuote(buyToBusd);
             const secondHop = await calculateSwapPrice(
               mid,
               buyCurrencyId,
@@ -610,7 +670,9 @@ export function useSwapQuotes(
               unwrapFee,
               undefined,
               buyCurrency,
+              secondHopState,
             );
+            const firstHopState = await getPoolStateForQuote(sellToBusd);
             const firstHop = await calculateSwapPrice(
               sellCurrencyId,
               mid,
@@ -622,6 +684,8 @@ export function useSwapQuotes(
               wrapFee,
               unwrapFee,
               sellCurrency,
+              undefined,
+              firstHopState,
             );
             const overallBuyAmount = toAlks(debouncedAmount);
             const overallExchangeRate = new BigNumber(overallBuyAmount || '0').dividedBy(firstHop.sellAmount || '1').toString();
@@ -637,6 +701,7 @@ export function useSwapQuotes(
         const mid = FRBTC_ALKANE_ID;
         if (direction === 'sell') {
           try {
+            const firstHopState = await getPoolStateForQuote(sellToFrbtc);
             const firstHop = await calculateSwapPrice(
               sellCurrencyId,
               mid,
@@ -648,7 +713,10 @@ export function useSwapQuotes(
               wrapFee,
               unwrapFee,
               sellCurrency,
+              undefined,
+              firstHopState,
             );
+            const secondHopState = await getPoolStateForQuote(buyToFrbtc);
             const secondHop = await calculateSwapPrice(
               mid,
               buyCurrencyId,
@@ -661,6 +729,7 @@ export function useSwapQuotes(
               unwrapFee,
               undefined,
               buyCurrency,
+              secondHopState,
             );
             const overallSellAmount = toAlks(debouncedAmount);
             const overallExchangeRate = new BigNumber(secondHop.buyAmount || '0').dividedBy(overallSellAmount || '1').toString();
@@ -670,6 +739,7 @@ export function useSwapQuotes(
           }
         } else {
           try {
+            const secondHopState = await getPoolStateForQuote(buyToFrbtc);
             const secondHop = await calculateSwapPrice(
               mid,
               buyCurrencyId,
@@ -682,7 +752,9 @@ export function useSwapQuotes(
               unwrapFee,
               undefined,
               buyCurrency,
+              secondHopState,
             );
+            const firstHopState = await getPoolStateForQuote(sellToFrbtc);
             const firstHop = await calculateSwapPrice(
               sellCurrencyId,
               mid,
@@ -694,6 +766,8 @@ export function useSwapQuotes(
               wrapFee,
               unwrapFee,
               sellCurrency,
+              undefined,
+              firstHopState,
             );
             const overallBuyAmount = toAlks(debouncedAmount);
             const overallExchangeRate = new BigNumber(overallBuyAmount || '0').dividedBy(firstHop.sellAmount || '1').toString();

@@ -99,6 +99,7 @@ jobs:
             --set-env-vars "REDIS_HOST=${{ secrets.REDIS_HOST }}" \
             --set-env-vars "REDIS_PORT=${{ secrets.REDIS_PORT }}" \
             --set-env-vars "ADMIN_SECRET=${{ secrets.ADMIN_SECRET }}" \
+            --set-env-vars "SUBFROST_V6_API_KEY=${{ secrets.SUBFROST_V6_API_KEY }}" \
             --set-secrets "DATABASE_URL=DATABASE_URL:latest" \
             --vpc-connector "subfrost-connector" \
             --vpc-egress "private-ranges-only"

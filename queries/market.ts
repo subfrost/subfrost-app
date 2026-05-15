@@ -9,9 +9,7 @@ import { queryOptions } from '@tanstack/react-query';
 import { queryKeys } from './keys';
 import { FRBTC_WRAP_FEE_PER_1000, FRBTC_UNWRAP_FEE_PER_1000 } from '@/constants/alkanes';
 import { encodeSimulateCalldata } from '@/utils/simulateCalldata';
-import { getBitcoinPrice as rpcGetBitcoinPrice } from '@/lib/alkanes/rpc';
-// Pricing data is global — always use mainnet subpricer regardless of connected network
-const SUBPRICER_BASE = 'https://mainnet.subfrost.io/v4/subfrost';
+import { getAlkanesDataSource } from '@/lib/alkanes/dataSource';
 
 // Re-export the premium type so hooks can use it
 export type FrbtcPremiumData = {
@@ -25,10 +23,17 @@ export type FrbtcPremiumData = {
 // Re-export token display type
 export type TokenDisplay = { id: string; name?: string; symbol?: string };
 
-// Hardcoded fallbacks for well-known tokens
+// Hardcoded canonical names. Checked before espo so protocol-canonical
+// alkanes (genesis tokens, etc.) resolve instantly and don't fall through to
+// the raw-id fallback when espo has no metadata for them.
 const KNOWN_TOKENS: Record<string, TokenDisplay> = {
   btc: { id: 'btc', name: 'Bitcoin', symbol: 'BTC' },
   frbtc: { id: 'frbtc', name: 'frBTC', symbol: 'frBTC' },
+  '32:0': { id: '32:0', name: 'frBTC', symbol: 'frBTC' },
+  '2:0': { id: '2:0', name: 'DIESEL', symbol: 'DIESEL' },
+  '2:56801': { id: '2:56801', name: 'bUSD', symbol: 'bUSD' },
+  '2:68479': { id: '2:68479', name: 'TORTILLA', symbol: 'TORTILLA' },
+  '2:69': { id: '2:69', name: 'FARTANE', symbol: 'FARTANE' },
 };
 
 // ---------------------------------------------------------------------------
@@ -76,42 +81,27 @@ export function btcPriceQueryOptions(
     staleTime: Infinity,
     refetchOnWindowFocus: false,
     queryFn: async () => {
-      // Primary: subpricer — protocol-canonical price.
+      // Same-origin proxy `/api/btc-price` forwards to the canonical
+      // subpricer endpoint `mainnet.subfrost.io/v4/subfrost/get-bitcoin-price`
+      // (implemented in subkube). Going through the proxy avoids CORS,
+      // gets CDN-edge caching, and keeps the canonical URL in one place
+      // (the route handler) so a future endpoint change is a one-file
+      // edit.
+      //
+      // No fallback chain — if subpricer is unreachable, the proxy
+      // returns { usd: 0 } with a 502 and we propagate 0 to the UI so
+      // USD displays render "—" instead of mixing stale numbers from
+      // a different aggregator.
       try {
-        const resp = await fetch(`${SUBPRICER_BASE}/api/v1/bitcoin-price`, {
+        const resp = await fetch('/api/btc-price', {
           signal: AbortSignal.timeout(5000),
         });
         if (resp.ok) {
           const data = await resp.json();
-          const price = data?.usd ?? data?.price ?? 0;
+          const price = data?.usd ?? 0;
           if (price > 0) return price;
         }
-      } catch { /* fall through to rpc.ts */ }
-
-      // Fallback 1: SDK-mediated rpc.ts layer (Next.js /api/btc-price).
-      try {
-        const data = await rpcGetBitcoinPrice(AbortSignal.timeout(5000));
-        const price = (data as { usd?: number; price?: number })?.usd
-          ?? (data as { price?: number })?.price
-          ?? (typeof data === 'number' ? data : 0);
-        if (price > 0) return price;
-      } catch { /* fall through to coingecko */ }
-
-      // Fallback 2: coingecko public API (last resort).
-      try {
-        const resp = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd', {
-          signal: AbortSignal.timeout(5000),
-        });
-        if (resp.ok) {
-          const data = await resp.json();
-          const price = data?.bitcoin?.usd ?? 0;
-          if (price > 0) return price;
-        }
-      } catch { /* fall through */ }
-
-      // No source returned a price. Surface this honestly rather than
-      // returning a hardcoded 90000 — display "—" is better than a wrong
-      // number that triggers wrong USD math everywhere downstream.
+      } catch { /* proxy/subpricer down — return 0 below */ }
       return 0;
     },
   });
@@ -145,6 +135,16 @@ export function frbtcPremiumQueryOptions(
     retry: 3,
     retryDelay: 1000,
     queryFn: async () => {
+      if (network === 'mainnet' || getAlkanesDataSource(network) === 'espo') {
+        return {
+          premium: FRBTC_WRAP_FEE_PER_1000 * 100_000,
+          wrapFeePerThousand: FRBTC_WRAP_FEE_PER_1000,
+          unwrapFeePerThousand: FRBTC_UNWRAP_FEE_PER_1000,
+          isLive: false,
+          error: 'ESPO data source uses configured frBTC fees; no alkanes_simulate call',
+        };
+      }
+
       if (!provider) throw new Error('Provider not initialized');
 
       if (!frbtcAlkaneId || frbtcAlkaneId === '') {
@@ -236,37 +236,38 @@ async function fetchAlkaneNamesBatch(
 
   const rpcUrl = `/api/rpc/${network || 'mainnet'}/espo`;
 
-  const results = await Promise.all(
-    alkaneIds.map(async (id) => {
-      try {
-        const resp = await fetch(rpcUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          signal: AbortSignal.timeout(5000),
-          body: JSON.stringify({
-            jsonrpc: '2.0', id: 1,
-            method: 'essentials.get_alkane_info',
-            params: { alkane: id },
-          }),
-        });
-        const json = await resp.json();
-        const data = json?.result;
-        if (data?.name) {
-          const name = (data.name as string).replace('SUBFROST BTC', 'frBTC');
-          return { id, name, symbol: data.symbol || '' };
-        }
-        return { id, name: undefined as string | undefined, symbol: '' };
-      } catch {
-        return { id, name: undefined as string | undefined, symbol: '' };
-      }
-    }),
-  );
+  try {
+    const request = alkaneIds.map((id, index) => ({
+      jsonrpc: '2.0',
+      id: index + 1,
+      method: 'essentials.get_alkane_info',
+      params: { alkane: id },
+    }));
+    const resp = await fetch(rpcUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(5000),
+      body: JSON.stringify(request),
+    });
+    const json = await resp.json();
+    const responses = Array.isArray(json) ? json : [];
+    const byId = new Map<number, any>();
+    for (const item of responses) {
+      if (typeof item?.id === 'number') byId.set(item.id, item);
+    }
 
-  for (const r of results) {
-    if (r.name) {
-      map[r.id] = { id: r.id, name: r.name, symbol: r.symbol };
-    } else {
-      map[r.id] = { id: r.id };
+    for (const [index, id] of alkaneIds.entries()) {
+      const data = byId.get(index + 1)?.result;
+      if (data?.name) {
+        const name = (data.name as string).replace('SUBFROST BTC', 'frBTC');
+        map[id] = { id, name, symbol: data.symbol || '' };
+      } else {
+        map[id] = { id, name: id, symbol: id };
+      }
+    }
+  } catch {
+    for (const id of alkaneIds) {
+      map[id] = { id, name: id, symbol: id };
     }
   }
 

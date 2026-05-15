@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { X, Scissors, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { useWallet } from '@/context/WalletContext';
+import { useTranslation } from '@/hooks/useTranslation';
 import * as bitcoin from 'bitcoinjs-lib';
 
 interface SplitUtxoModalProps {
@@ -22,6 +23,7 @@ interface SplitUtxoModalProps {
 }
 
 export default function SplitUtxoModal({ isOpen, onClose, utxo }: SplitUtxoModalProps) {
+  const { t } = useTranslation();
   const { provider } = useAlkanesSDK();
   const { address, wallet } = useWallet() as any;
   const [splitAmount, setSplitAmount] = useState('546'); // Dust limit
@@ -36,7 +38,7 @@ export default function SplitUtxoModal({ isOpen, onClose, utxo }: SplitUtxoModal
 
   const handleSplit = async () => {
     if (!provider || !wallet) {
-      setError('Wallet not initialized');
+      setError(t('splitUtxo.walletNotInitialized'));
       return;
     }
 
@@ -48,13 +50,13 @@ export default function SplitUtxoModal({ isOpen, onClose, utxo }: SplitUtxoModal
       const splitSats = parseInt(splitAmount);
 
       if (splitSats < dustLimit) {
-        setError(`Split amount must be at least ${dustLimit} sats (dust limit)`);
+        setError(t('splitUtxo.amountTooSmall', { dustLimit }));
         setStep('input');
         return;
       }
 
       if (splitSats * outputs > utxo.value - 1000) {
-        setError('Not enough value to create outputs and pay fees');
+        setError(t('splitUtxo.notEnoughValue'));
         setStep('input');
         return;
       }
@@ -122,7 +124,7 @@ export default function SplitUtxoModal({ isOpen, onClose, utxo }: SplitUtxoModal
       setStep('success');
     } catch (err: any) {
       console.error('UTXO split failed:', err);
-      setError(err.message || 'Failed to split UTXO');
+      setError(err.message || t('splitUtxo.failed'));
       setStep('input');
     }
   };
@@ -143,7 +145,7 @@ export default function SplitUtxoModal({ isOpen, onClose, utxo }: SplitUtxoModal
         <div className="flex items-center justify-between p-6 border-b border-[color:var(--sf-outline)]">
           <div className="flex items-center gap-3">
             <Scissors size={24} className="text-purple-500 dark:text-purple-400" />
-            <h2 className="text-xl font-bold text-[color:var(--sf-text)]">Split UTXO for Ordinals</h2>
+            <h2 className="text-xl font-bold text-[color:var(--sf-text)]">{t('splitUtxo.title')}</h2>
           </div>
           <button
             onClick={handleClose}
@@ -159,16 +161,16 @@ export default function SplitUtxoModal({ isOpen, onClose, utxo }: SplitUtxoModal
             <div className="space-y-6">
               {/* UTXO Info */}
               <div className="p-4 rounded-lg bg-[color:var(--sf-primary)]/5 border border-[color:var(--sf-outline)]">
-                <div className="text-sm text-[color:var(--sf-text)]/60 mb-2">UTXO to Split:</div>
+                <div className="text-sm text-[color:var(--sf-text)]/60 mb-2">{t('splitUtxo.utxoToSplit')}</div>
                 <div className="text-xs text-[color:var(--sf-text)]/80 mb-2">
                   {utxo.txid.slice(0, 16)}...:{utxo.vout}
                 </div>
                 <div className="text-sm text-[color:var(--sf-text)]">
-                  Value: {(utxo.value / 100000000).toFixed(8)} BTC ({utxo.value.toLocaleString()} sats)
+                  {t('utxo.value')} {(utxo.value / 100000000).toFixed(8)} BTC ({utxo.value.toLocaleString()} sats)
                 </div>
                 {utxo.inscriptions && utxo.inscriptions.length > 0 && (
                   <div className="mt-2 text-xs text-orange-500 dark:text-orange-400">
-                    ⚠️ Contains {utxo.inscriptions.length} inscription{utxo.inscriptions.length > 1 ? 's' : ''}
+                    {t(utxo.inscriptions.length === 1 ? 'splitUtxo.containsInscriptionSingular' : 'splitUtxo.containsInscriptionPlural', { count: utxo.inscriptions.length })}
                   </div>
                 )}
               </div>
@@ -177,7 +179,7 @@ export default function SplitUtxoModal({ isOpen, onClose, utxo }: SplitUtxoModal
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-[color:var(--sf-text)]/80 mb-2">
-                    Number of Outputs
+                    {t('splitUtxo.numberOfOutputs')}
                   </label>
                   <input
                     type="number"
@@ -188,13 +190,13 @@ export default function SplitUtxoModal({ isOpen, onClose, utxo }: SplitUtxoModal
                     className="w-full px-4 py-3 rounded-lg bg-[color:var(--sf-primary)]/5 border border-[color:var(--sf-outline)] text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)]"
                   />
                   <div className="mt-1 text-xs text-[color:var(--sf-text)]/60">
-                    Split into {numOutputs} separate UTXOs (good for managing multiple ordinals)
+                    {t('splitUtxo.splitIntoOutputs', { count: numOutputs })}
                   </div>
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-[color:var(--sf-text)]/80 mb-2">
-                    Amount per Output (sats)
+                    {t('splitUtxo.amountPerOutput')}
                   </label>
                   <input
                     type="number"
@@ -204,29 +206,29 @@ export default function SplitUtxoModal({ isOpen, onClose, utxo }: SplitUtxoModal
                     className="w-full px-4 py-3 rounded-lg bg-[color:var(--sf-primary)]/5 border border-[color:var(--sf-outline)] text-[color:var(--sf-text)] outline-none focus:border-[color:var(--sf-primary)]"
                   />
                   <div className="mt-1 text-xs text-[color:var(--sf-text)]/60">
-                    Minimum: {dustLimit} sats (dust limit)
+                    {t('splitUtxo.minimumDust', { dustLimit })}
                   </div>
                 </div>
 
                 {/* Preview */}
                 <div className="p-4 rounded-lg bg-[color:var(--sf-primary)]/10 border border-[color:var(--sf-primary)]/20">
-                  <div className="text-sm font-medium text-[color:var(--sf-primary)] mb-2">Split Preview:</div>
+                  <div className="text-sm font-medium text-[color:var(--sf-primary)] mb-2">{t('splitUtxo.preview')}</div>
                   <div className="space-y-1 text-xs text-[color:var(--sf-text)]/80">
-                    <div>• {numOutputs} outputs × {parseInt(splitAmount).toLocaleString()} sats = {(parseInt(numOutputs) * parseInt(splitAmount)).toLocaleString()} sats</div>
-                    <div>• Estimated fee: ~1,500 sats</div>
-                    <div>• Change: ~{(utxo.value - (parseInt(numOutputs) * parseInt(splitAmount)) - 1500).toLocaleString()} sats</div>
+                    <div>{t('splitUtxo.previewOutputs', { count: numOutputs, amount: parseInt(splitAmount).toLocaleString(), total: (parseInt(numOutputs) * parseInt(splitAmount)).toLocaleString() })}</div>
+                    <div>{t('splitUtxo.estimatedFee', { amount: '1,500' })}</div>
+                    <div>{t('splitUtxo.change', { amount: (utxo.value - (parseInt(numOutputs) * parseInt(splitAmount)) - 1500).toLocaleString() })}</div>
                   </div>
                 </div>
               </div>
 
               {/* Warning */}
               <div className="p-4 rounded-lg bg-yellow-500/10 border border-yellow-500/20 text-sm text-yellow-600 dark:text-yellow-200">
-                <div className="font-medium mb-2">⚠️ Important:</div>
+                <div className="font-medium mb-2">{t('receive.important')}</div>
                 <ul className="list-disc list-inside space-y-1 text-xs">
-                  <li>This creates smaller UTXOs suitable for ordinals/inscriptions</li>
-                  <li>Each output will be exactly {parseInt(splitAmount).toLocaleString()} sats</li>
-                  <li>Inscriptions will stay in the original output positions</li>
-                  <li>Use this before sending to avoid accidentally sending ordinals</li>
+                  <li>{t('splitUtxo.warningCreatesSmaller')}</li>
+                  <li>{t('splitUtxo.warningEachOutput', { amount: parseInt(splitAmount).toLocaleString() })}</li>
+                  <li>{t('splitUtxo.warningInscriptionsStay')}</li>
+                  <li>{t('splitUtxo.warningUseBeforeSending')}</li>
                 </ul>
               </div>
 
@@ -244,13 +246,13 @@ export default function SplitUtxoModal({ isOpen, onClose, utxo }: SplitUtxoModal
                   className="flex-1 px-4 py-3 rounded-lg bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white font-medium flex items-center justify-center gap-2"
                 >
                   <Scissors size={18} />
-                  Split UTXO
+                  {t('splitUtxo.split')}
                 </button>
                 <button
                   onClick={handleClose}
                   className="px-4 py-3 rounded-lg bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)]"
                 >
-                  Cancel
+                  {t('common.cancel')}
                 </button>
               </div>
             </div>
@@ -259,8 +261,8 @@ export default function SplitUtxoModal({ isOpen, onClose, utxo }: SplitUtxoModal
           {step === 'processing' && (
             <div className="flex flex-col items-center justify-center py-12">
               <Loader2 className="animate-spin text-[color:var(--sf-primary)] mb-4" size={48} />
-              <div className="text-lg text-[color:var(--sf-text)]/80">Splitting UTXO...</div>
-              <div className="text-sm text-[color:var(--sf-text)]/60 mt-2">Please wait</div>
+              <div className="text-lg text-[color:var(--sf-text)]/80">{t('splitUtxo.splitting')}</div>
+              <div className="text-sm text-[color:var(--sf-text)]/60 mt-2">{t('common.pleaseWait')}</div>
             </div>
           )}
 
@@ -268,10 +270,10 @@ export default function SplitUtxoModal({ isOpen, onClose, utxo }: SplitUtxoModal
             <div className="space-y-6">
               <div className="flex flex-col items-center justify-center py-8">
                 <CheckCircle size={64} className="text-green-400 mb-4" />
-                <div className="text-xl font-bold text-[color:var(--sf-text)] mb-2">UTXO Split Successfully!</div>
+                <div className="text-xl font-bold text-[color:var(--sf-text)] mb-2">{t('splitUtxo.success')}</div>
 
                 <div className="w-full p-4 rounded-lg bg-green-500/10 border border-green-500/20">
-                  <div className="text-sm text-green-600 dark:text-green-200 mb-2">Transaction ID:</div>
+                  <div className="text-sm text-green-600 dark:text-green-200 mb-2">{t('success.transactionId')}</div>
                   <div className="text-xs text-[color:var(--sf-text)] break-all">{txid}</div>
                 </div>
 
@@ -281,7 +283,7 @@ export default function SplitUtxoModal({ isOpen, onClose, utxo }: SplitUtxoModal
                   rel="noopener noreferrer"
                   className="text-[color:var(--sf-primary)] hover:opacity-80 text-sm mt-4"
                 >
-                  View on Block Explorer →
+                  {t('common.viewOnBlockExplorer')}
                 </a>
               </div>
 
@@ -289,7 +291,7 @@ export default function SplitUtxoModal({ isOpen, onClose, utxo }: SplitUtxoModal
                 onClick={handleClose}
                 className="w-full px-4 py-3 rounded-lg bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] hover:shadow-lg transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white font-medium"
               >
-                Close
+                {t('common.close')}
               </button>
             </div>
           )}

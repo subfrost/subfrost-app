@@ -72,13 +72,11 @@ import * as ecc from '@bitcoinerlab/secp256k1';
 import { patchInputsOnly } from '@/lib/psbt-patching';
 import { useWallet } from '@/context/WalletContext';
 import { useTransactionConfirm } from '@/context/TransactionConfirmContext';
-import { useIndexerSync } from '@/context/IndexerSyncContext';
-import { waitForIndexerSync } from '@/lib/alkanes/waitForIndexerSync';
 import { useSandshrewProvider } from './useSandshrewProvider';
-import { useWalletUtxoCache, useSyncStatus } from './useWalletUtxoCache';
+import { useWalletUtxoCache } from './useWalletUtxoCache';
 import { getConfig } from '@/utils/getConfig';
 import { buildPlanFromTx } from '@/lib/alkanes/planBuilder';
-import { buildUnwrapProtostone, buildUnwrapInputRequirements } from '@/lib/alkanes/builders';
+import { buildUnwrapProtostones, buildUnwrapInputRequirements } from '@/lib/alkanes/builders';
 import { getBitcoinNetwork, extractPsbtBase64, toAlks, getSignerAddressDynamic } from '@/lib/alkanes/helpers';
 
 bitcoin.initEccLib(ecc);
@@ -93,27 +91,12 @@ export function useUnwrapMutation() {
   const provider = useSandshrewProvider();
   const queryClient = useQueryClient();
   const { requestConfirmation } = useTransactionConfirm();
-  const indexerSync = useIndexerSync();
   const { FRBTC_ALKANE_ID } = getConfig(network);
   // Pre-warmed UTXO cache + sync gate.
   const utxoCache = useWalletUtxoCache();
-  const syncStatus = useSyncStatus();
-
   return useMutation({
     mutationFn: async (unwrapData: UnwrapTransactionBaseData) => {
       if (!isConnected) throw new Error('Wallet not connected');
-      const isLocal = ['devnet', 'regtest-local', 'qubitcoin-regtest'].includes(network ?? '');
-      if (!isLocal && syncStatus.metashrewHeight > 0 && !syncStatus.inSync) {
-        indexerSync.start('Preparing unwrap');
-        try {
-          await waitForIndexerSync({
-            network: network ?? 'mainnet',
-            onProgress: (p) => indexerSync.update(p),
-          });
-        } finally {
-          indexerSync.finish();
-        }
-      }
       // Ensure browser wallet session is active before building PSBT
       if (walletType === 'browser') {
         const { ensureWalletSession } = await import('@/lib/wallet/browserWalletSigning');
@@ -140,15 +123,17 @@ export function useUnwrapMutation() {
 
       const unwrapAmount = toAlks(unwrapData.amount);
 
-      // Input requirements: frBTC amount to unwrap (SDK auto-edicts to p0)
+      // Input requirements select the frBTC UTXO. The protostones below
+      // explicitly include p0 as the edict into the p1 unwrap call.
       const inputRequirements = buildUnwrapInputRequirements({
         frbtcId: FRBTC_ALKANE_ID,
         amount: unwrapAmount,
       });
 
-      // BTC recipient. Default to segwit (cheaper); fall back to taproot for
-      // single-address wallets that don't expose a segwit derivation.
-      const recipientAddress = account?.nativeSegwit?.address || account?.taproot?.address;
+      // BTC recipient. `txContext.btcChangeAddress` is the payer/payment
+      // address when the wallet exposes one, falling back to taproot only for
+      // single-address wallets.
+      const recipientAddress = txContext.btcChangeAddress;
       if (!recipientAddress) throw new Error('No recipient address available');
 
       // Determine btcNetwork for PSBT operations
@@ -195,17 +180,20 @@ export function useUnwrapMutation() {
       const DUST_VOUT = 2;
       const toAddresses = [
         txContext.alkanesChangeAddress,
-        txContext.btcChangeAddress,
+        recipientAddress,
         signerAddress,
       ];
 
-      // Build protostone for unwrap operation. MUST include dustVout + amount
-      // in the cellpack — see header comment ("Calldata Bug Fix 2026-04-29").
-      const protostone = buildUnwrapProtostone({
+      // Build protostones for unwrap operation:
+      //   p0: [frBTC:amount:p1]:v0:v0
+      //   p1: [frBTC,78,dustVout,amount]:v1:v0
+      // The unwrap cellpack MUST include dustVout + amount — see header
+      // comment ("Calldata Bug Fix 2026-04-29").
+      const protostone = buildUnwrapProtostones({
         frbtcId: FRBTC_ALKANE_ID,
         dustVout: DUST_VOUT,
         amount: unwrapAmount,
-        pointer: 'v1', // BTC payment record points at btcRecipient
+        pointer: 'v1', // unwrap call points at the payer/BTC recipient output
         refund: 'v0',  // unspent frBTC bounces back to alkanes recipient
       });
 

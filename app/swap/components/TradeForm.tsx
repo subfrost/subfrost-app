@@ -5,8 +5,13 @@ import type { SelectedOrder, TokenMeta } from '../types';
 import type { Network } from '@/utils/constants';
 import type { ComponentProps } from 'react';
 import { useTranslation } from '@/hooks/useTranslation';
+import SwapInputs from './SwapInputs';
 
-const SwapInputs = lazy(() => import('./SwapInputs'));
+// Market swap is the primary use case on /swap — load it eagerly so the
+// initial render doesn't show the FormSkeleton while the JS chunk streams in.
+// Limit/Liquidity stay lazy: their tabs are opt-in, and the modules carry
+// heavier deps (orderbook, paired-amount math) that aren't worth shipping
+// in the initial bundle.
 const LimitOrderPanel = lazy(() => import('./LimitOrderPanel'));
 const LiquidityInputs = lazy(() => import('./LiquidityInputs'));
 
@@ -23,6 +28,7 @@ interface Props {
   network?: Network;
   orderType: OrderType;
   onOrderTypeChange: (orderType: OrderType) => void;
+  hideLimit?: boolean;
 }
 
 const FormSkeleton = () => (
@@ -45,39 +51,63 @@ export default function TradeForm({
   network,
   orderType,
   onOrderTypeChange,
+  hideLimit = false,
 }: Props) {
   const { t } = useTranslation();
+  const effectiveOrderType = hideLimit && orderType === 'limit' ? 'market' : orderType;
+
   return (
     <div className="sf-card flex flex-col h-full overflow-visible">
       {/* Tabs row: Market / Limit / Liquidity — top of panel */}
       <div className="flex items-center gap-2 w-full p-3 pb-0">
         <button
           onClick={() => onOrderTypeChange('market')}
-          className={`sf-tab-btn flex-1 basis-0 ${orderType === 'market' ? 'sf-tab-btn--active' : ''}`}
+          className={`sf-tab-btn flex-1 basis-0 ${effectiveOrderType === 'market' ? 'sf-tab-btn--active' : ''}`}
         >
           {t('swap.market')}
         </button>
-        <button
-          onClick={() => onOrderTypeChange('limit')}
-          className={`sf-tab-btn flex-1 basis-0 ${orderType === 'limit' ? 'sf-tab-btn--active' : ''}`}
-        >
-          {t('swap.limit')}
-        </button>
-        <button
-          onClick={() => onOrderTypeChange('liquidity')}
-          className={`sf-tab-btn flex-1 basis-0 ${orderType === 'liquidity' ? 'sf-tab-btn--active' : ''}`}
-        >
-          {t('swap.liquidity')}
-        </button>
+        {!hideLimit && (
+          <button
+            onClick={() => onOrderTypeChange('limit')}
+            className={`sf-tab-btn flex-1 basis-0 ${effectiveOrderType === 'limit' ? 'sf-tab-btn--active' : ''}`}
+          >
+            {t('swap.limit')}
+          </button>
+        )}
+        {effectiveOrderType === 'liquidity' ? (
+          <div className="flex flex-1 basis-0 gap-1">
+            <button
+              onClick={() => liquidityProps.onModeChange?.('provide')}
+              className={`sf-tab-btn flex-1 basis-0 ${liquidityProps.liquidityMode !== 'remove' ? 'sf-tab-btn--active' : ''}`}
+              style={liquidityProps.liquidityMode !== 'remove' ? { '--sf-tab-active-bg': '#16a34a' } as React.CSSProperties : undefined}
+            >
+              {t('liquidity.add')}
+            </button>
+            <button
+              onClick={() => liquidityProps.onModeChange?.('remove')}
+              className={`sf-tab-btn flex-1 basis-0 ${liquidityProps.liquidityMode === 'remove' ? 'sf-tab-btn--active' : ''}`}
+              style={liquidityProps.liquidityMode === 'remove' ? { '--sf-tab-active-bg': '#dc2626' } as React.CSSProperties : undefined}
+            >
+              {t('liquidity.remove')}
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => onOrderTypeChange('liquidity')}
+            className={`sf-tab-btn flex-1 basis-0`}
+          >
+            {t('swap.liquidity')}
+          </button>
+        )}
       </div>
 
       <div className="flex-1 min-h-0">
         <Suspense fallback={<FormSkeleton />}>
-          {orderType === 'market' ? (
+          {effectiveOrderType === 'market' ? (
             <div className="p-4">
               <SwapInputs {...swapInputsProps} />
             </div>
-          ) : orderType === 'limit' ? (
+          ) : effectiveOrderType === 'limit' ? (
             <LimitOrderPanel
               baseToken={baseToken}
               quoteToken={quoteToken}

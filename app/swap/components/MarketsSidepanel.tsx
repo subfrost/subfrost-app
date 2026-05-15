@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback, lazy, Suspense } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import type { PoolSummary } from '../types';
 
@@ -63,7 +64,7 @@ export default function MarketsSidepanel({
 
   if (!mounted) return null;
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex justify-end" onTransitionEnd={handleTransitionEnd}>
       {/* Backdrop */}
       <div
@@ -150,6 +151,7 @@ export default function MarketsSidepanel({
           </Suspense>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

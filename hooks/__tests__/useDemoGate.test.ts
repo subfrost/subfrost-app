@@ -56,24 +56,24 @@ describe('useDemoGate', () => {
     expect(result.current).toBe(true);
   });
 
-  it('returns false on regtest regardless of demo mode', () => {
+  it('returns true on regtest when demo mode is enabled', () => {
     mockUseWallet.mockReturnValue({
       network: 'subfrost-regtest',
       browserWallet: null,
     });
 
     const { result } = renderHook(() => useDemoGate());
-    expect(result.current).toBe(false);
+    expect(result.current).toBe(true);
   });
 
-  it('returns false on signet regardless of demo mode', () => {
+  it('returns true on signet when demo mode is enabled', () => {
     mockUseWallet.mockReturnValue({
       network: 'signet',
       browserWallet: null,
     });
 
     const { result } = renderHook(() => useDemoGate());
-    expect(result.current).toBe(false);
+    expect(result.current).toBe(true);
   });
 
   it('returns false when demo mode is disabled on mainnet', () => {
@@ -154,34 +154,33 @@ describe('useDemoGate', () => {
     expect(result.current).toBe(true);
   });
 
-  it('returns false for OKX on regtest even with demo mode', () => {
+  it('returns true for OKX on regtest with demo mode', () => {
     mockUseWallet.mockReturnValue({
       network: 'subfrost-regtest',
       browserWallet: { info: { id: 'okx' } },
     });
 
     const { result } = renderHook(() => useDemoGate());
-    expect(result.current).toBe(false);
+    expect(result.current).toBe(true);
   });
 
-  it('returns false when network is empty string', () => {
+  it('returns true when network is empty string and demo mode is enabled', () => {
     mockUseWallet.mockReturnValue({
       network: '',
       browserWallet: null,
     });
 
     const { result } = renderHook(() => useDemoGate());
-    // network !== 'mainnet' => false
-    expect(result.current).toBe(false);
+    expect(result.current).toBe(true);
   });
 
-  it('returns false when network is undefined', () => {
+  it('returns true when network is undefined and demo mode is enabled', () => {
     mockUseWallet.mockReturnValue({
       network: undefined,
       browserWallet: null,
     });
 
     const { result } = renderHook(() => useDemoGate());
-    expect(result.current).toBe(false);
+    expect(result.current).toBe(true);
   });
 });

@@ -2,6 +2,7 @@ export const SANDSHREW_PROJECT_ID =
   process.env.SANDSHREW_PROJECT_ID ?? 'd6aebfed1769128379aca7d215f0b689';
 export const OYL_PROJECT_ID =
   process.env.OYL_PROJECT_ID ?? 'd6aebfed1769128379aca7d215f0b689';
+export const NEXT_PUBLIC_DEMO_MODE = 0;
 
 /**
  * FACTORY_OPCODES - AMM Factory Contract Operations

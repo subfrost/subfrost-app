@@ -1,10 +1,9 @@
 /**
  * usePoolStateLive — reactive live pool state (reserves + LP supply).
  *
- * Reads pool reserves *directly from the pool contract* via
- * `metashrew_view("simulate")` against opcode 999 (PoolDetails). NO espo
- * dependency — this is what swap/LP slippage math agrees with at submit
- * time. See `lib/alkanes/poolState.ts` for the byte-layout decoder.
+ * Reads pool reserves through the app-level alkanes data source. Mainnet
+ * defaults to ESPO (`essentials.*` reserve/supply reads); metashrew simulate
+ * remains available for non-ESPO networks and explicit configuration.
  *
  * ## Refresh model
  *
@@ -23,12 +22,18 @@
 import { useQuery } from '@tanstack/react-query';
 import { useWallet } from '@/context/WalletContext';
 import { getConfig } from '@/utils/getConfig';
-import { fetchLivePoolState, type LivePoolState } from '@/lib/alkanes/poolState';
+import { fetchPoolStateFromDataSource, type LivePoolState } from '@/lib/alkanes/poolState';
 import { queryKeys } from '@/queries/keys';
+import { getAlkanesDataSource, type AlkanesDataSource } from '@/lib/alkanes/dataSource';
 
 export interface UsePoolStateLiveOptions {
   /** Disable the query (e.g. amount empty, modal closed). Default: true. */
   enabled?: boolean;
+  /** Token IDs are required by the Espo reserve path. */
+  token0Id?: string;
+  token1Id?: string;
+  /** Override for callers that must force one backend. Defaults to app-level source. */
+  dataSource?: AlkanesDataSource;
 }
 
 export function usePoolStateLive(
@@ -37,16 +42,30 @@ export function usePoolStateLive(
 ) {
   const { network } = useWallet();
   const { ALKANE_FACTORY_ID } = getConfig(network);
+  const dataSource = options.dataSource ?? getAlkanesDataSource(network);
   const enabled = (options.enabled ?? true) && !!poolId && !!ALKANE_FACTORY_ID;
 
   return useQuery<LivePoolState | null>({
-    queryKey: queryKeys.pools.liveState(network, poolId ?? ''),
+    queryKey: queryKeys.pools.liveState(
+      network,
+      poolId ?? '',
+      dataSource,
+      options.token0Id,
+      options.token1Id,
+    ),
     enabled,
     staleTime: Infinity,
     refetchOnWindowFocus: true,
     queryFn: async () => {
       if (!poolId || !ALKANE_FACTORY_ID) return null;
-      return fetchLivePoolState(network, ALKANE_FACTORY_ID, poolId);
+      return fetchPoolStateFromDataSource(
+        network,
+        ALKANE_FACTORY_ID,
+        poolId,
+        options.token0Id,
+        options.token1Id,
+        dataSource,
+      );
     },
   });
 }

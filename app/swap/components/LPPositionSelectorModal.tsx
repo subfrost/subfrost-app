@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { X, Search } from 'lucide-react';
 import type { LPPosition } from './LiquidityInputs';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useWallet } from '@/context/WalletContext';
 import TokenIcon from '@/app/components/TokenIcon';
+import SfPopup, { type SfPopupHandle } from '@/app/components/SfPopup';
 
 type Props = {
   isOpen: boolean;
@@ -25,6 +26,8 @@ export default function LPPositionSelectorModal({
   const { t } = useTranslation();
   const { network } = useWallet();
   const [searchQuery, setSearchQuery] = useState('');
+  const popupRef = useRef<SfPopupHandle>(null);
+  const handleClose = () => popupRef.current?.close();
 
   const filteredPositions = useMemo(() => {
     if (!searchQuery.trim()) return positions;
@@ -39,25 +42,25 @@ export default function LPPositionSelectorModal({
 
   const handleSelect = (position: LPPosition) => {
     onSelectPosition(position);
-    onClose();
+    handleClose();
     setSearchQuery('');
   };
 
-  if (!isOpen) return null;
-
   return (
-    <div className="sf-popup-overlay px-4" onClick={onClose}>
-      <div
-        className="sf-popup w-full max-w-[480px] h-[80vh] max-h-[600px]"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <SfPopup
+      ref={popupRef}
+      isOpen={isOpen}
+      onClose={onClose}
+      overlayClassName="px-4"
+      panelClassName="w-full max-w-[480px] h-[80vh] max-h-[600px]"
+    >
         {/* Header */}
         <div className="sf-popup-header flex items-center justify-between px-6 py-5">
           <h2 className="text-xl font-extrabold tracking-wider uppercase text-[color:var(--sf-text)]">
             {t('lpSelector.title')}
           </h2>
           <button
-            onClick={onClose}
+            onClick={handleClose}
             className="sf-popup-close"
             aria-label="Close"
           >
@@ -150,7 +153,6 @@ export default function LPPositionSelectorModal({
             </div>
           )}
         </div>
-      </div>
-    </div>
+    </SfPopup>
   );
 }

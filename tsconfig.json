@@ -41,6 +41,9 @@
     "node_modules",
     "e2e-tests",
     "__tests__/devnet",
+    "agent-context",
+    "agent-repos",
+    "__tests__/brc20-prog",
     "vendor",
     "services",
     "reference"

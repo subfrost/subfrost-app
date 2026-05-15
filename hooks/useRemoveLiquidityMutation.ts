@@ -50,10 +50,8 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useWallet } from '@/context/WalletContext';
 import { useTransactionConfirm } from '@/context/TransactionConfirmContext';
-import { useIndexerSync } from '@/context/IndexerSyncContext';
-import { waitForIndexerSync } from '@/lib/alkanes/waitForIndexerSync';
 import { useSandshrewProvider } from '@/hooks/useSandshrewProvider';
-import { useWalletUtxoCache, useSyncStatus } from '@/hooks/useWalletUtxoCache';
+import { useWalletUtxoCache } from '@/hooks/useWalletUtxoCache';
 import { getTokenSymbol } from '@/lib/alkanes-client';
 import { getFutureBlockHeight } from '@/utils/amm';
 import * as bitcoin from 'bitcoinjs-lib';
@@ -67,6 +65,26 @@ import { buildPlanFromTx } from '@/lib/alkanes/planBuilder';
 import { getConfig } from '@/utils/getConfig';
 
 bitcoin.initEccLib(ecc);
+
+function stripBrowserTapLeafMetadata(psbtBase64: string, btcNetwork: bitcoin.Network): {
+  psbtBase64: string;
+  stripped: number;
+} {
+  const psbt = bitcoin.Psbt.fromBase64(psbtBase64, { network: btcNetwork });
+  let stripped = 0;
+
+  for (const input of psbt.data.inputs) {
+    const script = input.witnessUtxo?.script ? Buffer.from(input.witnessUtxo.script) : null;
+    const isTaprootKeyPathCandidate = !!script && script.length === 34 && script[0] === 0x51 && script[1] === 0x20;
+    if (!isTaprootKeyPathCandidate || !input.tapLeafScript?.length) continue;
+
+    delete input.tapLeafScript;
+    delete input.tapScriptSig;
+    stripped++;
+  }
+
+  return { psbtBase64: stripped > 0 ? psbt.toBase64() : psbtBase64, stripped };
+}
 
 export type RemoveLiquidityTransactionData = {
   lpTokenId: string;       // LP token alkane id (e.g., "3:123")
@@ -92,13 +110,10 @@ export function useRemoveLiquidityMutation() {
   const provider = useSandshrewProvider();
   const queryClient = useQueryClient();
   const { requestConfirmation } = useTransactionConfirm();
-  const indexerSync = useIndexerSync();
   // Pre-warmed UTXO snapshot — feeds clean BTC payment_utxos to the
   // SDK so it skips the WASM's internal coinselect fanout. Same
   // perf-fix pattern as useSwapMutation / useAlkaneSendMutation.
   const utxoCache = useWalletUtxoCache();
-  const syncStatus = useSyncStatus();
-
   return useMutation({
     mutationFn: async (data: RemoveLiquidityTransactionData) => {
       console.log('[RemoveLiquidity] ═══════════════════════════════════════════');
@@ -107,19 +122,6 @@ export function useRemoveLiquidityMutation() {
 
       // Validation
       if (!isConnected) throw new Error('Wallet not connected');
-      // Sync gate (skipped on local networks).
-      const isLocal = ['devnet', 'regtest-local', 'qubitcoin-regtest'].includes(network ?? '');
-      if (!isLocal && syncStatus.metashrewHeight > 0 && !syncStatus.inSync) {
-        indexerSync.start('Preparing remove liquidity');
-        try {
-          await waitForIndexerSync({
-            network: network ?? 'mainnet',
-            onProgress: (p) => indexerSync.update(p),
-          });
-        } finally {
-          indexerSync.finish();
-        }
-      }
       // Ensure browser wallet session is active before building PSBT
       if (walletType === 'browser') {
         const { ensureWalletSession } = await import('@/lib/wallet/browserWalletSigning');
@@ -236,7 +238,7 @@ export function useRemoveLiquidityMutation() {
           const readyToSign = result.readyToSign;
 
           // Convert PSBT to base64
-          let psbtBase64: string = extractPsbtBase64(readyToSign.psbt);
+          const psbtBase64: string = extractPsbtBase64(readyToSign.psbt);
 
           // ============================================================================
           // ⚠️ CRITICAL: PSBT PATCHING REMOVED - DO NOT RE-ADD ⚠️
@@ -273,6 +275,12 @@ export function useRemoveLiquidityMutation() {
             finalPsbtBase64 = result.psbtBase64;
             if (result.inputsPatched > 0) {
               console.log(`[RemoveLiquidity] Patched ${result.inputsPatched} input(s) for browser wallet compatibility`);
+            }
+
+            const tapLeafStrip = stripBrowserTapLeafMetadata(finalPsbtBase64, btcNetwork);
+            finalPsbtBase64 = tapLeafStrip.psbtBase64;
+            if (tapLeafStrip.stripped > 0) {
+              console.log(`[RemoveLiquidity] Stripped stale tapleaf metadata from ${tapLeafStrip.stripped} taproot input(s) for key-path signing`);
             }
           }
 
@@ -362,9 +370,18 @@ export function useRemoveLiquidityMutation() {
 
           // Finalize and extract transaction
           const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtBase64, { network: btcNetwork });
-          signedPsbt.finalizeAllInputs();
-
-          const tx = signedPsbt.extractTransaction();
+          let tx: bitcoin.Transaction;
+          try {
+            tx = signedPsbt.extractTransaction();
+          } catch {
+            const alreadyFinalized = signedPsbt.data.inputs.every(input =>
+              input.finalScriptWitness || input.finalScriptSig
+            );
+            if (!alreadyFinalized) {
+              signedPsbt.finalizeAllInputs();
+            }
+            tx = signedPsbt.extractTransaction();
+          }
           const txHex = tx.toHex();
           const txid = tx.getId();
 
@@ -372,6 +389,14 @@ export function useRemoveLiquidityMutation() {
 
           // Broadcast
           const broadcastTxid = await provider.broadcastTransaction(txHex);
+          if (typeof window !== 'undefined') {
+            try {
+              const { pendingTxStore } = await import('@/lib/alkanes/pendingTxStore');
+              await pendingTxStore.add(txHex);
+            } catch (error) {
+              console.warn('[RemoveLiquidity] pendingTxStore.add failed:', error);
+            }
+          }
           console.log('[RemoveLiquidity] Broadcast successful:', broadcastTxid);
 
           return {
@@ -402,6 +427,8 @@ export function useRemoveLiquidityMutation() {
 
       // Invalidate balance queries
       queryClient.invalidateQueries({ queryKey: ['sellable-currencies'] });
+      queryClient.invalidateQueries({ queryKey: ['wallet-utxo-cache'] });
+      queryClient.invalidateQueries({ queryKey: ['btc-balance-fast'] });
       queryClient.invalidateQueries({ queryKey: ['btc-balance'] });
       queryClient.invalidateQueries({ queryKey: ['dynamic-pools'] });
       queryClient.invalidateQueries({ queryKey: ['pool-stats'] });

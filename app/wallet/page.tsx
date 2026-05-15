@@ -1,267 +1,216 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { AlkaneAsset } from '@/hooks/useEnrichedWalletData';
 import { useWallet } from '@/context/WalletContext';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Wallet, Activity, Settings, BarChart2, Send, QrCode, Copy, Check, RefreshCw } from 'lucide-react';
+import { ChevronDown, RefreshCw, X } from 'lucide-react';
 import { useTranslation } from '@/hooks/useTranslation';
-import AddressAvatar from '@/app/components/AddressAvatar';
-import AccountSwitcher from '@/app/components/AccountSwitcher';
 import PageContent from '@/app/components/PageContent';
 import BitcoinBalanceCard from './components/BitcoinBalanceCard';
-import AlkanesBalancesCard from './components/AlkanesBalancesCard';
-import UTXOManagement from './components/UTXOManagement';
-import TransactionHistory, { type TransactionHistoryHandle } from './components/TransactionHistory';
+import AlkanesBalancesCard, { type AlkaneBalanceFilter } from './components/AlkanesBalancesCard';
+import TransactionHistory, { type SpeedUpRequest, type TransactionHistoryHandle } from './components/TransactionHistory';
 import WalletSettings from './components/WalletSettings';
 import RegtestControls from './components/RegtestControls';
 import ReceiveModal from './components/ReceiveModal';
 import SendModal from './components/SendModal';
+import SpeedUpModal from './components/SpeedUpModal';
 import { useNotification } from '@/context/NotificationContext';
+import { useFuelAllocation } from '@/hooks/useFuelAllocation';
+import SfPopup from '@/app/components/SfPopup';
 
-type TabView = 'balances' | 'utxos' | 'transactions' | 'settings';
+type WalletSection = AlkaneBalanceFilter | 'history';
 
 export default function WalletDashboardPage() {
-  const { connected, isConnected, address, paymentAddress, network, browserWallet, walletType } = useWallet() as any;
+  const { connected, isConnected } = useWallet() as any;
   const { t } = useTranslation();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const tabParam = searchParams.get('tab') as TabView | null;
-  const [activeTab, setActiveTab] = useState<TabView>(tabParam && ['utxos', 'transactions', 'settings'].includes(tabParam) ? tabParam : 'transactions');
-
-  // Update activeTab when URL changes
-  useEffect(() => {
-    if (tabParam && ['utxos', 'transactions', 'settings'].includes(tabParam)) {
-      setActiveTab(tabParam);
-    }
-  }, [tabParam]);
+  const tabParam = searchParams.get('tab');
+  const [activeSection, setActiveSection] = useState<WalletSection>(
+    tabParam === 'transactions' ? 'history' : 'tokens',
+  );
   const [showReceiveModal, setShowReceiveModal] = useState(false);
   const [showSendModal, setShowSendModal] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(tabParam === 'settings');
   const [sendAlkane, setSendAlkane] = useState<AlkaneAsset | null>(null);
-  const [copiedAddress, setCopiedAddress] = useState<'segwit' | 'taproot' | null>(null);
-  const [showComingSoon, setShowComingSoon] = useState(false);
+  const [speedUpFor, setSpeedUpFor] = useState<SpeedUpRequest | null>(null);
   const [txRefreshing, setTxRefreshing] = useState(false);
+  const [sectionDropdownOpen, setSectionDropdownOpen] = useState(false);
   const { showNotification, notifications } = useNotification();
-  // Active notification count for History tab badge.
-  // NOTE: includes confirmed txs still in their 60s auto-close window.
-  // Acceptable: the toast is still visible, badge reflects "active tx activity".
+  const fuelAllocation = useFuelAllocation();
   const pendingCount = notifications.length;
   const txHistoryRef = useRef<TransactionHistoryHandle>(null);
+  const sectionDropdownRef = useRef<HTMLDivElement>(null);
 
-  const handleUtxoClick = useCallback(() => {
-    setShowComingSoon(true);
-    setTimeout(() => setShowComingSoon(false), 1500);
-  }, []);
-
-  const copyToClipboard = async (text: string, type: 'segwit' | 'taproot') => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopiedAddress(type);
-      setTimeout(() => setCopiedAddress(null), 2000);
-    } catch (err) {
-      console.error('Failed to copy:', err);
+  useEffect(() => {
+    if (tabParam === 'transactions') {
+      setActiveSection('history');
+    } else if (tabParam === 'settings') {
+      setShowSettingsModal(true);
     }
-  };
+  }, [tabParam]);
 
   const { isInitializing } = useWallet() as any;
   const walletConnected = typeof connected === 'boolean' ? connected : isConnected;
 
-  // Redirect if not connected — but wait for wallet restore from localStorage first.
-  // Without this guard, refreshing the page would redirect to '/' before the
-  // cached browser wallet addresses are restored from localStorage.
   useEffect(() => {
     if (!isInitializing && !walletConnected) router.push('/');
   }, [isInitializing, walletConnected, router]);
 
+  useEffect(() => {
+    if (!sectionDropdownOpen) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!sectionDropdownRef.current?.contains(event.target as Node)) {
+        setSectionDropdownOpen(false);
+      }
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    return () => document.removeEventListener('pointerdown', handlePointerDown);
+  }, [sectionDropdownOpen]);
+
   if (isInitializing || !walletConnected) return null;
 
-  // Settings tab is rendered separately for responsive control
-  const tabs = [
-    { id: 'transactions' as TabView, label: t('walletDash.transactionHistory'), shortLabel: t('walletDash.history'), icon: Activity, disabled: false },
-    { id: 'utxos' as TabView, label: t('walletDash.utxos'), shortLabel: t('walletDash.utxos'), mobileLabel: 'UTXOs', icon: BarChart2, disabled: true },
+  const walletSections: WalletSection[] = [
+    'tokens',
+    'positions',
+    'nfts',
+    'history',
+    ...(fuelAllocation.isEligible ? (['fuel'] as const) : []),
   ];
+  const isAlkaneSection = ['tokens', 'positions', 'nfts', 'fuel'].includes(activeSection);
+  const getSectionLabel = (section: WalletSection) => (
+    section === 'tokens' ? t('balances.tabTokens')
+      : section === 'positions' ? t('balances.tabPositions')
+      : section === 'nfts' ? t('balances.tabNfts')
+      : section === 'fuel' ? t('balances.tabFuel')
+      : t('walletDash.history')
+  );
 
   return (
     <PageContent className="text-[color:var(--sf-text)]">
-      <div className="flex w-full flex-col gap-6">
-        {/* Page Header */}
+      <div className="mx-auto flex w-full max-w-[1204px] flex-col gap-6">
         <div className="flex w-full flex-col gap-2">
           <div className="flex w-full items-center justify-between gap-4">
             <h1 className="flex items-center gap-2 text-xl sm:text-3xl font-bold text-[color:var(--sf-text)]">
               {t('walletDash.title')}
-              {walletType === 'browser' && browserWallet?.info?.icon && (
-                <img src={browserWallet.info.icon} alt="" className="h-[1em] w-[1em] rounded-sm" />
-              )}
             </h1>
-            <div className="flex shrink-0 items-center gap-2">
-              <button
-                data-testid="header-send-button"
-                onClick={() => setShowSendModal(true)}
-                className="px-4 md:px-6 py-2 rounded-md bg-[color:var(--sf-primary)] text-white text-sm font-bold uppercase tracking-wide shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:shadow-lg transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none flex items-center gap-2"
-              >
-                <Send size={16} />
-                {t('walletDash.send')}
-              </button>
-              <button
-                onClick={() => setShowReceiveModal(true)}
-                className="px-4 md:px-6 py-2 rounded-md bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)] text-sm font-bold uppercase tracking-wide shadow-[0_2px_12px_rgba(0,0,0,0.08)] hover:bg-[color:var(--sf-surface)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none flex items-center gap-2"
-              >
-                <QrCode size={16} />
-                {t('walletDash.receive')}
-              </button>
-            </div>
-          </div>
-          {/* Addresses */}
-          <div className="flex flex-col gap-2">
-            {paymentAddress && (
-              <div className="flex items-center gap-3">
-                <AddressAvatar address={paymentAddress} size={24} className="shrink-0" />
-                <span className="text-xs sm:text-sm text-[color:var(--sf-text)]/60 whitespace-nowrap">
-                  {t('walletDash.nativeSegwit')}
-                </span>
-                <span className="text-xs sm:text-sm text-[color:var(--sf-text)]/80 truncate">{paymentAddress}</span>
-                <button
-                  onClick={() => copyToClipboard(paymentAddress, 'segwit')}
-                  className="p-1.5 rounded-md hover:bg-[color:var(--sf-surface)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none shrink-0"
-                  title="Copy address"
-                >
-                  {copiedAddress === 'segwit' ? (
-                    <Check size={14} className="text-green-500" />
-                  ) : (
-                    <Copy size={14} className="text-[color:var(--sf-text)]/60" />
-                  )}
-                </button>
-              </div>
-            )}
-            {address && (
-              <div className="flex items-center gap-3">
-                <AccountSwitcher size={24} className="shrink-0" />
-                <span className="text-xs sm:text-sm text-[color:var(--sf-text)]/60 whitespace-nowrap">
-                  {t('walletDash.taproot')}
-                </span>
-                <span className="text-xs sm:text-sm text-[color:var(--sf-text)]/80 truncate">{address}</span>
-                <button
-                  onClick={() => copyToClipboard(address, 'taproot')}
-                  className="p-1.5 rounded-md hover:bg-[color:var(--sf-surface)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none shrink-0"
-                  title="Copy address"
-                >
-                  {copiedAddress === 'taproot' ? (
-                    <Check size={14} className="text-green-500" />
-                  ) : (
-                    <Copy size={14} className="text-[color:var(--sf-text)]/60" />
-                  )}
-                </button>
-              </div>
-            )}
           </div>
         </div>
 
-        {/* Two columns on lg: [BTC → Alkanes] | [Tabbed Panel]. */}
-        {/* Left column is its own flex stack so BTC sits flush above Alkanes */}
-        {/* regardless of the tabs panel's height on the right. */}
-        {/* On mobile (stacked): Bitcoin Balance → Alkanes → Tabbed Panel via order classes */}
-        <div className="flex flex-col lg:grid lg:grid-cols-2 gap-6 flex-1 min-h-0">
-          {/* Left column on lg: BTC stacked above Alkanes with no row-gap */}
-          <div className="contents lg:flex lg:flex-col lg:gap-6 lg:col-start-1 lg:row-start-1 min-h-0">
-            <div className="order-1 lg:order-none">
-              <BitcoinBalanceCard />
-            </div>
-            <div className="order-2 lg:order-none min-h-0">
-              <AlkanesBalancesCard onSendAlkane={(alkane) => { setSendAlkane(alkane); setShowSendModal(true); }} />
-            </div>
-          </div>
+        <div className="flex flex-col gap-6 flex-1 min-h-0">
+          <BitcoinBalanceCard
+            onSend={() => setShowSendModal(true)}
+            onReceive={() => setShowReceiveModal(true)}
+            onSettings={() => setShowSettingsModal(true)}
+            settingsActive={showSettingsModal}
+          />
 
-          {/* Tabbed Panel - right column on lg, third on mobile */}
-          <div className="order-3 lg:order-none lg:col-start-2 lg:row-start-1 min-h-0">
-            <div className="rounded-2xl bg-[color:var(--sf-glass-bg)] p-3 sm:p-4 lg:p-4 shadow-[0_4px_20px_rgba(0,0,0,0.2)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)]">
-              {/* Tab Navigation — compact on lg+ since panel is half-width */}
-              <div className="border-b border-[color:var(--sf-outline)] mb-4 relative">
-                <div className="flex items-center gap-1 overflow-x-auto scrollbar-hide">
-                  {tabs.map((tab) => {
-                    const Icon = tab.icon;
-                    return (
-                      <div key={tab.id} className="relative shrink-0">
-                        <button
-                          onClick={() => tab.disabled ? handleUtxoClick() : setActiveTab(tab.id)}
-                          className={`flex items-center gap-1.5 px-2 py-2.5 font-semibold transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-sm ${
-                            tab.disabled
-                              ? 'text-[color:var(--sf-text)]/30 cursor-not-allowed'
-                              : activeTab === tab.id
-                                ? 'text-[color:var(--sf-primary)] border-b-2 border-[color:var(--sf-primary)]'
-                                : 'text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)]/80'
-                          }`}
-                        >
-                          <Icon size={14} />
-                          {tab.mobileLabel ? (
-                            <>
-                              <span className="whitespace-nowrap sm:hidden lg:inline">{tab.mobileLabel}</span>
-                              <span className="whitespace-nowrap hidden sm:inline lg:hidden">{tab.shortLabel}</span>
-                            </>
-                          ) : (
-                            <span className="whitespace-nowrap">{tab.shortLabel}</span>
-                          )}
-                          {tab.id === 'transactions' && pendingCount > 0 && (
-                            <span className="ml-1 px-1.5 py-0.5 text-[9px] font-bold rounded-full bg-[color:var(--sf-primary)]/20 text-[color:var(--sf-primary)]">
-                              {pendingCount}
-                            </span>
-                          )}
-                        </button>
-                        {tab.disabled && showComingSoon && (
-                          <div className="absolute left-[calc(50%+28px)] -translate-x-1/2 -top-8 px-3 py-1.5 rounded-lg bg-transparent text-[color:var(--sf-text)]/60 text-xs font-normal whitespace-nowrap z-50 pointer-events-none animate-fade-in-out">
-                            {t('walletDash.comingSoon')}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                  <div className="flex-grow" />
-                  {activeTab === 'transactions' && (
-                    <button
-                      onClick={async () => {
-                        setTxRefreshing(true);
-                        await txHistoryRef.current?.refresh();
-                        setTxRefreshing(false);
-                      }}
-                      disabled={txRefreshing}
-                      className="p-2 rounded-lg transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none shrink-0 text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)] disabled:opacity-50"
-                      title={t('txHistory.refresh')}
-                    >
-                      <RefreshCw size={14} className={txRefreshing ? 'animate-spin' : ''} />
-                    </button>
-                  )}
+          <div className="h-full rounded-2xl bg-[color:var(--sf-glass-bg)] p-6 shadow-[0_4px_20px_rgba(0,0,0,0.2)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)] flex flex-col">
+            <div className="mb-4 flex items-center gap-3">
+              <div className="sf-tab-group wallet-section-tabs">
+                {walletSections.map((section) => (
                   <button
-                    onClick={() => setActiveTab('settings')}
-                    className={`p-2 rounded-lg transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none shrink-0 ${
-                      activeTab === 'settings'
-                        ? 'text-[color:var(--sf-primary)] bg-[color:var(--sf-primary)]/10'
-                        : 'text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)]'
-                    }`}
-                    title={t('header.settings')}
+                    key={section}
+                    onClick={() => setActiveSection(section)}
+                    className={`sf-tab-btn ${activeSection === section ? 'sf-tab-btn--active' : ''}`}
                   >
-                    <Settings size={14} />
+                    {getSectionLabel(section)}
+                    {section === 'history' && pendingCount > 0 && (
+                      <span className="ml-1.5 px-1.5 py-0.5 text-[9px] font-bold rounded-full bg-[color:var(--sf-primary)]/20 text-[color:var(--sf-primary)]">
+                        {pendingCount}
+                      </span>
+                    )}
                   </button>
-                </div>
+                ))}
               </div>
-
-              {/* Tab Content */}
-              <div className="animate-fadeIn">
-                {/* BalancesPanel removed — BRC20/Runes/Ordinals not supported yet */}
-                {activeTab === 'utxos' && <UTXOManagement />}
-                {activeTab === 'transactions' && <TransactionHistory ref={txHistoryRef} />}
-                {activeTab === 'settings' && (
-                  <>
-                    <WalletSettings />
-                    <RegtestControls />
-                  </>
+              <div ref={sectionDropdownRef} className="wallet-section-dropdown relative">
+                <button
+                  type="button"
+                  onClick={() => setSectionDropdownOpen((open) => !open)}
+                  className="sf-dropdown-trigger min-w-36 justify-between"
+                  aria-haspopup="menu"
+                  aria-expanded={sectionDropdownOpen}
+                >
+                  <span className="font-bold uppercase tracking-wide">{getSectionLabel(activeSection)}</span>
+                  {activeSection === 'history' && pendingCount > 0 && (
+                    <span className="ml-1 px-1.5 py-0.5 text-[9px] font-bold rounded-full bg-[color:var(--sf-primary)]/20 text-[color:var(--sf-primary)]">
+                      {pendingCount}
+                    </span>
+                  )}
+                  <ChevronDown
+                    size={14}
+                    className={`transition-transform duration-200 ${sectionDropdownOpen ? 'rotate-180' : ''}`}
+                  />
+                </button>
+                {sectionDropdownOpen && (
+                  <div className="sf-dropdown absolute left-0 top-full mt-1.5 z-50 w-44 py-1">
+                    {walletSections.map((section) => (
+                      <button
+                        key={section}
+                        type="button"
+                        onClick={() => {
+                          setActiveSection(section);
+                          setSectionDropdownOpen(false);
+                        }}
+                        className={`sf-row w-full px-4 py-2.5 text-left text-xs font-bold uppercase tracking-wide transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] ${
+                          activeSection === section
+                            ? 'text-[color:var(--sf-primary)]'
+                            : 'text-[color:var(--sf-text)]'
+                        }`}
+                      >
+                        <span>{getSectionLabel(section)}</span>
+                        {section === 'history' && pendingCount > 0 && (
+                          <span className="ml-1.5 px-1.5 py-0.5 text-[9px] font-bold rounded-full bg-[color:var(--sf-primary)]/20 text-[color:var(--sf-primary)]">
+                            {pendingCount}
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
                 )}
               </div>
+              {activeSection === 'history' && (
+                <div className="ml-auto">
+                  <button
+                    onClick={async () => {
+                      setTxRefreshing(true);
+                      await txHistoryRef.current?.refresh();
+                      setTxRefreshing(false);
+                    }}
+                    disabled={txRefreshing}
+                    className="p-2 rounded-lg transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none shrink-0 text-[color:var(--sf-text)]/60 hover:text-[color:var(--sf-text)] hover:bg-[color:var(--sf-surface)] disabled:opacity-50"
+                    title={t('txHistory.refresh')}
+                  >
+                    <RefreshCw size={16} className={txRefreshing ? 'animate-spin' : ''} />
+                  </button>
+                </div>
+              )}
             </div>
-          </div>
 
+            {isAlkaneSection && (
+              <AlkanesBalancesCard
+                embedded
+                hideHeader
+                hideTabs
+                filter={activeSection as AlkaneBalanceFilter}
+                onSendBitcoin={() => { setSendAlkane(null); setShowSendModal(true); }}
+                onSendAlkane={(alkane) => { setSendAlkane(alkane); setShowSendModal(true); }}
+              />
+            )}
+
+            {activeSection === 'history' && (
+              <TransactionHistory
+                ref={txHistoryRef}
+                onSpeedUpRequest={setSpeedUpFor}
+              />
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Modals */}
       <SendModal
         isOpen={showSendModal}
         onClose={() => { setShowSendModal(false); setSendAlkane(null); }}
@@ -272,6 +221,42 @@ export default function WalletDashboardPage() {
         isOpen={showReceiveModal}
         onClose={() => setShowReceiveModal(false)}
       />
+      {speedUpFor && (
+        <SpeedUpModal
+          key={speedUpFor.txid}
+          open={!!speedUpFor}
+          onClose={() => setSpeedUpFor(null)}
+          txid={speedUpFor.txid}
+          txHex={speedUpFor.hex}
+          currentFeeSats={speedUpFor.fee}
+          vsize={speedUpFor.vsize}
+        />
+      )}
+      <SfPopup
+        isOpen={showSettingsModal}
+        onClose={() => setShowSettingsModal(false)}
+        overlayClassName="p-4"
+        panelClassName="w-full max-w-3xl max-h-[90vh]"
+      >
+        <div className="bg-[color:var(--sf-panel-bg)] px-6 py-5 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-extrabold tracking-wider uppercase text-[color:var(--sf-text)]">
+              {t('header.settings')}
+            </h2>
+            <button
+              onClick={() => setShowSettingsModal(false)}
+              className="flex h-8 w-8 items-center justify-center rounded-lg bg-[color:var(--sf-input-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-[color:var(--sf-text)]/70 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)] hover:text-[color:var(--sf-text)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] focus:outline-none"
+              aria-label="Close"
+            >
+              <X size={18} />
+            </button>
+          </div>
+        </div>
+        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          <WalletSettings />
+          <RegtestControls />
+        </div>
+      </SfPopup>
     </PageContent>
   );
 }

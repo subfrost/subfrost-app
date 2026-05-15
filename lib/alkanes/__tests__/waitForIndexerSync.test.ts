@@ -73,7 +73,7 @@ describe('waitForIndexerSync', () => {
     });
   });
 
-  it('polls until lag resolves and reports progress on each poll', async () => {
+  it('polls until lag === 0 (default — strict)', async () => {
     mockFetchSequence([
       { metashrew: 98, bitcoind: 100 }, // lag 2
       { metashrew: 99, bitcoind: 100 }, // lag 1
@@ -90,6 +90,34 @@ describe('waitForIndexerSync', () => {
     expect(onProgress.mock.calls[0][0].lag).toBe(2);
     expect(onProgress.mock.calls[1][0].lag).toBe(1);
     expect(onProgress.mock.calls[2][0].lag).toBe(0);
+  });
+
+  it('honors maxLagBlocks=2 (caller tolerates lag — used when SDK has its own per-UTXO filter)', async () => {
+    mockFetchSequence([
+      { metashrew: 95, bitcoind: 100 }, // lag 5 — keep waiting
+      { metashrew: 98, bitcoind: 100 }, // lag 2 — within tolerance
+    ]);
+    const onProgress = vi.fn();
+    const result = await waitForIndexerSync({
+      network: 'mainnet',
+      onProgress,
+      intervalMs: 1,
+      maxLagBlocks: 2,
+    });
+    expect(result.lag).toBe(2);
+    expect(onProgress).toHaveBeenCalledTimes(2);
+  });
+
+  it('returns immediately when lag === 0 on first poll', async () => {
+    mockFetchSequence([{ metashrew: 100, bitcoind: 100 }]);
+    const onProgress = vi.fn();
+    const result = await waitForIndexerSync({
+      network: 'mainnet',
+      onProgress,
+      intervalMs: 100,
+    });
+    expect(result.lag).toBe(0);
+    expect(onProgress).toHaveBeenCalledTimes(1);
   });
 
   it('throws AbortError when signal aborts mid-poll', async () => {

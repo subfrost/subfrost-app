@@ -288,6 +288,44 @@ export function buildAtomicWrapCreatePoolProtostones(params: {
   return `${wrapProtostone},${createPoolProtostone}`;
 }
 
+/**
+ * Build a single factory CreateNewPool cellpack for cases where input alkanes
+ * are already staged on the spending UTXO and should auto-route into this
+ * protostone via `inputRequirements`.
+ */
+export function buildFactoryCreatePoolProtostone(params: {
+  factoryId: string;
+  tokenA: string;
+  tokenB: string;
+  amountA: string;
+  amountB: string;
+  pointer?: string;
+  refund?: string;
+}): string {
+  const {
+    factoryId,
+    tokenA,
+    tokenB,
+    amountA,
+    amountB,
+    pointer = 'v0',
+    refund = 'v0',
+  } = params;
+  const [factoryBlock, factoryTx] = factoryId.split(':');
+  const [tokenABlock, tokenATx] = tokenA.split(':');
+  const [tokenBBlock, tokenBTx] = tokenB.split(':');
+
+  const cellpack = [
+    factoryBlock, factoryTx,
+    1, // CreateNewPool
+    tokenABlock, tokenATx,
+    tokenBBlock, tokenBTx,
+    amountA, amountB,
+  ].join(',');
+
+  return `[${cellpack}]:${pointer}:${refund}`;
+}
+
 // ---------------------------------------------------------------------------
 // Router Swap (hybrid CLOB+AMM via Universal Router)
 // ---------------------------------------------------------------------------
@@ -382,7 +420,7 @@ export function buildWrapProtostone(params: {
  * stored under `/payments/byheight/`. The CLI canonical layout
  * (`alkanes-cli/src/main.rs:3192-3197`) is:
  *   - output 0: alkanes refund (taproot)
- *   - output 1: BTC recipient (segwit) — destination for the queued BTC payment
+ *   - output 1: BTC recipient (payer/segwit) - destination for the queued BTC payment
  *   - output 2: signer dust (P2TR) — `dustVout = 2`
  * with `pointer = 'v1'` (BTC recipient) and `refund = 'v0'` (alkanes refund).
  *
@@ -405,6 +443,35 @@ export function buildUnwrapProtostone(params: {
   const [frbtcBlock, frbtcTx] = frbtcId.split(':');
   const cellpack = [frbtcBlock, frbtcTx, FRBTC_UNWRAP_OPCODE, dustVout, amount].join(',');
   return `[${cellpack}]:${pointer}:${refund}`;
+}
+
+/**
+ * Build the full two-protostone frBTC unwrap message.
+ *
+ * p0 is an edict protostone that forwards the selected frBTC amount into p1.
+ * p1 calls frBTC.unwrap(dustVout, amount). This keeps alkane refund/change on
+ * output v0 while the unwrap call records the queued BTC payment against v1.
+ */
+export function buildUnwrapProtostones(params: {
+  frbtcId: string;
+  /** Index of the P2TR signer dust output in this tx (the `vout` arg). */
+  dustVout: number;
+  /** frBTC amount to burn, in u128 sats (the `amount_requested` arg). */
+  amount: string;
+  /** Where the unwrapped BTC payment (queued for signer) is recorded. Default `v1`. */
+  pointer?: string;
+  /** Where unspent frBTC bounces back. Default `v0` (alkanes recipient). */
+  refund?: string;
+}): string {
+  const { frbtcId, amount, pointer = 'v1', refund = 'v0' } = params;
+  const [frbtcBlock, frbtcTx] = frbtcId.split(':');
+  const edictProtostone = `[${frbtcBlock}:${frbtcTx}:${amount}:p1]:v0:v0`;
+  const unwrapProtostone = buildUnwrapProtostone({
+    ...params,
+    pointer,
+    refund,
+  });
+  return `${edictProtostone},${unwrapProtostone}`;
 }
 
 /**

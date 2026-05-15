@@ -17,7 +17,7 @@ import { renderHook } from '@testing-library/react';
 
 const mockUseEnrichedWalletData = vi.fn();
 const mockUsePools = vi.fn();
-const mockUseBtcPrice = vi.fn();
+const mockUseAllPoolStats = vi.fn();
 
 vi.mock('@/hooks/useEnrichedWalletData', () => ({
   useEnrichedWalletData: () => mockUseEnrichedWalletData(),
@@ -27,8 +27,8 @@ vi.mock('@/hooks/usePools', () => ({
   usePools: () => mockUsePools(),
 }));
 
-vi.mock('@/hooks/useBtcPrice', () => ({
-  useBtcPrice: () => mockUseBtcPrice(),
+vi.mock('@/hooks/usePoolData', () => ({
+  useAllPoolStats: () => mockUseAllPoolStats(),
 }));
 
 // ---------------------------------------------------------------------------
@@ -70,7 +70,7 @@ function makePoolItem(overrides: any = {}) {
 describe('useLPPositions', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockUseBtcPrice.mockReturnValue({ data: 100000 });
+    mockUseAllPoolStats.mockReturnValue({ data: {} });
     mockUsePools.mockReturnValue({ data: { items: [] }, isLoading: false });
     mockUseEnrichedWalletData.mockReturnValue({
       balances: { alkanes: [] },
@@ -262,8 +262,12 @@ describe('useLPPositions', () => {
     expect(result.current.refresh).toBe(mockRefresh);
   });
 
-  it('calculates USD value using BTC price', () => {
-    mockUseBtcPrice.mockReturnValue({ data: 50000 });
+  it('calculates USD value from pool tvlUsd × user share', () => {
+    mockUseAllPoolStats.mockReturnValue({
+      data: {
+        DIESEL_FRBTC: { poolId: '2:77087', tvlUsd: 100000, lpTotalSupply: '200000000' },
+      },
+    });
     mockUseEnrichedWalletData.mockReturnValue({
       balances: {
         alkanes: [makeAlkane({ balance: '100000000', decimals: 8, symbol: 'A/B LP' })],
@@ -273,7 +277,7 @@ describe('useLPPositions', () => {
     });
 
     const { result } = renderHook(() => useLPPositions());
-    // 100000000 / 10^8 = 1.0; 1.0 * 50000 = 50000
+    // share = 100_000_000 / 200_000_000 = 0.5; 0.5 × 100_000 = 50_000
     expect(result.current.positions[0].valueUSD).toBe(50000);
   });
 

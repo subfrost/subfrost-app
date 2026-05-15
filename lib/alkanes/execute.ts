@@ -55,8 +55,10 @@
  * handle_message() returns Err on revert → atomic.commit() never called → rollback.
  */
 
-import { parseMaxVoutFromProtostones, extractPsbtBase64 } from './helpers';
+import * as bitcoin from 'bitcoinjs-lib';
+import { parseMaxVoutFromProtostones, extractPsbtBase64, getBitcoinNetwork } from './helpers';
 import type { AlkanesExecuteTypedParams } from './types';
+import { getAlkanesDataSource } from './dataSource';
 
 type WebProvider = import('@alkanes/ts-sdk/wasm').WebProvider;
 
@@ -92,6 +94,7 @@ export async function alkanesExecuteTyped(
     params.changeAddress ?? params.txContext?.btcChangeAddress ?? 'p2wpkh:0';
   options.alkanes_change_address =
     params.alkanesChangeAddress ?? params.txContext?.alkanesChangeAddress ?? 'p2tr:0';
+  options.utxo_source = params.utxoSource ?? getAlkanesDataSource(params.network);
 
   if (params.traceEnabled !== undefined) options.trace_enabled = params.traceEnabled;
   if (params.mineEnabled !== undefined) options.mine_enabled = params.mineEnabled;
@@ -105,6 +108,23 @@ export async function alkanesExecuteTyped(
   // during the 2026-05-03 mainnet camoufoxd run as "only 1
   // sendrawtransaction observed when wrap+swap should produce 2."
   if (params.splitTransactions !== undefined) options.split_transactions = params.splitTransactions;
+  if (params.knownPendingTxHexes !== undefined) {
+    if (params.knownPendingTxHexes.length > 0) {
+      options.known_pending_tx_hexes = params.knownPendingTxHexes;
+      options.knownPendingTxHexes = params.knownPendingTxHexes;
+    }
+  } else if (typeof window !== 'undefined') {
+    try {
+      const { pendingTxStore } = await import('./pendingTxStore');
+      const pendingHexes = await pendingTxStore.list();
+      if (pendingHexes.length > 0) {
+        options.known_pending_tx_hexes = pendingHexes;
+        options.knownPendingTxHexes = pendingHexes;
+      }
+    } catch (e) {
+      console.warn('[alkanesExecuteTyped] pendingTxStore.list failed:', e);
+    }
+  }
 
   const ordinalsStrategy = params.ordinalsStrategy ?? params.txContext?.defaultOrdinalsStrategy;
   if (ordinalsStrategy !== undefined) options.ordinals_strategy = ordinalsStrategy;
@@ -136,13 +156,139 @@ export async function alkanesExecuteTyped(
   // is the user-visible "click → wallet popup" delay.
   if (!options.payment_utxos && params.cachedUtxos?.length) {
     const clean = params.cachedUtxos
-      .filter((u) => (u.alkanes?.length ?? 0) === 0 && u.value > 1000)
+      .filter((u) => (u.alkanes?.length ?? 0) === 0 && (u.runes?.length ?? 0) === 0 && u.value > 1000)
       .map((u) => ({ txid: u.txid, vout: u.vout, value: u.value }));
     if (clean.length > 0) {
       options.payment_utxos = clean;
       console.log(
         `[alkanesExecuteTyped] payment_utxos: ${clean.length} clean BTC UTXOs from prefetched cache (skipping WASM fanout)`,
       );
+    }
+  }
+
+  // PERF: prefetched_utxos — caller-supplied (outpoint, value, scriptPubKey,
+  // alkanes) map that the SDK consumes inside:
+  //   - `validate_transaction` / `build_psbt_and_fee`: skip per-UTXO
+  //     `getrawtransaction` roundtrips (PR #256).
+  //   - `select_utxos` per-outpoint `protorunesbyoutpoint` fanout
+  //     (mainnet 2026-05-09: 40s on 36-dust-UTXO wallet, second-pass
+  //     extension built on top of #256).
+  // Required by the alkanes-rs change in https://github.com/kungfuflex/alkanes-rs/pull/256
+  // and its second-pass alkanes extension; ignored by older SDKs since the
+  // fields are `#[serde(default)]` Rust-side.
+  //
+  // Every cached UTXO contributes — not just clean BTC carriers. The SDK's
+  // hot loops iterate the FULL selected set (including alkane-bearing dust
+  // and inscribed UTXOs), so anything we cache here saves a roundtrip.
+  //
+  // `alkanes` field semantics (load-bearing, mirrors Rust `Option<Vec<_>>`):
+  //   - `[]`        → Rust `Some(vec![])` → "asserted clean — do not query."
+  //   - `[{...}]`   → Rust `Some([...])`   → authoritative balances.
+  //   - omitted     → Rust `None`          → fall back to RPC for this outpoint.
+  // Every UTXO returned by the wallet UTXO cache is fully covered (dust gets
+  // a populated balance sheet, non-dust gets `[]`), so we always emit `Some`.
+  if (params.cachedUtxos?.length) {
+    try {
+      const btcNetwork = getBitcoinNetwork(params.network ?? 'mainnet');
+      let alkaneAsserted = 0;
+      const prefetched = params.cachedUtxos.map((u) => {
+        let scriptPubKeyHex = u.scriptPubKeyHex;
+        if (!scriptPubKeyHex) {
+          // Derive scriptPubKey from address — pure compute, no RPC.
+          // Falls through to the slow path on per-UTXO derivation failure
+          // (defensive: never let a bad address abort the whole execute).
+          if (!u.address) return null;
+          try {
+            const script = bitcoin.address.toOutputScript(u.address, btcNetwork);
+            scriptPubKeyHex = Buffer.from(script).toString('hex');
+          } catch {
+            return null;
+          }
+        }
+        const alkanesAsserted = (u.alkanes ?? []).map((a) => ({
+          block: a.block,
+          tx: a.tx,
+          amount: a.amount.toString(),
+        }));
+        if (alkanesAsserted.length > 0) alkaneAsserted++;
+        return {
+          outpoint: `${u.txid}:${u.vout}`,
+          value: u.value,
+          script_pubkey_hex: scriptPubKeyHex,
+          alkanes: alkanesAsserted, // [] = "asserted clean" (NOT undefined)
+        };
+      }).filter((x): x is {
+        outpoint: string;
+        value: number;
+        script_pubkey_hex: string;
+        alkanes: Array<{ block: number; tx: number; amount: string }>;
+      } => x !== null);
+      if (prefetched.length > 0) {
+        options.prefetched_utxos = prefetched;
+        options.prefetchedUtxos = prefetched;
+        console.log(
+          `[alkanesExecuteTyped] prefetched_utxos: ${prefetched.length} TxOuts ` +
+          `(${alkaneAsserted} with alkane assertion) from wallet cache ` +
+          `(skips ~${prefetched.length * 2} getrawtransaction + ` +
+          `${prefetched.length} protorunesbyoutpoint roundtrips)`,
+        );
+      }
+    } catch (e) {
+      console.warn('[alkanesExecuteTyped] failed to build prefetched_utxos:', e);
+    }
+  }
+  if (params.prefetchedUtxos?.length) {
+    const prefetchedUtxos = [
+      ...(Array.isArray(options.prefetched_utxos) ? options.prefetched_utxos : []),
+      ...params.prefetchedUtxos,
+    ];
+    options.prefetched_utxos = prefetchedUtxos;
+    options.prefetchedUtxos = prefetchedUtxos;
+  }
+
+  // Indexer-aware UTXO height filter (2026-05-10, replaces global lag wait).
+  //
+  // Fetch the alkanes indexer's current height and pass it as
+  // `max_indexed_height` so the SDK's `select_utxos` skips any confirmed
+  // UTXO whose creating block is above this height (metashrew can't yet
+  // read its alkane balance sheet). Alkane balance sheets are immutable
+  // per-outpoint, so any UTXO at height ≤ max_indexed_height is safe.
+  //
+  // Why this beats waiting for full sync:
+  //   - esplora indexes new blocks ~immediately; metashrew takes longer
+  //     because it re-runs every protostone in the block.
+  //   - Steady-state on mainnet has esplora 1–2 blocks ahead of metashrew.
+  //     Waiting for `lag === 0` would stall every mutation for several
+  //     minutes after each block lands.
+  //   - With this filter we just don't pick UTXOs above metashrew's view —
+  //     correctness preserved without the wait.
+  //
+  // On local networks (devnet/regtest) we skip this probe — the user
+  // mines manually and selecting UTXOs above metashrew's height is fine.
+  if (!options.max_indexed_height && options.utxo_source !== 'espo') {
+    try {
+      const rpcUrl =
+        (typeof window !== 'undefined' &&
+          ((provider as any).sandshrew_rpc_url?.() || null)) ||
+        null;
+      if (rpcUrl && !rpcUrl.includes('localhost:18888')) {
+        const res = await fetch(rpcUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'metashrew_height', params: [] }),
+        });
+        if (res.ok) {
+          const json = await res.json();
+          const r = json?.result;
+          const h = typeof r === 'string' ? parseInt(r, 10) : Number(r);
+          if (Number.isFinite(h) && h > 0) {
+            options.max_indexed_height = h;
+            console.log(`[alkanesExecuteTyped] max_indexed_height=${h} (per-UTXO indexer filter)`);
+          }
+        }
+      }
+    } catch (probeErr) {
+      console.warn('[alkanesExecuteTyped] metashrew_height probe failed, continuing without filter:', probeErr);
     }
   }
 
@@ -154,26 +300,6 @@ export async function alkanesExecuteTyped(
   console.log('[alkanesExecuteTyped] protostones:', params.protostones);
   console.log('[alkanesExecuteTyped] fee_rate:', params.feeRate);
   console.log('[alkanesExecuteTyped] options:', optionsJson);
-
-  // Proactive indexer-sync probe (2026-05-04, fixes "Indexer sync timed out").
-  //
-  // alkanesExecuteWithStrings / alkanesExecuteFull internally call
-  // `webprovider_waitForIndexer` before broadcast and time out at 30s if
-  // metashrew_height < bitcoind_blockcount. On mainnet the gateway is
-  // sometimes one block apart for ~10–30s; the timeout buries the swap on
-  // "Building Transaction" forever. The elegant pattern (97b1aec2 — "fix:
-  // update @alkanes/ts-sdk with indexer sync fix") is to probe the
-  // SDK's sync primitive ourselves first so a transient gap becomes a
-  // short pre-flight wait instead of a deep failure. Catching here in the
-  // central wrapper covers swap / wrap / unwrap / send / addLiquidity in
-  // one place — no per-hook duplication.
-  try {
-    if (typeof (provider as any).waitForIndexer === 'function') {
-      await (provider as any).waitForIndexer();
-    }
-  } catch (syncErr) {
-    console.warn('[alkanesExecuteTyped] proactive waitForIndexer failed, continuing:', syncErr);
-  }
 
   // On devnet, use alkanesExecuteFull which handles signing + mining internally.
   // alkanesExecuteWithStrings relies on the SDK's data API for UTXO discovery,
@@ -194,7 +320,13 @@ export async function alkanesExecuteTyped(
   }
   if (!isLocalNetwork && typeof window !== 'undefined') {
     try {
-      const stored = localStorage.getItem('subfrost_selected_network') ?? '';
+      // Devnet is tab-scoped and stored in sessionStorage (not localStorage).
+      // Without this check, devnet swaps take the PSBT path instead of
+      // alkanesExecuteFull and hang waiting for a wallet-signing popup.
+      const stored =
+        sessionStorage.getItem('subfrost_selected_network') ??
+        localStorage.getItem('subfrost_selected_network') ??
+        '';
       isLocalNetwork = LOCAL_NETWORKS.includes(stored);
     } catch { /* ignore */ }
   }
@@ -213,6 +345,7 @@ export async function alkanesExecuteTyped(
   // path because the user controls block production there.
   const wantPreview = !!params.previewBeforeBroadcast && !isLocalNetwork;
   const useFullExecution =
+    !params.forcePsbt &&
     !wantPreview &&
     (isLocalNetwork || params.autoConfirm) &&
     typeof (provider as any).alkanesExecuteFull === 'function';

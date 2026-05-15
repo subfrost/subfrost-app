@@ -25,8 +25,15 @@ const mockProvider = {
   alkanesGetAllPoolsWithDetails: vi.fn(),
 };
 
+// Default network: a non-mainnet network so the data-API path actually
+// runs. On `mainnet`, `usePools` returns the static curated list (see
+// `lib/alkanes/curated-pools.ts`) without ever calling the SDK provider's
+// dataApiGetAllPoolsDetails — which makes the data-API parsing tests
+// below silently see the curated list (21 items) instead of the mocked
+// response. Tests that need to assert mainnet curated behaviour can
+// override per-test via `mockUseWallet.mockReturnValue(...)`.
 const mockUseWallet = vi.fn(() => ({
-  network: 'mainnet',
+  network: 'subfrost-regtest',
   account: null,
   browserWallet: null,
 }));
@@ -149,8 +156,9 @@ import { usePools, type PoolsListItem } from '../usePools';
 describe('usePools', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // Reset to defaults
-    mockUseWallet.mockReturnValue({ network: 'mainnet', account: null, browserWallet: null });
+    // Reset to defaults — see comment on `mockUseWallet` above for why
+    // we deliberately use a non-mainnet network here.
+    mockUseWallet.mockReturnValue({ network: 'subfrost-regtest', account: null, browserWallet: null });
     mockUseAlkanesSDK.mockReturnValue({ provider: mockProvider, isReady: true });
     // Default: token-names returns empty
     mockFetch.mockResolvedValue({

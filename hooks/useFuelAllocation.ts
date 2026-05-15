@@ -27,7 +27,8 @@ export function useFuelAllocation(): FuelAllocation {
         const res = await fetch(`/api/fuel?address=${encodeURIComponent(addr)}`);
         if (!res.ok) return 0;
         const data = await res.json();
-        return data.amount ?? 0;
+        const amount = Number(data.amount ?? 0);
+        return Number.isFinite(amount) ? amount : 0;
       } catch {
         return 0;
       }

@@ -2,7 +2,9 @@
 
 import { useMemo } from 'react';
 import Link from 'next/link';
-import { usePoolMarkets } from '@/hooks/usePoolMarkets';
+import { usePools } from '@/hooks/usePools';
+import { useAllPoolStats } from '@/hooks/usePoolData';
+import { pickPositive } from '@/lib/pools/mergeStats';
 import TokenIcon from '@/app/components/TokenIcon';
 import HomeMarketsButton from '@/app/components/HomeMarketsButton';
 import { useTranslation } from '@/hooks/useTranslation';
@@ -41,23 +43,66 @@ function formatUsd(n?: number, showZeroAsDash = false) {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n);
 }
 
+function formatPercent(v?: number | string) {
+  if (v == null) return "-";
+  const n = typeof v === 'string' ? parseFloat(v) : v;
+  if (!isFinite(n)) return "-";
+  const decimals = n > 99.99 ? 0 : n > 9.99 ? 1 : 2;
+  return `${n.toFixed(decimals)}%`;
+}
+
 export default function TrendingPairs() {
   const { t } = useTranslation();
-  const { markets } = usePoolMarkets();
+  const { data } = usePools({ sortBy: 'tvl', order: 'desc', limit: 200 });
+
+  // Enhanced pool stats from our local API (TVL, Volume, APR)
+  const { data: poolStats } = useAllPoolStats();
 
   const pairs = useMemo(() => {
-    const hasAny24hVolume = markets.some((p) => (p.vol24hUsd ?? 0) > 0);
-    const hasAny30dVolume = markets.some((p) => (p.vol30dUsd ?? 0) > 0);
+    const filtered = data?.items ?? [];
 
-    // Sort by 24h volume if any exists, otherwise 30d volume, otherwise TVL.
-    return [...markets]
+    // Create stats lookup map (fallback)
+    const statsMap = new Map<string, NonNullable<typeof poolStats>[string]>();
+    if (poolStats) {
+      for (const [, stats] of Object.entries(poolStats)) {
+        statsMap.set(stats.poolId, stats);
+      }
+    }
+
+    // Merge stats with pools (usePools already provides TVL/volume from OYL Alkanode).
+    // pickPositive (not `||`) so a `0` from the primary source doesn't
+    // short-circuit the stats overlay — the user-reported staging symptom
+    // (DIESEL/frBTC TVL=$0 → wrong trending pair selected) was caused by
+    // that exact bug. See lib/pools/mergeStats.ts header for context.
+    const enrichedPools = filtered.map(p => {
+      const stats = statsMap.get(p.id);
+      return {
+        ...p,
+        tvlUsd: pickPositive(p.tvlUsd, stats?.tvlUsd),
+        vol24hUsd: pickPositive(p.vol24hUsd, stats?.volume24hUsd),
+        vol30dUsd: pickPositive(p.vol30dUsd, stats?.volume30dUsd),
+        apr: pickPositive(p.apr, stats?.apr),
+      };
+    });
+
+    // Check if any pool has volume data
+    const hasAny24hVolume = enrichedPools.some(p => (p.vol24hUsd ?? 0) > 0);
+    const hasAny30dVolume = enrichedPools.some(p => (p.vol30dUsd ?? 0) > 0);
+
+    // Sort by 24h volume if any exists, otherwise 30d volume, otherwise TVL
+    return enrichedPools
       .sort((a, b) => {
-        if (hasAny24hVolume) return (b.vol24hUsd ?? 0) - (a.vol24hUsd ?? 0);
-        if (hasAny30dVolume) return (b.vol30dUsd ?? 0) - (a.vol30dUsd ?? 0);
+        if (hasAny24hVolume) {
+          return (b.vol24hUsd ?? 0) - (a.vol24hUsd ?? 0);
+        }
+        if (hasAny30dVolume) {
+          return (b.vol30dUsd ?? 0) - (a.vol30dUsd ?? 0);
+        }
+        // Final fallback to TVL
         return (b.tvlUsd ?? 0) - (a.tvlUsd ?? 0);
       })
       .slice(0, 1);
-  }, [markets]);
+  }, [data?.items, poolStats]);
 
   return (
     <div className="sf-card h-full">
@@ -85,9 +130,15 @@ export default function TrendingPairs() {
                   <div className="font-bold text-[color:var(--sf-text)]">{formatUsd(p.vol30dUsd, true)}</div>
                 </div>
               </div>
-              <div className="text-center">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">{t('trending.tvl')}</div>
-                <div className="font-bold text-[color:var(--sf-text)]">{formatUsd(p.tvlUsd)}</div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="text-center">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">{t('trending.tvl')}</div>
+                  <div className="font-bold text-[color:var(--sf-text)]">{formatUsd(p.tvlUsd)}</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/60 mb-1">30D APR</div>
+                  <div className="font-bold text-[color:var(--sf-info-green-title)]">{formatPercent(p.apr)}</div>
+                </div>
               </div>
             </div>
           </Link>

@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, ArrowLeftRight, Vault, TrendingUp } from 'lucide-react';
+import { Home, ArrowLeftRight, Vault, TrendingUp, type LucideIcon } from 'lucide-react';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useDemoGate } from '@/hooks/useDemoGate';
 
@@ -11,11 +11,15 @@ export default function MobileBottomNav() {
   const { t } = useTranslation();
   const isDemoGated = useDemoGate();
 
-  const navItems = [
-    { href: '/', label: t('nav.home'), icon: Home, gated: false },
-    { href: '/swap', label: t('nav.swap'), icon: ArrowLeftRight, gated: false },
-    { href: '/vaults', label: t('nav.vaults'), icon: Vault, gated: false },
-    { href: '/futures', label: t('nav.futures'), icon: TrendingUp, gated: isDemoGated },
+  const navItems: Array<{ href: string; label: string; icon: LucideIcon }> = [
+    { href: '/', label: t('nav.home'), icon: Home },
+    { href: '/swap', label: t('nav.swap'), icon: ArrowLeftRight },
+    { href: '/vaults', label: t('nav.vaults'), icon: Vault },
+    ...(!isDemoGated
+      ? [
+          { href: '/futures', label: t('nav.futures'), icon: TrendingUp },
+        ]
+      : []),
   ];
 
   const isActive = (path: string) => {
@@ -31,18 +35,6 @@ export default function MobileBottomNav() {
         {navItems.map((item) => {
           const Icon = item.icon;
           const active = isActive(item.href);
-          if (item.gated) {
-            return (
-              <span
-                key={item.href}
-                aria-disabled="true"
-                className="flex flex-col items-center justify-center flex-1 h-full gap-1 text-[color:var(--sf-text)]/30 cursor-not-allowed"
-              >
-                <Icon size={22} strokeWidth={2} />
-                <span className="text-[10px] font-semibold">{item.label}</span>
-              </span>
-            );
-          }
           return (
             <Link
               key={item.href}

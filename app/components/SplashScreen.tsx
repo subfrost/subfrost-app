@@ -148,7 +148,7 @@ export default function SplashScreen() {
   }, [isInitialized, fontsLoaded, imagesLoaded, pageLoaded]);
 
   // ---------------------------------------------------------------------------
-  // Progress bar animation
+  // Progress animation
   // ---------------------------------------------------------------------------
 
   useEffect(() => {
@@ -162,15 +162,11 @@ export default function SplashScreen() {
       const milestoneTarget = milestonePRef.current;
 
       if (!readyRef.current) {
-        // Drive progress toward milestone ceiling.
-        // Approach smoothly so the bar doesn't jump in 25% steps.
         if (targetP < milestoneTarget) {
           targetP += Math.max(0.5, (milestoneTarget - targetP) * 0.06);
         } else {
-          // Small creep past the last milestone for natural feel
           targetP += 0.015;
         }
-        // Never exceed 95% until readyRef is true
         targetP = Math.min(targetP, 95);
       } else {
         targetP = 100;
@@ -178,8 +174,9 @@ export default function SplashScreen() {
 
       progress += (targetP - progress) * 0.08;
 
-      if (bar) bar.style.width = Math.min(progress, 100) + '%';
-      if (pct) pct.textContent = Math.round(Math.min(progress, 100)) + '%';
+      const clamped = Math.min(progress, 100);
+      if (bar) bar.style.width = clamped + '%';
+      if (pct) pct.textContent = Math.round(clamped) + '%';
 
       if (readyRef.current && progress > 99.5) {
         dismiss(true);
@@ -213,47 +210,62 @@ export default function SplashScreen() {
     >
       <div
         style={{
-          fontFamily: 'var(--font-satoshi), ui-sans-serif, system-ui, sans-serif',
-          fontWeight: 700,
-          fontSize: 36,
-          letterSpacing: '0.05em',
-          color: '#ffffff',
-          lineHeight: 1,
-        }}
-      >
-        SUBFROST
-      </div>
-      <div
-        style={{
-          marginTop: 28,
-          width: 200,
-          height: 2,
-          background: 'rgba(91,156,255,0.12)',
-          borderRadius: 1,
-          overflow: 'hidden',
+          width: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          textAlign: 'center',
         }}
       >
         <div
-          id="sf-splash-bar"
+          aria-label="SUBFROST"
           style={{
-            height: '100%',
-            width: '0%',
-            background: 'linear-gradient(90deg, #3a6fd8, #5b9cff, #c7e0fe)',
+            width: 200,
+            marginBottom: 18,
+            color: '#FFFFFF',
+            fontFamily: "Satoshi, 'Satoshi', Arial, Helvetica, sans-serif",
+            fontSize: 30,
+            fontWeight: 700,
+            letterSpacing: '0.05em',
+            lineHeight: 1,
+            textAlign: 'center',
+          }}
+        >
+          SUBFROST
+        </div>
+        <div
+          style={{
+            width: 200,
+            height: 2,
+            background: 'rgba(91,156,255,0.12)',
             borderRadius: 1,
-            transition: 'width 0.3s ease',
+            overflow: 'hidden',
+          }}
+        >
+          <div
+            id="sf-splash-bar"
+            style={{
+              height: '100%',
+              width: '0%',
+              background: 'linear-gradient(90deg, #3a6fd8, #5b9cff, #c7e0fe)',
+              borderRadius: 1,
+              transition: 'width 0.3s ease',
+            }}
+          />
+        </div>
+        <div
+          id="sf-splash-pct"
+          style={{
+            marginTop: 10,
+            fontSize: 10,
+            fontWeight: 700,
+            fontFamily: 'inherit',
+            color: 'rgba(91,156,255,1)',
+            letterSpacing: 3,
+            textAlign: 'center',
           }}
         />
       </div>
-      <div
-        id="sf-splash-pct"
-        style={{
-          marginTop: 10,
-          fontSize: 10,
-          fontFamily: '"Courier New", Courier, monospace',
-          color: 'rgba(91,156,255,1)',
-          letterSpacing: 3,
-        }}
-      />
     </div>
   );
 }

@@ -1,16 +1,17 @@
 /**
- * useAtomicWrapSwapMutation — single-tx BTC → Token swap.
+ * useAtomicWrapSwapMutation — BTC → Token swap.
  *
  * Wraps `useSwapMutation` with the protostone construction needed for an
- * atomic wrap+swap. Two chained protostones in one Bitcoin tx:
- *   p0: [32,0,FRBTC_WRAP_OPCODE]:p1:v1   — wrap BTC → frBTC
+ * wrap+swap. Two chained protostones split into a CPFP package:
+ *   p0: [32,0,FRBTC_WRAP_OPCODE]:v0:v0   — wrap BTC → frBTC
  *   p1: factory.SwapExactTokensForTokens — swap frBTC for buyToken
  *
  * Output layout:
- *   v0 = signer (receives BTC)
- *   v1 = user (receives buyToken)
+ *   parent v0 = ephemeral refund/carrier, parent v1 = signer wrap address
+ *   child v0 = user (receives buyToken)
  *
- * Verified in alkanes-rs/crates/alkanes-integ-tests/tests/atomic_wrap_swap.rs.
+ * The Rust executor rewrites this into Tx A (wrap-only) and Tx B (swap-only)
+ * when splitTransactions=true.
  *
  * Why this hook exists separately from useSwapMutation:
  *   The atomic flow needs runtime data (signer address, wrap fee, current
@@ -23,13 +24,15 @@
 
 import BigNumber from 'bignumber.js';
 import { useCallback } from 'react';
+import { useMutation } from '@tanstack/react-query';
 import { useWallet } from '@/context/WalletContext';
-import { useSwapMutation } from '@/hooks/useSwapMutation';
 import { useSandshrewProvider } from '@/hooks/useSandshrewProvider';
 import { useFrbtcPremium } from '@/hooks/useFrbtcPremium';
+import { useEphemeralWrapPackage } from '@/hooks/useEphemeralWrapPackage';
 import { FRBTC_WRAP_FEE_PER_1000 } from '@/constants/alkanes';
 import { getConfig } from '@/utils/getConfig';
 import { getFutureBlockHeight } from '@/utils/amm';
+import { FRBTC_WRAP_OPCODE } from '@/lib/alkanes/constants';
 
 export interface AtomicWrapSwapParams {
   /** Display BTC amount (e.g. "0.001"). */
@@ -57,16 +60,15 @@ export interface AtomicWrapSwapParams {
    * Required when combined wrap + execute fuel cost (~5M) exceeds the floor
    * — typical on busy mainnet blocks where block_fuel is depleted.
    *
-   * When false (default), uses the original single-tx atomic flow which
-   * works fine when block_fuel is abundant but OOGs at the floor.
+   * When false, uses the legacy single-tx atomic flow.
    */
   splitTransactions?: boolean;
 }
 
 export function useAtomicWrapSwapMutation() {
   const { network, address } = useWallet();
-  const swapMutation = useSwapMutation();
   const provider = useSandshrewProvider();
+  const executeEphemeralWrapPackage = useEphemeralWrapPackage();
   const { data: premiumData } = useFrbtcPremium();
 
   const executeAtomicSwap = useCallback(
@@ -75,7 +77,7 @@ export function useAtomicWrapSwapMutation() {
       if (!address) throw new Error('No wallet address');
 
       const { getSignerAddressDynamic } = await import('@/lib/alkanes/helpers');
-      const { buildAtomicWrapSwapProtostones } = await import('@/lib/alkanes/builders');
+      const { buildSwapProtostone } = await import('@/lib/alkanes/builders');
 
       const wrapFeePerThousand = premiumData?.wrapFeePerThousand ?? FRBTC_WRAP_FEE_PER_1000;
       const btcSats = new BigNumber(params.btcAmount).multipliedBy(1e8).integerValue(BigNumber.ROUND_FLOOR);
@@ -88,8 +90,9 @@ export function useAtomicWrapSwapMutation() {
       // useRemoveLiquidityMutation / useSwapMutation.
       const deadline = (await getFutureBlockHeight(params.deadlineBlocks, provider as any)).toString();
 
-      const protostones = buildAtomicWrapSwapProtostones({
+      const childProtostone = buildSwapProtostone({
         factoryId: config.ALKANE_FACTORY_ID,
+        sellTokenId: config.FRBTC_ALKANE_ID,
         buyTokenId: params.buyTokenId,
         sellAmount: frbtcAfterFee,
         minOutput: params.minimumReceived || '1',
@@ -98,36 +101,30 @@ export function useAtomicWrapSwapMutation() {
 
       const signerAddress = await getSignerAddressDynamic(network);
 
-      return swapMutation.mutateAsync({
-        sellCurrency: 'btc',
-        buyCurrency: params.buyTokenId,
-        direction: 'sell',
-        sellAmount: btcSats.toString(),
-        buyAmount: params.quoteBuyAmount,
-        maxSlippage: params.maxSlippage,
+      return executeEphemeralWrapPackage({
         feeRate: params.feeRate,
-        poolId: params.poolId,
-        deadlineBlocks: params.deadlineBlocks,
-        // Override protostones and addresses for atomic wrap+swap.
-        // v0 = signer (BTC), v1 = user (swap output).
-        overrideProtostones: protostones,
-        overrideToAddresses: [signerAddress, address],
-        overrideInputRequirements: `B:${btcSats.toString()}:v0`,
-        // Default-on for mainnet: combined wrap+swap fuel exceeds the
-        // MINIMUM_FUEL_CHANGE1 floor (3.5M) so the original atomic flow
-        // OOGs whenever block_fuel is exhausted by earlier txs. Splitting
-        // the wrap into a parent tx avoids the race entirely. Devnet /
-        // regtest get full block_fuel each tx so the atomic flow is fine
-        // there — leave it off to keep existing test paths unchanged.
-        splitTransactions: params.splitTransactions ?? (network === 'mainnet'),
-      } as any);
+        signerAddress,
+        userAddress: address,
+        parentInputRequirements: `B:${btcSats.toString()}:v1`,
+        parentProtostone: `[32,0,${FRBTC_WRAP_OPCODE}]:v0:v0`,
+        childInputRequirements: `${config.FRBTC_ALKANE_ID}:${frbtcAfterFee}`,
+        childProtostone,
+        childAlkanes: [{
+          block: 32,
+          tx: 0,
+          amount: frbtcAfterFee,
+        }],
+        invalidate: 'swap',
+        splitTransactions: params.splitTransactions ?? true,
+      });
     },
-    [network, address, premiumData, swapMutation, provider],
+    [network, address, premiumData, executeEphemeralWrapPackage, provider],
   );
+  const mutation = useMutation({ mutationFn: executeAtomicSwap });
 
   return {
-    executeAtomicSwap,
-    isPending: swapMutation.isPending,
-    error: swapMutation.error,
+    executeAtomicSwap: mutation.mutateAsync,
+    isPending: mutation.isPending,
+    error: mutation.error,
   };
 }

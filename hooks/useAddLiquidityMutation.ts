@@ -51,8 +51,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useWallet } from '@/context/WalletContext';
 import { useTransactionConfirm } from '@/context/TransactionConfirmContext';
-import { useIndexerSync } from '@/context/IndexerSyncContext';
-import { waitForIndexerSync } from '@/lib/alkanes/waitForIndexerSync';
 import { useSandshrewProvider } from '@/hooks/useSandshrewProvider';
 import { getConfig } from '@/utils/getConfig';
 import { getTokenSymbol } from '@/lib/alkanes-client';
@@ -63,10 +61,8 @@ import * as ecc from '@bitcoinerlab/secp256k1';
 // NOTE: Only patching INPUTS (witnessUtxo + redeemScript), NOT outputs
 // Output patching was removed - see useSwapMutation.ts for why
 import { patchInputsOnly } from '@/lib/psbt-patching';
-import { toXOnlyPubKeyHex, X_ONLY_HEX_LENGTH } from '@/lib/wallet/pubkeyHelpers';
 import { buildCreateNewPoolProtostone, buildFactoryAddLiquidityProtostones, buildAddLiquidityInputRequirements } from '@/lib/alkanes/builders';
-import { getAddressUtxos, getProtorunesByOutpoint } from '@/lib/alkanes/rpc';
-import { useWalletUtxoCache, useSyncStatus, type WalletUtxoCache } from '@/hooks/useWalletUtxoCache';
+import { useWalletUtxoCache } from '@/hooks/useWalletUtxoCache';
 import { getBitcoinNetwork, toAlks, extractPsbtBase64 } from '@/lib/alkanes/helpers';
 import { buildPlanFromTx } from '@/lib/alkanes/planBuilder';
 import { getFutureBlockHeight } from '@/utils/amm';
@@ -182,198 +178,21 @@ export async function findPoolId(
   }
 }
 
-/**
- * Discover alkane-bearing UTXOs at the given taproot address.
- *
- * Workaround: SDK UTXO selection doesn't find alkane UTXOs automatically.
- * Uses esplora_address::utxo to find dust UTXOs, then checks each via
- * alkanes_protorunesbyoutpoint (which works correctly).
- */
-async function discoverAlkaneUtxos(
-  taprootAddress: string,
-  network: string = 'mainnet',
-  prefetched?: WalletUtxoCache,
-): Promise<{ txid: string; vout: number; value: number; alkanes: { block: number; tx: number; amount: number }[] }[]> {
-  // Cache-fast path: use the pre-warmed snapshot from
-  // useWalletUtxoCache. Mounted eagerly on connect so by click time
-  // we already have the answer in memory. No fanout, no waiting on
-  // the indexer for outpoints we already enumerated.
-  if (prefetched && prefetched.utxos.length > 0) {
-    const fromCache = prefetched.utxos
-      .filter((u) => u.address === taprootAddress && u.alkanes.length > 0)
-      .map((u) => ({
-        txid: u.txid,
-        vout: u.vout,
-        value: u.value,
-        alkanes: u.alkanes.map((a) => ({
-          block: a.block,
-          tx: a.tx,
-          amount: Number(a.amount),
-        })),
-      }));
-    console.log(
-      `[AddLiquidity] Discovered ${fromCache.length} alkane UTXOs from prefetched cache (no RPC fanout)`,
-    );
-    return fromCache;
-  }
-
-  console.log('[AddLiquidity] Discovering alkane UTXOs at', taprootAddress);
-
-  // 1. Fetch UTXOs via SDK-mediated rpc.ts (handles devnet localhost
-  //    interception, error-sentinel guards, and abort signals).
-  const utxos = await getAddressUtxos(network, taprootAddress, AbortSignal.timeout(15_000));
-
-  // 2. Filter for dust UTXOs (<=1000 sats) - alkane tokens live on dust outputs
-  const dustUtxos = utxos.filter((u) => u.value <= 1000);
-  console.log(`[AddLiquidity] Found ${utxos.length} UTXOs, ${dustUtxos.length} dust UTXOs to check`);
-
-  if (dustUtxos.length === 0) {
-    console.log('[AddLiquidity] No dust UTXOs found - no alkane tokens available');
-    return [];
-  }
-
-  // 3. Check each dust UTXO for alkane balances (in parallel)
-  const checks = dustUtxos.map(async (utxo) => {
-    try {
-      const resp = await getProtorunesByOutpoint(network, utxo.txid, utxo.vout, AbortSignal.timeout(15_000));
-      const balances = resp?.balance_sheet?.cached?.balances || [];
-      if (balances.length > 0) {
-        return {
-          txid: utxo.txid,
-          vout: utxo.vout,
-          value: utxo.value,
-          alkanes: balances.map((b: any) => ({ block: Number(b.block), tx: Number(b.tx), amount: Number(b.amount) })),
-        };
-      }
-    } catch (e) {
-      console.warn(`[AddLiquidity] Failed to check outpoint ${utxo.txid}:${utxo.vout}:`, e);
-    }
-    return null;
-  });
-
-  const results = await Promise.all(checks);
-  const alkaneUtxos = results.filter((r): r is NonNullable<typeof r> => r !== null);
-
-  console.log(`[AddLiquidity] Found ${alkaneUtxos.length} alkane-bearing UTXOs:`,
-    alkaneUtxos.map(u => `${u.txid.slice(0, 8)}:${u.vout} -> ${u.alkanes.map((a: { block: number; tx: number; amount: number }) => `[${a.block}:${a.tx}]=${a.amount}`).join(', ')}`));
-
-  return alkaneUtxos;
-}
-
-/**
- * Inject alkane-bearing UTXOs into a PSBT that's missing them.
- *
- * The SDK builds PSBTs without alkane UTXOs because its UTXO selection doesn't
- * find them automatically. This function adds the missing alkane inputs so the
- * protostone edicts can transfer tokens correctly.
- *
- * Returns the modified PSBT as base64.
- */
-function injectAlkaneInputs(
-  psbtBase64: string,
-  alkaneUtxos: { txid: string; vout: number; value: number }[],
-  taprootAddress: string,
-  btcNetwork: bitcoin.Network,
-  tapInternalKeyHex?: string,
-): string {
-  if (alkaneUtxos.length === 0) return psbtBase64;
-
-  const psbt = bitcoin.Psbt.fromBase64(psbtBase64, { network: btcNetwork });
-
-  // Get existing input outpoints to avoid duplicates
-  const existingInputs = new Set(
-    psbt.txInputs.map(input => {
-      const txid = Buffer.from(input.hash).reverse().toString('hex');
-      return `${txid}:${input.index}`;
-    })
-  );
-
-  const taprootScript = bitcoin.address.toOutputScript(taprootAddress, btcNetwork);
-  // Defense-in-depth: WalletContext now hands us a properly-shaped x-only key
-  // via toXOnlyPubKeyHex, but if a future caller bypasses that path we still
-  // want to reject malformed input rather than emit an invalid PSBT.
-  // (bitcoinjs-lib's tapInternalKey validator rejects with "Expected Uint8Array".)
-  // Use pure Uint8Array — wallets reject node Buffer with that same error.
-  let tapInternalKey: Uint8Array | undefined;
-  if (tapInternalKeyHex) {
-    const cleanHex = toXOnlyPubKeyHex(tapInternalKeyHex);
-    if (cleanHex.length !== X_ONLY_HEX_LENGTH) {
-      console.warn(`[AddLiquidity] tapInternalKeyHex has unexpected length ${cleanHex.length}, skipping tapInternalKey injection`);
-    } else {
-      tapInternalKey = new Uint8Array(Buffer.from(cleanHex, 'hex'));
-    }
-  }
-
-  let injectedCount = 0;
-  for (const utxo of alkaneUtxos) {
-    const key = `${utxo.txid}:${utxo.vout}`;
-    if (existingInputs.has(key)) {
-      console.log(`[AddLiquidity] Alkane UTXO ${key} already in PSBT, skipping`);
-      continue;
-    }
-
-    const inputData: Parameters<typeof psbt.addInput>[0] = {
-      hash: utxo.txid,
-      index: utxo.vout,
-      witnessUtxo: {
-        script: taprootScript,
-        value: BigInt(utxo.value),
-      },
-    };
-
-    if (tapInternalKey) {
-      inputData.tapInternalKey = tapInternalKey;
-    }
-
-    psbt.addInput(inputData);
-    injectedCount++;
-    console.log(`[AddLiquidity] Injected alkane UTXO ${key} (${utxo.value} sats)`);
-  }
-
-  if (injectedCount > 0) {
-    console.log(`[AddLiquidity] Injected ${injectedCount} alkane input(s) into PSBT`);
-    console.log(`[AddLiquidity] PSBT now has ${psbt.txInputs.length} total inputs`);
-  }
-
-  return psbt.toBase64();
-}
-
 export function useAddLiquidityMutation() {
   const { account, network, isConnected, signTaprootPsbt, walletType, browserWallet, txContext } = useWallet();
   const provider = useSandshrewProvider();
   const queryClient = useQueryClient();
   const { requestConfirmation } = useTransactionConfirm();
-  const indexerSync = useIndexerSync();
   // Pre-warmed UTXO cache: read from this instead of fetching at click
   // time. Eliminates the multi-second pause between Confirm and the
   // wallet popup for wallets with many dust UTXOs.
   const utxoCache = useWalletUtxoCache();
-  const syncStatus = useSyncStatus();
   const config = getConfig(network);
   const ALKANE_FACTORY_ID = config.ALKANE_FACTORY_ID;
   const defaultPoolId = 'DEFAULT_POOL_ID' in config ? (config as any).DEFAULT_POOL_ID as string : undefined;
 
   return useMutation({
     mutationFn: async (data: AddLiquidityTransactionData) => {
-      // Sync gate: alkane operations require metashrew to be caught
-      // up to bitcoind. Without this, simulated quotes use stale
-      // reserves and the SDK's pre-broadcast sync check errors with
-      // "Indexer sync timed out" mid-flight. Surface the wait up
-      // front so the UI can show a clear "indexer catching up" state.
-      // Skip the gate on local networks (devnet/regtest) — there the
-      // user controls block production via the control panel.
-      const isLocal = ['devnet', 'regtest-local', 'qubitcoin-regtest'].includes(network ?? '');
-      if (!isLocal && syncStatus.metashrewHeight > 0 && !syncStatus.inSync) {
-        indexerSync.start('Preparing add liquidity');
-        try {
-          await waitForIndexerSync({
-            network: network ?? 'mainnet',
-            onProgress: (p) => indexerSync.update(p),
-          });
-        } finally {
-          indexerSync.finish();
-        }
-      }
       console.log('[AddLiquidity] ═══════════════════════════════════════════');
       console.log('[AddLiquidity] Starting add liquidity transaction');
       console.log('[AddLiquidity] Input data:', JSON.stringify(data, null, 2));
@@ -515,8 +334,10 @@ export function useAddLiquidityMutation() {
         // alkane UTXO injection / input patching below is skipped in that
         // branch — for atomic wrap+addLiquidity the alkanes come from the
         // wrap protostone so injection isn't needed anyway.
+        // Browser wallets must still receive unsigned PSBTs for their wallet
+        // prompts; only keystore wallets can safely auto-confirm in-process.
         const wantsSplit = data.splitTransactions === true;
-        const useAutoConfirm = wantsSplit;
+        const useAutoConfirm = walletType === 'keystore';
         const result = await provider.alkanesExecuteTyped({
           txContext,
           // Atomic wrap+addLiquidity passes overrides (custom protostones, BTC input, signer output)
@@ -529,6 +350,12 @@ export function useAddLiquidityMutation() {
           // Opt-in: SDK splits wrap+addLiquidity into a CPFP chain so each
           // tx fits under the per-tx fuel floor. See useAtomicWrapAddLiquidityMutation.
           splitTransactions: wantsSplit,
+          // Caller-supplied UTXO cache — feeds prefetched_utxos so the
+          // SDK skips its `getrawtransaction` + `protorunesbyoutpoint`
+          // fanouts. Mirrors swap / wrap / unwrap / send / removeLiquidity
+          // for consistency; the cache is already mounted via
+          // WalletStatePrewarmer at connect time.
+          cachedUtxos: utxoCache.utxos,
         });
 
         console.log('[AddLiquidity] Called alkanesExecuteTyped (browser:', isBrowserWallet, ')');
@@ -547,28 +374,19 @@ export function useAddLiquidityMutation() {
           console.log('[AddLiquidity] Got readyToSign, signing PSBT...');
           const readyToSign = result.readyToSign;
 
-          // Convert PSBT to base64
+          // Convert PSBT to base64.
+          //
+          // The SDK selects its own alkane-bearing inputs from `prefetched_utxos`
+          // (the `(N with alkane assertion)` line in the log just before this
+          // point). We used to follow up with a `discoverAlkaneUtxos` +
+          // `injectAlkaneInputs` pass that bolted EVERY known alkane UTXO
+          // onto the PSBT — a regtest-era workaround from 11e1e3ef (Jan 2026)
+          // for the days when the SDK's protorunesbyaddress returned `0x`.
+          // On mainnet that pass shipped the user's entire alkane wallet to
+          // the signer: the OYL approval dialog showed 30 inputs (5 from the
+          // SDK + 25 of ours) for a swap that needed 4. Removed 2026-05-11 —
+          // trust the SDK's selection.
           let psbtBase64: string = extractPsbtBase64(readyToSign.psbt);
-
-          // === Alkane UTXO Injection ===
-          // The SDK's internal protorunesbyaddress is broken (returns 0x on regtest),
-          // so the PSBT is built WITHOUT alkane-bearing inputs. We manually discover
-          // alkane UTXOs and inject them into the PSBT before signing.
-          console.log('[AddLiquidity] Discovering alkane UTXOs for injection...');
-          const alkaneUtxos = await discoverAlkaneUtxos(taprootAddress!, network || 'mainnet', utxoCache);
-
-          if (alkaneUtxos.length > 0) {
-            const tapInternalKeyHex = account?.taproot?.pubKeyXOnly;
-            psbtBase64 = injectAlkaneInputs(
-              psbtBase64,
-              alkaneUtxos,
-              taprootAddress!,
-              btcNetwork,
-              tapInternalKeyHex,
-            );
-          } else {
-            console.warn('[AddLiquidity] No alkane UTXOs found - protostone edicts will have no tokens to transfer');
-          }
 
           // ============================================================================
           // ⚠️ CRITICAL: PSBT PATCHING REMOVED - DO NOT RE-ADD ⚠️
@@ -698,6 +516,14 @@ export function useAddLiquidityMutation() {
 
           // Broadcast
           const broadcastTxid = await provider.broadcastTransaction(txHex);
+          if (typeof window !== 'undefined') {
+            try {
+              const { pendingTxStore } = await import('@/lib/alkanes/pendingTxStore');
+              await pendingTxStore.add(txHex);
+            } catch (error) {
+              console.warn('[AddLiquidity] pendingTxStore.add failed:', error);
+            }
+          }
           console.log('[AddLiquidity] Broadcast successful:', broadcastTxid);
 
           return {
@@ -728,6 +554,8 @@ export function useAddLiquidityMutation() {
 
       // Invalidate balance queries
       queryClient.invalidateQueries({ queryKey: ['sellable-currencies'] });
+      queryClient.invalidateQueries({ queryKey: ['wallet-utxo-cache'] });
+      queryClient.invalidateQueries({ queryKey: ['btc-balance-fast'] });
       queryClient.invalidateQueries({ queryKey: ['btc-balance'] });
       queryClient.invalidateQueries({ queryKey: ['dynamic-pools'] });
       queryClient.invalidateQueries({ queryKey: ['pool-stats'] });

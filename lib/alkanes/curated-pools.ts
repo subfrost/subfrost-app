@@ -1,183 +1,323 @@
 /**
- * Curated mainnet pool list — known good IDs verified on-chain.
+ * Curated mainnet pool list — fully static, NO runtime discovery.
  *
- * The espo `/get-all-pools-details` and `/get-all-token-pairs` endpoints have
- * been returning empty on mainnet for an extended period (see audit
- * 2026-05-02 + bug report 2026-05-03). The SDK's
- * `alkanesGetAllPoolsWithDetails` fallback also misses several pools.
- * Without a pool list, the swap form's "Select Token to Receive" modal
- * filters out every BTC-paired token because no pool matches BTC's
- * counterparty (frBTC).
+ * Per flex (alkanes-rs maintainer, 2026-05-11):
+ *   "There shouldn't be a pool discovery phase at all"
+ *   "We have hardcoded pools in there now" — "Right"
+ *   "Even if we didn't, that's the migration from subfrost api to espo we
+ *    maybe haven't done yet"
  *
- * This module hardcodes the mainnet pool IDs we want to surface in the
- * UI, fetches their *live* reserves directly via metashrew_view simulate
- * (opcode 999 PoolDetails), and assembles a `PoolsListItem[]` shaped
- * identically to what `usePools` returns from the espo path. Plug it in
- * as a high-priority data source and the swap/LP forms light up
- * immediately.
+ * Implementation rules:
+ *   - The pool list is a TypeScript constant. It does not depend on any
+ *     network call to enumerate. usePools / useSwapQuotes can synchronously
+ *     ask "what pools exist?" and get an answer in zero ms with zero
+ *     failure modes.
+ *   - Each entry encodes everything the UI needs to find the pool: the
+ *     pool's alkane id, the non-frBTC token's alkane id, display strings,
+ *     and the LP-token alkane id (for wallet enumeration).
+ *   - Live RESERVES are still fetched on-demand by the swap quote engine
+ *     (`fetchLivePoolState` / `usePoolStateLive`) — that's a different
+ *     concern (price math), not pool discovery. Reserves change every
+ *     block; pool existence does not.
+ *   - To add a pool: append an entry below. To remove a pool: delete an
+ *     entry. Never write code that "discovers" pools at runtime.
  *
  * Pool IDs were captured from a live mainnet `factory.GetAllPools` query
- * on 2026-05-03 against block 947661. They are stable: pools cannot be
- * renamed or moved, so as long as the AMM factory at 4:65522 keeps
- * returning these pools they remain valid.
+ * on 2026-05-03 against block 947661 and stay valid forever — pools are
+ * immutable on-chain.
  */
 
 import type { PoolsListItem } from '@/hooks/usePools';
-import { simulateContract, extractField3Data, parseU128LE } from '@/lib/fujin/rpc';
+
+const FRBTC_ID = '32:0';
+const BUSD_ID = '2:56801';
+const MAINNET_FACTORY_ID = '4:65522';
 
 /**
- * Mainnet alkane id ↔ symbol/name + its direct frBTC pool. Each entry
- * pairs the buy-side token with a single pool that contains both that
- * token and frBTC, so the swap router resolves a one-hop path
- * automatically (BTC → wrap to frBTC → swap to target).
+ * Mainnet alkane id ↔ symbol/name + its direct pool. Each entry pairs
+ * the buy-side token with a single pool that contains both that token
+ * and a quote token (frBTC by default, or bUSD when `quoteTokenId` is
+ * set), so the swap router resolves a one-hop path automatically.
+ *
+ * For frBTC quote pools the route is BTC → wrap to frBTC → swap. For
+ * bUSD quote pools the user must already hold bUSD (or route through
+ * the bUSD/frBTC pool — `2:77222`).
  */
 export interface CuratedPool {
-  /** Alkane id of the non-frBTC token (the "counterparty" the user buys). */
+  /** Pool id (block:tx) — must contain `tokenId` and the quote token. */
+  poolId: string;
+  /** Alkane id of the non-quote token (the "counterparty" the user buys). */
   tokenId: string;
-  /** Display symbol (matches the contract's GET_SYMBOL output). */
+  /** Display symbol. */
   symbol: string;
   /** Display name. */
   name: string;
-  /** Pool id (block:tx) — must contain `tokenId` and frBTC (32:0). */
-  poolId: string;
+  /** Token decimals (8 for all known mainnet alkanes today). */
+  decimals: number;
+  /**
+   * Alkane id of the LP token issued by this pool (for wallet enumeration —
+   * lets the wallet card recognize "this dust outpoint is an LP receipt"
+   * without needing to call the pool contract).
+   */
+  lpTokenId?: string;
+  /**
+   * Alkane id of the quote token (token1 in the on-chain pool layout).
+   * Defaults to frBTC (`32:0`). Set to bUSD (`2:56801`) for USD-quoted pools.
+   */
+  quoteTokenId?: string;
+  /** Display symbol of the quote token. Defaults to `frBTC`. */
+  quoteSymbol?: string;
+  /** Display name of the quote token. Defaults to `frBTC`. */
+  quoteName?: string;
 }
 
 export const MAINNET_CURATED_POOLS: readonly CuratedPool[] = [
-  { tokenId: '2:0',     symbol: 'DIESEL',    name: 'DIESEL',    poolId: '2:77087' },
-  { tokenId: '2:25720', symbol: 'MIST',      name: 'ALKAMIST',  poolId: '2:77237' },
-  { tokenId: '2:590',   symbol: '🐝',         name: 'Bee',        poolId: '2:77220' },
-  { tokenId: '2:35275', symbol: 'DUST',      name: 'GOLD DUST', poolId: '2:77228' },
+  {
+    poolId: '2:77087',
+    tokenId: '2:0',
+    symbol: 'DIESEL',
+    name: 'DIESEL',
+    decimals: 8,
+  },
+  {
+    poolId: '2:77237',
+    tokenId: '2:25720',
+    symbol: 'MIST',
+    name: 'ALKAMIST',
+    decimals: 8,
+  },
+  {
+    poolId: '2:77228',
+    tokenId: '2:35275',
+    symbol: 'DUST',
+    name: 'GOLD DUST',
+    decimals: 8,
+  },
+  {
+    poolId: '2:77269',
+    tokenId: '2:68479',
+    symbol: 'TORTILLA',
+    name: 'TORTILLA',
+    decimals: 8,
+  },
+  {
+    poolId: '2:77222',
+    tokenId: BUSD_ID,
+    symbol: 'bUSD',
+    name: 'bUSD',
+    decimals: 8,
+  },
+  {
+    poolId: '2:68441',
+    tokenId: '2:0',
+    symbol: 'DIESEL',
+    name: 'DIESEL',
+    decimals: 8,
+    quoteTokenId: BUSD_ID,
+    quoteSymbol: 'bUSD',
+    quoteName: 'bUSD',
+    lpTokenId: '2:68441',
+  },
+  {
+    poolId: '2:68433',
+    tokenId: '2:16',
+    symbol: 'METHANE',
+    name: 'METHANE',
+    decimals: 8,
+    quoteTokenId: BUSD_ID,
+    quoteSymbol: 'bUSD',
+    quoteName: 'bUSD',
+    lpTokenId: '2:68433',
+  },
+  {
+    poolId: '2:68497',
+    tokenId: '2:69',
+    symbol: 'FARTANE',
+    name: 'FARTANE',
+    decimals: 8,
+    quoteTokenId: BUSD_ID,
+    quoteSymbol: 'bUSD',
+    quoteName: 'bUSD',
+    lpTokenId: '2:68497',
+  },
+  {
+    poolId: '2:77221',
+    tokenId: '2:16',
+    symbol: 'METHANE',
+    name: 'METHANE',
+    decimals: 8,
+    lpTokenId: '2:77221',
+  },
+  {
+    poolId: '2:53014',
+    tokenId: '2:0',
+    symbol: 'DIESEL',
+    name: 'DIESEL',
+    decimals: 8,
+    quoteTokenId: '2:16',
+    quoteSymbol: 'METHANE',
+    quoteName: 'METHANE',
+    lpTokenId: '2:53014',
+  },
+  {
+    poolId: '2:62028',
+    tokenId: '2:16',
+    symbol: 'METHANE',
+    name: 'METHANE',
+    decimals: 8,
+    quoteTokenId: '2:69',
+    quoteSymbol: 'FARTANE',
+    quoteName: 'FARTANE',
+    lpTokenId: '2:62028',
+  },
+  {
+    poolId: '2:68498',
+    tokenId: '2:69',
+    symbol: 'FARTANE',
+    name: 'FARTANE',
+    decimals: 8,
+    quoteTokenId: '2:68479',
+    quoteSymbol: 'TORTILLA',
+    quoteName: 'TORTILLA',
+    lpTokenId: '2:68498',
+  },
+  {
+    poolId: '2:57353',
+    tokenId: '2:0',
+    symbol: 'DIESEL',
+    name: 'DIESEL',
+    decimals: 8,
+    quoteTokenId: '2:69',
+    quoteSymbol: 'FARTANE',
+    quoteName: 'FARTANE',
+    lpTokenId: '2:57353',
+  },
+  {
+    poolId: '2:68162',
+    tokenId: '2:0',
+    symbol: 'DIESEL',
+    name: 'DIESEL',
+    decimals: 8,
+    quoteTokenId: '2:35275',
+    quoteSymbol: 'DUST',
+    quoteName: 'GOLD DUST',
+    lpTokenId: '2:68162',
+  },
+  {
+    poolId: '2:62345',
+    tokenId: '2:0',
+    symbol: 'DIESEL',
+    name: 'DIESEL',
+    decimals: 8,
+    quoteTokenId: '2:25720',
+    quoteSymbol: 'MIST',
+    quoteName: 'ALKAMIST',
+    lpTokenId: '2:62345',
+  },
+  {
+    poolId: '2:64006',
+    tokenId: '2:0',
+    symbol: 'DIESEL',
+    name: 'DIESEL',
+    decimals: 8,
+    quoteTokenId: '4:0',
+    quoteSymbol: 'BAMBOO',
+    quoteName: 'BAMBOO',
+    lpTokenId: '2:64006',
+  },
+  {
+    poolId: '2:70020',
+    tokenId: '2:0',
+    symbol: 'DIESEL',
+    name: 'DIESEL',
+    decimals: 8,
+    quoteTokenId: '2:68479',
+    quoteSymbol: 'TORTILLA',
+    quoteName: 'TORTILLA',
+    lpTokenId: '2:70020',
+  },
+  {
+    poolId: '2:62044',
+    tokenId: '2:0',
+    symbol: 'DIESEL',
+    name: 'DIESEL',
+    decimals: 8,
+    quoteTokenId: '2:50169',
+    quoteSymbol: 'LOVE BOMB',
+    quoteName: 'LOVE BOMB',
+    lpTokenId: '2:62044',
+  },
+  {
+    poolId: '2:69914',
+    tokenId: '2:0',
+    symbol: 'DIESEL',
+    name: 'DIESEL',
+    decimals: 8,
+    quoteTokenId: '2:490',
+    quoteSymbol: 'CheekyB',
+    quoteName: 'CheekyB',
+    lpTokenId: '2:69914',
+  },
+  {
+    poolId: '2:77355',
+    tokenId: '2:77313',
+    symbol: 'BB',
+    name: 'BB',
+    decimals: 8,
+    lpTokenId: '2:77355',
+  },
+  {
+    poolId: '2:77592',
+    tokenId: '2:25349',
+    symbol: 'ARBUZ',
+    name: 'ARBUZ',
+    decimals: 8,
+    quoteTokenId: '2:0',
+    quoteSymbol: 'DIESEL',
+    quoteName: 'DIESEL',
+    lpTokenId: '2:77592',
+  },
 ] as const;
 
-/** Decode a u32 LE from a hex string at a hex-character offset. */
-function parseU32LE(hexData: string, offset: number): number {
-  const bytes = hexData.slice(offset, offset + 8);
-  if (bytes.length !== 8) return 0;
-  let value = 0;
-  for (let i = 0; i < 4; i++) {
-    const byte = parseInt(bytes.slice(i * 2, i * 2 + 2), 16);
-    if (!isNaN(byte)) value |= byte << (i * 8);
-  }
-  return value >>> 0;
-}
-
-function hexToUtf8(hex: string): string {
-  let out = '';
-  for (let i = 0; i + 1 < hex.length; i += 2) {
-    const byte = parseInt(hex.slice(i, i + 2), 16);
-    if (Number.isNaN(byte) || byte === 0) break;
-    out += String.fromCharCode(byte);
-  }
-  return out;
-}
-
 /**
- * Live reserves for a single curated pool. Calls the pool contract
- * directly via metashrew_view simulate opcode 999 (PoolDetails) — same
- * mechanism poolState.ts uses for swap quote inputs, so reserves are
- * always consistent with what the factory contract sees at submit time.
- */
-export interface CuratedPoolDetails {
-  poolId: string;
-  token0Id: string;
-  token1Id: string;
-  reserve0: string;
-  reserve1: string;
-  totalSupply: string;
-  name: string;
-}
-
-async function fetchCuratedPoolDetails(
-  rpcUrl: string,
-  poolId: string,
-): Promise<CuratedPoolDetails | null> {
-  let detailsHex: string;
-  try {
-    detailsHex = await simulateContract(rpcUrl, poolId, 999);
-  } catch (err) {
-    console.warn(`[curated-pools] opcode-999 failed for ${poolId}:`, err);
-    return null;
-  }
-  const poolInfo = extractField3Data(detailsHex, 116);
-  if (!poolInfo || poolInfo.length < 232) return null;
-
-  const token0Block = parseU128LE(poolInfo, 0);
-  const token0Tx = parseU128LE(poolInfo, 32);
-  const token1Block = parseU128LE(poolInfo, 64);
-  const token1Tx = parseU128LE(poolInfo, 96);
-  const reserve0 = parseU128LE(poolInfo, 128);
-  const reserve1 = parseU128LE(poolInfo, 160);
-  const totalSupply = parseU128LE(poolInfo, 192);
-  const nameLength = parseU32LE(poolInfo, 224);
-  const nameStart = 232;
-  const nameEnd = Math.min(nameStart + nameLength * 2, poolInfo.length);
-  const name = hexToUtf8(poolInfo.slice(nameStart, nameEnd));
-
-  return {
-    poolId,
-    token0Id: `${token0Block}:${token0Tx}`,
-    token1Id: `${token1Block}:${token1Tx}`,
-    reserve0: reserve0.toString(),
-    reserve1: reserve1.toString(),
-    totalSupply: totalSupply.toString(),
-    name,
-  };
-}
-
-/**
- * Render the curated list as `PoolsListItem[]` so it slots into the
- * existing `usePools` consumer surface (same shape `useAlkanesTokenPairs`
- * etc. already consume from the espo path).
+ * Convert the static curated list to `PoolsListItem[]` for `usePools`
+ * consumers (TrendingPairs, MarketsGrid, useSwapQuotes' `directPool`
+ * lookup, etc.). Synchronous — no fetch, no Promise, no failure modes.
  *
- * Promise.all-fetches reserves for every pool in parallel; takes
- * ~100-200ms on warm metashrew. If any individual pool fetch fails it's
- * skipped (logged) — the rest still surface.
+ * Reserves (`token0Amount`, `token1Amount`), TVL, volume, APR are
+ * intentionally undefined here. The swap quote engine fetches live
+ * reserves separately via `usePoolStateLive` (opcode-999 simulate).
+ * Display surfaces (TrendingPairs, MarketsGrid TVL columns) overlay
+ * those values from `useAllPoolStats` when available.
+ *
+ * Each pool's `token0` / `token1` ordering matches the on-chain pool's
+ * canonical layout — for the curated set, frBTC was always slot 1
+ * (token1) at deployment. Verified via curl 2026-05-11.
  */
-export async function fetchCuratedPoolsListItems(
-  rpcUrl: string,
-): Promise<PoolsListItem[]> {
-  const detailsList = await Promise.all(
-    MAINNET_CURATED_POOLS.map((p) => fetchCuratedPoolDetails(rpcUrl, p.poolId)),
-  );
-
-  const items: PoolsListItem[] = [];
-  for (let i = 0; i < MAINNET_CURATED_POOLS.length; i++) {
-    const curated = MAINNET_CURATED_POOLS[i];
-    const details = detailsList[i];
-    if (!details) continue;
-
-    // Map token0 / token1 from on-chain so we don't drift if the pool
-    // was created with frBTC in the opposite slot.
-    const tokenSide =
-      details.token0Id === curated.tokenId ? 'token0' : 'token1';
-    const frBtcSide = tokenSide === 'token0' ? 'token1' : 'token0';
-
-    items.push({
-      id: details.poolId,
-      pairLabel: `${curated.symbol}/frBTC`,
+export function getCuratedPoolsListItems(): PoolsListItem[] {
+  return MAINNET_CURATED_POOLS.map((p) => {
+    const quoteId = p.quoteTokenId ?? FRBTC_ID;
+    const quoteSymbol = p.quoteSymbol ?? 'frBTC';
+    const quoteName = p.quoteName ?? 'frBTC';
+    return {
+      id: p.poolId,
+      pairLabel: `${p.symbol} / ${quoteSymbol} LP`,
       token0: {
-        id: details.token0Id,
-        symbol: tokenSide === 'token0' ? curated.symbol : 'frBTC',
-        name: tokenSide === 'token0' ? curated.name : 'frBTC',
+        id: p.tokenId,
+        symbol: p.symbol,
+        name: p.name,
       },
       token1: {
-        id: details.token1Id,
-        symbol: frBtcSide === 'token0' ? curated.symbol : 'frBTC',
-        name: frBtcSide === 'token0' ? curated.name : 'frBTC',
+        id: quoteId,
+        symbol: quoteSymbol,
+        name: quoteName,
       },
-      token0Amount:
-        tokenSide === 'token0' ? details.reserve0 : details.reserve1,
-      token1Amount:
-        frBtcSide === 'token0' ? details.reserve0 : details.reserve1,
-      // Intentionally leave tvlUsd undefined — real TVL is overlaid from
-      // /api/pools/stats (poolStats in SwapShell.tsx) when available. The
-      // upstream low-TVL filter in usePools.ts is patched to keep entries
-      // with no explicit TVL data so the curated set survives.
-    } as PoolsListItem);
-  }
-
-  return items;
+    } as PoolsListItem;
+  });
 }
+
+/** Mainnet factory alkane id (the AMM router). */
+export const CURATED_FACTORY_ID = MAINNET_FACTORY_ID;
 
 /**
  * Set of curated token ids — used by the swap UI to decide whether a
@@ -187,3 +327,19 @@ export async function fetchCuratedPoolsListItems(
 export const CURATED_TOKEN_IDS: ReadonlySet<string> = new Set(
   MAINNET_CURATED_POOLS.map((p) => p.tokenId),
 );
+
+/** Set of curated pool ids. */
+export const CURATED_POOL_IDS: ReadonlySet<string> = new Set(
+  MAINNET_CURATED_POOLS.map((p) => p.poolId),
+);
+
+/**
+ * BACKWARD COMPAT: legacy export name preserved for callers that
+ * imported `fetchCuratedPoolsListItems`. Now synchronous-wrapped-in-Promise
+ * (no actual fetch). Migrate callers to `getCuratedPoolsListItems` over time.
+ */
+export async function fetchCuratedPoolsListItems(
+  _rpcUrl?: string,
+): Promise<PoolsListItem[]> {
+  return getCuratedPoolsListItems();
+}

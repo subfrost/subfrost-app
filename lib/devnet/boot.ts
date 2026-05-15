@@ -91,7 +91,7 @@ export async function bootDevnet(
   // Dynamic import of qubitcoin SDK
   // Import qubitcoin SDK from public dir (served as static ESM).
   // Cannot use bare '@qubitcoin/sdk' — browser can't resolve npm specifiers.
-  // @ts-ignore — runtime URL import, not resolvable by TypeScript
+  // @ts-expect-error - runtime URL import, not resolvable by TypeScript
   const sdk = await import(/* webpackIgnore: true */ '/sdk/qubitcoin/index.js');
 
   // Load indexer WASMs from the app's public directory or bundled assets
@@ -168,7 +168,7 @@ export async function bootDevnetWithWasms(
   // Import qubitcoin SDK from public dir (served as static ESM).
   // Cannot use bare '@qubitcoin/sdk' — browser can't resolve npm specifiers.
   console.log('[devnet-boot] Importing SDK from /sdk/qubitcoin/index.js...');
-  // @ts-ignore — runtime URL import, not resolvable by TypeScript
+  // @ts-expect-error - runtime URL import, not resolvable by TypeScript
   const sdk = await import(/* webpackIgnore: true */ '/sdk/qubitcoin/index.js');
   console.log('[devnet-boot] SDK imported, exports:', Object.keys(sdk));
 
@@ -247,7 +247,12 @@ export async function bootDevnetWithWasms(
         try {
           const body = typeof init.body === 'string' ? init.body : await new Response(init.body).text();
           const parsed = JSON.parse(body);
-          if (parsed.method === 'sendrawtransactions' || parsed.method === 'btc_sendrawtransactions') {
+          if (
+            parsed.method === 'submitpackage' ||
+            parsed.method === 'btc_submitpackage' ||
+            parsed.method === 'sendrawtransactions' ||
+            parsed.method === 'btc_sendrawtransactions'
+          ) {
             const txHexes: string[] = Array.isArray(parsed.params?.[0]) ? parsed.params[0] : parsed.params;
             const results: string[] = [];
             for (const txHex of txHexes) {
@@ -355,17 +360,20 @@ export async function bootDevnetWithWasms(
   } else {
     contracts = await deployFullProtocol(
       _provider, _harness, segwitAddress, taprootAddress, onProgress,
+      /* ammOnly= */ true,
+      quspoWasm,
     );
   }
 
-  // Add quspo tertiary indexer AFTER deployments (or state restore).
-  // quspo processes the full chain on addTertiary, catching up instantly.
-  if (quspoWasm) {
+  // Add quspo tertiary indexer after state restore (fresh boot adds it inside deployFullProtocol).
+  // On savedState restore, contracts were already deployed — add quspo now so the UI can
+  // discover pool UTXOs and alkane balances.
+  if (savedState && quspoWasm) {
     onProgress('Loading quspo indexer...', 98);
     try {
       _harness.server.addTertiary('quspo', quspoWasm);
       _harness.mineBlocks(1);
-      console.log('[devnet-boot] quspo tertiary indexer added');
+      console.log('[devnet-boot] quspo tertiary indexer added (state-restore path)');
     } catch (e: any) {
       console.warn('[devnet-boot] Failed to add quspo (non-fatal):', e?.message || e);
     }
@@ -990,6 +998,8 @@ async function deployFullProtocol(
   segwit: string,
   taproot: string,
   onProgress: ProgressCallback,
+  ammOnly = false,
+  quspoWasm?: Uint8Array,
 ): Promise<DeployedContracts> {
   const S = PROTOCOL_SLOTS;
   const contracts = getDefaultContractIds();
@@ -1052,6 +1062,25 @@ async function deployFullProtocol(
   contracts.ammFactoryId = factoryId;
 
   // -----------------------------------------------------------------------
+  // Add quspo BEFORE Phase 2 so the SDK's alkane UTXO selector can find
+  // the DIESEL/frBTC dust UTXOs when building the CreateNewPool transaction.
+  // Without quspo, `get_address_outpoints` returns empty → SDK reports
+  // "Insufficient alkanes: have 0" even though the tokens exist on-chain.
+  // We add it here (after Phase 1 deploys) rather than at boot start to
+  // avoid quspo adding per-block overhead during the 6 deploy transactions.
+  // -----------------------------------------------------------------------
+  if (quspoWasm) {
+    try {
+      harness.server.addTertiary('quspo', quspoWasm);
+      harness.mineBlocks(1);
+      await new Promise(r => setTimeout(r, 200));
+      console.log('[devnet-boot] quspo tertiary indexer added (pre-Phase2)');
+    } catch (e: any) {
+      console.warn('[devnet-boot] Failed to add quspo before Phase 2 (non-fatal):', e?.message || e);
+    }
+  }
+
+  // -----------------------------------------------------------------------
   // Phase 2: Mint DIESEL + wrap frBTC + create AMM pool
   // -----------------------------------------------------------------------
   onProgress('Minting DIESEL...', 40);
@@ -1094,38 +1123,73 @@ async function deployFullProtocol(
 
   // Create AMM pool
   onProgress('Creating AMM pool...', 44);
-  const dieselBal = await getAlkaneBalance(provider, taproot, '2:0');
-  const frbtcBal = await getAlkaneBalance(provider, taproot, '32:0');
-  console.log('[devnet-boot] DIESEL:', dieselBal.toString(), 'frBTC:', frbtcBal.toString());
+  // Check both taproot and segwit — alkane change can land at either address
+  // depending on which UTXOs the SDK selected. protorunesbyaddress has known
+  // phantom-balance issues so we sum from both addresses defensively.
+  const dieselBalTaproot = await getAlkaneBalance(provider, taproot, '2:0');
+  const dieselBalSegwit = await getAlkaneBalance(provider, segwit, '2:0');
+  const frbtcBalTaproot = await getAlkaneBalance(provider, taproot, '32:0');
+  const frbtcBalSegwit = await getAlkaneBalance(provider, segwit, '32:0');
+  const dieselBal = dieselBalTaproot + dieselBalSegwit;
+  const frbtcBal = frbtcBalTaproot + frbtcBalSegwit;
+  console.log('[devnet-boot] DIESEL taproot:', dieselBalTaproot.toString(), 'segwit:', dieselBalSegwit.toString(), 'total:', dieselBal.toString());
+  console.log('[devnet-boot] frBTC taproot:', frbtcBalTaproot.toString(), 'segwit:', frbtcBalSegwit.toString(), 'total:', frbtcBal.toString());
+
+  // Fallback: if balance query returns 0 (protorunesbyaddress phantom issue),
+  // use conservative fixed amounts. 3x mints of 10000 DIESEL = 30000 total;
+  // wrap of 1000000 sats frBTC should yield ~1000000 units.
+  const effectiveDiesel = dieselBal > BigInt(0) ? dieselBal : BigInt(10000);
+  const effectiveFrbtc = frbtcBal > BigInt(0) ? frbtcBal : BigInt(500000);
+  if (dieselBal === BigInt(0) || frbtcBal === BigInt(0)) {
+    console.warn('[devnet-boot] Balance query returned 0 — using fallback amounts for pool creation. diesel=', effectiveDiesel.toString(), 'frbtc=', effectiveFrbtc.toString());
+  }
 
   let poolId = '';
-  if (dieselBal > BigInt(0) && frbtcBal > BigInt(0)) {
-    const dieselAmount = dieselBal / BigInt(3);
-    const frbtcAmount = frbtcBal / BigInt(2);
-    const [fBlock, fTx] = factoryId.split(':');
-    await executeCall(provider, harness, segwit, taproot,
-      `[${fBlock},${fTx},1,2,0,32,0,${dieselAmount},${frbtcAmount}]:v0:v0`,
-      `2:0:${dieselAmount},32:0:${frbtcAmount}`);
-    harness.mineBlocks(1);
-    await new Promise(r => setTimeout(r, 50));
+  const dieselAmount = effectiveDiesel / BigInt(3);
+  const frbtcAmount = effectiveFrbtc / BigInt(2);
+  const [fBlock, fTx] = factoryId.split(':');
+  console.log('[devnet-boot] Creating pool with DIESEL:', dieselAmount.toString(), 'frBTC:', frbtcAmount.toString());
+  // Use taproot-only from_addresses so protect_taproot=false is set (isTaprootOnly path
+  // in executeCall). DIESEL and frBTC both live on taproot dust UTXOs — with the default
+  // [segwit, taproot] + protect_taproot=true, the SDK treats taproot UTXOs as ineligible
+  // for spending and reports "Insufficient alkanes: have 0" even though they exist.
+  await executeCall(provider, harness, segwit, taproot,
+    `[${fBlock},${fTx},1,2,0,32,0,${dieselAmount},${frbtcAmount}]:v0:v0`,
+    `2:0:${dieselAmount},32:0:${frbtcAmount}`,
+    undefined,
+    [taproot]);
+  harness.mineBlocks(1);
+  await new Promise(r => setTimeout(r, 50));
 
-    try {
-      const findPool = await simulate(factoryId, ['2', '2', '0', '32', '0']);
-      const poolData = findPool?.result?.execution?.data?.replace('0x', '') || '';
-      if (poolData.length >= 64) {
-        // Parse two u128 LE values (pool block and tx) from hex.
-        // Browser Buffer polyfill may not support readBigUInt64LE, so parse manually.
-        const poolBlock128 = parseLeU128FromHex(poolData, 0);
-        const poolTx128 = parseLeU128FromHex(poolData, 16);
-        poolId = `${poolBlock128}:${poolTx128}`;
-        console.log('[devnet-boot] AMM pool created:', poolId);
-      }
-    } catch (e: any) {
-      console.warn('[devnet-boot] Pool discovery failed:', e?.message);
+  try {
+    const findPool = await simulate(factoryId, ['2', '2', '0', '32', '0']);
+    const poolData = findPool?.result?.execution?.data?.replace('0x', '') || '';
+    console.log('[devnet-boot] FindPool response data length:', poolData.length, 'raw:', poolData.slice(0, 64));
+    if (poolData.length >= 64) {
+      // Parse two u128 LE values (pool block and tx) from hex.
+      // Browser Buffer polyfill may not support readBigUInt64LE, so parse manually.
+      const poolBlock128 = parseLeU128FromHex(poolData, 0);
+      const poolTx128 = parseLeU128FromHex(poolData, 16);
+      poolId = `${poolBlock128}:${poolTx128}`;
+      console.log('[devnet-boot] AMM pool created:', poolId);
+    } else {
+      console.warn('[devnet-boot] Pool creation may have failed — FindPool returned empty data. Check executeCall error above.');
     }
+  } catch (e: any) {
+    console.warn('[devnet-boot] Pool discovery failed:', e?.message);
   }
   contracts.ammPoolId = poolId;
   const [poolBlock, poolTx] = poolId ? poolId.split(':').map(Number) : [2, 0];
+
+  // -----------------------------------------------------------------------
+  // AMM-only mode: skip all phases beyond 2 (CLOB, FIRE, Fujin, Bridge,
+  // Synth, Vaults, seeding). This cuts boot time from ~5 min to ~45 sec.
+  // -----------------------------------------------------------------------
+  if (ammOnly) {
+    onProgress('AMM devnet ready!', 100);
+    console.log('[devnet-boot] ammOnly=true — skipping phases 3–10');
+    return contracts;
+  }
 
   // -----------------------------------------------------------------------
   // Phase 3a: Carbine CLOB — deployed early so logs are visible before

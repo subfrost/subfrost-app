@@ -89,10 +89,9 @@ export const POOL_OPCODES = {
 /**
  * Signer addresses per network — derived from frBTC contract opcode 103 (GET_SIGNER).
  *
- * frBTC signer address is computed dynamically via getSignerAddressDynamic()
- * which queries opcode 103 and applies BIP341 taproot tweak.
- * These constants are kept for test compatibility only — not used in production.
- * @deprecated Use getSignerAddressDynamic() instead
+ * Mainnet uses this static address to avoid an alkanes_simulate signer lookup
+ * in ESPO-backed wrap/swap flows. Non-mainnet wraps still use
+ * getSignerAddressDynamic() because local/regtest signer keys can change.
  */
 export const SIGNER_ADDRESSES: Record<string, string> = {
   mainnet: 'bc1p5lushqjk7kxpqa87ppwn0dealucyqa6t40ppdkhpqm3grcpqvw9s3wdsx7',

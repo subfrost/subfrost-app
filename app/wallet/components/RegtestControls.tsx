@@ -17,11 +17,12 @@ export default function RegtestControls() {
   const [mining, setMining] = useState(false);
   const [message, setMessage] = useState('');
 
-  // Only show for regtest/devnet networks
-  // JOURNAL (2026-03-31): Added 'devnet' to the allowlist — devnet is an in-process
-  // qubitcoin node accessible via the fetch interceptor at localhost:18888. It was
-  // missing from this guard so the controls never rendered when devnet was selected.
-  const REGTEST_NETWORKS = ['regtest', 'subfrost-regtest', 'oylnet', 'regtest-local', 'qubitcoin-regtest', 'devnet'] as const;
+  // Only show for non-devnet regtest networks.
+  // devnet is an in-process node — its controls (mine, faucet, reset) are handled
+  // entirely by DevnetControlPanel which talks to the in-process harness directly.
+  // Showing RegtestControls for devnet caused ERR_CONNECTION_REFUSED because
+  // mineBlocks() calls /api/regtest/mine which tries localhost:18888 server-side.
+  const REGTEST_NETWORKS = ['regtest', 'subfrost-regtest', 'oylnet', 'regtest-local', 'qubitcoin-regtest'] as const;
   if (!REGTEST_NETWORKS.includes(network as typeof REGTEST_NETWORKS[number])) {
     return null;
   }

@@ -30,6 +30,19 @@ interface EnrichedTransaction {
   isCoinbase: boolean;
   runestone?: any;
   alkanesTraces?: any[];
+  alkaneSummaries?: AlkaneTraceSummary[];
+}
+
+export interface AlkaneTraceSummary {
+  contractId: string;
+  contractLabel: string;
+  opcode?: string;
+  methodName: string;
+  callType?: string;
+  status: 'success' | 'failure' | 'pending';
+  statusText: string;
+  createdId?: string;
+  outpoint?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -64,6 +77,114 @@ function mapToObject(item: any): any {
   return item;
 }
 
+function parseNumericIdPart(value: unknown): string | null {
+  if (value == null) return null;
+  const raw = String(value);
+  if (raw.startsWith('0x')) {
+    try {
+      return BigInt(raw).toString();
+    } catch {
+      return null;
+    }
+  }
+  return raw || null;
+}
+
+function formatShortId(id: any): string | null {
+  const block = parseNumericIdPart(id?.block);
+  const tx = parseNumericIdPart(id?.tx);
+  if (!block || !tx) return null;
+  return `${block}:${tx}`;
+}
+
+function traceOpcode(inputs: unknown): string | undefined {
+  if (!Array.isArray(inputs) || inputs.length === 0) return undefined;
+  const raw = String(inputs[0]);
+  if (!raw) return undefined;
+  if (raw.startsWith('0x')) {
+    try {
+      return BigInt(raw).toString();
+    } catch {
+      return undefined;
+    }
+  }
+  return raw;
+}
+
+function methodNameForOpcode(opcode?: string): string {
+  switch (opcode) {
+    case '0':
+      return 'initialize';
+    case '1':
+      return 'add liquidity';
+    case '2':
+      return 'remove liquidity';
+    case '3':
+      return 'swap';
+    case '11':
+      return 'add liquidity';
+    case '12':
+      return 'remove liquidity';
+    case '13':
+      return 'swap exact in';
+    case '14':
+      return 'swap exact out';
+    case '77':
+      return 'wrap';
+    case '78':
+      return 'unwrap';
+    case '99':
+      return 'get name';
+    case '999':
+      return 'pool details';
+    default:
+      return 'contract call';
+  }
+}
+
+function summarizeAlkaneTrace(trace: any, confirmed: boolean): AlkaneTraceSummary | null {
+  const events = trace?.trace?.events || trace?.events || [];
+  if (!Array.isArray(events) || events.length === 0) return null;
+
+  const invoke = events.find((event: any) => event?.event === 'invoke');
+  const contractId = formatShortId(invoke?.data?.context?.myself);
+  if (!contractId) return null;
+
+  const opcode = traceOpcode(invoke?.data?.context?.inputs);
+  const created = events.find((event: any) => event?.event === 'create');
+  const createdId = formatShortId(created?.data);
+  const failed = events.some((event: any) =>
+    event?.event === 'return' && String(event?.data?.status || '').toLowerCase() === 'failure',
+  );
+
+  const status = !confirmed ? 'pending' : failed ? 'failure' : 'success';
+  const statusText =
+    status === 'pending'
+      ? 'Waiting for block confirmation'
+      : status === 'failure'
+        ? 'Call reverted'
+        : 'Call successful';
+
+  return {
+    contractId,
+    contractLabel: contractId,
+    opcode,
+    methodName: methodNameForOpcode(opcode),
+    callType: invoke?.data?.type || undefined,
+    status,
+    statusText,
+    createdId: createdId || undefined,
+    outpoint: trace?.outpoint,
+  };
+}
+
+function summarizeAlkaneTraces(traces: any[] | undefined, confirmed: boolean): AlkaneTraceSummary[] {
+  if (!Array.isArray(traces)) return [];
+  return traces
+    .map((trace) => summarizeAlkaneTrace(trace, confirmed))
+    .filter((summary): summary is AlkaneTraceSummary => summary !== null);
+}
+
 /** Parse a raw tx object (espo or esplora format) into EnrichedTransaction. */
 function parseTx(raw: any): EnrichedTransaction | null {
   const tx = mapToObject(raw);
@@ -71,12 +192,14 @@ function parseTx(raw: any): EnrichedTransaction | null {
 
   const vin = tx.vin || tx.inputs || [];
   const vout = tx.vout || tx.outputs || [];
+  const alkanesTraces = tx.alkanesTraces || tx.alkanes_traces || [];
+  const confirmed = tx.status?.confirmed ?? tx.confirmed ?? false;
 
   return {
     txid: tx.txid,
     blockHeight: tx.status?.block_height ?? tx.block_height ?? tx.blockHeight,
     blockTime: tx.status?.block_time ?? tx.block_time ?? tx.blockTime,
-    confirmed: tx.status?.confirmed ?? tx.confirmed ?? false,
+    confirmed,
     fee: tx.fee,
     weight: tx.weight,
     size: tx.size,
@@ -98,6 +221,8 @@ function parseTx(raw: any): EnrichedTransaction | null {
     hasProtostones: !!(
       tx.runestone?.protostones?.length > 0 ||
       tx.has_protostones ||
+      tx.hasProtostones ||
+      (Array.isArray(alkanesTraces) && alkanesTraces.length > 0) ||
       // Detect OP_RETURN with protorune magic if traces aren't available
       vout.some((v: any) => {
         const spk: string = v.scriptpubkey || '';
@@ -108,7 +233,8 @@ function parseTx(raw: any): EnrichedTransaction | null {
     isRbf: vin.some((v: any) => v.sequence != null && v.sequence < 0xfffffffe),
     isCoinbase: vin.some((v: any) => v.is_coinbase),
     runestone: tx.runestone,
-    alkanesTraces: tx.alkanes_traces || [],
+    alkanesTraces,
+    alkaneSummaries: summarizeAlkaneTraces(alkanesTraces, confirmed),
   };
 }
 

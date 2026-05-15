@@ -1,7 +1,9 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
+import { X } from 'lucide-react';
 import NumberField from '@/app/components/NumberField';
+import SfPopup, { type SfPopupHandle } from '@/app/components/SfPopup';
 import TokenIcon from '@/app/components/TokenIcon';
 import { useBtcPrice } from '@/hooks/useBtcPrice';
 import { useTranslation } from '@/hooks/useTranslation';
@@ -53,8 +55,9 @@ export default function ContractDetailModal({
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showBuyComingSoon, setShowBuyComingSoon] = useState(false);
   const [showSellComingSoon, setShowSellComingSoon] = useState(false);
-  const modalRef = useRef<HTMLDivElement>(null);
+  const popupRef = useRef<SfPopupHandle>(null);
   const { data: btcPrice } = useBtcPrice();
+  const handleClose = () => popupRef.current?.close();
 
   // Calculate exercise values
   const exercisePremium = calculateExercisePremium(blocksLeft);
@@ -75,33 +78,16 @@ export default function ContractDetailModal({
     value: chartMin + (chartMax - chartMin) * (i / (chartPoints - 1)),
   }));
 
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (modalRef.current && !modalRef.current.contains(e.target as Node)) {
-        onClose();
-      }
-    };
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose();
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    document.addEventListener('keydown', handleEscape);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('keydown', handleEscape);
-    };
-  }, [onClose]);
-
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 px-4 backdrop-blur-sm">
-      <div
-        ref={modalRef}
-        className="relative w-full max-w-6xl max-h-[90vh] flex flex-col rounded-3xl bg-[color:var(--sf-glass-bg)] shadow-[0_24px_96px_rgba(0,0,0,0.4)] backdrop-blur-xl"
-      >
+    <SfPopup
+      ref={popupRef}
+      isOpen
+      onClose={onClose}
+      overlayClassName="px-4"
+      panelClassName="relative w-full max-w-6xl max-h-[90vh] flex flex-col"
+    >
         {/* Header */}
-        <div className="shrink-0 bg-[color:var(--sf-panel-bg)] px-6 py-5 shadow-[0_2px_8px_rgba(0,0,0,0.15)] rounded-t-3xl flex items-center justify-between">
+        <div className="shrink-0 bg-[color:var(--sf-panel-bg)] px-6 py-5 shadow-[0_2px_8px_rgba(0,0,0,0.15)] flex items-center justify-between">
           <div>
             <h2 className="text-xl sm:text-2xl font-extrabold tracking-wider uppercase text-[color:var(--sf-text)]">{contractId}</h2>
             <p className="text-xs sm:text-sm font-medium text-[color:var(--sf-text)]/60 mt-1">
@@ -110,20 +96,11 @@ export default function ContractDetailModal({
           </div>
           <button
             type="button"
-            onClick={onClose}
-            className="flex h-8 w-8 items-center justify-center rounded-lg bg-[color:var(--sf-input-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-[color:var(--sf-text)]/70 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)] hover:text-[color:var(--sf-text)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] focus:outline-none"
+            onClick={handleClose}
+            className="sf-popup-close"
             aria-label="Close"
           >
-            <svg
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <path d="M18 6L6 18M6 6l12 12" />
-            </svg>
+            <X size={18} />
           </button>
         </div>
 
@@ -344,8 +321,7 @@ export default function ContractDetailModal({
             </div>
           </div>
         </div>
-      </div>
-    </div>
+    </SfPopup>
   );
 }
 

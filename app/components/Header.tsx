@@ -248,14 +248,9 @@ export default function Header() {
                     </Link>
                     <button
                       type="button"
-                      onClick={async () => {
-                        try {
-                          await disconnect();
-                        } catch (e) {
-                          // noop
-                        } finally {
-                          setMenuOpen(false);
-                        }
+                      onClick={() => {
+                        disconnect();
+                        setMenuOpen(false);
                       }}
                       className="w-full px-4 py-3 text-left text-sm font-medium text-red-500 hover:bg-[color:var(--sf-primary)]/10"
                     >
@@ -331,29 +326,20 @@ export default function Header() {
               >
                 {t("nav.swap")}
               </Link>
-              {swapMenuOpen && (
+              {swapMenuOpen && !isDemoGated && (
                 <div className="absolute left-0 top-full z-50 pt-1 w-44">
                   <div className="overflow-hidden rounded-xl bg-[color:var(--sf-surface)] backdrop-blur-xl shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
-                    {isDemoGated ? (
-                      <span
-                        aria-disabled="true"
-                        className="block w-full px-4 py-1.5 text-left text-sm font-medium text-[color:var(--sf-text)]/30 cursor-not-allowed"
-                      >
-                        {t("nav.advancedTrader")}
-                      </span>
-                    ) : (
-                      <Link
-                        href="/swap/advanced"
-                        onClick={() => setSwapMenuOpen(false)}
-                        className={`block w-full px-4 py-1.5 text-left text-sm font-medium transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
-                          pathname === "/swap/advanced"
-                            ? "bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]"
-                            : "text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10"
-                        }`}
-                      >
-                        {t("nav.advancedTrader")}
-                      </Link>
-                    )}
+                    <Link
+                      href="/swap/advanced"
+                      onClick={() => setSwapMenuOpen(false)}
+                      className={`block w-full px-4 py-1.5 text-left text-sm font-medium transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
+                        pathname === "/swap/advanced"
+                          ? "bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]"
+                          : "text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10"
+                      }`}
+                    >
+                      {t("nav.advancedTrader")}
+                    </Link>
                   </div>
                 </div>
               )}
@@ -496,14 +482,9 @@ export default function Header() {
                     </Link>
                     <button
                       type="button"
-                      onClick={async () => {
-                        try {
-                          await disconnect();
-                        } catch (e) {
-                          // noop
-                        } finally {
-                          setMenuOpen(false);
-                        }
+                      onClick={() => {
+                        disconnect();
+                        setMenuOpen(false);
                       }}
                       className="w-full px-4 py-3 text-left text-sm font-medium text-red-500 hover:bg-[color:var(--sf-primary)]/10"
                     >

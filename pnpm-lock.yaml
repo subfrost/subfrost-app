@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       '@alkanes/ts-sdk':
-        specifier: https://pkg.alkanes.build/dist/@alkanes/ts-sdk?v=0.1.5-138a9cf
-        version: https://pkg.alkanes.build/dist/@alkanes/ts-sdk?v=0.1.5-138a9cf(@types/node@20.19.37)
+        specifier: https://pkg.alkanes.build/dist/@alkanes/ts-sdk?v=0.1.6-5265053
+        version: https://pkg.alkanes.build/dist/@alkanes/ts-sdk?v=0.1.6-5265053(@types/node@20.19.37)
       '@bitcoinerlab/secp256k1':
         specifier: ^1.2.0
         version: 1.2.0
@@ -90,9 +90,6 @@ importers:
       '@playwright/test':
         specifier: ^1.58.2
         version: 1.58.2
-      '@qubitcoin/sdk':
-        specifier: link:vendor/@qubitcoin/sdk
-        version: link:vendor/@qubitcoin/sdk
       '@scure/base':
         specifier: ^2.0.0
         version: 2.0.0
@@ -183,9 +180,9 @@ packages:
   '@adobe/css-tools@4.4.4':
     resolution: {integrity: sha512-Elp+iwUx5rN5+Y8xLt5/GRoG20WGoDCQ/1Fb+1LiGtvwbDavuSk0jhD/eZdckHAuzcDzccnkv+rEjyWfRx18gg==}
 
-  '@alkanes/ts-sdk@https://pkg.alkanes.build/dist/@alkanes/ts-sdk?v=0.1.5-138a9cf':
-    resolution: {tarball: https://pkg.alkanes.build/dist/@alkanes/ts-sdk?v=0.1.5-138a9cf}
-    version: 0.1.5-138a9cf
+  '@alkanes/ts-sdk@https://pkg.alkanes.build/dist/@alkanes/ts-sdk?v=0.1.6-5265053':
+    resolution: {tarball: https://pkg.alkanes.build/dist/@alkanes/ts-sdk?v=0.1.6-5265053}
+    version: 0.1.6-5265053
     hasBin: true
     peerDependencies:
       '@oyl/sdk': '*'
@@ -1704,6 +1701,7 @@ packages:
   basic-ftp@5.2.0:
     resolution: {integrity: sha512-VoMINM2rqJwJgfdHq6RiUudKt2BV+FY5ZFezP/ypmwayk68+NzzAQy4XXLlqsGD4MCzq3DrmNFD/uUmBJuGoXw==}
     engines: {node: '>=10.0.0'}
+    deprecated: Security vulnerability fixed in 5.2.1, please upgrade
 
   bcryptjs@3.0.3:
     resolution: {integrity: sha512-GlF5wPWnSa/X5LKM1o0wz0suXIINz1iHRLvTS+sLyi7XPbe5ycmYI3DlZqVGZZtDgl4DmasFg7gOB3JYbphV5g==}
@@ -3826,6 +3824,7 @@ packages:
 
   uuid@10.0.0:
     resolution: {integrity: sha512-8XkAphELsDnEGrDxUOHB3RGvXz6TeuYSGEZBOjtTtPm2lwhGBjLgOzLHB63IUWfBpNucQjND6d3AOudO+H3RWQ==}
+    deprecated: uuid@10 and below is no longer supported.  For ESM codebases, update to uuid@latest.  For CommonJS codebases, use uuid@11 (but be aware this version will likely be deprecated in 2028).
     hasBin: true
 
   valibot@1.1.0:
@@ -4080,7 +4079,7 @@ snapshots:
 
   '@adobe/css-tools@4.4.4': {}
 
-  '@alkanes/ts-sdk@https://pkg.alkanes.build/dist/@alkanes/ts-sdk?v=0.1.5-138a9cf(@types/node@20.19.37)':
+  '@alkanes/ts-sdk@https://pkg.alkanes.build/dist/@alkanes/ts-sdk?v=0.1.6-5265053(@types/node@20.19.37)':
     dependencies:
       '@bitcoinerlab/secp256k1': 1.2.0
       bip32: 4.0.0

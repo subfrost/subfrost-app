@@ -2,7 +2,10 @@
 
 import { useEffect, useMemo, useRef } from 'react';
 import { useTheme } from '@/context/ThemeContext';
-import { useAmmTotalVolume } from '@/hooks/useAmmTotalVolume';
+import { useAmmTotalVolume, type AmmVolumePoint } from '@/hooks/useAmmTotalVolume';
+import { fillDailyForward } from '@/lib/amm/volumeSeries';
+
+const ASSUMED_SECONDS_PER_BLOCK = 600;
 
 function formatUsd(value: number): string {
   if (!Number.isFinite(value)) return '—';
@@ -11,15 +14,75 @@ function formatUsd(value: number): string {
   return `$${value.toFixed(0)}`;
 }
 
+/**
+ * Convert sparse (height, valueUsd) points into a dense, sorted (time, value)
+ * series suitable for lightweight-charts.
+ *
+ * Espo only emits per-block-event points (no timestamps and gaps for blocks
+ * with no swap activity), so we estimate each point's time by anchoring the
+ * latest point to "now" and walking backward at 600s/block. Drift over a
+ * multi-month window is small enough for a marketing-quality landing-page
+ * chart; precision isn't the goal.
+ *
+ * After bucketing per UTC date, `fillDailyForward` carries the most-recent
+ * cumulative value forward into every otherwise-empty UTC day. Without this,
+ * a multi-month low-volume gap rendered as a single straight segment between
+ * the two outer points (the user-reported "August 2025 → today" symptom on
+ * staging, 2026-05-10).
+ */
+function pointsToSeries(
+  points: AmmVolumePoint[],
+  latest: { height: number; valueUsd: number } | null,
+): { time: string; value: number }[] {
+  if (!points.length) return [];
+
+  const anchorHeight = latest?.height ?? points[points.length - 1]!.height;
+  const anchorMs = Date.now();
+
+  const heightToDate = (h: number): string => {
+    const blocksAgo = anchorHeight - h;
+    const ms = anchorMs - blocksAgo * ASSUMED_SECONDS_PER_BLOCK * 1000;
+    return new Date(ms).toISOString().slice(0, 10);
+  };
+
+  // Bucket per ISO date, keeping the *highest* cumulative value seen on that
+  // date — cumulative volume is monotonic so the last point in a bucket wins.
+  const byDate = new Map<string, number>();
+  for (const p of points) {
+    const t = heightToDate(p.height);
+    const cur = byDate.get(t);
+    if (cur === undefined || p.valueUsd > cur) byDate.set(t, p.valueUsd);
+  }
+
+  // If `latest` exists and isn't already in the series, append today's value
+  // — important when the indexed series ends mid-day on a low-volume block.
+  if (latest) {
+    const today = heightToDate(latest.height);
+    if (!byDate.has(today) || byDate.get(today)! < latest.valueUsd) {
+      byDate.set(today, latest.valueUsd);
+    }
+  }
+
+  const sparse = Array.from(byDate.entries())
+    .map(([time, value]) => ({ time, value }))
+    .sort((a, b) => (a.time < b.time ? -1 : a.time > b.time ? 1 : 0));
+
+  // Densify: one point per UTC day from first → today, missing days inherit
+  // the most-recent prior value. Cumulative volume is monotonic so this is
+  // semantically correct (carry-forward = "no new activity that day").
+  const today = new Date(anchorMs).toISOString().slice(0, 10);
+  return fillDailyForward(sparse, today);
+}
+
 export default function CumulativeAmmVolume() {
   const { theme } = useTheme();
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<any>(null);
 
-  const { data, isLoading, isError } = useAmmTotalVolume();
+  const { data, isLoading, isError } = useAmmTotalVolume(1000);
 
   const series = useMemo(
-    () => data?.points?.map((p) => ({ time: p.time, value: p.valueUsd })) ?? [],
+    () => (data ? pointsToSeries(data.points, data.latest) : []),
     [data],
   );
 

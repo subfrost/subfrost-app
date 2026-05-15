@@ -1,184 +1,133 @@
 /**
  * Total AMM Volume API — proxies espo's `ammdata.get_total_volume_amm`.
  *
- * GET /api/amm-volume
+ * GET /api/amm-volume?limit=<n>&maxPages=<m>
  *
- * Returns a daily-bucketed cumulative AMM volume series in USD. The upstream
- * RPC paginates at 1000 points/page sorted ascending, so a single page only
- * covers ~28 days. We fetch all pages in parallel here, bucket by date, and
- * forward-fill missing days (cumulative volume is monotonic — a day with no
- * recorded events inherits the prior day's value). The browser receives a
- * tiny ~270-point series instead of ~7K raw event points.
+ * Returns cumulative AMM volume time-series in USD (post-scaling). The
+ * upstream espo module emits values as scaled bigints (`scale` field, default
+ * 1e16) so we divide here and return plain JS numbers — consumers don't need
+ * to know about the fixed-point encoding.
+ *
+ * ## Pagination
+ *
+ * Upstream returns points in forward chronological order starting from the
+ * oldest swap event. A single page of 1000 only covers ~4000 blocks (~28
+ * days). Without pagination the chart shows a flat line at last-page-value
+ * for ~9 months and then jumps to `latest` on today's bucket — exactly the
+ * "shoots straight up" symptom reported on staging 2026-05-10.
+ *
+ * We page forward until either (a) we've reached `latest.height`, or (b)
+ * we've hit `maxPages` (default 50, cap 200). Each page is one upstream
+ * call. The Vercel CDN caches the assembled series for 30s with SWR.
  *
  * Upstream: https://api.alkanode.com/rpc method `ammdata.get_total_volume_amm`.
- * Override via env:
- *   ESPO_RPC_PRIMARY_URL    — primary JSON-RPC base. Default api.alkanode.com.
- *   ESPO_RPC_FALLBACK_URL   — fallback if primary page-1 fails. No default.
+ * Single upstream, no fallback (per flex 2026-05-11). Override the host via
+ * ESPO_RPC_URL if alkanode itself goes down.
  */
 
 import { NextResponse } from 'next/server';
 
-const ESPO_RPC_PRIMARY = process.env.ESPO_RPC_PRIMARY_URL || 'https://api.alkanode.com/rpc';
-const ESPO_RPC_FALLBACK = process.env.ESPO_RPC_FALLBACK_URL || '';
+const ESPO_RPC_PRIMARY =
+  process.env.ESPO_RPC_URL ||
+  process.env.ESPO_RPC_PRIMARY_URL ||
+  'https://api.alkanode.com/rpc';
 
 const UPSTREAM_TIMEOUT_MS = 8_000;
-const PAGE_SIZE = 1000;
-// Generous ceiling — currently ~8 pages of data exist (May 2026). Bump if the
-// chart starts visibly clipping at the historical end.
-const MAX_PAGES = 16;
-const ASSUMED_SECONDS_PER_BLOCK = 600;
+const DEFAULT_MAX_PAGES = 50;
+const HARD_CAP_PAGES = 200;
 
 const FRESH_CACHE_HEADER = 'public, s-maxage=30, stale-while-revalidate=300';
 
-interface UpstreamPoint {
-  height: number;
-  value: string;
-}
-interface UpstreamPage {
-  ok: boolean;
-  scale?: string;
+interface RawPoint { height: number | string; value: string | number; }
+interface RawResult {
+  ok?: boolean;
+  scale?: string | number;
   unit?: string;
-  latest?: { height: number; value: string } | null;
-  points?: UpstreamPoint[];
+  points?: RawPoint[];
+  latest?: { height: number | string; value: string | number };
+  has_more?: boolean;
 }
 
-async function fetchPage(url: string, page: number): Promise<UpstreamPage> {
-  const resp = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      method: 'ammdata.get_total_volume_amm',
-      params: { limit: PAGE_SIZE, page },
-      id: page,
-    }),
-    signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
-    cache: 'no-store',
-  });
-  if (!resp.ok) throw new Error(`http ${resp.status} (${url}, page ${page})`);
-  const j = await resp.json();
-  if (j?.error) throw new Error(`rpc error: ${JSON.stringify(j.error)}`);
-  if (!j?.result?.ok) throw new Error('rpc result not ok');
-  return j.result as UpstreamPage;
-}
-
-async function fetchAllPages(url: string) {
-  // Fire all pages in parallel. Individual page failures past page 1 are
-  // tolerated (we just skip them) — only a page-1 failure is fatal here.
-  const settled = await Promise.all(
-    Array.from({ length: MAX_PAGES }, (_, i) =>
-      fetchPage(url, i + 1).then(
-        (p) => ({ ok: true as const, page: i + 1, p }),
-        (err) => ({ ok: false as const, page: i + 1, err }),
-      ),
-    ),
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const limit = Math.min(Number(searchParams.get('limit') || 1000), 5000);
+  const maxPages = Math.min(
+    Number(searchParams.get('maxPages') || DEFAULT_MAX_PAGES),
+    HARD_CAP_PAGES,
   );
 
-  const page1 = settled[0]!;
-  if (!page1.ok) throw page1.err;
-
-  const head = page1.p;
-  const allPoints: UpstreamPoint[] = [];
-  for (const r of settled) {
-    if (r.ok && Array.isArray(r.p.points)) allPoints.push(...r.p.points);
-  }
-
-  return {
-    points: allPoints,
-    scale: head.scale ?? '10000000000000000',
-    unit: head.unit ?? 'usd',
-    latest: head.latest ?? null,
-  };
-}
-
-function bucketByDay(
-  rawPoints: UpstreamPoint[],
-  latest: { height: number; value: string } | null,
-  scaleFloat: number,
-): { time: string; valueUsd: number }[] {
-  const points = rawPoints
-    .map((p) => ({ height: Number(p.height), valueUsd: Number(p.value) / scaleFloat }))
-    .filter((p) => Number.isFinite(p.height) && Number.isFinite(p.valueUsd));
-
-  const latestPt = latest
-    ? { height: Number(latest.height), valueUsd: Number(latest.value) / scaleFloat }
-    : null;
-
-  if (!points.length && !latestPt) return [];
-
-  // Estimate dates by anchoring `latest` to "now" and walking back at 600s/block.
-  // Drift over months is well below the 1-day bucket granularity.
-  const anchorHeight = latestPt?.height ?? points[points.length - 1]!.height;
-  const anchorMs = Date.now();
-  const heightToDate = (h: number): string => {
-    const ms = anchorMs - (anchorHeight - h) * ASSUMED_SECONDS_PER_BLOCK * 1000;
-    return new Date(ms).toISOString().slice(0, 10);
+  const callRpcPage = async (url: string, page: number): Promise<RawResult> => {
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        method: 'ammdata.get_total_volume_amm',
+        params: { limit, page },
+        id: page,
+      }),
+      signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+      cache: 'no-store',
+    });
+    if (!resp.ok) throw new Error(`http ${resp.status} (${url} page=${page})`);
+    const j = await resp.json();
+    if (j?.error) throw new Error(`rpc error page=${page}: ${JSON.stringify(j.error)}`);
+    if (!j?.result?.ok) throw new Error(`rpc result not ok page=${page}`);
+    return j.result as RawResult;
   };
 
-  // Bucket per ISO date — keep the highest cumulative value seen on that date.
-  const byDate = new Map<string, number>();
-  for (const p of points) {
-    const t = heightToDate(p.height);
-    const cur = byDate.get(t);
-    if (cur === undefined || p.valueUsd > cur) byDate.set(t, p.valueUsd);
-  }
-  if (latestPt) {
-    const today = heightToDate(latestPt.height);
-    if (!byDate.has(today) || byDate.get(today)! < latestPt.valueUsd) {
-      byDate.set(today, latestPt.valueUsd);
-    }
-  }
-
-  const entries = Array.from(byDate.entries())
-    .map(([time, valueUsd]) => ({ time, valueUsd }))
-    .sort((a, b) => (a.time < b.time ? -1 : a.time > b.time ? 1 : 0));
-
-  if (entries.length < 2) return entries;
-
-  // Forward-fill missing days. Cumulative volume only increases, so a day with
-  // no events inherits the prior day's value — without this the chart jumps
-  // across empty intervals (e.g. Aug → today) instead of drawing a continuous
-  // timeline.
-  const ONE_DAY_MS = 86_400_000;
-  const parseDay = (iso: string) =>
-    Date.UTC(
-      Number(iso.slice(0, 4)),
-      Number(iso.slice(5, 7)) - 1,
-      Number(iso.slice(8, 10)),
-    );
-
-  const startMs = parseDay(entries[0]!.time);
-  const endMs = parseDay(entries[entries.length - 1]!.time);
-
-  const filled: { time: string; valueUsd: number }[] = [];
-  let nextIdx = 0;
-  let lastValue = entries[0]!.valueUsd;
-  for (let cursor = startMs; cursor <= endMs; cursor += ONE_DAY_MS) {
-    const t = new Date(cursor).toISOString().slice(0, 10);
-    if (nextIdx < entries.length && entries[nextIdx]!.time === t) {
-      lastValue = entries[nextIdx]!.valueUsd;
-      nextIdx++;
-    }
-    filled.push({ time: t, valueUsd: lastValue });
-  }
-  return filled;
-}
-
-export async function GET() {
   try {
-    let result: Awaited<ReturnType<typeof fetchAllPages>>;
-    try {
-      result = await fetchAllPages(ESPO_RPC_PRIMARY);
-    } catch (primaryErr) {
-      if (!ESPO_RPC_FALLBACK) throw primaryErr;
-      console.warn(
-        `[amm-volume] primary failed (${primaryErr instanceof Error ? primaryErr.message : 'unknown'}); falling back to ${ESPO_RPC_FALLBACK}`,
-      );
-      result = await fetchAllPages(ESPO_RPC_FALLBACK);
+    // Page 1 establishes the scale + latest anchor. Subsequent pages reuse
+    // the same scale (it's a per-result invariant set by the server's
+    // ammdata module). Single upstream — no fallback (per flex 2026-05-11:
+    // "we should never have more than 1 way to do something").
+    const activeUrl = ESPO_RPC_PRIMARY;
+    const result: RawResult = await callRpcPage(ESPO_RPC_PRIMARY, 1);
+
+    const scaleBigInt = BigInt(result.scale || '10000000000000000');
+    const scaleFloat = Number(scaleBigInt);
+
+    const allRaw: RawPoint[] = [...(result.points || [])];
+    const latestHeight = result.latest ? Number(result.latest.height) : null;
+
+    // Walk forward until we cover the gap between the last point we have
+    // and `latest.height`. Stop when:
+    //   - server says no more pages
+    //   - we've reached or surpassed the latest anchor
+    //   - we've spent maxPages calls
+    //   - a page returns zero new points (defensive against server quirks)
+    let page = 2;
+    while (page <= maxPages) {
+      const lastHaveHeight = allRaw.length > 0
+        ? Number(allRaw[allRaw.length - 1]!.height)
+        : null;
+      if (
+        latestHeight != null
+        && lastHaveHeight != null
+        && lastHaveHeight >= latestHeight
+      ) break;
+      if (result.has_more === false) break;
+      let nextPage: RawResult;
+      try {
+        nextPage = await callRpcPage(activeUrl, page);
+      } catch (err) {
+        console.warn(`[amm-volume] page ${page} failed (${err instanceof Error ? err.message : 'unknown'}); stopping pagination at page ${page - 1}`);
+        break;
+      }
+      const newPts = nextPage.points || [];
+      if (newPts.length === 0) break;
+      allRaw.push(...newPts);
+      result.has_more = nextPage.has_more;
+      page += 1;
     }
 
-    const scaleFloat = Number(BigInt(result.scale));
-    const points = bucketByDay(result.points, result.latest, scaleFloat);
+    const points = allRaw
+      .map((p) => ({
+        height: Number(p.height),
+        valueUsd: Number(p.value) / scaleFloat,
+      }))
+      .filter((p) => Number.isFinite(p.height) && Number.isFinite(p.valueUsd));
+
     const latest = result.latest
       ? {
           height: Number(result.latest.height),
@@ -187,12 +136,20 @@ export async function GET() {
       : null;
 
     return NextResponse.json(
-      { ok: true, unit: result.unit, latest, points },
+      {
+        ok: true,
+        unit: result.unit || 'usd',
+        latest,
+        points,
+      },
       { headers: { 'Cache-Control': FRESH_CACHE_HEADER } },
     );
-  } catch (e: unknown) {
+  } catch (e) {
     const msg = e instanceof Error ? e.message : 'fetch failed';
     console.error('[amm-volume] failed:', msg);
-    return NextResponse.json({ ok: false, error: msg }, { status: 502 });
+    return NextResponse.json(
+      { ok: false, error: msg },
+      { status: 502 },
+    );
   }
 }

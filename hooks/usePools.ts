@@ -12,7 +12,7 @@ import { getConfig, getRpcUrl } from '@/utils/getConfig';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { KNOWN_TOKENS } from '@/lib/alkanes-client';
 import { simulateContract, extractField3Data, parseU128LE } from '@/lib/fujin/rpc';
-import { fetchCuratedPoolsListItems } from '@/lib/alkanes/curated-pools';
+import { getCuratedPoolsListItems } from '@/lib/alkanes/curated-pools';
 import { queryKeys } from '@/queries/keys';
 
 export type UsePoolsParams = {
@@ -72,7 +72,7 @@ function calculateApr(vol24hUsd: number, tvlUsd: number, feeRate: number = DEFAU
 /**
  * Build icon URL for a token
  */
-function getTokenIconUrl(tokenId: string, _network: string): string {
+export function getTokenIconUrl(tokenId: string, _network: string): string {
   const [block, tx] = tokenId.split(':');
   if (block && tx) {
     return `https://cdn.subfrost.io/alkanes/${block}_${tx}`;
@@ -730,35 +730,34 @@ export function usePools(params: UsePoolsParams = {}) {
       let items: PoolsListItem[] = [];
       let tokenMetaMap: Map<string, { name: string; symbol: string }> = new Map();
 
-      // regtest-local: skip REST/SDK fallbacks (all return 503 or hang 30s).
-      // Go directly to metashrew_view simulate which is the only working path.
-      if (network === 'regtest-local' || network === 'qubitcoin-regtest') {
+      // regtest-local / devnet: skip REST/SDK fallbacks (devnet's quspo may not
+      // have indexed the pool yet; regtest-local REST returns 503 or hangs 30s).
+      // Go directly to metashrew_view simulate which reads live on-chain state.
+      if (network === 'regtest-local' || network === 'qubitcoin-regtest' || network === 'devnet') {
         try { tokenMetaMap = await tokenMetaPromise; } catch { /* ignore */ }
         try {
           items = await fetchPoolsFromDirectSimulate(ALKANE_FACTORY_ID, network);
         } catch (e) {
-          console.warn('[usePools] regtest-local: Direct simulate failed:', e);
+          console.warn('[usePools] regtest-local/devnet: Direct simulate failed:', e);
         }
         return items;
       }
 
-      // Mainnet (and signet/testnet) primary: prefetch curated pool IDs
-      // directly from on-chain via metashrew. Espo + SDK fallbacks have been
-      // returning empty for extended periods (verified 2026-05-03), so we
-      // anchor the swap/LP UI on a known good list of pool IDs and fetch
-      // their live reserves with a single fan-out of opcode-999 calls.
-      // The remaining espo / SDK fallbacks below run *additively* — any
-      // extra pools they surface get layered on top of the curated set.
-      if (network === 'mainnet' || network === 'signet' || network === 'testnet') {
-        try {
-          const rpcUrl = getRpcUrl(network);
-          const curated = await fetchCuratedPoolsListItems(rpcUrl);
-          if (curated.length > 0) {
-            items = curated;
-          }
-        } catch (e) {
-          console.warn('[usePools] curated pool prefetch failed:', e);
-        }
+      // Mainnet: ONLY the static curated pool list. No discovery phase.
+      //
+      // Per flex (alkanes-rs maintainer, 2026-05-11):
+      //   "There shouldn't be a pool discovery phase at all"
+      //   "We have hardcoded pools in there now"
+      //
+      // Returns synchronously — `getCuratedPoolsListItems()` is a pure
+      // constructor over `MAINNET_CURATED_POOLS`, no network call. If we
+      // need to add/remove a pool, edit `lib/alkanes/curated-pools.ts`.
+      // Live reserves for these pools are fetched separately by the swap
+      // quote engine via `usePoolStateLive`; that's a price-math concern,
+      // not pool discovery.
+      if (network === 'mainnet') {
+        items = getCuratedPoolsListItems();
+        return { items, total: items.length };
       }
 
       // Merge fallback pool entries onto the curated set. New ids get pushed;
@@ -924,7 +923,7 @@ export function usePools(params: UsePoolsParams = {}) {
       // the curated/on-chain fallback paths where reserves come from
       // opcode-999 directly and pricing isn't joined yet. Filtering those
       // out would silently nuke the curated set whenever espo is empty.
-      if (!network?.includes('regtest') && network !== 'devnet') {
+      if (!network?.includes('regtest')) {
         const MIN_TVL_USD = 5;
         items = items.filter(p => p.tvlUsd === undefined || p.tvlUsd >= MIN_TVL_USD);
       }
