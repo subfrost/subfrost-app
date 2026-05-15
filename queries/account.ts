@@ -1153,7 +1153,19 @@ function cacheBtcBalance(network: string, addressKey: string, balance: BtcBalanc
 }
 
 export function btcBalanceFastQueryOptions(deps: BtcBalanceFastDeps) {
-  const addresses = getWalletBtcBalanceAddresses(deps.account);
+  // Query EVERY address the wallet exposes (segwit AND taproot when both
+  // exist) so `total`/`p2tr` reflect what the user actually holds. Previously
+  // we only queried the payment address (segwit) on dual-address wallets,
+  // which made the header show "0 BTC" when the user's BTC happened to sit
+  // at the taproot — verified live 2026-05-15 against
+  // bc1psn0925c2p5mjnvkg0xkntpd26wtcyktmwt3shuw7ue04yed5sjfs7xwmj4 (213k
+  // sats clean BTC at taproot, 0 at segwit → header showed 0).
+  //
+  // `spendable` keeps the existing protect_taproot semantics (segwit-only
+  // when both addresses exist, total when single-address) so the swap form's
+  // input cap doesn't inflate.
+  const addresses = getWalletBalanceAddresses(deps.account);
+  const btcSpendableAddresses = new Set(getWalletBtcBalanceAddresses(deps.account));
   const addressKey = addresses.sort().join(',');
 
   const isLocal = ['devnet', 'regtest-local', 'qubitcoin-regtest'].includes(deps.network);
@@ -1188,28 +1200,32 @@ export function btcBalanceFastQueryOptions(deps: BtcBalanceFastDeps) {
 
       const results = await Promise.all(addresses.map(addr => fetchAddressBalance(rpcPath, addr)));
 
-      let p2wpkh = 0, p2tr = 0, confirmedP2wpkh = 0, confirmedP2tr = 0, pendingIn = 0;
+      let p2wpkh = 0, p2tr = 0, confirmedSpendable = 0, pendingIn = 0;
       for (let i = 0; i < addresses.length; i++) {
         const result = results[i];
         pendingIn += result.mempool;
         if (isWalletTaprootAddress(deps.account, addresses[i])) {
           p2tr += result.total;
-          confirmedP2tr += result.confirmed;
         } else {
           p2wpkh += result.total;
-          confirmedP2wpkh += result.confirmed;
+        }
+        // Confirmed-spendable is the subset of addresses the SDK will pick
+        // for fee inputs — payment address(es) on dual-address wallets,
+        // every address on single-address wallets (where the only address
+        // IS the taproot).
+        if (btcSpendableAddresses.has(addresses[i])) {
+          confirmedSpendable += result.confirmed;
         }
       }
 
-      // Mirrors `txContext.shouldProtectTaproot` from WalletContext + the
-      // existing Header.tsx display logic: wallets with a payer/payment
-      // address use that BTC address; taproot is counted only when it is the
-      // actual BTC/payment address exposed by the wallet.
-      const taprootAddr = deps.account?.taproot?.address;
-      const hasPaymentAddress = addresses.some((address) => address !== taprootAddr);
-      const spendable = hasPaymentAddress ? confirmedP2wpkh : confirmedP2wpkh + confirmedP2tr;
-
-      const balance: BtcBalanceFast = { p2wpkh, p2tr, total: p2wpkh + p2tr, spendable, pendingIn, pendingOut: 0 };
+      const balance: BtcBalanceFast = {
+        p2wpkh,
+        p2tr,
+        total: p2wpkh + p2tr,
+        spendable: confirmedSpendable,
+        pendingIn,
+        pendingOut: 0,
+      };
       cacheBtcBalance(deps.network, addressKey, balance);
       return balance;
     },
