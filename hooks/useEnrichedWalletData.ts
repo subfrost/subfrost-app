@@ -218,7 +218,10 @@ export function useEnrichedWalletData(): EnrichedWalletData {
     return getWalletBalanceAddresses(balanceAccount).sort().join(',');
   }, [balanceAccount]);
 
-  const btcAddressSet = useMemo(() => new Set(getWalletBtcBalanceAddresses(balanceAccount)), [balanceAccount]);
+  const btcSpendableAddressSet = useMemo(
+    () => new Set(getWalletBtcBalanceAddresses(balanceAccount)),
+    [balanceAccount],
+  );
 
   const btcFastFromWalletCache = useMemo<BtcBalanceFast | null>(() => {
     if (dataSource !== 'espo') return null;
@@ -227,20 +230,25 @@ export function useEnrichedWalletData(): EnrichedWalletData {
     const p2trAddress = balanceAccount?.taproot?.address;
     let p2wpkh = 0;
     let p2tr = 0;
+    let spendable = 0;
+    // Iterate every UTXO in the cache (covers both segwit and taproot), so
+    // dual-address wallets with BTC at the taproot still see the right
+    // total. `spendable` keeps the protect_taproot semantics — only the
+    // payment-address bucket counts toward fee inputs on dual wallets.
     for (const utxo of walletUtxoCache.utxos) {
-      if (!btcAddressSet.has(utxo.address)) continue;
       if (utxo.address === p2trAddress) p2tr += utxo.value;
       else p2wpkh += utxo.value;
+      if (btcSpendableAddressSet.has(utxo.address)) spendable += utxo.value;
     }
     return {
       p2wpkh,
       p2tr,
       total: p2wpkh + p2tr,
-      spendable: p2wpkh + p2tr,
+      spendable,
       pendingIn: 0,
       pendingOut: 0,
     };
-  }, [balanceAccount, addressKey, btcAddressSet, dataSource, walletUtxoCache.height, walletUtxoCache.utxos]);
+  }, [balanceAccount, addressKey, btcSpendableAddressSet, dataSource, walletUtxoCache.height, walletUtxoCache.utxos]);
 
   const btcFast = btcFastQuery.data ?? btcFastFromWalletCache ?? null;
 

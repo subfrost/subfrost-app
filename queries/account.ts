@@ -1087,7 +1087,7 @@ async function fetchAddressBalance(rpcPath: string, address: string) {
   const response = await fetch(rpcPath, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    signal: AbortSignal.timeout(5000),
+    signal: AbortSignal.timeout(10_000),
     body: JSON.stringify({
       jsonrpc: '2.0',
       method: 'esplora_address::utxo',
@@ -1095,9 +1095,13 @@ async function fetchAddressBalance(rpcPath: string, address: string) {
       id: 1,
     }),
   });
+  // Throw on HTTP errors — React Query will retry and preserve the last
+  // known balance rather than overwriting it with zeros.
+  if (!response.ok) throw new Error(`esplora_address::utxo HTTP ${response.status} for ${address}`);
   const json = await response.json();
+  if (json.error) throw new Error(`esplora_address::utxo: ${json.error?.message ?? JSON.stringify(json.error)}`);
   const utxos = json.result;
-  if (!Array.isArray(utxos)) return { confirmed: 0, mempool: 0, total: 0 };
+  if (!Array.isArray(utxos)) throw new Error(`esplora_address::utxo: unexpected result shape for ${address}`);
 
   let confirmed = 0;
   let mempool = 0;
@@ -1149,12 +1153,27 @@ function cacheBtcBalance(network: string, addressKey: string, balance: BtcBalanc
 }
 
 export function btcBalanceFastQueryOptions(deps: BtcBalanceFastDeps) {
-  const addresses = getWalletBtcBalanceAddresses(deps.account);
+  // Query EVERY address the wallet exposes (segwit AND taproot when both
+  // exist) so `total`/`p2tr` reflect what the user actually holds. Previously
+  // we only queried the payment address (segwit) on dual-address wallets,
+  // which made the header show "0 BTC" when the user's BTC happened to sit
+  // at the taproot — verified live 2026-05-15 against
+  // bc1psn0925c2p5mjnvkg0xkntpd26wtcyktmwt3shuw7ue04yed5sjfs7xwmj4 (213k
+  // sats clean BTC at taproot, 0 at segwit → header showed 0).
+  //
+  // `spendable` keeps the existing protect_taproot semantics (segwit-only
+  // when both addresses exist, total when single-address) so the swap form's
+  // input cap doesn't inflate.
+  const addresses = getWalletBalanceAddresses(deps.account);
+  const btcSpendableAddresses = new Set(getWalletBtcBalanceAddresses(deps.account));
   const addressKey = addresses.sort().join(',');
 
   const isLocal = ['devnet', 'regtest-local', 'qubitcoin-regtest'].includes(deps.network);
 
-  // Show cached balance instantly while the real query loads (eliminates LCP wait)
+  // Use localStorage cache as initialData (not placeholderData) so it persists
+  // through query errors. placeholderData is cleared when a query errors, causing
+  // the balance to flicker to 0 if the RPC call fails on first load. initialData
+  // is treated as real cached data — React Query preserves it on error.
   const cached = getCachedBtcBalance(deps.network, addressKey);
 
   return queryOptions<BtcBalanceFast>({
@@ -1166,7 +1185,11 @@ export function btcBalanceFastQueryOptions(deps: BtcBalanceFastDeps) {
     staleTime: isLocal ? 2_000 : Infinity,
     refetchOnMount: 'always',
     refetchOnWindowFocus: 'always',
-    placeholderData: cached,
+    // initialData: treated as real data — survives query errors.
+    // initialDataUpdatedAt: 0 ensures React Query considers it stale and
+    // always fires a background refetch (refetchOnMount: 'always' also covers this).
+    initialData: cached ?? undefined,
+    initialDataUpdatedAt: cached ? 0 : undefined,
     retry: 3,
     retryDelay: (attempt: number) => Math.min(1000 * 2 ** attempt, 5000),
     queryFn: async () => {
@@ -1177,28 +1200,32 @@ export function btcBalanceFastQueryOptions(deps: BtcBalanceFastDeps) {
 
       const results = await Promise.all(addresses.map(addr => fetchAddressBalance(rpcPath, addr)));
 
-      let p2wpkh = 0, p2tr = 0, confirmedP2wpkh = 0, confirmedP2tr = 0, pendingIn = 0;
+      let p2wpkh = 0, p2tr = 0, confirmedSpendable = 0, pendingIn = 0;
       for (let i = 0; i < addresses.length; i++) {
         const result = results[i];
         pendingIn += result.mempool;
         if (isWalletTaprootAddress(deps.account, addresses[i])) {
           p2tr += result.total;
-          confirmedP2tr += result.confirmed;
         } else {
           p2wpkh += result.total;
-          confirmedP2wpkh += result.confirmed;
+        }
+        // Confirmed-spendable is the subset of addresses the SDK will pick
+        // for fee inputs — payment address(es) on dual-address wallets,
+        // every address on single-address wallets (where the only address
+        // IS the taproot).
+        if (btcSpendableAddresses.has(addresses[i])) {
+          confirmedSpendable += result.confirmed;
         }
       }
 
-      // Mirrors `txContext.shouldProtectTaproot` from WalletContext + the
-      // existing Header.tsx display logic: wallets with a payer/payment
-      // address use that BTC address; taproot is counted only when it is the
-      // actual BTC/payment address exposed by the wallet.
-      const taprootAddr = deps.account?.taproot?.address;
-      const hasPaymentAddress = addresses.some((address) => address !== taprootAddr);
-      const spendable = hasPaymentAddress ? confirmedP2wpkh : confirmedP2wpkh + confirmedP2tr;
-
-      const balance: BtcBalanceFast = { p2wpkh, p2tr, total: p2wpkh + p2tr, spendable, pendingIn, pendingOut: 0 };
+      const balance: BtcBalanceFast = {
+        p2wpkh,
+        p2tr,
+        total: p2wpkh + p2tr,
+        spendable: confirmedSpendable,
+        pendingIn,
+        pendingOut: 0,
+      };
       cacheBtcBalance(deps.network, addressKey, balance);
       return balance;
     },
