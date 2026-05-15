@@ -30,7 +30,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
       <Header />
       <DemoBanner />
       <main className="relative flex-1 flex flex-col min-h-0">
-        <div className="relative w-full flex justify-center px-4 py-8 flex-1 min-h-0">
+        <div className="relative w-full flex justify-center px-2 sm:px-4 py-8 flex-1 min-h-0">
           {children}
         </div>
       </main>
