@@ -2,9 +2,13 @@
  * Pre-warmed wallet UTXO + alkane balance-sheet cache.
  *
  * Reroute (2026-05-16): this hook is now a thin adapter on top of
- * `useWalletState()`. The legacy `walletUtxoCacheQueryOptions` query
- * (with its own RPC fan-out via the convenience `alkanes_protorunesbyoutpoint`
- * wrapper) is replaced by the server-side `/api/wallet-state` route that:
+ * `useWalletState()`. The legacy `walletUtxoCacheQueryOptions` query —
+ * which fanned out per-outpoint via the convenience
+ * `alkanes_protorunesbyoutpoint` wrapper AND had an espo path that
+ * called `essentials.get_address_spendable_outpoints` — has been
+ * DELETED (cleanup/dead-espo-utxo-paths, 2026-05-16) along with every
+ * helper that only existed to support it. The replacement is the
+ * server-side `/api/wallet-state` route that:
  *   - uses the canonical `metashrew_view protorunesbyoutpoint` primitive
  *     (the legacy wrapper is "Method not found" on the in-cluster jsonrpc
  *     upstream — subfrost-mobile fixed the same bug 2026-05-11)
