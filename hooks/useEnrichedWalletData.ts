@@ -54,6 +54,7 @@ import type { BtcBalanceFast } from '@/queries/account';
 import { queryKeys } from '@/queries/keys';
 import { getAlkanesDataSource } from '@/lib/alkanes/dataSource';
 import { useWalletUtxoCache } from '@/hooks/useWalletUtxoCache';
+import { useWalletState } from '@/hooks/useWalletState';
 
 export interface AlkaneAsset {
   alkaneId: string;
@@ -141,6 +142,14 @@ export function useEnrichedWalletData(): EnrichedWalletData {
   const prevConnectedRef = useRef(false);
   const dataSource = getAlkanesDataSource(network || 'mainnet');
   const walletUtxoCache = useWalletUtxoCache();
+  // New: server-side per-block wallet snapshot from /api/wallet-state.
+  // Opportunistic hydration source — used to backfill BTC totals when
+  // the existing fast/alkane queries haven't responded yet (cold start,
+  // upstream blip). Once `useEnrichedWalletData` becomes the only
+  // consumer of `useWalletUtxoCache`, we can swap the underlying
+  // implementation; for now this layer is additive.
+  const walletStateResult = useWalletState();
+  const walletState = walletStateResult.data;
   const balanceAccount = useMemo(() => ({
     ...account,
     paymentAddress: account?.paymentAddress || paymentAddress || undefined,
@@ -250,7 +259,24 @@ export function useEnrichedWalletData(): EnrichedWalletData {
     };
   }, [balanceAccount, addressKey, btcSpendableAddressSet, dataSource, walletUtxoCache.height, walletUtxoCache.utxos]);
 
-  const btcFast = btcFastQuery.data ?? btcFastFromWalletCache ?? null;
+  // Hydrate from the new /api/wallet-state route when the existing
+  // fast-balance queries haven't arrived yet. Shape conversion is
+  // straightforward — the route already aggregates BTC by address type.
+  const btcFastFromWalletState = useMemo<BtcBalanceFast | null>(() => {
+    if (!walletState) return null;
+    if (walletState.btcSats.total === 0 && walletState.utxos.length === 0) return null;
+    return {
+      p2wpkh: walletState.btcSats.p2wpkh,
+      p2tr: walletState.btcSats.p2tr,
+      total: walletState.btcSats.total,
+      spendable: walletState.btcSats.spendable,
+      pendingIn: 0,
+      pendingOut: 0,
+    };
+  }, [walletState]);
+
+  const btcFast =
+    btcFastQuery.data ?? btcFastFromWalletCache ?? btcFastFromWalletState ?? null;
 
   const espoAlkanesFromWalletCache = useMemo<AlkaneAsset[] | null>(() => {
     if (dataSource !== 'espo') return null;
