@@ -30,6 +30,11 @@ import { getAddressUtxos, getHeight } from '@/lib/alkanes/rpc';
 import { getProtorunesByOutpointMV } from '@/lib/alkanes/protorunesByOutpointMV';
 import { getRpcUrl } from '@/utils/getConfig';
 import { getCurrentTipHash } from './tipHash';
+import {
+  withPendingAdjustment,
+  type MempoolAdjustmentReport,
+} from './applyMempoolAdjustment';
+import type { PendingTxStore } from './pendingTxStorePort';
 
 /** Dust threshold — alkanes always live in ≤ 1000-sat outputs by the
  *  subfrost convention (matches subfrost-mobile `ALKANE_DUST_MAX`). */
@@ -62,6 +67,17 @@ export interface WalletUtxo {
   confirmations: number;
   /** Per-outpoint alkane balance sheet. Empty for non-dust BTC change. */
   alkanes: WalletUtxoAlkane[];
+  /**
+   * `true` when the UTXO was synthesised from a broadcast-but-unconfirmed
+   * pending mempool tx (`withPendingAdjustment`), rather than read from
+   * the indexer's confirmed UTXO set. Pending UTXOs ALWAYS carry
+   * `alkanes: []` regardless of value — we never trust mempool alkane
+   * provenance (see `applyMempoolAdjustment.ts`).
+   *
+   * Optional/omitted on confirmed entries — only the pending-chain-spend
+   * path sets this.
+   */
+  isPending?: boolean;
 }
 
 export interface WalletStateBtcSats {
@@ -88,6 +104,52 @@ export interface WalletState {
   btcSats: WalletStateBtcSats;
   /** Aggregate per-alkane balance keyed by "block:tx". */
   alkanes: Record<string, string>;
+  /**
+   * Populated only when `fetchWalletState` is called with
+   * `{ includePending: true }`. Counts of UTXOs stripped (confirmed
+   * outpoints spent by a pending tx) and added (pending outputs paying
+   * our addresses, treated as fresh spendable BTC). Useful for
+   * observability — e.g. logging "wallet view stitched: stripped 1,
+   * added 2 pending".
+   */
+  pendingAdjustment?: MempoolAdjustmentReport;
+}
+
+/**
+ * Network names recognised by the per-outpoint helpers AND by
+ * `applyMempoolAdjustment`. Cast through this once at the entry point
+ * so the rest of the pipeline doesn't have to re-narrow.
+ */
+function networkBucket(network: string): 'mainnet' | 'signet' | 'regtest' {
+  if (network.includes('regtest') || network === 'devnet') return 'regtest';
+  if (network === 'signet' || network === 'testnet') return 'signet';
+  return 'mainnet';
+}
+
+export interface FetchWalletStateOptions {
+  /**
+   * When `true`, stitch the wallet's own broadcast-but-unconfirmed
+   * mempool transactions into the returned UTXO set:
+   *   - strip confirmed UTXOs at any prevout spent by a pending tx
+   *     (closes the `bad-txns-spends-conflicting-tx` window),
+   *   - add pending outputs paying our addresses as fresh
+   *     `confirmations: 0, isPending: true, alkanes: []` entries.
+   *
+   * Defaults to `false` to keep the route path 100% backward-compatible
+   * with the original confirmed-only snapshot.
+   *
+   * Wiring this on for the live wallet UI requires a `pendingTxStore`
+   * accessible from the server route (IndexedDB is browser-only); the
+   * current implementation accepts an injected store so the API route
+   * can opt in once we plumb a server-side or request-bound store.
+   */
+  includePending?: boolean;
+  /**
+   * Concrete store implementation. Must be provided when
+   * `includePending: true`. The route layer can build an ad-hoc store
+   * from request-body-supplied tx hexes; tests inject a memory store.
+   */
+  pendingTxStore?: PendingTxStore;
 }
 
 /** True for any address-string that looks like a taproot output. */
@@ -131,6 +193,7 @@ async function fetchBitcoindHeight(network: string): Promise<number> {
 export async function fetchWalletState(
   network: string,
   addresses: string[],
+  options: FetchWalletStateOptions = {},
 ): Promise<WalletState> {
   if (addresses.length === 0) {
     throw new Error('fetchWalletState: addresses must be non-empty');
@@ -243,7 +306,7 @@ export async function fetchWalletState(
   }
 
   // Assemble the final UTXO list with annotations + alkane balances.
-  const utxos: WalletUtxo[] = rawUtxos.map((u) => {
+  const confirmedUtxos: WalletUtxo[] = rawUtxos.map((u) => {
     const confirmations =
       u.blockHeight === null || metashrewHeight === 0
         ? 0
@@ -256,8 +319,33 @@ export async function fetchWalletState(
       blockHeight: u.blockHeight,
       confirmations,
       alkanes: balanceSheets.get(`${u.txid}:${u.vout}`) ?? [],
+      isPending: false,
     };
   });
+
+  // Pending-tx-aware adjustment — opt-in via `options.includePending`.
+  // Runs AFTER per-outpoint enrichment so the protorune fan-out only
+  // touches outpoints we actually have alkane state for (pending
+  // outputs carry `alkanes: []` by construction — see
+  // `applyMempoolAdjustment.ts`), and BEFORE the final aggregation so
+  // the BTC totals reflect the post-pending view the caller asked for.
+  let utxos: WalletUtxo[] = confirmedUtxos;
+  let pendingAdjustment: MempoolAdjustmentReport | undefined;
+  if (options.includePending && options.pendingTxStore) {
+    const result = await withPendingAdjustment(
+      confirmedUtxos,
+      addresses,
+      networkBucket(network),
+      options.pendingTxStore,
+    );
+    utxos = result.utxos;
+    pendingAdjustment = result.report;
+    if (pendingAdjustment.stripped > 0 || pendingAdjustment.added > 0) {
+      console.info(
+        `[walletState] pending adjustment: stripped=${pendingAdjustment.stripped}, added=${pendingAdjustment.added}`,
+      );
+    }
+  }
 
   // Aggregate BTC sats by address type + alkane totals by (block, tx).
   let p2wpkh = 0;
@@ -267,6 +355,11 @@ export async function fetchWalletState(
   for (const u of utxos) {
     if (isTaprootAddress(u.address)) p2tr += u.value;
     else p2wpkh += u.value;
+    // `spendable` gates on `confirmations >= 1`, so pending-adjustment
+    // outputs (`confirmations: 0, isPending: true`) intentionally do
+    // NOT count toward it. Callers that want to chain-spend optimistic
+    // BTC should select against `utxos` directly (filtering on
+    // `isPending` if they need to reason about confirmation state).
     if (u.confirmations >= 1 && u.value > ALKANE_DUST_MAX) {
       spendable += u.value;
     }
@@ -294,5 +387,6 @@ export async function fetchWalletState(
       spendable,
     },
     alkanes,
+    ...(pendingAdjustment ? { pendingAdjustment } : {}),
   };
 }

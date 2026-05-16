@@ -389,4 +389,99 @@ describe('fetchWalletState', () => {
     expect(state.utxos[0].address).toBe(TAPROOT_ADDR);
     expect(state.btcSats.total).toBe(50_000);
   });
+
+  // ---------------------------------------------------------------------
+  // includePending — pending-tx chain-spend stitching opt-in
+  // ---------------------------------------------------------------------
+  it('includePending: false (default) leaves the response unchanged', async () => {
+    stageMocks({
+      tipHeight: 1,
+      tipHash: 'cafe',
+      metashrewHeight: 1,
+      bitcoindHeight: 1,
+      addressUtxos: [
+        [{ txid: 'a'.repeat(64), vout: 0, value: 50_000, blockHeight: 1 }],
+      ],
+      outpointBalances: [],
+    });
+
+    const state = await fetchWalletState('mainnet', [TAPROOT_ADDR]);
+    expect(state.pendingAdjustment).toBeUndefined();
+    expect(state.utxos).toHaveLength(1);
+  });
+
+  it('includePending: true stitches pending outputs as fresh spendable BTC', async () => {
+    // Build a real synthetic tx that spends prev:0 and creates new:0
+    // paying our taproot address. The decoder is exercised end-to-end
+    // (raw hex → mempool payload → adjustment).
+    //
+    // Note: the test wallet's TAPROOT_ADDR is a synthesised bech32m
+    // string we use as a label — the synthetic tx pays a DIFFERENT
+    // (real, network-valid) address we then list as an owned address.
+    // The point of the test is to prove the end-to-end stitching works,
+    // not to round-trip the test fixture's TAPROOT_ADDR.
+    const bitcoin = await import('bitcoinjs-lib');
+    const prevTxid =
+      'aa00000000000000000000000000000000000000000000000000000000000000';
+    const spk = Buffer.concat([
+      Buffer.from([0x00, 0x14]),
+      Buffer.from('1234567890abcdef1234567890abcdef12345678', 'hex'),
+    ]);
+    const ourAddr = bitcoin.address.fromOutputScript(
+      spk,
+      bitcoin.networks.bitcoin,
+    );
+    const psbt = new bitcoin.Psbt({ network: bitcoin.networks.bitcoin });
+    psbt.addInput({
+      hash: prevTxid,
+      index: 0,
+      witnessUtxo: { script: spk, value: BigInt(100_000) },
+    });
+    psbt.addOutput({ script: spk, value: BigInt(99_500) });
+    const tx = (psbt as unknown as { __CACHE: { __TX: import('bitcoinjs-lib').Transaction } }).__CACHE.__TX;
+    const pendingHex = tx.toHex();
+    const pendingTxid = tx.getId();
+
+    stageMocks({
+      tipHeight: 100,
+      tipHash: 'feed',
+      metashrewHeight: 100,
+      bitcoindHeight: 100,
+      addressUtxos: [
+        // Indexer still sees prev:0 as confirmed because it hasn't
+        // processed the pending tx yet — this is the production race
+        // condition the adjustment fixes.
+        [{ txid: prevTxid, vout: 0, value: 100_000, blockHeight: 99 }],
+      ],
+      outpointBalances: [], // not dust → no fan-out
+    });
+
+    const store: import('../pendingTxStorePort').PendingTxStore = {
+      list: async () => [pendingHex],
+    };
+
+    const state = await fetchWalletState('mainnet', [ourAddr], {
+      includePending: true,
+      pendingTxStore: store,
+    });
+
+    // Report populated.
+    expect(state.pendingAdjustment).toEqual({ stripped: 1, added: 1 });
+
+    // The confirmed prev:0 was stripped, the pending new:0 added.
+    expect(state.utxos).toHaveLength(1);
+    expect(state.utxos[0].txid).toBe(pendingTxid);
+    expect(state.utxos[0].vout).toBe(0);
+    expect(state.utxos[0].value).toBe(99_500);
+    expect(state.utxos[0].isPending).toBe(true);
+    expect(state.utxos[0].confirmations).toBe(0);
+    expect(state.utxos[0].alkanes).toEqual([]); // load-bearing safety
+    expect(state.utxos[0].blockHeight).toBe(null);
+
+    // btcSats: total reflects the pending output, but `spendable`
+    // (which gates on confirmations >= 1) deliberately excludes it
+    // so risk-averse callers can opt out.
+    expect(state.btcSats.total).toBe(99_500);
+    expect(state.btcSats.spendable).toBe(0);
+  });
 });
