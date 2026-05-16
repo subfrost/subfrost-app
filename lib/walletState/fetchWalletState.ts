@@ -26,11 +26,8 @@
  * stitches up the rest from the previous block's cache entry.
  */
 
-import {
-  getAddressUtxos,
-  getProtorunesByOutpoint,
-  getHeight,
-} from '@/lib/alkanes/rpc';
+import { getAddressUtxos, getHeight } from '@/lib/alkanes/rpc';
+import { getProtorunesByOutpointMV } from '@/lib/alkanes/protorunesByOutpointMV';
 import { getRpcUrl } from '@/utils/getConfig';
 import { getCurrentTipHash } from './tipHash';
 
@@ -195,12 +192,25 @@ export async function fetchWalletState(
   const balanceSheets = new Map<string, WalletUtxoAlkane[]>();
 
   if (dustOutpoints.length > 0) {
+    // Pin every per-outpoint read to the SAME metashrew height as the
+    // snapshot's tipHash so the fan-out is reorg-safe and a block landing
+    // mid-fan-out can't return mixed state. `'latest'` would let metashrew
+    // return whatever its current tip is at each call — fine in steady
+    // state, racy across the boundary. Using the canonical
+    // `metashrew_view protorunesbyoutpoint` primitive via the MV helper
+    // because the legacy `alkanes_protorunesbyoutpoint` JSON-RPC wrapper
+    // is "Method not found" on the in-cluster jsonrpc upstream (verified
+    // 2026-05-11 in subfrost-mobile upstream.rs:646; same risk surface
+    // here on any deployment that routes through jsonrpc.mainnet-alkanes).
+    const blockTag = metashrewHeight > 0 ? metashrewHeight.toString() : 'latest';
     const settled = await Promise.allSettled(
       dustOutpoints.map(async (u) => {
-        const resp = await getProtorunesByOutpoint(
+        const resp = await getProtorunesByOutpointMV(
           network,
           u.txid,
           u.vout,
+          blockTag,
+          1n,
           AbortSignal.timeout(15_000),
         );
         const balances = resp?.balance_sheet?.cached?.balances ?? [];

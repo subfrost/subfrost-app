@@ -8,8 +8,44 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const mockFetch = vi.fn();
 vi.stubGlobal('fetch', mockFetch);
 
+// Mock the canonical metashrew_view protorunesbyoutpoint helper at the
+// module level. The wire format (protobuf-encoded request, hex-encoded
+// response) has its own dedicated tests in
+// `lib/alkanes/__tests__/protorunesByOutpointMV.test.ts` — these tests
+// pin the FANOUT BEHAVIOUR (dust filter, error tolerance, balance
+// aggregation), not the wire format. Mocking at the helper boundary
+// keeps the test asserting on what fetchWalletState DOES with the
+// per-outpoint results.
+const mvCalls: Array<{ txid: string; vout: number; blockTag: string }> = [];
+vi.mock('@/lib/alkanes/protorunesByOutpointMV', () => ({
+  getProtorunesByOutpointMV: vi.fn(
+    async (
+      _network: string,
+      txid: string,
+      vout: number,
+      blockTag: string,
+    ) => {
+      mvCalls.push({ txid, vout, blockTag });
+      // Each call consumes the next staged balance sheet.
+      const sheet = stagedOutpointBalances.shift();
+      if (sheet === 'error' || sheet === undefined) {
+        throw new Error('protorunesbyoutpoint 524');
+      }
+      return {
+        outpoint: { txid, vout },
+        balance_sheet: { cached: { balances: sheet } },
+        blockTag,
+      };
+    },
+  ),
+}));
+
 import { fetchWalletState, ALKANE_DUST_MAX } from '../fetchWalletState';
 import { __resetTipHashCacheForTests } from '../tipHash';
+
+let stagedOutpointBalances: Array<
+  Array<{ block: number; tx: number; amount: string }> | 'error'
+> = [];
 
 /** Build a fetch-mock response with the supplied JSON-RPC result. */
 function rpcResult(result: unknown, ok = true) {
@@ -44,10 +80,14 @@ function stageMocks(opts: {
   addressUtxos: Array<Array<{ txid: string; vout: number; value: number; blockHeight?: number | null }>>;
   outpointBalances: Array<Array<{ block: number; tx: number; amount: string }> | 'error'>;
 }): void {
-  // Track per-address-utxo and per-outpoint consumption counters so we
-  // can serve in insertion order without depending on global call order.
+  // Per-outpoint balance sheets are consumed in order by the mocked
+  // getProtorunesByOutpointMV helper above. Reset so each test starts
+  // with a clean queue.
+  stagedOutpointBalances = [...opts.outpointBalances];
+  mvCalls.length = 0;
+  // Track per-address-utxo consumption order. (Outpoint mocking moved
+  // to the helper-level mock above; this counter only tracks UTXOs.)
   let addressIdx = 0;
-  let outpointIdx = 0;
 
   mockFetch.mockImplementation(async (_url: string, init: RequestInit) => {
     const body = JSON.parse(String(init.body ?? '{}'));
@@ -81,13 +121,9 @@ function stageMocks(opts: {
         })),
       ) as Response;
     }
-    if (method === 'alkanes_protorunesbyoutpoint') {
-      const sheet = opts.outpointBalances[outpointIdx++];
-      if (sheet === 'error' || sheet === undefined) {
-        throw new Error('protorunesbyoutpoint 524');
-      }
-      return rpcResult({ balance_sheet: { cached: { balances: sheet } } }) as Response;
-    }
+    // metashrew_view protorunesbyoutpoint calls are intercepted by the
+    // module-level mock above — fetch never sees them. (The per-outpoint
+    // wire format has its own coverage in protorunesByOutpointMV.test.ts.)
     throw new Error(`unexpected RPC method in mock: ${method}`);
   });
 }
@@ -172,8 +208,65 @@ describe('fetchWalletState', () => {
     expect(onTheLimit!.alkanes).toHaveLength(1);
     expect(overTheLimit!.alkanes).toEqual([]);
 
-    // Calls: 2 (tip) + 1 (height) + 1 (bitcoind) + 1 (utxo list) + 1 (1× fanout) = 6
-    expect(mockFetch).toHaveBeenCalledTimes(6);
+    // Fetch calls: 2 (tip) + 1 (height) + 1 (bitcoind) + 1 (utxo list) = 5.
+    // (Per-outpoint protorunes is now via the mocked MV helper — separate counter below.)
+    expect(mockFetch).toHaveBeenCalledTimes(5);
+    // Exactly ONE per-outpoint helper call — proves the dust filter
+    // excluded the over-limit UTXO from the fan-out.
+    expect(mvCalls).toHaveLength(1);
+    expect(mvCalls[0].vout).toBe(0);
+  });
+
+  it('pins per-outpoint reads to the snapshot tip height (reorg safety)', async () => {
+    // The whole fan-out MUST use the same blockTag as the captured tip.
+    // If individual outpoint reads were 'latest' instead, a block landing
+    // mid-fan-out could mix old and new state — the snapshot would not
+    // be self-consistent at the tipHash it advertises.
+    stageMocks({
+      tipHeight: 950_000,
+      tipHash: 'feed',
+      metashrewHeight: 950_000,
+      bitcoindHeight: 950_000,
+      addressUtxos: [
+        [
+          { txid: 'a'.repeat(64), vout: 0, value: 546, blockHeight: 949_900 },
+          { txid: 'b'.repeat(64), vout: 1, value: 546, blockHeight: 949_950 },
+          { txid: 'c'.repeat(64), vout: 2, value: 546, blockHeight: 949_995 },
+        ],
+      ],
+      outpointBalances: [
+        [{ block: 2, tx: 0, amount: '10' }],
+        [{ block: 2, tx: 0, amount: '20' }],
+        [{ block: 2, tx: 0, amount: '30' }],
+      ],
+    });
+
+    await fetchWalletState('mainnet', [TAPROOT_ADDR]);
+
+    expect(mvCalls).toHaveLength(3);
+    for (const c of mvCalls) {
+      expect(c.blockTag).toBe('950000');
+    }
+  });
+
+  it('falls back to blockTag="latest" when metashrew height is 0 (boot or upstream fail)', async () => {
+    // If the height probe returns 0 we don't have a usable tip to pin to;
+    // 'latest' is the safest fallback — at least the per-outpoint reads
+    // are all consistent with whatever metashrew's current tip is at the
+    // moment of the call.
+    stageMocks({
+      tipHeight: 0,
+      tipHash: 'cafe',
+      metashrewHeight: 0,
+      bitcoindHeight: 0,
+      addressUtxos: [[{ txid: 'a'.repeat(64), vout: 0, value: 546, blockHeight: 1 }]],
+      outpointBalances: [[{ block: 2, tx: 0, amount: '1' }]],
+    });
+
+    await fetchWalletState('mainnet', [TAPROOT_ADDR]);
+
+    expect(mvCalls).toHaveLength(1);
+    expect(mvCalls[0].blockTag).toBe('latest');
   });
 
   it('tolerates per-outpoint failure (allSettled)', async () => {
