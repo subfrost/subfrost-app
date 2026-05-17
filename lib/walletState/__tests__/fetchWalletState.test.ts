@@ -339,6 +339,80 @@ describe('fetchWalletState', () => {
     expect(state.utxos[0].confirmations).toBe(0);
   });
 
+  // -------------------------------------------------------------------------
+  // mork1e IMG_2439 regression (2026-05-17): "Insufficient BTC balance.
+  // Need 0.000012 BTC for this transaction" — but wallet had 19,035 sats
+  // present and confirmed in bitcoind. Root cause: spendable gate used
+  // metashrewHeight-based `confirmations >= 1`, so when metashrew lagged
+  // bitcoind by even 1 block, fresh BTC UTXOs got `confirmations = 0` and
+  // were silently dropped from spendable.
+  //
+  // Fix: gate spendable on bitcoind confirmation (`blockHeight !== null`).
+  // Metashrew lag shouldn't gate BTC spending — it's the alkane indexer,
+  // not the BTC indexer. Alkane-aware mutation hooks that need indexer
+  // catch-up before selecting a UTXO can still filter on
+  // `u.confirmations >= 1` directly.
+  // -------------------------------------------------------------------------
+  it('BTC spendable: includes UTXOs confirmed in bitcoind even when metashrew lags (mork1e IMG_2439)', async () => {
+    // Mock infra returns opts.tipHeight for the metashrew_height RPC
+    // (used by both getCurrentTipHash and getHeight in fetchWalletState),
+    // so metashrewHeight inside the impl ends up at `tipHeight`. To
+    // simulate "metashrew 2 blocks behind bitcoind", set tipHeight to
+    // the lower value and bitcoindHeight to the higher.
+    stageMocks({
+      tipHeight: 949858,         // metashrew at 949858
+      tipHash: 'cafe',
+      metashrewHeight: 949858,   // (declarative — not actually consumed by mock)
+      bitcoindHeight: 949860,    // bitcoind at 949860 (2 blocks ahead)
+      addressUtxos: [
+        [
+          // The exact mork scenario: 19,035-sat UTXO confirmed at block
+          // 949860 (above metashrew's 949858 → old gate would set
+          // confirmations=0 → spendable=0 → "Insufficient BTC" panic).
+          { txid: 'a'.repeat(64), vout: 0, value: 19_035, blockHeight: 949860 },
+        ],
+      ],
+      outpointBalances: [],
+    });
+
+    const state = await fetchWalletState('mainnet', [TAPROOT_ADDR]);
+
+    // confirmations stays metashrew-gated (used by alkane paths) — still 0
+    expect(state.utxos[0].confirmations).toBe(0);
+    // ...but spendable now counts the UTXO because it IS confirmed in bitcoind
+    expect(state.btcSats.spendable).toBe(19_035);
+    expect(state.btcSats.total).toBe(19_035);
+  });
+
+  it('BTC spendable: still excludes mempool (no block_height) and dust', async () => {
+    stageMocks({
+      tipHeight: 100,
+      tipHash: 'cafe',
+      metashrewHeight: 100,
+      bitcoindHeight: 100,
+      addressUtxos: [
+        [
+          // Confirmed dust — excluded because <= ALKANE_DUST_MAX (alkane carrier).
+          { txid: 'a'.repeat(64), vout: 0, value: 546, blockHeight: 99 },
+          // Confirmed non-dust — included.
+          { txid: 'b'.repeat(64), vout: 0, value: 10_000, blockHeight: 99 },
+          // Mempool (blockHeight=null) — excluded.
+          { txid: 'c'.repeat(64), vout: 0, value: 5_000, blockHeight: null },
+        ],
+      ],
+      outpointBalances: [
+        [{ block: 2, tx: 0, amount: '100' }],
+        [],
+        [],
+      ],
+    });
+
+    const state = await fetchWalletState('mainnet', [TAPROOT_ADDR]);
+
+    expect(state.btcSats.total).toBe(15_546);  // sum of all
+    expect(state.btcSats.spendable).toBe(10_000); // only the confirmed non-dust
+  });
+
   it('aggregates alkane balances across multiple dust outpoints', async () => {
     stageMocks({
       tipHeight: 100,

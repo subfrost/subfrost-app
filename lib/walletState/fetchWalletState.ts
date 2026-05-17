@@ -355,12 +355,26 @@ export async function fetchWalletState(
   for (const u of utxos) {
     if (isTaprootAddress(u.address)) p2tr += u.value;
     else p2wpkh += u.value;
-    // `spendable` gates on `confirmations >= 1`, so pending-adjustment
-    // outputs (`confirmations: 0, isPending: true`) intentionally do
-    // NOT count toward it. Callers that want to chain-spend optimistic
-    // BTC should select against `utxos` directly (filtering on
-    // `isPending` if they need to reason about confirmation state).
-    if (u.confirmations >= 1 && u.value > ALKANE_DUST_MAX) {
+    // `spendable` gates on BITCOIND confirmation (blockHeight !== null),
+    // NOT metashrew confirmation. Metashrew-lag must not gate BTC spending.
+    //
+    // 2026-05-17 mork1e IMG_2439 regression: previously gated on
+    // `confirmations >= 1` where `confirmations = metashrewHeight - blockHeight + 1`.
+    // When metashrew lagged bitcoind by even 1 block, fresh BTC UTXOs
+    // (confirmed by miners, indexed by esplora) silently got
+    // `confirmations = 0` and dropped from spendable → wallet showed
+    // "Insufficient BTC: need 12 sats" with 19,035 confirmed sats present.
+    // Concrete: UTXO at block 949860, metashrew at 949858 → spendable=0.
+    //
+    // Pending-adjustment outputs still don't count (their blockHeight is
+    // null by construction in applyMempoolAdjustment.ts), preserving the
+    // original "don't trust optimistic mempool sats for fee budget" intent.
+    //
+    // Alkane-aware mutation hooks that need the indexer caught up before
+    // selecting a UTXO should filter against `u.confirmations >= 1`
+    // directly (uses metashrewHeight) — that's a separate gate from BTC
+    // spendability and a different consumer.
+    if (u.blockHeight !== null && u.value > ALKANE_DUST_MAX) {
       spendable += u.value;
     }
     for (const a of u.alkanes) {
