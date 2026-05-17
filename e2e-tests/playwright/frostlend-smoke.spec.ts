@@ -1830,8 +1830,59 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
       }
     }
 
-    // Re-open trove with same params (oracle has been dropped — use higher coll ratio)
-    // Use 0.05 frBTC / 1800 frostUSD to get a comfortable ICR even after the 25% drop.
+    // Re-open trove with same params (oracle has been dropped — re-raise to $100k first
+    // so 0.05 frBTC × $100k / 1800 = ICR 277% > MCR. Without re-raise, oracle is at $25k
+    // after Flow 4's 50% drop, giving ICR 69% which keeps the Open Trove button disabled).
+    console.log('[frostlend-smoke] Pre-step: re-raising oracle to $100k before opening second trove...');
+    {
+      try {
+        await openDevPanel(page);
+        // Wait for "deployed" span before touching oracle input
+        await page.waitForFunction(
+          () => {
+            const spans = Array.from(document.querySelectorAll('span'));
+            return spans.some(s => s.textContent?.trim() === 'deployed' && s.classList.contains('text-green-400'));
+          },
+          { timeout: 60_000 },
+        ).catch(() => console.log('[frostlend-smoke] pre-second-trove oracle: deployed span not seen'));
+        await page.evaluate((price) => {
+          const inputs = Array.from(document.querySelectorAll('input[inputmode="decimal"]'));
+          const oracleInput = inputs.find(el => el.classList.contains('font-mono')) as HTMLInputElement | undefined;
+          if (!oracleInput) return;
+          const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!;
+          setter.call(oracleInput, String(price));
+          oracleInput.dispatchEvent(new Event('input', { bubbles: true }));
+          oracleInput.dispatchEvent(new Event('change', { bubbles: true }));
+        }, ORACLE_PRICE_USD);
+        await page.waitForTimeout(300);
+        const setClicked = await page.evaluate(() => {
+          const inputs = Array.from(document.querySelectorAll('input[inputmode="decimal"]'));
+          const oracleInput = inputs.find(el => el.classList.contains('font-mono'));
+          if (!oracleInput) return false;
+          const parent = oracleInput.parentElement;
+          if (!parent) return false;
+          const setBtn = Array.from(parent.querySelectorAll('button')).find(b => b.textContent?.trim() === 'Set');
+          if (setBtn && !(setBtn as HTMLButtonElement).disabled) { (setBtn as HTMLElement).click(); return true; }
+          return false;
+        });
+        if (setClicked) {
+          await page.waitForFunction(
+            () => Array.from(document.querySelectorAll('div')).some(d => /Price\s*→/i.test(d.textContent || '')),
+            { timeout: 60_000 },
+          ).catch(() => {});
+          await mineOneBlock(page);
+          await waitForIndexerSync(page, 30_000);
+          console.log(`[frostlend-smoke] Pre-step: oracle re-raised to $${ORACLE_PRICE_USD}`);
+        } else {
+          console.log('[frostlend-smoke] Pre-step: oracle Set button not found — proceeding with current price');
+        }
+        await closeDevPanel(page);
+      } catch (e) {
+        console.log(`[frostlend-smoke] Pre-step oracle re-raise error: ${e instanceof Error ? e.message : String(e)}`);
+        await closeDevPanel(page).catch(() => {});
+      }
+    }
+
     console.log('[frostlend-smoke] Pre-step: opening second trove for adjust flows...');
     {
       await navToLend(page);
