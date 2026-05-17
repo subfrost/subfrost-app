@@ -41,7 +41,7 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
   const { network: walletNetwork } = useWallet();
   const network = networkProp || walletNetwork;
   const { t } = useTranslation();
-  const { FRBTC_ALKANE_ID, BUSD_ALKANE_ID } = getConfig(network);
+  const { FRBTC_ALKANE_ID } = getConfig(network);
   const { maxSlippage, setMaxSlippage, slippageSelection, setSlippageSelection, deadlineBlocks, setDeadlineBlocks } = useGlobalStore();
   const isCrossChain = isCrossChainFrom || isCrossChainTo;
 
@@ -227,33 +227,13 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
                   </div>
                 ))}
               </div>
-              {(quote?.hops === 2 || sellId === 'btc' || buyId === 'btc') && (
-                <div className="mt-1.5 flex items-start gap-1.5 text-xs text-[color:var(--sf-text)]/60">
-                  <svg className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" viewBox="0 0 256 256" fill="currentColor">
-                    <path d="M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm0,192a88,88,0,1,1,88-88A88.1,88.1,0,0,1,128,216Zm16-40a8,8,0,0,1-8,8,16,16,0,0,1-16-16V128a8,8,0,0,1,0-16,16,16,0,0,1,16,16v40A8,8,0,0,1,144,176ZM112,84a12,12,0,1,1,12,12A12,12,0,0,1,112,84Z"/>
-                  </svg>
-                  <span>
-                    {quote?.hops === 2 && swapRoute.length === 3 && (
-                      <>
-                        {swapRoute[1].id === BUSD_ALKANE_ID && t('swapSummary.bridgeBusd')}
-                        {swapRoute[1].id === FRBTC_ALKANE_ID && t('swapSummary.bridgeFrbtc')}
-                      </>
-                    )}
-                    {sellId === 'btc' && (buyId === 'frbtc' || buyId === FRBTC_ALKANE_ID) && t('swapSummary.wrapNote')}
-                    {sellId === 'btc' && buyId !== 'frbtc' && buyId !== FRBTC_ALKANE_ID && t('swapSummary.wrapSwapNote')}
-                    {buyId === 'btc' && (sellId === 'frbtc' || sellId === FRBTC_ALKANE_ID) && t('swapSummary.unwrapNote')}
-                    {buyId === 'btc' && sellId !== 'frbtc' && sellId !== FRBTC_ALKANE_ID && t('swapSummary.unwrapSwapNote')}
-                    {quote?.hops === 2 && ' • Higher fees apply for multi-hop swaps'}
-                  </span>
-                </div>
-              )}
             </div>
           )}
           
           {/* Routing source indicator — shown when Universal Router provides a better price */}
           {quote?.routeSource && quote.routeSource !== 'amm' && (
             <div className="mx-4 mt-2 flex items-center gap-1.5">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/40">Routed via</span>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sf-text)]/40">{t('swapSummary.routedVia')}</span>
               <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
                 quote.routeSource === 'clob'
                   ? 'bg-emerald-500/15 text-emerald-400'
@@ -262,9 +242,9 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
                 <svg className="h-2.5 w-2.5" fill="currentColor" viewBox="0 0 16 16">
                   <path d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0ZM6.79 5.093A.5.5 0 0 0 6 5.5v5a.5.5 0 0 0 .79.407l3.5-2.5a.5.5 0 0 0 0-.814l-3.5-2.5Z"/>
                 </svg>
-                {quote.routeSource === 'clob' ? 'Orderbook' : 'Hybrid'}
+                {quote.routeSource === 'clob' ? t('swapSummary.orderbook') : t('swapSummary.hybrid')}
               </span>
-              <span className="text-[10px] text-emerald-400/80">Better price</span>
+              <span className="text-[10px] text-emerald-400/80">{t('swapSummary.betterPrice')}</span>
             </div>
           )}
 
@@ -277,7 +257,7 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
                 return formatAlks(quote.minimumReceived, decimals, decimals);
               })()} ${buyName ?? buyId}`} />
             ) : (
-              <Row className="mt-3" label="Maximum Sent" value={`${(() => {
+              <Row className="mt-3" label={t('swapSummary.maximumSent')} value={`${(() => {
                 const isBtcToken = sellId === 'btc' || sellId === FRBTC_ALKANE_ID || sellName === 'BTC' || sellName === 'frBTC';
                 const decimals = isBtcToken ? 8 : 2;
                 return formatAlks(quote.maximumSent, decimals, decimals);
@@ -432,6 +412,35 @@ export default function SwapSummary({ sellId, buyId, sellName, buyName, directio
           )}
           </div>
           </div>
+
+          {/* Low liquidity warning — always visible, shown outside collapsible */}
+          {quote.priceImpact !== undefined && quote.priceImpact > 0.10 && !isWrapPair && !isUnwrapPair && (
+            <div className={`mt-2 flex items-start gap-2.5 rounded-xl border p-3 ${
+              quote.priceImpact > 0.20
+                ? 'bg-red-500/10 border-red-500/25'
+                : 'bg-orange-500/10 border-orange-500/25'
+            }`}>
+              <svg
+                className={`h-5 w-5 flex-shrink-0 mt-0.5 ${quote.priceImpact > 0.20 ? 'text-red-500' : 'text-orange-400'}`}
+                fill="none" viewBox="0 0 24 24" stroke="currentColor"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-2">
+                  <p className={`text-xs font-bold ${quote.priceImpact > 0.20 ? 'text-red-500' : 'text-orange-400'}`}>
+                    {t('swapSummary.lowLiquidityWarning')}
+                  </p>
+                  <span className={`text-xs font-bold tabular-nums ${quote.priceImpact > 0.20 ? 'text-red-500' : 'text-orange-400'}`}>
+                    {(quote.priceImpact * 100).toFixed(1)}% {t('swapSummary.priceImpact')}
+                  </span>
+                </div>
+                <p className={`text-xs mt-0.5 ${quote.priceImpact > 0.20 ? 'text-red-500/80' : 'text-orange-400/80'}`}>
+                  {t('swapSummary.lowLiquidityMessage')}
+                </p>
+              </div>
+            </div>
+          )}
         </>
       ) : null}
     </div>

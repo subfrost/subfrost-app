@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import Image from "next/image";
 import NumberField from "@/app/components/NumberField";
 import TokenIcon from "@/app/components/TokenIcon";
 import type { TokenMeta } from "../types";
@@ -12,7 +13,6 @@ import ActivateBridge from "./ActivateBridge";
 import BridgeDepositFlow from "./BridgeDepositFlow";
 import type { BridgeDirection } from "./BridgeDepositFlow";
 import { useTranslation } from "@/hooks/useTranslation";
-import { useDemoGate } from "@/hooks/useDemoGate";
 
 type BridgeStep = 1 | 2 | 3 | 4 | 5;
 
@@ -34,6 +34,7 @@ type Props = {
   toBalanceText?: string;
   fromFiatText?: string; // e.g., "$0.00"
   toFiatText?: string;
+  isQuoteLoading?: boolean;
   onMaxFrom?: () => void; // optional Max action
   onPercentFrom?: (percent: number) => void; // optional percentage action (0.25, 0.5, 0.75)
   summary?: React.ReactNode;
@@ -59,6 +60,7 @@ export default function SwapInputs({
   toBalanceText,
   fromFiatText = "$0.00",
   toFiatText = "$0.00",
+  isQuoteLoading = false,
   onMaxFrom,
   onPercentFrom,
   summary,
@@ -69,7 +71,6 @@ export default function SwapInputs({
   const { theme } = useTheme();
   const { openTokenSelector } = useModalStore();
   const { t } = useTranslation();
-  const isDemoGated = useDemoGate();
 
   // Apply i18n defaults for balance texts
   const resolvedFromBalanceText = fromBalanceText ?? t("swap.noBalance");
@@ -86,7 +87,6 @@ export default function SwapInputs({
   const [ethAddressFocused, setEthAddressFocused] = useState(false);
 
   // Bridge state
-  const [showSwapComingSoon, setShowSwapComingSoon] = useState(false);
   const [bridgeActive, setBridgeActive] = useState(false);
   const [bridgeStep, setBridgeStep] = useState<BridgeStep>(1);
   const [completedSteps, setCompletedSteps] = useState<BridgeStep[]>([]);
@@ -101,23 +101,28 @@ export default function SwapInputs({
   // Deposit address for cross-chain swaps
   const DEPOSIT_ADDRESS = "0x59f57b84d6742acdaa56e9da1c770898e4a270b6";
 
+  const fromAmountNumber = parseFloat(fromAmount);
+  const toAmountNumber = parseFloat(toAmount);
+  const hasValidFromAmount = Number.isFinite(fromAmountNumber) && fromAmountNumber > 0;
+  const hasValidToAmount = Number.isFinite(toAmountNumber) && toAmountNumber > 0;
+
   // For testing: allow cross-chain swap button to work even without full pricing
   const canSwapCrossChain =
     isConnected &&
+    !!from &&
+    !!to &&
     isFromBridgeToken &&
-    !!fromAmount &&
-    parseFloat(fromAmount) > 0;
+    hasValidFromAmount;
   const canSwap =
     isConnected &&
-    !!fromAmount &&
-    !!toAmount &&
-    isFinite(parseFloat(fromAmount)) &&
-    isFinite(parseFloat(toAmount)) &&
-    parseFloat(fromAmount) > 0 &&
-    parseFloat(toAmount) > 0;
+    !!from &&
+    !!to &&
+    hasValidFromAmount &&
+    hasValidToAmount;
 
   // Enable button for cross-chain FROM tokens even without full quote
   const isButtonEnabled = canSwap || canSwapCrossChain;
+  const isCtaDisabled = isSwapping || (isConnected && !isButtonEnabled);
 
   const ctaText = isConnected
     ? isToBridgeToken || isFromBridgeToken
@@ -126,6 +131,8 @@ export default function SwapInputs({
     : t("swap.connectWallet");
 
   const onCtaClick = () => {
+    if (isCtaDisabled) return;
+
     if (!isConnected) {
       onConnectModalOpenChange(true);
       return;
@@ -218,6 +225,10 @@ export default function SwapInputs({
   };
 
   const activePercent = getActivePercent();
+  const showBtcUnwrapNotice = to?.id === "btc";
+  const btcUnwrapNoticeText = from?.id === "32:0"
+    ? t("swap.btcUnwrapNoticeDirect")
+    : t("swap.btcUnwrapNoticeSwap");
 
   // ---- Cross-chain bridge pair detection ----
   // When a cross-chain pair is selected (e.g., USDT -> BTC or BTC -> USDT),
@@ -255,7 +266,7 @@ export default function SwapInputs({
           onClick={() => setShowBridgeFlow(false)}
           className="text-xs text-[color:var(--sf-text)]/40 hover:text-[color:var(--sf-text)]/60 transition-colors"
         >
-          ← Back to quote
+          {t("swap.backToQuote")}
         </button>
       </div>
     );
@@ -493,16 +504,23 @@ export default function SwapInputs({
 
             {/* Input - full width */}
             <div className="pr-32">
-              <NumberField
-                ref={toInputRef}
-                placeholder={"0.00"}
-                align="left"
-                value={toAmount}
-                onChange={onChangeToAmount}
-                onFocus={() => setToFocused(true)}
-                onBlur={() => setToFocused(false)}
-                className={toAmount ? '' : '!text-[color:var(--sf-text)]/40'}
-              />
+              <div className="relative h-11 w-full">
+                <NumberField
+                  ref={toInputRef}
+                  placeholder=""
+                  align="left"
+                  value={toAmount}
+                  onChange={onChangeToAmount}
+                  onFocus={() => setToFocused(true)}
+                  onBlur={() => setToFocused(false)}
+                  className={isQuoteLoading ? "opacity-0 pointer-events-none" : ""}
+                />
+                {isQuoteLoading && (
+                  <div className="pointer-events-none absolute inset-0 flex items-center">
+                    <div className="h-8 w-28 animate-pulse rounded-lg bg-[color:var(--sf-text)]/10" />
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Fiat value + Balance on same row */}
@@ -565,6 +583,33 @@ export default function SwapInputs({
         completedSteps={completedSteps}
       />
 
+      {showBtcUnwrapNotice && !bridgeActive && (
+        <div className="relative overflow-hidden rounded-lg bg-[color:var(--sf-primary)]/10 px-3 py-3">
+          <Image
+            src="/brand/balance-snowflake-mark.svg"
+            alt=""
+            aria-hidden="true"
+            width={96}
+            height={96}
+            className="pointer-events-none absolute -right-8 top-1/2 h-24 w-24 -translate-y-1/2 rotate-12 opacity-[0.07]"
+          />
+          <div className="relative z-10">
+            <p className="text-xs font-medium leading-5 text-[color:var(--sf-text)]/75">
+              {btcUnwrapNoticeText}
+              {' '}
+              <a
+                href="https://docs.subfrost.io/"
+                target="_blank"
+                rel="noreferrer"
+                className="text-[color:var(--sf-primary)] no-underline hover:text-[color:var(--sf-primary-pressed)]"
+              >
+                {t("common.learnMore")}
+              </a>
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* CTA Button - slides down when bridge is active */}
       <div
         className={`transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
@@ -575,9 +620,9 @@ export default function SwapInputs({
       >
         <button
           type="button"
-          disabled={isSwapping}
+          disabled={isCtaDisabled}
           onClick={() => {
-            if (isSwapping) return;
+            if (isCtaDisabled) return;
 
             if (!isConnected) {
               onConnectModalOpenChange(true);
@@ -589,19 +634,12 @@ export default function SwapInputs({
               setShowBridgeFlow(true);
               return;
             }
-            if (!isDemoGated || isBridgeSwap) {
-              onSwapClick();
-              return;
-            }
-            if (!showSwapComingSoon) {
-              setShowSwapComingSoon(true);
-              setTimeout(() => setShowSwapComingSoon(false), 1000);
-            }
+            onSwapClick();
           }}
           className={`h-12 w-full rounded-xl font-bold text-sm uppercase tracking-wider transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none focus:outline-none ${
             isSwapping
               ? "bg-[color:var(--sf-primary)]/60 text-white/80 cursor-wait"
-              : isConnected && isDemoGated && !isFromBridgeToken && !isToBridgeToken
+              : isConnected && !isButtonEnabled
               ? "bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)]/30 cursor-not-allowed"
               : "bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] text-white shadow-[0_4px_16px_rgba(0,0,0,0.3)] hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98]"
           }`}
@@ -612,14 +650,12 @@ export default function SwapInputs({
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
               </svg>
-              Building Transaction...
+              {t("swap.buildingTransaction")}
             </span>
-          ) : showSwapComingSoon ? (
-            <span className="animate-pulse">{t("badge.comingSoon")}</span>
           ) : !isConnected ? (
             t("swap.connectWallet")
           ) : isCrossChainPair ? (
-            `Bridge ${from?.symbol || ''} → ${to?.symbol || ''}`
+            t("swap.bridgePair", { from: from?.symbol || '', to: to?.symbol || '' })
           ) : (
             t("swap.confirmSwap")
           )}

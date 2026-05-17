@@ -1,0 +1,57 @@
+{
+  "run_at": "2026-05-17T13:55:45.953Z",
+  "wallet": "OYL",
+  "network": "mainnet",
+  "seed_hint": "panic ... myself",
+  "flows": [
+    {
+      "name": "diesel_to_btc",
+      "status": "error",
+      "txid": null,
+      "fee_sats": null,
+      "fee_usd": null,
+      "skip_reason": null,
+      "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeEnabled\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator:  locator('button').filter({ hasText: /confirm swap/i }).first()\nExpected: enabled\nReceived: disabled\nTimeout:  10000ms\n\nCall log:\n\u001b[2m  - Expect \"toBeEnabled\" with timeout 10000ms\u001b[22m\n\u001b[2m  - waiting for locator('button').filter({ hasText: /confirm swap/i }).first()\u001b[22m\n\u001b[2m    19 × locator resolved to <button disabled type=\"button\" class=\"h-12 w-full rounded-xl font-bold text-sm uppercase tracking-wider transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none focus:outline-none bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)]/30 cursor-not-allowed\">CONFIRM SWAP</button>\u001b[22m\n\u001b[2m       - unexpected value \"disabled\"\u001b[22m\n"
+    },
+    {
+      "name": "btc_to_frbtc_wrap",
+      "status": "error",
+      "txid": null,
+      "fee_sats": null,
+      "fee_usd": null,
+      "skip_reason": null,
+      "error": "page.goto: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"http://localhost:3000/swap\", waiting until \"domcontentloaded\"\u001b[22m\n"
+    },
+    {
+      "name": "frbtc_to_btc_unwrap",
+      "status": "success",
+      "txid": "1742754b0cbaeab265030893b1d52104534c1d543be4318ff1c11d21442c4c71",
+      "fee_sats": null,
+      "fee_usd": null,
+      "skip_reason": null,
+      "error": null
+    },
+    {
+      "name": "add_liquidity_btc_diesel",
+      "status": "error",
+      "txid": null,
+      "fee_sats": null,
+      "fee_usd": null,
+      "skip_reason": null,
+      "error": "txid not found in page after submit"
+    },
+    {
+      "name": "remove_liquidity",
+      "status": "skipped",
+      "txid": null,
+      "fee_sats": null,
+      "fee_usd": null,
+      "skip_reason": "remove_button_disabled",
+      "error": null
+    }
+  ],
+  "total_fee_sats": 0,
+  "total_fee_usd": 0,
+  "btc_price_usd": 78101.58738600744,
+  "aberrations": []
+}

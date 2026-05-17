@@ -50,10 +50,8 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useWallet } from '@/context/WalletContext';
 import { useTransactionConfirm } from '@/context/TransactionConfirmContext';
-import { useIndexerSync } from '@/context/IndexerSyncContext';
-import { waitForIndexerSync } from '@/lib/alkanes/waitForIndexerSync';
 import { useSandshrewProvider } from '@/hooks/useSandshrewProvider';
-import { useWalletUtxoCache, useSyncStatus } from '@/hooks/useWalletUtxoCache';
+import { useWalletUtxoCache } from '@/hooks/useWalletUtxoCache';
 import { getTokenSymbol } from '@/lib/alkanes-client';
 import { getFutureBlockHeight } from '@/utils/amm';
 import * as bitcoin from 'bitcoinjs-lib';
@@ -67,6 +65,26 @@ import { buildPlanFromTx } from '@/lib/alkanes/planBuilder';
 import { getConfig } from '@/utils/getConfig';
 
 bitcoin.initEccLib(ecc);
+
+function stripBrowserTapLeafMetadata(psbtBase64: string, btcNetwork: bitcoin.Network): {
+  psbtBase64: string;
+  stripped: number;
+} {
+  const psbt = bitcoin.Psbt.fromBase64(psbtBase64, { network: btcNetwork });
+  let stripped = 0;
+
+  for (const input of psbt.data.inputs) {
+    const script = input.witnessUtxo?.script ? Buffer.from(input.witnessUtxo.script) : null;
+    const isTaprootKeyPathCandidate = !!script && script.length === 34 && script[0] === 0x51 && script[1] === 0x20;
+    if (!isTaprootKeyPathCandidate || !input.tapLeafScript?.length) continue;
+
+    delete input.tapLeafScript;
+    delete input.tapScriptSig;
+    stripped++;
+  }
+
+  return { psbtBase64: stripped > 0 ? psbt.toBase64() : psbtBase64, stripped };
+}
 
 export type RemoveLiquidityTransactionData = {
   lpTokenId: string;       // LP token alkane id (e.g., "3:123")
@@ -92,34 +110,14 @@ export function useRemoveLiquidityMutation() {
   const provider = useSandshrewProvider();
   const queryClient = useQueryClient();
   const { requestConfirmation } = useTransactionConfirm();
-  const indexerSync = useIndexerSync();
   // Pre-warmed UTXO snapshot — feeds clean BTC payment_utxos to the
   // SDK so it skips the WASM's internal coinselect fanout. Same
   // perf-fix pattern as useSwapMutation / useAlkaneSendMutation.
   const utxoCache = useWalletUtxoCache();
-  const syncStatus = useSyncStatus();
-
   return useMutation({
     mutationFn: async (data: RemoveLiquidityTransactionData) => {
-      console.log('[RemoveLiquidity] ═══════════════════════════════════════════');
-      console.log('[RemoveLiquidity] Starting remove liquidity transaction');
-      console.log('[RemoveLiquidity] Input data:', JSON.stringify(data, null, 2));
-
       // Validation
       if (!isConnected) throw new Error('Wallet not connected');
-      // Sync gate (skipped on local networks).
-      const isLocal = ['devnet', 'regtest-local', 'qubitcoin-regtest'].includes(network ?? '');
-      if (!isLocal && syncStatus.metashrewHeight > 0 && !syncStatus.inSync) {
-        indexerSync.start('Preparing remove liquidity');
-        try {
-          await waitForIndexerSync({
-            network: network ?? 'mainnet',
-            onProgress: (p) => indexerSync.update(p),
-          });
-        } finally {
-          indexerSync.finish();
-        }
-      }
       // Ensure browser wallet session is active before building PSBT
       if (walletType === 'browser') {
         const { ensureWalletSession } = await import('@/lib/wallet/browserWalletSigning');
@@ -140,14 +138,11 @@ export function useRemoveLiquidityMutation() {
       // For alkane operations, prefer taproot if available (alkanes use P2TR).
       // Falls back to segwit on single-address segwit-only wallets.
       const primaryAddress = (taprootAddress || segwitAddress)!;
-      console.log('[RemoveLiquidity] Using addresses:', { taprootAddress, segwitAddress, primaryAddress });
 
       // Convert display amounts to alks
       const lpAmountAlks = toAlks(data.lpAmount, data.lpDecimals ?? 8);
       const minAmount0Alks = data.minAmount0 ? toAlks(data.minAmount0, data.token0Decimals ?? 8) : '0';
       const minAmount1Alks = data.minAmount1 ? toAlks(data.minAmount1, data.token1Decimals ?? 8) : '0';
-
-      console.log('[RemoveLiquidity] Amounts in alks:', { lpAmountAlks, minAmount0Alks, minAmount1Alks });
 
       // Get block height for deadline (regtest uses large offset so deadline never expires)
       const isRegtest = network === 'regtest' || network === 'subfrost-regtest' || network === 'regtest-local' || network === 'qubitcoin-regtest';
@@ -155,8 +150,6 @@ export function useRemoveLiquidityMutation() {
         isRegtest ? 1000 : (data.deadlineBlocks || 5),
         provider as any
       );
-
-      console.log('[RemoveLiquidity] Deadline block:', deadline);
 
       // Build protostone — factory router opcode 12 (Burn).
       // Single protostone: cellpack identifies the pool by token_a/token_b;
@@ -176,21 +169,11 @@ export function useRemoveLiquidityMutation() {
         deadline: deadline.toString(),
       });
 
-      console.log('[RemoveLiquidity] Protostone (factory opcode 12):', protostone);
-
       // Build input requirements
       const inputRequirements = buildRemoveLiquidityInputRequirements({
         lpTokenId: data.lpTokenId,
         lpAmount: lpAmountAlks,
       });
-
-      console.log('[RemoveLiquidity] Input requirements:', inputRequirements);
-
-      console.log('[RemoveLiquidity] ═══════════════════════════════════════════');
-      console.log('[RemoveLiquidity] Executing...');
-      console.log('[RemoveLiquidity] inputRequirements:', inputRequirements);
-      console.log('[RemoveLiquidity] protostone:', protostone);
-      console.log('[RemoveLiquidity] feeRate:', data.feeRate);
 
       const btcNetwork = getBitcoinNetwork(network);
 
@@ -200,10 +183,6 @@ export function useRemoveLiquidityMutation() {
       // dummy wallet — see useSwapMutation.ts header for the 2026-03-01 token-loss
       // tx that motivated `txContext`. Always actual addresses now.
       const toAddresses = [primaryAddress];
-
-      console.log('[RemoveLiquidity] From addresses:', txContext.feeSourceAddresses, '(browser:', isBrowserWallet, ')');
-      console.log('[RemoveLiquidity] To addresses:', toAddresses);
-      console.log('[RemoveLiquidity] Change address:', txContext.btcChangeAddress);
 
       try {
 
@@ -217,50 +196,31 @@ export function useRemoveLiquidityMutation() {
           // Pre-warmed clean BTC UTXOs from the prefetched cache —
           // skips the SDK's internal coinselect fanout.
           cachedUtxos: utxoCache.utxos,
+          // Pin to metashrew height we already know — SDK skips its
+          // waitForIndexer poll loop. Mirrors subfrost-mobile.
+          maxIndexedHeight: utxoCache.height,
         });
-
-        console.log('[RemoveLiquidity] Called alkanesExecuteTyped (browser:', isBrowserWallet, ')');
-
-        console.log('[RemoveLiquidity] Execute result:', JSON.stringify(result, null, 2));
 
         // Handle auto-completed transaction
         if (result?.txid || result?.reveal_txid) {
           const txId = result.txid || result.reveal_txid;
-          console.log('[RemoveLiquidity] Transaction auto-completed, txid:', txId);
           return { success: true, transactionId: txId };
         }
 
         // Handle readyToSign state (need to sign PSBT manually)
         if (result?.readyToSign) {
-          console.log('[RemoveLiquidity] Got readyToSign, signing PSBT...');
           const readyToSign = result.readyToSign;
 
           // Convert PSBT to base64
-          let psbtBase64: string = extractPsbtBase64(readyToSign.psbt);
+          const psbtBase64: string = extractPsbtBase64(readyToSign.psbt);
 
-          // ============================================================================
-          // ⚠️ CRITICAL: PSBT PATCHING REMOVED - DO NOT RE-ADD ⚠️
-          // ============================================================================
-          // Date Removed: 2026-03-01 (same as useSwapMutation.ts fix)
-          // See useSwapMutation.ts:444-483 for full documentation.
-          //
-          // alkanes-rs SDK creates PSBTs with correct real addresses for browser wallets.
-          // patchPsbtForBrowserWallet was CORRUPTING these addresses.
-          // ============================================================================
-
-          console.log('[RemoveLiquidity] Using PSBT from SDK (addresses already correct, no patching needed)');
-
-          // ============================================================================
-          // Input patching for ALL browser wallet types
-          // ============================================================================
-          // Different wallets have different requirements:
-          // - Xverse: P2SH-P2WPKH (starts with '3'/'2'). Needs redeemScript injection.
-          // - UniSat/OKX: Single-address P2TR or P2WPKH. Need witnessUtxo.script patching.
-          // - OYL/Leather/Phantom: Native P2WPKH (bc1q). Need witnessUtxo.script patching.
-          //
-          // patchInputsOnly handles ALL these cases. It does NOT touch outputs (the SDK
-          // already creates correct output addresses when we pass actual addresses).
-          // ============================================================================
+          // patchInputsOnly required for ALL wallet types (browser + keystore).
+          // Browser wallets: fix tapInternalKey mismatch + inject P2SH redeemScript.
+          // Keystore: SDK embeds dummy witnessUtxo.script derived from the internal
+          // provider key, not the real taproot address. BIP-341 key-path signing
+          // compares toXOnly(tweakedPubkey) against script[2..34] — mismatch means
+          // tapKeySig is never written and finalizeAllInputs throws "cannot finalize".
+          // patchInputsOnly replaces witnessUtxo.script with the real derived script.
           let finalPsbtBase64 = psbtBase64;
           if (isBrowserWallet) {
             const result = patchInputsOnly({
@@ -271,9 +231,9 @@ export function useRemoveLiquidityMutation() {
               paymentPubkeyHex: account?.nativeSegwit?.pubkey,
             });
             finalPsbtBase64 = result.psbtBase64;
-            if (result.inputsPatched > 0) {
-              console.log(`[RemoveLiquidity] Patched ${result.inputsPatched} input(s) for browser wallet compatibility`);
-            }
+
+            const tapLeafStrip = stripBrowserTapLeafMetadata(finalPsbtBase64, btcNetwork);
+            finalPsbtBase64 = tapLeafStrip.psbtBase64;
           }
 
           // For keystore wallets, request user confirmation before signing
@@ -357,23 +317,35 @@ export function useRemoveLiquidityMutation() {
           //   - Keystore: taproot-only after our refactor — segwit derivation
           //     is disabled, signSegwitPsbt throws, and all PSBT inputs are
           //     already taproot. Direct taproot sign is sufficient.
-          console.log('[RemoveLiquidity] Signing PSBT with taproot key…');
           const signedPsbtBase64 = await signTaprootPsbt(finalPsbtBase64);
 
           // Finalize and extract transaction
           const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtBase64, { network: btcNetwork });
-          signedPsbt.finalizeAllInputs();
-
-          const tx = signedPsbt.extractTransaction();
+          let tx: bitcoin.Transaction;
+          try {
+            tx = signedPsbt.extractTransaction();
+          } catch {
+            const alreadyFinalized = signedPsbt.data.inputs.every(input =>
+              input.finalScriptWitness || input.finalScriptSig
+            );
+            if (!alreadyFinalized) {
+              signedPsbt.finalizeAllInputs();
+            }
+            tx = signedPsbt.extractTransaction();
+          }
           const txHex = tx.toHex();
           const txid = tx.getId();
 
-          console.log('[RemoveLiquidity] Transaction built:', txid);
-
           // Broadcast
           const broadcastTxid = await provider.broadcastTransaction(txHex);
-          console.log('[RemoveLiquidity] Broadcast successful:', broadcastTxid);
-
+          if (typeof window !== 'undefined') {
+            try {
+              const { pendingTxStore } = await import('@/lib/alkanes/pendingTxStore');
+              await pendingTxStore.add(txHex);
+            } catch (error) {
+              console.warn('[RemoveLiquidity] pendingTxStore.add failed:', error);
+            }
+          }
           return {
             success: true,
             transactionId: broadcastTxid || txid,
@@ -383,13 +355,11 @@ export function useRemoveLiquidityMutation() {
         // Handle complete state
         if (result?.complete) {
           const txId = result.complete?.reveal_txid || result.complete?.commit_txid;
-          console.log('[RemoveLiquidity] Complete, txid:', txId);
           return { success: true, transactionId: txId };
         }
 
         // Fallback
         const txId = result?.txid || result?.reveal_txid;
-        console.log('[RemoveLiquidity] Transaction ID:', txId);
         return { success: true, transactionId: txId };
 
       } catch (error) {
@@ -398,10 +368,10 @@ export function useRemoveLiquidityMutation() {
       }
     },
     onSuccess: (data) => {
-      console.log('[RemoveLiquidity] Success! txid:', data.transactionId);
-
       // Invalidate balance queries
       queryClient.invalidateQueries({ queryKey: ['sellable-currencies'] });
+      queryClient.invalidateQueries({ queryKey: ['wallet-utxo-cache'] });
+      queryClient.invalidateQueries({ queryKey: ['btc-balance-fast'] });
       queryClient.invalidateQueries({ queryKey: ['btc-balance'] });
       queryClient.invalidateQueries({ queryKey: ['dynamic-pools'] });
       queryClient.invalidateQueries({ queryKey: ['pool-stats'] });

@@ -120,8 +120,7 @@ export default function VaultShell() {
   // Vault detail view - full width with 1/2 + 1/2 grid
   if (selectedVault) {
     return (
-      <div className="flex w-full flex-col gap-6">
-        {/* Back Button */}
+      <div className="flex w-full flex-col gap-3 sm:gap-6">
         <button
           onClick={() => setSelectedVault(null)}
           className="flex items-center gap-2 text-[color:var(--sf-text)] hover:text-[color:var(--sf-primary)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
@@ -144,7 +143,7 @@ export default function VaultShell() {
 
   // Vault overview - full width
   return (
-    <div className="flex w-full flex-col gap-6">
+    <div className="flex w-full flex-col gap-3 sm:gap-6">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex lg:flex-col gap-3">
           {/* Filter Buttons - mobile/tablet only */}
           <div className="col-span-full mb-2 lg:hidden">

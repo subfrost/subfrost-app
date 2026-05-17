@@ -15,7 +15,6 @@ import { TransactionConfirmProvider } from '@/context/TransactionConfirmContext'
 import { NotificationProvider } from '@/context/NotificationContext';
 import { HeightPoller } from '@/queries/height';
 import { WalletStatePrewarmer } from '@/components/WalletStatePrewarmer';
-import { PendingTxHUD } from '@/components/PendingTxHUD';
 import { IndexerSyncProvider } from '@/context/IndexerSyncContext';
 import { IndexerSyncOverlay } from '@/components/IndexerSyncOverlay';
 import { DevnetProvider } from '@/context/DevnetContext';
@@ -23,39 +22,12 @@ import { DevnetBootModal, DevnetErrorModal } from '@/components/DevnetBootModal'
 import { DevnetControlPanel, DevnetNetworkBanner } from '@/components/DevnetControlPanel';
 import TransactionConfirmModal from '@/app/components/TransactionConfirmModal';
 import GlobalNotificationArea from '@/app/components/GlobalNotificationArea';
+import { DEMO_MODE_ENABLED } from '@/utils/demoMode';
 
 
-// Define Network type locally
 import type { Network } from '@/utils/constants';
-
-const NETWORK_STORAGE_KEY = 'subfrost_selected_network';
-
-// Detect network from localStorage, hostname, or env variable
-function detectNetwork(): Network {
-  if (typeof window === 'undefined') return 'mainnet';
-
-  // First check localStorage for user selection
-  // JOURNAL (2026-03-31): Added 'devnet' to the allowlist — it was missing, so
-  // selecting devnet in the balances page would be saved to localStorage but
-  // detectNetwork() would ignore it, reverting to mainnet on next load.
-  const stored = localStorage.getItem(NETWORK_STORAGE_KEY);
-  if (stored && ['mainnet', 'testnet', 'signet', 'regtest', 'regtest-local', 'qubitcoin-regtest', 'subfrost-regtest', 'oylnet', 'devnet'].includes(stored)) {
-    return stored as Network;
-  }
-
-  // Then check hostname
-  const host = window.location.host;
-  if (!process.env.NEXT_PUBLIC_NETWORK) {
-    if (host.startsWith('signet.') || host.startsWith('staging-signet.')) {
-      return 'signet';
-    } else if (host.startsWith('regtest.') || host.startsWith('staging-regtest.')) {
-      return 'subfrost-regtest';
-    }
-    // Default to mainnet for all other cases (including localhost)
-    return 'mainnet';
-  }
-  return process.env.NEXT_PUBLIC_NETWORK as Network;
-}
+import { detectNetwork, normalizeNetworkForDemo, NETWORK_STORAGE_KEY } from '@/utils/detectNetwork';
+export { detectNetwork };
 
 export default function Providers({ children }: { children: ReactNode }) {
   const [mounted, setMounted] = useState(false);
@@ -84,13 +56,20 @@ export default function Providers({ children }: { children: ReactNode }) {
 
   // Initialize network on mount and listen for storage changes
   useEffect(() => {
+    // Clear any stale devnet value from localStorage (legacy cleanup — devnet now uses sessionStorage)
+    if (localStorage.getItem(NETWORK_STORAGE_KEY) === 'devnet') {
+      localStorage.removeItem(NETWORK_STORAGE_KEY);
+    }
+    if (DEMO_MODE_ENABLED && sessionStorage.getItem(NETWORK_STORAGE_KEY) === 'devnet') {
+      sessionStorage.removeItem(NETWORK_STORAGE_KEY);
+    }
     const initialNetwork = detectNetwork();
     setNetwork(initialNetwork);
 
     // Listen for network changes from other tabs/components
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === NETWORK_STORAGE_KEY && e.newValue) {
-        setNetwork(e.newValue as Network);
+        setNetwork(normalizeNetworkForDemo(e.newValue as Network));
         // Invalidate all queries to refetch with new network
         queryClient.invalidateQueries();
       }
@@ -98,7 +77,7 @@ export default function Providers({ children }: { children: ReactNode }) {
 
     // Listen for custom events from same tab
     const handleNetworkChange = (e: CustomEvent) => {
-      const newNetwork = e.detail as Network;
+      const newNetwork = normalizeNetworkForDemo(e.detail as Network);
       setNetwork(newNetwork);
       // Invalidate all queries to refetch with new network
       queryClient.invalidateQueries();
@@ -121,8 +100,8 @@ export default function Providers({ children }: { children: ReactNode }) {
 
   return (
     <ProgressProvider
-      height="1px"
-      color="#00E5FF"
+      height="2px"
+      color="#FFFFFF"
       options={{ showSpinner: false }}
       shallowRouting
     >
@@ -136,7 +115,6 @@ export default function Providers({ children }: { children: ReactNode }) {
                     <HeightPoller network={network} />
                     <WalletProvider network={network}>
                       <WalletStatePrewarmer />
-                      <PendingTxHUD />
                       <IndexerSyncProvider>
                         <IndexerSyncOverlay />
                         <TransactionConfirmProvider>

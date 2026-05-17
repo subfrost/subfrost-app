@@ -79,10 +79,8 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useWallet } from '@/context/WalletContext';
 import { useTransactionConfirm } from '@/context/TransactionConfirmContext';
-import { useIndexerSync } from '@/context/IndexerSyncContext';
 import { useSandshrewProvider } from './useSandshrewProvider';
-import { useWalletUtxoCache, useSyncStatus } from './useWalletUtxoCache';
-import { waitForIndexerSync } from '@/lib/alkanes/waitForIndexerSync';
+import { useWalletUtxoCache } from './useWalletUtxoCache';
 import { getConfig } from '@/utils/getConfig';
 import { buildPlanFromTx } from '@/lib/alkanes/planBuilder';
 import * as bitcoin from 'bitcoinjs-lib';
@@ -104,30 +102,15 @@ export function useWrapMutation() {
   const provider = useSandshrewProvider();
   const queryClient = useQueryClient();
   const { requestConfirmation } = useTransactionConfirm();
-  const indexerSync = useIndexerSync();
   const { FRBTC_ALKANE_ID } = getConfig(network);
   const { data: premiumData } = useFrbtcPremium();
   // Pre-warmed UTXO cache + sync gate. Same perf-fix pattern as the
   // other alkane mutation hooks — feeds clean BTC payment_utxos and
   // refuses submission while metashrew is behind bitcoind.
   const utxoCache = useWalletUtxoCache();
-  const syncStatus = useSyncStatus();
-
   return useMutation({
     mutationFn: async (wrapData: WrapTransactionBaseData) => {
       if (!isConnected) throw new Error('Wallet not connected');
-      const isLocal = ['devnet', 'regtest-local', 'qubitcoin-regtest'].includes(network ?? '');
-      if (!isLocal && syncStatus.metashrewHeight > 0 && !syncStatus.inSync) {
-        indexerSync.start('Preparing wrap');
-        try {
-          await waitForIndexerSync({
-            network: network ?? 'mainnet',
-            onProgress: (p) => indexerSync.update(p),
-          });
-        } finally {
-          indexerSync.finish();
-        }
-      }
       // Ensure browser wallet session is active before building PSBT
       if (walletType === 'browser') {
         const { ensureWalletSession } = await import('@/lib/wallet/browserWalletSigning');
@@ -207,6 +190,9 @@ export function useWrapMutation() {
           mineEnabled: false,
           // Pre-warmed clean BTC UTXOs — skips the WASM coinselect fanout.
           cachedUtxos: utxoCache.utxos,
+          // Pin to metashrew height we already know — SDK skips its
+          // waitForIndexer poll loop. Mirrors subfrost-mobile.
+          maxIndexedHeight: utxoCache.height,
         });
 
         console.log('[WRAP] Execute result:', result);

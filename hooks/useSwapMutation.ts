@@ -152,10 +152,8 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import BigNumber from 'bignumber.js';
 import { useWallet } from '@/context/WalletContext';
 import { useSandshrewProvider } from '@/hooks/useSandshrewProvider';
-import { useWalletUtxoCache, useSyncStatus } from '@/hooks/useWalletUtxoCache';
+import { useWalletUtxoCache } from '@/hooks/useWalletUtxoCache';
 import { useTransactionConfirm } from '@/context/TransactionConfirmContext';
-import { useIndexerSync } from '@/context/IndexerSyncContext';
-import { waitForIndexerSync } from '@/lib/alkanes/waitForIndexerSync';
 import { getConfig } from '@/utils/getConfig';
 import { getTokenSymbol } from '@/lib/alkanes-client';
 import { FRBTC_WRAP_FEE_PER_1000 } from '@/constants/alkanes';
@@ -173,6 +171,10 @@ import { buildSwapProtostone, buildSwapExactOutputProtostone, buildSwapInputRequ
 import { FACTORY_SWAP_OPCODE } from '@/lib/alkanes/constants';
 import { uint8ArrayToBase64, getBitcoinNetwork, extractPsbtBase64 } from '@/lib/alkanes/helpers';
 import { buildPlanFromTx } from '@/lib/alkanes/planBuilder';
+import {
+  broadcastTransaction as broadcastRawTransaction,
+  broadcastTransactions as broadcastRawTransactions,
+} from '@/lib/alkanes/rpc';
 import type { PlanAlkaneEntry } from '@/context/TransactionConfirmContext';
 
 bitcoin.initEccLib(ecc);
@@ -232,14 +234,11 @@ export function useSwapMutation() {
   const provider = useSandshrewProvider();
   const queryClient = useQueryClient();
   const { requestConfirmation } = useTransactionConfirm();
-  const indexerSync = useIndexerSync();
   const { FRBTC_ALKANE_ID, ALKANE_FACTORY_ID } = getConfig(network);
   // Pre-warmed UTXO snapshot — passed into alkanesExecuteTyped so the
   // SDK skips its internal BTC-fee fanout. Per-click latency win on
   // wallets with many UTXOs (user-reported, 2026-05-05).
   const utxoCache = useWalletUtxoCache();
-  const syncStatus = useSyncStatus();
-
   // Fetch dynamic frBTC wrap/unwrap fees
   const { data: premiumData } = useFrbtcPremium();
   const wrapFee = premiumData?.wrapFeePerThousand ?? FRBTC_WRAP_FEE_PER_1000;
@@ -251,21 +250,6 @@ export function useSwapMutation() {
         console.error('[useSwapMutation] ❌ Wallet not connected');
         throw new Error('Wallet not connected');
       }
-      // Sync gate — refuse to submit while metashrew is behind bitcoind.
-      // Skipped on local devnet/regtest where the user mines blocks.
-      const isLocalNetwork = ['devnet', 'regtest-local', 'qubitcoin-regtest'].includes(network ?? '');
-      if (!isLocalNetwork && syncStatus.metashrewHeight > 0 && !syncStatus.inSync) {
-        indexerSync.start('Preparing swap');
-        try {
-          await waitForIndexerSync({
-            network: network ?? 'mainnet',
-            onProgress: (p) => indexerSync.update(p),
-          });
-        } finally {
-          indexerSync.finish();
-        }
-      }
-
       // Ensure browser wallet session is active before building PSBT
       if (walletType === 'browser') {
         const { ensureWalletSession } = await import('@/lib/wallet/browserWalletSigning');
@@ -417,30 +401,41 @@ export function useSwapMutation() {
         // The retry-on-error block below remains as a safety net for the
         // case where the indexer takes longer than waitForIndexer's own
         // internal budget.
+        const wantsSplit = (swapData as any).splitTransactions === true;
+        const useAutoConfirm = isKeystoreWallet;
+
         const buildExecuteOpts = () => ({
           txContext,
           // Support overrides for atomic wrap+swap (SwapShell passes custom protostones/addresses)
           inputRequirements: (swapData as any).overrideInputRequirements || inputRequirements,
           protostones: (swapData as any).overrideProtostones || protostone,
           feeRate: swapData.feeRate,
-          autoConfirm: isKeystoreWallet,
+          // Browser wallets must stay on the unsigned-PSBT path so the user
+          // gets wallet signing prompts. Keystore wallets can use SDK-side
+          // signing/broadcasting via execute_full.
+          autoConfirm: useAutoConfirm,
           toAddresses: (swapData as any).overrideToAddresses || toAddresses,
           network,
           // Pre-warmed UTXO snapshot. alkanesExecuteTyped derives clean
           // BTC payment_utxos from this and skips the WASM's internal
           // fanout. Click-to-popup latency win.
           cachedUtxos: utxoCache.utxos,
+          // Tell the SDK exactly which metashrew height our cache reflects.
+          // It will filter coin selection to UTXOs at height ≤ this, so
+          // there's no need to wait for metashrew to catch up to bitcoind
+          // — the SDK skips its waitForIndexer poll loop entirely. Same
+          // pattern subfrost-mobile uses (see subfrost-mobile-core
+          // ::pending::utxo_eligible_for_indexed_height).
+          maxIndexedHeight: utxoCache.height,
           // Opt-in CPFP-chained 2-tx flow when caller knows the combined wrap
           // + execute fuel cost would exceed the per-tx floor. The SDK splits
           // the wrap into Tx A and the execute into Tx B; each gets its own
           // 3.5M MINIMUM_FUEL budget. Required for atomic BTC→Token swaps on
           // mainnet where block-fuel-share starvation is real.
-          // `splitTransactions` is honored at runtime by alkanesExecuteFull's
-          // options JSON (see alkanes-rs ts-sdk/src/provider/index.ts), but
-          // the SDK's hand-maintained index.d.ts hasn't surfaced the prop on
-          // alkanesExecuteTyped's param type yet. Cast `as any` until the SDK
-          // d.ts is regenerated; the runtime path is unchanged.
-          splitTransactions: (swapData as any).splitTransactions === true,
+          // `splitTransactions` is honored by the WASM provider through the
+          // options JSON. Keystore reaches that through execute_full; browser
+          // wallets must still receive unsigned PSBTs for wallet prompts.
+          splitTransactions: wantsSplit,
         });
 
         const isIndexerSyncError = (e: unknown): boolean => {
@@ -470,6 +465,135 @@ export function useSwapMutation() {
           }
         }
 
+        const broadcastSignedTx = async (txHex: string, fallbackTxid: string): Promise<string> => {
+          let broadcastTxid: string;
+          try {
+            broadcastTxid = await broadcastRawTransaction(network, txHex) || fallbackTxid;
+          } catch (directErr) {
+            console.warn('[useSwapMutation] sendrawtransaction broadcast failed, falling back to provider.broadcastTransaction:', directErr);
+            broadcastTxid = await provider.broadcastTransaction(txHex) || fallbackTxid;
+          }
+          if (typeof window !== 'undefined') {
+            try {
+              const { pendingTxStore } = await import('@/lib/alkanes/pendingTxStore');
+              await pendingTxStore.add(txHex);
+            } catch (error) {
+              console.warn('[useSwapMutation] pendingTxStore.add failed:', error);
+            }
+          }
+          return broadcastTxid;
+        };
+
+        const signPsbtToTx = async (rawPsbt: unknown): Promise<{ txHex: string; txid: string }> => {
+          let psbtBase64 = extractPsbtBase64(rawPsbt);
+          if (isBrowserWallet) {
+            if (!taprootAddress) {
+              throw new Error(
+                'Connected wallet has no taproot address. Switch your wallet ' +
+                'extension to Taproot (P2TR) mode and reconnect — alkanes only ' +
+                'live at P2TR addresses.'
+              );
+            }
+            const patchResult = patchInputsOnly({
+              psbtBase64,
+              network: btcNetwork,
+              taprootAddress,
+              segwitAddress,
+              paymentPubkeyHex: account?.nativeSegwit?.pubkey,
+            });
+            psbtBase64 = patchResult.psbtBase64;
+          }
+
+          const signedPsbtBase64 = await signTaprootPsbt(psbtBase64);
+          const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtBase64, { network: btcNetwork });
+          const alreadyFinalized = signedPsbt.data.inputs.every(input =>
+            input.finalScriptWitness || input.finalScriptSig
+          );
+          if (!alreadyFinalized) {
+            signedPsbt.finalizeAllInputs();
+          }
+          const tx = signedPsbt.extractTransaction();
+          const txHex = tx.toHex();
+          return { txHex, txid: tx.getId() };
+        };
+
+        const signAndBroadcastPsbt = async (rawPsbt: unknown): Promise<string> => {
+          const tx = await signPsbtToTx(rawPsbt);
+          return await broadcastSignedTx(tx.txHex, tx.txid);
+        };
+
+        const broadcastSignedPackage = async (
+          txs: Array<{ txHex: string; txid: string }>,
+        ): Promise<string[]> => {
+          const txids = await broadcastRawTransactions(network, txs.map((tx) => tx.txHex));
+          if (typeof window !== 'undefined') {
+            try {
+              const { pendingTxStore } = await import('@/lib/alkanes/pendingTxStore');
+              await Promise.all(txs.map((tx) => pendingTxStore.add(tx.txHex)));
+            } catch (error) {
+              console.warn('[useSwapMutation] pendingTxStore.add package failed:', error);
+            }
+          }
+          return txs.map((tx, index) => txids[index] || tx.txid);
+        };
+
+        const getSplitPsbts = (value: any): unknown[] => {
+          const arrayCandidates = [
+            value?.readyToSign?.psbts,
+            value?.ready_to_sign?.psbts,
+            value?.readyToSignSplit?.psbts,
+            value?.ready_to_sign_split?.psbts,
+            value?.split?.psbts,
+            value?.psbts,
+          ];
+          for (const candidate of arrayCandidates) {
+            if (Array.isArray(candidate) && candidate.length >= 2) {
+              return candidate;
+            }
+          }
+
+          const parent =
+            value?.readyToSign?.split_psbt ??
+            value?.ready_to_sign?.split_psbt ??
+            value?.split_psbt ??
+            value?.parent_psbt ??
+            value?.parentPsbt ??
+            value?.wrap_psbt ??
+            value?.wrapPsbt;
+          const child =
+            (parent ? (value?.readyToSign?.psbt ?? value?.ready_to_sign?.psbt) : undefined) ??
+            value?.readyToSign?.execute_psbt ??
+            value?.ready_to_sign?.execute_psbt ??
+            value?.execute_psbt ??
+            value?.child_psbt ??
+            value?.childPsbt ??
+            value?.swap_psbt ??
+            value?.swapPsbt;
+          return parent && child ? [parent, child] : [];
+        };
+
+        const splitPsbts = getSplitPsbts(result);
+        if (splitPsbts.length >= 2) {
+          // CPFP split transactions must be pre-signed first and submitted as
+          // one ordered package. Broadcasting the parent alone can fail mempool
+          // policy because the child carries the package fee.
+          const signedPackage = [
+            await signPsbtToTx(splitPsbts[0]),
+            await signPsbtToTx(splitPsbts[1]),
+          ];
+          const [wrapTxId, txId] = await broadcastSignedPackage(signedPackage);
+          return {
+            success: true,
+            transactionId: txId,
+            wrapTxId,
+            frbtcUnwrapTxId: undefined,
+          } as {
+            success: boolean;
+            transactionId?: string;
+            wrapTxId?: string;
+            frbtcUnwrapTxId?: string;
+          };
+        }
 
 
         // Check if SDK auto-completed the transaction.
@@ -502,47 +626,9 @@ export function useSwapMutation() {
           // The PSBT comes as Uint8Array from serde_wasm_bindgen (or as object with indices)
           const psbtBase64 = extractPsbtBase64(readyToSign.psbt);
 
-          // Helper to classify script type from raw bytes
-          const classifyScript = (script: Uint8Array | Buffer): string => {
-            const s = Buffer.from(script);
-            if (s.length === 34 && s[0] === 0x51 && s[1] === 0x20) return 'P2TR';
-            if (s.length === 22 && s[0] === 0x00 && s[1] === 0x14) return 'P2WPKH';
-            if (s.length === 23 && s[0] === 0xa9 && s[1] === 0x14 && s[22] === 0x87) return 'P2SH';
-            if (s.length === 34 && s[0] === 0x00 && s[1] === 0x20) return 'P2WSH';
-            return `UNKNOWN(len=${s.length},op=${s[0]?.toString(16)})`;
-          };
-
-          const logSwapInputDetails = (psbt: bitcoin.Psbt, label: string) => {
-            psbt.data.inputs.forEach((input, idx) => {
-              const ws = input.witnessUtxo?.script;
-              const scriptHex = ws ? Buffer.from(ws).toString('hex') : 'NONE';
-              const scriptType = ws ? classifyScript(ws) : 'NO_WITNESS_UTXO';
-            });
-            psbt.txOutputs.forEach((out, idx) => {
-              try {
-                const addr = bitcoin.address.fromOutputScript(out.script, btcNetwork);
-              } catch {
-              }
-            });
-          };
-
-          // DIAGNOSTIC: Log PSBT state before patching
-          {
-            const tempPsbt = bitcoin.Psbt.fromBase64(psbtBase64, { network: btcNetwork });
-            logSwapInputDetails(tempPsbt, 'BEFORE PATCHING');
-          }
-
-          // ============================================================================
-          // Input patching for ALL browser wallet types
-          // ============================================================================
-          // Different wallets have different requirements:
-          // - Xverse: P2SH-P2WPKH (starts with '3'/'2'). Needs redeemScript injection.
-          // - UniSat/OKX: Single-address P2TR or P2WPKH. Need witnessUtxo.script patching.
-          // - OYL/Leather/Phantom: Native P2WPKH (bc1q). Need witnessUtxo.script patching.
-          //
-          // patchInputsOnly handles ALL these cases. It does NOT touch outputs (the SDK
-          // already creates correct output addresses when we pass actual addresses).
-          // ============================================================================
+          // Input patching required for browser wallets AND OYL's P2SH-P2WPKH inputs.
+          // OYL's nativeSegwit.pubkey may be empty on first load; the P2SH recovery
+          // below handles that case by extracting the pubkey from partialSig after signing.
           let finalPsbtBase64 = psbtBase64;
           if (isBrowserWallet) {
             if (!taprootAddress) {
@@ -560,37 +646,6 @@ export function useSwapMutation() {
               paymentPubkeyHex: account?.nativeSegwit?.pubkey,
             });
             finalPsbtBase64 = result.psbtBase64;
-            if (result.inputsPatched > 0) {
-            }
-          }
-
-          {
-            const tempPsbt = bitcoin.Psbt.fromBase64(finalPsbtBase64, { network: btcNetwork });
-            tempPsbt.data.inputs.forEach((inp, idx) => {
-              if (inp.witnessUtxo) {
-                try {
-                  const addr = bitcoin.address.fromOutputScript(
-                    Buffer.from(inp.witnessUtxo.script),
-                    btcNetwork
-                  );
-                  const hasRedeemScript = inp.redeemScript ? ' [has redeemScript]' : '';
-                } catch (e) {
-                }
-              } else {
-              }
-            });
-            tempPsbt.txOutputs.forEach((out, idx) => {
-              try {
-                const addr = bitcoin.address.fromOutputScript(out.script, btcNetwork);
-              } catch (e) {
-              }
-            });
-          }
-
-          // DIAGNOSTIC: Log PSBT state after patching
-          {
-            const tempPsbt = bitcoin.Psbt.fromBase64(psbtBase64, { network: btcNetwork });
-            logSwapInputDetails(tempPsbt, 'AFTER PATCHING');
           }
 
           // For keystore wallets, request user confirmation before signing.
@@ -702,27 +757,10 @@ export function useSwapMutation() {
           // ============================================================================
           // Single signing path. Browser wallets sign all input types via the wallet
           // adapter; keystore is taproot-only (BIP86) — `signSegwitPsbt` throws.
-          let signedPsbtBase64: string;
-          const signStartTime = Date.now();
-          try {
-            signedPsbtBase64 = await signTaprootPsbt(finalPsbtBase64);
-          } catch (signErr: any) {
-            console.error('[useSwapMutation][OYL-DEBUG] ===== signTaprootPsbt FAILED =====');
-            console.error('[useSwapMutation][OYL-DEBUG] Error:', signErr?.message || signErr);
-            console.error('[useSwapMutation][OYL-DEBUG] Error type:', signErr?.constructor?.name);
-            console.error('[useSwapMutation][OYL-DEBUG] Full error:', signErr);
-            throw signErr;
-          }
+          const signedPsbtBase64 = await signTaprootPsbt(finalPsbtBase64);
 
           // Parse the signed PSBT, finalize, and extract the raw transaction
           const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtBase64, { network: btcNetwork });
-
-          // DIAGNOSTIC: Log per-input state after signing
-          signedPsbt.data.inputs.forEach((inp, idx) => {
-            const ws = inp.witnessUtxo?.script;
-            const scriptType = ws ? classifyScript(ws) : 'NO_WITNESS_UTXO';
-            const scriptHex = ws ? Buffer.from(ws).toString('hex') : 'NONE';
-          });
 
           // Check if already finalized by the wallet
           const alreadyFinalized = signedPsbt.data.inputs.every(input =>
@@ -730,22 +768,8 @@ export function useSwapMutation() {
           );
 
           // Finalize all inputs
-          if (alreadyFinalized) {
-          } else {
-            try {
-              signedPsbt.finalizeAllInputs();
-            } catch (e: any) {
-              console.error('[useSwapMutation] Finalization error:', e.message);
-              // Dump per-input state for debugging
-              console.error('[SWAP-DIAG] === FINALIZATION FAILURE DUMP ===');
-              signedPsbt.data.inputs.forEach((inp, idx) => {
-                const ws = inp.witnessUtxo?.script;
-                const sType = ws ? classifyScript(ws) : 'NO_WITNESS_UTXO';
-                const sHex = ws ? Buffer.from(ws).toString('hex') : 'NONE';
-                console.error(`  Input ${idx}: type=${sType} script=${sHex} redeemScript=${inp.redeemScript ? Buffer.from(inp.redeemScript).toString('hex') : 'NONE'} tapKeySig=${!!inp.tapKeySig} partialSig=${inp.partialSig?.length || 0} finalScriptWitness=${!!inp.finalScriptWitness}`);
-              });
-              throw e;
-            }
+          if (!alreadyFinalized) {
+            signedPsbt.finalizeAllInputs();
           }
 
           // Extract the raw transaction
@@ -755,7 +779,7 @@ export function useSwapMutation() {
 
 
           // Broadcast the transaction
-          const broadcastTxid = await provider.broadcastTransaction(txHex);
+          const broadcastTxid = await broadcastSignedTx(txHex, txid);
 
           if (txid !== broadcastTxid) {
             console.warn('[useSwapMutation] WARNING: Computed txid !== broadcast txid!');
@@ -797,14 +821,6 @@ export function useSwapMutation() {
         console.error('[useSwapMutation] No txid found in result:', result);
         throw new Error('Swap execution did not return a transaction ID');
       } catch (executeError: any) {
-        console.error('═══════════════════════════════════════════════════════════════');
-        console.error('[useSwapMutation] ████ EXECUTE ERROR ████');
-        console.error('═══════════════════════════════════════════════════════════════');
-        console.error('[useSwapMutation] Error message:', executeError?.message);
-        console.error('[useSwapMutation] Error name:', executeError?.name);
-        console.error('[useSwapMutation] Error stack:', executeError?.stack);
-        console.error('[useSwapMutation] Full error:', executeError);
-        console.error('═══════════════════════════════════════════════════════════════');
         throw executeError;
       }
     },
@@ -812,6 +828,8 @@ export function useSwapMutation() {
 
       // Invalidate all balance-related queries to refresh UI
       queryClient.invalidateQueries({ queryKey: ['sellable-currencies'] });
+      queryClient.invalidateQueries({ queryKey: ['wallet-utxo-cache'] });
+      queryClient.invalidateQueries({ queryKey: ['btc-balance-fast'] });
       queryClient.invalidateQueries({ queryKey: ['btc-balance'] });
       queryClient.invalidateQueries({ queryKey: ['frbtc-premium'] });
       queryClient.invalidateQueries({ queryKey: ['dynamic-pools'] });

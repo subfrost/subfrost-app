@@ -1,18 +1,35 @@
 /**
  * Wallet List Picker Component
- * 
+ *
  * Shows a list of wallet backups from user's Google Drive.
  * Allows user to select a wallet to restore.
+ *
+ * 2026-05-17 — DELETE PATH REMOVED.
+ * Previously this component rendered an invisible trash-icon button nested
+ * inside each wallet-select button (opacity-0 group-hover:opacity-100), with
+ * the only safeguard being a native `confirm()` dialog where Enter == OK.
+ * A real user (mork1e, 2026-05-17) accidentally tapped/Entered through it and
+ * thought he'd lost his $5k wallet — recovered only because the encrypted
+ * keystore also persisted to browser indexeddb.
+ *
+ * Per flex's directive: subfrost-app has no business deleting files out of
+ * the user's Google Drive. If users want to delete a backup they can do it
+ * in drive.google.com themselves. The "View in Drive" link (ExternalLink
+ * icon) below opens the folder directly — that's the only file-management
+ * surface this app exposes from now on.
+ *
+ * Don't re-introduce a deleteWalletBackup() call here. There is no UX
+ * mitigation strong enough to make destroying a user's only wallet copy
+ * with a single misclick acceptable.
  */
 
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Loader2, Cloud, Calendar, Info, ExternalLink, Trash2 } from 'lucide-react';
+import { Loader2, Cloud, Calendar, Info, ExternalLink } from 'lucide-react';
 import type { WalletBackupInfo } from '@/utils/clientSideDrive';
 import {
   listWalletBackups,
-  deleteWalletBackup,
   formatBackupDate,
   getRelativeTime
 } from '@/utils/clientSideDrive';
@@ -28,7 +45,6 @@ export function WalletListPicker({ onSelectWallet, onCancel }: WalletListPickerP
   const [wallets, setWallets] = useState<WalletBackupInfo[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   // Load wallets on mount
   useEffect(() => {
@@ -38,11 +54,11 @@ export function WalletListPicker({ onSelectWallet, onCancel }: WalletListPickerP
   const loadWallets = async () => {
     setIsLoading(true);
     setError(null);
-    
+
     try {
       const backups = await listWalletBackups();
       setWallets(backups);
-      
+
       if (backups.length === 0) {
         setError('No wallet backups found in your Google Drive.');
       }
@@ -51,27 +67,6 @@ export function WalletListPicker({ onSelectWallet, onCancel }: WalletListPickerP
       setError(err instanceof Error ? err.message : 'Failed to load wallets from Google Drive');
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  const handleDelete = async (e: React.MouseEvent, folderId: string) => {
-    e.stopPropagation(); // Don't trigger wallet selection
-    
-    if (!confirm(t('walletPicker.confirmDelete'))) {
-      return;
-    }
-
-    setDeletingId(folderId);
-    
-    try {
-      await deleteWalletBackup(folderId);
-      // Remove from list
-      setWallets(prev => prev.filter(w => w.folderId !== folderId));
-    } catch (err) {
-      console.error('Failed to delete wallet:', err);
-      alert(t('walletPicker.deleteFailed'));
-    } finally {
-      setDeletingId(null);
     }
   };
 
@@ -133,8 +128,7 @@ export function WalletListPicker({ onSelectWallet, onCancel }: WalletListPickerP
           <button
             key={wallet.folderId}
             onClick={() => onSelectWallet(wallet)}
-            disabled={deletingId === wallet.folderId}
-            className="w-full text-left p-4 rounded-xl border border-[color:var(--sf-outline)] hover:border-blue-500 bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none group disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full text-left p-4 rounded-xl border border-[color:var(--sf-outline)] hover:border-blue-500 bg-[color:var(--sf-primary)]/5 hover:bg-[color:var(--sf-primary)]/10 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none group"
           >
             <div className="flex items-start justify-between">
               {/* Wallet Info */}
@@ -167,9 +161,11 @@ export function WalletListPicker({ onSelectWallet, onCancel }: WalletListPickerP
                 </div>
               </div>
 
-              {/* Actions */}
+              {/* Actions — view-only. We deliberately do NOT render a delete
+                  button here; see file header comment for the incident that
+                  removed it. If users want to delete a backup, they do it in
+                  drive.google.com directly via this "View in Drive" link. */}
               <div className="flex items-center space-x-2 ml-4">
-                {/* View in Drive */}
                 <a
                   href={wallet.folderUrl}
                   target="_blank"
@@ -180,20 +176,6 @@ export function WalletListPicker({ onSelectWallet, onCancel }: WalletListPickerP
                 >
                   <ExternalLink className="h-4 w-4" />
                 </a>
-
-                {/* Delete */}
-                <button
-                  onClick={(e) => handleDelete(e, wallet.folderId)}
-                  disabled={deletingId === wallet.folderId}
-                  className="p-2 rounded hover:bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-text)]/40 hover:text-red-500 dark:hover:text-red-400 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none opacity-0 group-hover:opacity-100 disabled:opacity-100"
-                  title={t('walletPicker.deleteBackup')}
-                >
-                  {deletingId === wallet.folderId ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Trash2 className="h-4 w-4" />
-                  )}
-                </button>
               </div>
             </div>
           </button>

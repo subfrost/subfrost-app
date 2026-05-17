@@ -226,8 +226,11 @@ test.describe.serial('Carbine CLOB — Orderbook User Stories', () => {
     page = context.pages()[0] ?? await context.newPage();
     page.on('dialog', d => d.accept());
 
+    // detectNetwork() reads devnet from sessionStorage (tab-scoped), not localStorage.
+    // localStorage only accepts 'mainnet'. Must use sessionStorage for devnet.
     await page.addInitScript(() => {
-      localStorage.setItem('subfrost_selected_network', 'devnet');
+      sessionStorage.setItem('subfrost_selected_network', 'devnet');
+      localStorage.removeItem('subfrost_selected_network');
     });
 
     page.on('console', msg => {

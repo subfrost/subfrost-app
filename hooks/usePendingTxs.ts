@@ -39,11 +39,24 @@
 
 'use client';
 
-import { useEffect, useMemo, useState, useCallback } from 'react';
+import { useMemo, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useWallet } from '@/context/WalletContext';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { pendingTxStore } from '@/lib/alkanes/pendingTxStore';
+import { getEsploraTx } from '@/lib/alkanes/rpc';
+
+const STALE_UNKNOWN_TX_MS_DEFAULT = 30 * 60 * 1000;
+const STALE_UNKNOWN_TX_MS_FAST = 2 * 60 * 1000;
+const wasmPendingFirstSeen = new Map<string, number>();
+const staleSuppressedTxids = new Set<string>();
+
+function staleUnknownTxMs(network?: string | null): number {
+  const n = (network ?? '').toLowerCase();
+  return n.includes('regtest') || n.includes('devnet')
+    ? STALE_UNKNOWN_TX_MS_FAST
+    : STALE_UNKNOWN_TX_MS_DEFAULT;
+}
 
 // Phase 3-lite: alkane delta prediction.
 //
@@ -188,22 +201,27 @@ export function usePendingTxs(): UsePendingTxsResult {
   // broadcast through `alkanesExecuteTyped` auto-pushes — wrap, swap,
   // addLiquidity, alkane-send, etc.). Merge + dedupe by txid.
   const { data, isLoading, refetch } = useQuery<string[]>({
-    queryKey: ['pendingTxs', !!provider],
+    queryKey: ['pendingTxs', network, account?.taproot?.address, account?.nativeSegwit?.address, !!provider],
     enabled: typeof window !== 'undefined' && ourAddresses.size > 0,
     queryFn: async () => {
+      const now = Date.now();
+      const staleAfterMs = staleUnknownTxMs(network);
       const seen = new Set<string>();
-      const merged: string[] = [];
+      const merged: Array<{ txid: string; hex: string; addedAt: number }> = [];
       try {
-        const idbList = await pendingTxStore.list();
-        for (const hex of idbList) {
+        const idbList = await pendingTxStore.listRecords();
+        for (const record of idbList) {
           try {
+            const hex = record.hex;
             const txid = bitcoin.Transaction.fromHex(hex).getId();
-            if (!seen.has(txid)) {
+            if (!staleSuppressedTxids.has(txid) && !seen.has(txid)) {
               seen.add(txid);
-              merged.push(hex);
+              merged.push({ txid, hex, addedAt: record.addedAt || now });
             }
           } catch {
-            /* skip malformed */
+            if (record.txid) {
+              void pendingTxStore.remove(record.txid);
+            }
           }
         }
       } catch (e) {
@@ -217,9 +235,11 @@ export function usePendingTxs(): UsePendingTxsResult {
               if (typeof hex !== 'string') continue;
               try {
                 const txid = bitcoin.Transaction.fromHex(hex).getId();
-                if (!seen.has(txid)) {
+                if (!staleSuppressedTxids.has(txid) && !seen.has(txid)) {
                   seen.add(txid);
-                  merged.push(hex);
+                  const addedAt = wasmPendingFirstSeen.get(txid) ?? now;
+                  wasmPendingFirstSeen.set(txid, addedAt);
+                  merged.push({ txid, hex, addedAt });
                 }
               } catch {
                 /* skip malformed */
@@ -230,11 +250,73 @@ export function usePendingTxs(): UsePendingTxsResult {
           console.warn('[usePendingTxs] wasm list failed:', e);
         }
       }
-      return merged;
+
+      const confirmedTxids: string[] = [];
+      const staleUnknownTxids: string[] = [];
+      const statuses = await Promise.all(
+        merged.map(async ({ txid, hex, addedAt }) => {
+          const tx = await getEsploraTx(network ?? 'mainnet', txid);
+          if (tx?.status?.confirmed) {
+            staleSuppressedTxids.delete(txid);
+            return { txid, hex, confirmed: true, staleUnknown: false };
+          } else if (tx) {
+            staleSuppressedTxids.delete(txid);
+            return { txid, hex, confirmed: false, staleUnknown: false };
+          } else if (!tx && (network ?? '') === 'devnet') {
+            // On devnet the esplora index may not surface the tx at all once mined
+            // (autoConfirm flow). Treat a null response as confirmed so the pending
+            // entry is evicted rather than lingering indefinitely.
+            return { txid, hex, confirmed: true, staleUnknown: false };
+          } else if (!tx && now - addedAt > staleAfterMs) {
+            return { txid, hex, confirmed: false, staleUnknown: true };
+          } else {
+            return { txid, hex, confirmed: false, staleUnknown: false };
+          }
+        }),
+      );
+      const stillPending = statuses
+        .filter((status) => !status.confirmed && !status.staleUnknown)
+        .map((status) => status.hex);
+      confirmedTxids.push(
+        ...statuses
+          .filter((status) => status.confirmed)
+          .map((status) => status.txid),
+      );
+      staleUnknownTxids.push(
+        ...statuses
+          .filter((status) => status.staleUnknown)
+          .map((status) => status.txid),
+      );
+
+      const evictedTxids = [...confirmedTxids, ...staleUnknownTxids];
+
+      if (evictedTxids.length > 0) {
+        await pendingTxStore.evict(evictedTxids);
+        if (provider && typeof (provider as any).pendingTxStoreEvict === 'function') {
+          try {
+            await (provider as any).pendingTxStoreEvict(evictedTxids);
+          } catch (e) {
+            console.warn('[usePendingTxs] wasm eviction failed:', e);
+          }
+        }
+        for (const txid of evictedTxids) {
+          wasmPendingFirstSeen.delete(txid);
+        }
+        for (const txid of staleUnknownTxids) {
+          staleSuppressedTxids.add(txid);
+        }
+        queryClient.invalidateQueries({ queryKey: ['pendingTxsPredict'] });
+        queryClient.invalidateQueries({ queryKey: ['btc-balance-fast'] });
+        queryClient.invalidateQueries({ queryKey: ['enriched-wallet'] });
+        queryClient.invalidateQueries({ queryKey: ['alkane-balances'] });
+        queryClient.invalidateQueries({ queryKey: ['tx-history'] });
+      }
+
+      return stillPending;
     },
     staleTime: 5_000, // re-poll occasionally so newly-broadcast WASM-side txs surface
     refetchInterval: 8_000,
-    refetchOnWindowFocus: false,
+    refetchOnWindowFocus: 'always',
   });
 
   // BTC-side summary (output-only — see decodeHex docs).

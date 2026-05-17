@@ -15,6 +15,7 @@ interface Props {
   baseTokenId?: string;
   quoteTokenId?: string;
   onOrderSelect?: (order: SelectedOrder) => void;
+  hideOrderbook?: boolean;
 }
 
 export default function MobileDataPanels({
@@ -24,6 +25,7 @@ export default function MobileDataPanels({
   baseTokenId,
   quoteTokenId,
   onOrderSelect,
+  hideOrderbook = false,
 }: Props) {
   const { t } = useTranslation();
   const [chartOpen, setChartOpen] = useState(false);
@@ -68,42 +70,44 @@ export default function MobileDataPanels({
         </div>
       </div>
 
-      <div className="sf-panel overflow-visible">
-        <button
-          type="button"
-          onClick={() => setOrderbookOpen(!orderbookOpen)}
-          className="sf-collapsible-trigger"
-        >
-          <span>{orderbookOpen ? t('swap.hideOrderBook') : t('swap.showOrderBook')}</span>
-          <ChevronDown
-            size={14}
-            className={`transition-transform duration-300 ${orderbookOpen ? 'rotate-180' : ''}`}
-          />
-        </button>
-        <div
-          className={`transition-all duration-300 ease-in-out ${
-            orderbookOpen
-              ? 'max-h-[600px] opacity-100 overflow-visible'
-              : 'max-h-0 opacity-0 overflow-hidden'
-          }`}
-        >
-          <div className="px-1 pb-3">
-            <div className="h-[460px]">
-              <Suspense
-                fallback={
-                  <div className="animate-pulse h-full bg-[color:var(--sf-primary)]/10 rounded-xl" />
-                }
-              >
-                <OrderbookPanel
-                  baseToken={baseTokenId || '2:0'}
-                  quoteToken={quoteTokenId || '32:0'}
-                  onOrderSelect={onOrderSelect}
-                />
-              </Suspense>
+      {!hideOrderbook && (
+        <div className="sf-panel overflow-visible">
+          <button
+            type="button"
+            onClick={() => setOrderbookOpen(!orderbookOpen)}
+            className="sf-collapsible-trigger"
+          >
+            <span>{orderbookOpen ? t('swap.hideOrderBook') : t('swap.showOrderBook')}</span>
+            <ChevronDown
+              size={14}
+              className={`transition-transform duration-300 ${orderbookOpen ? 'rotate-180' : ''}`}
+            />
+          </button>
+          <div
+            className={`transition-all duration-300 ease-in-out ${
+              orderbookOpen
+                ? 'max-h-[600px] opacity-100 overflow-visible'
+                : 'max-h-0 opacity-0 overflow-hidden'
+            }`}
+          >
+            <div className="px-1 pb-3">
+              <div className="h-[460px]">
+                <Suspense
+                  fallback={
+                    <div className="animate-pulse h-full bg-[color:var(--sf-primary)]/10 rounded-xl" />
+                  }
+                >
+                  <OrderbookPanel
+                    baseToken={baseTokenId || '2:0'}
+                    quoteToken={quoteTokenId || '32:0'}
+                    onOrderSelect={onOrderSelect}
+                  />
+                </Suspense>
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

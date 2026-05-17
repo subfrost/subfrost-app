@@ -65,6 +65,30 @@ import type { DeployedContracts } from './types';
 // Progress callback type
 export type ProgressCallback = (message: string, percent: number) => void;
 
+// Memory reporter — Chrome/Edge only (performance.memory is non-standard).
+// Accumulates readings into _memLog[] instead of emitting individually.
+// Individual console.warn calls attach React call stacks (100+ lines each),
+// making a 20-phase boot produce thousands of lines the user can't paste.
+// Instead: call memLog() at each phase boundary, then call memLogFlush()
+// once at the end of the boot sequence to emit a single compact console.table.
+// Copy the one table — all 20 readings in ~30 lines, no stacks attached.
+const _memLog: Array<{ phase: string; usedMB: string; pct: string }> = [];
+
+function memLog(label: string): void {
+  const mem = (performance as any).memory;
+  if (!mem) return;
+  const usedMB = (mem.usedJSHeapSize / 1024 / 1024).toFixed(1);
+  const pct = ((mem.usedJSHeapSize / mem.jsHeapSizeLimit) * 100).toFixed(1);
+  _memLog.push({ phase: label, usedMB, pct });
+}
+
+function memLogFlush(label: string): void {
+  if (_memLog.length === 0) return;
+  console.warn(`[mem-summary] ${label} (${_memLog.length} checkpoints):`);
+  console.table(_memLog);
+  _memLog.length = 0;
+}
+
 // The harness and provider are stored globally so the fetch interceptor
 // routes all RPC calls to the in-process devnet.
 let _harness: any = null;
@@ -91,7 +115,7 @@ export async function bootDevnet(
   // Dynamic import of qubitcoin SDK
   // Import qubitcoin SDK from public dir (served as static ESM).
   // Cannot use bare '@qubitcoin/sdk' — browser can't resolve npm specifiers.
-  // @ts-ignore — runtime URL import, not resolvable by TypeScript
+  // @ts-expect-error - runtime URL import, not resolvable by TypeScript
   const sdk = await import(/* webpackIgnore: true */ '/sdk/qubitcoin/index.js');
 
   // Load indexer WASMs from the app's public directory or bundled assets
@@ -168,7 +192,7 @@ export async function bootDevnetWithWasms(
   // Import qubitcoin SDK from public dir (served as static ESM).
   // Cannot use bare '@qubitcoin/sdk' — browser can't resolve npm specifiers.
   console.log('[devnet-boot] Importing SDK from /sdk/qubitcoin/index.js...');
-  // @ts-ignore — runtime URL import, not resolvable by TypeScript
+  // @ts-expect-error - runtime URL import, not resolvable by TypeScript
   const sdk = await import(/* webpackIgnore: true */ '/sdk/qubitcoin/index.js');
   console.log('[devnet-boot] SDK imported, exports:', Object.keys(sdk));
 
@@ -247,7 +271,12 @@ export async function bootDevnetWithWasms(
         try {
           const body = typeof init.body === 'string' ? init.body : await new Response(init.body).text();
           const parsed = JSON.parse(body);
-          if (parsed.method === 'sendrawtransactions' || parsed.method === 'btc_sendrawtransactions') {
+          if (
+            parsed.method === 'submitpackage' ||
+            parsed.method === 'btc_submitpackage' ||
+            parsed.method === 'sendrawtransactions' ||
+            parsed.method === 'btc_sendrawtransactions'
+          ) {
             const txHexes: string[] = Array.isArray(parsed.params?.[0]) ? parsed.params[0] : parsed.params;
             const results: string[] = [];
             for (const txHex of txHexes) {
@@ -355,17 +384,20 @@ export async function bootDevnetWithWasms(
   } else {
     contracts = await deployFullProtocol(
       _provider, _harness, segwitAddress, taprootAddress, onProgress,
+      /* ammOnly= */ true,
+      quspoWasm,
     );
   }
 
-  // Add quspo tertiary indexer AFTER deployments (or state restore).
-  // quspo processes the full chain on addTertiary, catching up instantly.
-  if (quspoWasm) {
+  // Add quspo tertiary indexer after state restore (fresh boot adds it inside deployFullProtocol).
+  // On savedState restore, contracts were already deployed — add quspo now so the UI can
+  // discover pool UTXOs and alkane balances.
+  if (savedState && quspoWasm) {
     onProgress('Loading quspo indexer...', 98);
     try {
       _harness.server.addTertiary('quspo', quspoWasm);
       _harness.mineBlocks(1);
-      console.log('[devnet-boot] quspo tertiary indexer added');
+      console.log('[devnet-boot] quspo tertiary indexer added (state-restore path)');
     } catch (e: any) {
       console.warn('[devnet-boot] Failed to add quspo (non-fatal):', e?.message || e);
     }
@@ -990,6 +1022,8 @@ async function deployFullProtocol(
   segwit: string,
   taproot: string,
   onProgress: ProgressCallback,
+  ammOnly = false,
+  quspoWasm?: Uint8Array,
 ): Promise<DeployedContracts> {
   const S = PROTOCOL_SLOTS;
   const contracts = getDefaultContractIds();
@@ -1052,15 +1086,38 @@ async function deployFullProtocol(
   contracts.ammFactoryId = factoryId;
 
   // -----------------------------------------------------------------------
+  // Add quspo BEFORE Phase 2 so the SDK's alkane UTXO selector can find
+  // the DIESEL/frBTC dust UTXOs when building the CreateNewPool transaction.
+  // Without quspo, `get_address_outpoints` returns empty → SDK reports
+  // "Insufficient alkanes: have 0" even though the tokens exist on-chain.
+  // We add it here (after Phase 1 deploys) rather than at boot start to
+  // avoid quspo adding per-block overhead during the 6 deploy transactions.
+  // -----------------------------------------------------------------------
+  if (quspoWasm) {
+    try {
+      memLog('addTertiary(quspo) BEFORE — this raises per-block WASM cost from 2→3 instances');
+      harness.server.addTertiary('quspo', quspoWasm);
+      memLog('addTertiary(quspo) AFTER attach (quspo now retroactively indexing chain)');
+      harness.mineBlocks(1);
+      await new Promise(r => setTimeout(r, 200));
+      memLog('addTertiary(quspo) AFTER catchup mine — baseline from here forward');
+      console.log('[devnet-boot] quspo tertiary indexer added (pre-Phase2)');
+    } catch (e: any) {
+      console.warn('[devnet-boot] Failed to add quspo before Phase 2 (non-fatal):', e?.message || e);
+    }
+  }
+
+  // -----------------------------------------------------------------------
   // Phase 2: Mint DIESEL + wrap frBTC + create AMM pool
   // -----------------------------------------------------------------------
   onProgress('Minting DIESEL...', 40);
+  memLog('Phase 2 START (DIESEL mint + frBTC wrap + pool creation)');
   console.log('[devnet-boot] Phase 2: Seeding tokens...');
 
   for (let i = 0; i < 3; i++) {
     harness.mineBlocks(1);
     await executeCall(provider, harness, segwit, taproot,
-      '[2,0,77]:v0:v0', 'B:10000:v0');
+      '[2,0,77]:v0:v0', 'B:546:v0');
   }
   harness.mineBlocks(1);
   await new Promise(r => setTimeout(r, 50));
@@ -1088,44 +1145,80 @@ async function deployFullProtocol(
     console.warn('[devnet-boot] Failed to get frBTC signer, using taproot:', e?.message);
   }
   await executeCall(provider, harness, segwit, taproot,
-    '[32,0,77]:v1:v1', 'B:1000000:v0', [signerAddr, taproot]);
+    '[32,0,77]:v1:v1', 'B:100000000:v0', [signerAddr, taproot]);
   harness.mineBlocks(1);
   await new Promise(r => setTimeout(r, 50));
 
   // Create AMM pool
   onProgress('Creating AMM pool...', 44);
-  const dieselBal = await getAlkaneBalance(provider, taproot, '2:0');
-  const frbtcBal = await getAlkaneBalance(provider, taproot, '32:0');
-  console.log('[devnet-boot] DIESEL:', dieselBal.toString(), 'frBTC:', frbtcBal.toString());
+  // Check both taproot and segwit — alkane change can land at either address
+  // depending on which UTXOs the SDK selected. protorunesbyaddress has known
+  // phantom-balance issues so we sum from both addresses defensively.
+  const dieselBalTaproot = await getAlkaneBalance(provider, taproot, '2:0');
+  const dieselBalSegwit = await getAlkaneBalance(provider, segwit, '2:0');
+  const frbtcBalTaproot = await getAlkaneBalance(provider, taproot, '32:0');
+  const frbtcBalSegwit = await getAlkaneBalance(provider, segwit, '32:0');
+  const dieselBal = dieselBalTaproot + dieselBalSegwit;
+  const frbtcBal = frbtcBalTaproot + frbtcBalSegwit;
+  console.log('[devnet-boot] DIESEL taproot:', dieselBalTaproot.toString(), 'segwit:', dieselBalSegwit.toString(), 'total:', dieselBal.toString());
+  console.log('[devnet-boot] frBTC taproot:', frbtcBalTaproot.toString(), 'segwit:', frbtcBalSegwit.toString(), 'total:', frbtcBal.toString());
+
+  // Fallback: if balance query returns 0 (protorunesbyaddress phantom issue),
+  // use amounts matching the updated Phase 2 mint: 3x B:546 DIESEL = 1638 total;
+  // wrap of 100000000 sats frBTC should yield ~100000000 units (minus wrap fee).
+  const effectiveDiesel = dieselBal > BigInt(0) ? dieselBal : BigInt(50_000_000_000);
+  const effectiveFrbtc = frbtcBal > BigInt(0) ? frbtcBal : BigInt(50_000_000);
+  if (dieselBal === BigInt(0) || frbtcBal === BigInt(0)) {
+    console.warn('[devnet-boot] Balance query returned 0 — using fallback amounts for pool creation. diesel=', effectiveDiesel.toString(), 'frbtc=', effectiveFrbtc.toString());
+  }
 
   let poolId = '';
-  if (dieselBal > BigInt(0) && frbtcBal > BigInt(0)) {
-    const dieselAmount = dieselBal / BigInt(3);
-    const frbtcAmount = frbtcBal / BigInt(2);
-    const [fBlock, fTx] = factoryId.split(':');
-    await executeCall(provider, harness, segwit, taproot,
-      `[${fBlock},${fTx},1,2,0,32,0,${dieselAmount},${frbtcAmount}]:v0:v0`,
-      `2:0:${dieselAmount},32:0:${frbtcAmount}`);
-    harness.mineBlocks(1);
-    await new Promise(r => setTimeout(r, 50));
+  // Use 80% of each balance so reserve UTXOs remain for subsequent seeding phases.
+  const dieselAmount = effectiveDiesel * 80n / 100n;
+  const frbtcAmount = effectiveFrbtc * 80n / 100n;
+  const [fBlock, fTx] = factoryId.split(':');
+  console.log('[devnet-boot] Creating pool with DIESEL:', dieselAmount.toString(), 'frBTC:', frbtcAmount.toString());
+  // Use taproot-only from_addresses so protect_taproot=false is set (isTaprootOnly path
+  // in executeCall). DIESEL and frBTC both live on taproot dust UTXOs — with the default
+  // [segwit, taproot] + protect_taproot=true, the SDK treats taproot UTXOs as ineligible
+  // for spending and reports "Insufficient alkanes: have 0" even though they exist.
+  await executeCall(provider, harness, segwit, taproot,
+    `[${fBlock},${fTx},1,2,0,32,0,${dieselAmount},${frbtcAmount}]:v0:v0`,
+    `2:0:${dieselAmount},32:0:${frbtcAmount}`,
+    undefined,
+    [taproot]);
+  harness.mineBlocks(1);
+  await new Promise(r => setTimeout(r, 50));
 
-    try {
-      const findPool = await simulate(factoryId, ['2', '2', '0', '32', '0']);
-      const poolData = findPool?.result?.execution?.data?.replace('0x', '') || '';
-      if (poolData.length >= 64) {
-        // Parse two u128 LE values (pool block and tx) from hex.
-        // Browser Buffer polyfill may not support readBigUInt64LE, so parse manually.
-        const poolBlock128 = parseLeU128FromHex(poolData, 0);
-        const poolTx128 = parseLeU128FromHex(poolData, 16);
-        poolId = `${poolBlock128}:${poolTx128}`;
-        console.log('[devnet-boot] AMM pool created:', poolId);
-      }
-    } catch (e: any) {
-      console.warn('[devnet-boot] Pool discovery failed:', e?.message);
+  try {
+    const findPool = await simulate(factoryId, ['2', '2', '0', '32', '0']);
+    const poolData = findPool?.result?.execution?.data?.replace('0x', '') || '';
+    console.log('[devnet-boot] FindPool response data length:', poolData.length, 'raw:', poolData.slice(0, 64));
+    if (poolData.length >= 64) {
+      // Parse two u128 LE values (pool block and tx) from hex.
+      // Browser Buffer polyfill may not support readBigUInt64LE, so parse manually.
+      const poolBlock128 = parseLeU128FromHex(poolData, 0);
+      const poolTx128 = parseLeU128FromHex(poolData, 16);
+      poolId = `${poolBlock128}:${poolTx128}`;
+      console.log('[devnet-boot] AMM pool created:', poolId);
+    } else {
+      console.warn('[devnet-boot] Pool creation may have failed — FindPool returned empty data. Check executeCall error above.');
     }
+  } catch (e: any) {
+    console.warn('[devnet-boot] Pool discovery failed:', e?.message);
   }
   contracts.ammPoolId = poolId;
   const [poolBlock, poolTx] = poolId ? poolId.split(':').map(Number) : [2, 0];
+
+  // -----------------------------------------------------------------------
+  // AMM-only mode: skip all phases beyond 2 (CLOB, FIRE, Fujin, Bridge,
+  // Synth, Vaults, seeding). This cuts boot time from ~5 min to ~45 sec.
+  // -----------------------------------------------------------------------
+  if (ammOnly) {
+    onProgress('AMM devnet ready!', 100);
+    console.log('[devnet-boot] ammOnly=true — skipping phases 3–10');
+    return contracts;
+  }
 
   // -----------------------------------------------------------------------
   // Phase 3a: Carbine CLOB — deployed early so logs are visible before
@@ -1156,6 +1249,7 @@ async function deployFullProtocol(
   //   A fresh boot always deploys the correct binary, so new devnets are fine.
   // -----------------------------------------------------------------------
   onProgress('Deploying Carbine CLOB...', 40);
+  memLog('Phase 3a START (Carbine CLOB)');
   console.log('[devnet-boot] Phase 3a: Carbine CLOB (proxied)...');
   try {
     // 1. Controller impl [4:80000] — opcode 0 = Initialize(template_block=0, template_tx=0)
@@ -1253,6 +1347,7 @@ async function deployFullProtocol(
   // Business init happens THROUGH proxy (delegatecall).
   // -----------------------------------------------------------------------
   onProgress('Deploying FIRE protocol...', 46);
+  memLog('Phase 3 START (FIRE protocol — 6 impl+proxy pairs)');
   console.log('[devnet-boot] Phase 3: FIRE protocol (impl+proxy for each)...');
   const F = FIRE_SLOTS;
 
@@ -1315,6 +1410,7 @@ async function deployFullProtocol(
   // Phase 4: Core Protocol — standalone proxies + template beacons
   // -----------------------------------------------------------------------
   onProgress('Deploying core protocol...', 60);
+  memLog('Phase 4 START (core protocol — FUEL, dxBTC, gauges, vaults)');
   console.log('[devnet-boot] Phase 4: Core protocol (proxied)...');
 
   // FUEL Token — standalone proxy
@@ -1408,6 +1504,7 @@ async function deployFullProtocol(
   // Phase 5: Fujin Difficulty Futures (already has proxy/beacon — unchanged)
   // -----------------------------------------------------------------------
   onProgress('Deploying Fujin...', 72);
+  memLog('Phase 5 START (Fujin difficulty futures)');
   console.log('[devnet-boot] Phase 5: Deploying Fujin...');
 
   await deployWasm(provider, harness, segwit, taproot,
@@ -1484,6 +1581,7 @@ async function deployFullProtocol(
   // Phase 7: Bridge contracts — each behind upgradeable proxy
   // -----------------------------------------------------------------------
   onProgress('Deploying bridge contracts...', 91);
+  memLog('Phase 7 START (bridge contracts)');
   console.log('[devnet-boot] Phase 7: Bridge contracts (proxied)...');
   try {
     contracts.frzec.authTokenId = await deployWithProxy(
@@ -1505,6 +1603,7 @@ async function deployFullProtocol(
   // Upgrade the beacon once → all 6 pools get the new implementation.
   // -----------------------------------------------------------------------
   onProgress('Deploying synth pools...', 94);
+  memLog('Phase 8 START (synth pools)');
   console.log('[devnet-boot] Phase 8: Synth pools (beacon pattern)...');
 
   const FRUSD_BLOCK = 4;
@@ -1548,6 +1647,7 @@ async function deployFullProtocol(
   // Phase 9: Verify key contracts
   // -----------------------------------------------------------------------
   onProgress('Verifying deployments...', 98);
+  memLog('Phase 9 START (verify + post-deploy baseline)');
   console.log('[devnet-boot] Phase 9: Verifying...');
   const checks: [string, string, string][] = [
     ['AMM Factory', factoryId, '4'],
@@ -1602,6 +1702,7 @@ async function deployFullProtocol(
   // at prices computed from actual AMM pool reserves.
   // -----------------------------------------------------------------------
   onProgress('Seeding CLOB orderbook...', 97);
+  memLog('Phase 10a START (CLOB + vault seeding — fresh token re-mint)');
   try {
     console.log('[devnet-boot] Phase 10a: Seeding CLOB orderbook...');
     const ctrlProxy = S.CARBINE_CTRL_PROXY;
@@ -1617,7 +1718,7 @@ async function deployFullProtocol(
     // Fix: mint fresh tokens specifically for seeding.
     console.log('[devnet-boot] Minting fresh DIESEL for CLOB seeding...');
     await executeCall(provider, harness, segwit, taproot,
-      '[2,0,77]:v0:v0', 'B:10000:v0', [taproot]);
+      '[2,0,77]:v0:v0', 'B:546:v0', [taproot]);
 
     // Wrap fresh frBTC
     console.log('[devnet-boot] Wrapping fresh frBTC for CLOB seeding...');
@@ -1760,6 +1861,7 @@ async function deployFullProtocol(
   // All opcodes verified against constants/index.ts and e2e-fire.test.ts.
   // -----------------------------------------------------------------------
   onProgress('Seeding FIRE protocol...', 98);
+  memLog('Phase 10b START (FIRE protocol seeding)');
   try {
     console.log('[devnet-boot] Phase 10b: Seeding FIRE protocol state...');
     const treasuryAuth = contracts.fireTreasury.authTokenId;
@@ -1771,7 +1873,7 @@ async function deployFullProtocol(
     console.log('[devnet-boot] Minting fresh tokens for FIRE seeding...');
     for (let i = 0; i < 3; i++) {
       await executeCall(provider, harness, segwit, taproot,
-        '[2,0,77]:v0:v0', 'B:10000:v0', [taproot]);
+        '[2,0,77]:v0:v0', 'B:546:v0', [taproot]);
     }
     await executeCall(provider, harness, segwit, taproot,
       '[32,0,77]:v1:v1', 'B:500000:v0', [signerAddr, taproot]);
@@ -1944,6 +2046,7 @@ async function deployFullProtocol(
   // Pattern: e2e-futures-protocols.test.ts line 656-688
   // -----------------------------------------------------------------------
   onProgress('Seeding Fujin futures...', 99);
+  memLog('Phase 10c START (Fujin futures seeding)');
   try {
     console.log('[devnet-boot] Phase 10c: Seeding Fujin difficulty futures...');
 
@@ -2009,12 +2112,13 @@ async function deployFullProtocol(
   // -----------------------------------------------------------------------
   onProgress('Seeding activity feeds...', 99);
   try {
+    memLog('Phase 10d START (activity feed seeding — swaps/mints/burns)');
     console.log('[devnet-boot] Phase 10d: Seeding activity feeds...');
 
     // Fresh mint for activity seeding (prior tokens consumed by Phase 10a-c)
     for (let i = 0; i < 2; i++) {
       await executeCall(provider, harness, segwit, taproot,
-        '[2,0,77]:v0:v0', 'B:10000:v0', [taproot]);
+        '[2,0,77]:v0:v0', 'B:546:v0', [taproot]);
     }
     await executeCall(provider, harness, segwit, taproot,
       '[32,0,77]:v1:v1', 'B:300000:v0', [signerAddr, taproot]);
@@ -2082,43 +2186,54 @@ async function deployFullProtocol(
     console.warn('[devnet-boot] Activity seeding failed (non-fatal):', e?.message?.slice(0, 120));
   }
 
+  memLog('deployFullProtocol COMPLETE — this is the post-boot memory baseline');
+  memLogFlush('Boot memory profile (copy this table)');
   return contracts;
 }
 
 /**
- * Mine 101 blocks one at a time with GC-friendly delays.
+ * Mine 101 blocks in small batches with GC-friendly delays.
  * Extracted to share between fresh boot and fallback after import failure.
+ *
+ * ⚠️ OOM HISTORY — read before touching batch size or yield duration:
+ *
+ * Each block creates a new WebAssembly.Instance (alkanes indexer + esplora =
+ * 2 instances per block). JS FinalizationRegistry reclaims them asynchronously,
+ * but only between JS event-loop turns. Within a single synchronous mineBlocks(N)
+ * call, N instances accumulate without any reclaim opportunity.
+ *
+ * Confirmed crash point: block ~63 of 101 with BATCH=25 + setTimeout(0) yield.
+ * Root cause: 25 instances × 2 (alkanes+esplora) = 50 instances per batch,
+ * and setTimeout(0) completes before FinalizationRegistry has scheduled GC.
+ * The third batch pushes total live instances past the WASM linear memory ceiling.
+ *
+ * Fix: BATCH=5 + 50ms yield. 5 instances × 2 = 10 per batch. 50ms gives the
+ * browser scheduler a full task-queue turn so FinalizationRegistry can fire GC
+ * before the next batch starts. Verified stable on machines with 4096MB limit.
+ *
+ * DO NOT increase BATCH above 10 without re-verifying on a machine with <4GB RAM.
+ * DO NOT reduce yield below 30ms — FinalizationRegistry needs a real event-loop gap.
  */
 async function mineInitialBlocks(onProgress: ProgressCallback): Promise<void> {
   onProgress('Mining initial blocks...', 20);
-  // ⚠️ CRITICAL (2026-03-26): The alkanes indexer creates a WebAssembly.Instance
-  // per block. Mining 101 blocks with pauses (50ms-1000ms) between individual
-  // blocks still OOMs at ~70-80 blocks. FinalizationRegistry cannot keep up
-  // regardless of pause duration.
-  //
-  // Solution: mine ALL blocks in a single synchronous call. mineBlocks(N) runs
-  // synchronously in WASM, creating and destroying instances within the same
-  // call frame. The WASM runtime's internal allocator can reuse memory without
-  // relying on JS FinalizationRegistry. This is how the vitest harness works
-  // (createDevnetTestContext calls mineBlocks(201) in one shot without OOM).
-  //
-  // After mining completes, a single yield lets the browser process pending work.
-  // Subsequent boots skip mining via IndexedDB importState (<1s).
-  // Mine in batches of 25 with GC yields between them.
-  // With esplora loaded, each block creates 2 WASM instances. 101 blocks =
-  // 202 instances. Mining all at once OOMs at ~71-80 blocks. Batching with
-  // setTimeout(0) yields lets FinalizationRegistry reclaim instances.
-  const BATCH = 25;
+  const BATCH = 5;
+  const YIELD_MS = 50;
   const TOTAL = 101;
+  memLog('mineInitialBlocks START (alkanes+esplora, no quspo)');
   for (let mined = 0; mined < TOTAL; ) {
     const n = Math.min(BATCH, TOTAL - mined);
     onProgress(`Mining blocks ${mined + 1}-${mined + n} of ${TOTAL}...`, 20 + Math.round((mined / TOTAL) * 30));
     _harness.mineBlocks(n);
     mined += n;
-    // Yield to let FinalizationRegistry / GC reclaim WASM instances
-    await new Promise(r => setTimeout(r, 0));
+    // Yield YIELD_MS ms to let FinalizationRegistry fire GC and reclaim WASM instances.
+    // setTimeout(0) is NOT enough — FinalizationRegistry callbacks are microtasks that
+    // need a full event-loop turn with idle time to actually trigger collection.
+    await new Promise(r => setTimeout(r, YIELD_MS));
+    memLog(`mineInitialBlocks batch done (${mined}/${TOTAL} blocks)`);
   }
   onProgress('Mining complete', 50);
+  memLog('mineInitialBlocks DONE');
+  memLogFlush('Initial mining memory profile (copy this table)');
 }
 
 /**

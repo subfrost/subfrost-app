@@ -120,8 +120,9 @@ function isP2WPKH(script: Buffer): boolean {
   return script[0] === 0x00 && script.length === 22;
 }
 
+// Exported for use in useSwapMutation's post-sign P2SH redeemScript recovery.
 /** P2SH: OP_HASH160 <20-byte script hash> OP_EQUAL → [0xa9, 0x14, ...20 bytes, 0x87] = 23 bytes */
-function isP2SH(script: Buffer): boolean {
+export function isP2SH(script: Buffer): boolean {
   return script.length === 23 && script[0] === 0xa9 && script[1] === 0x14 && script[22] === 0x87;
 }
 
@@ -251,6 +252,13 @@ export function patchInputWitnessScripts(
 
   for (let i = 0; i < psbt.data.inputs.length; i++) {
     const input = psbt.data.inputs[i];
+
+    // Script-path taproot spends include their own control block and must be
+    // signed against the actual prevout script. Rewriting the script to the
+    // connected wallet's P2TR address makes the Schnorr signature invalid.
+    if (input.tapLeafScript?.length) {
+      continue;
+    }
 
     // If witnessUtxo exists, patch the script
     if (input.witnessUtxo) {

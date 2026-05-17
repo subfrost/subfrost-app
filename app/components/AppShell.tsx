@@ -8,22 +8,10 @@ import MobileBottomNav from '@/app/components/MobileBottomNav';
 import DemoBanner from '@/app/components/DemoBanner';
 import SplashScreen from '@/app/components/SplashScreen';
 import ConnectWalletModal from '@/app/components/ConnectWalletModal';
-import { useWallet } from '@/context/WalletContext';
 
-// JOURNAL (2026-03-31): Guard ConnectWalletModal mount at the AppShell level.
-// Previously the modal used `if (!isConnectModalOpen) return null` internally.
-// In React 18 Strict Mode (reactStrictMode: true in next.config.mjs), components
-// mount → unmount → remount during development. When the close handler called
-// onConnectModalOpenChange(false) + resetForm() synchronously, React attempted
-// to removeChild a node that Strict Mode had already unmounted in the first
-// pass, producing:
-//   "Failed to execute 'removeChild' on 'Node': The node to be removed is
-//    not a child of this node."
-// Fix: gate the mount here so the component is never in a partial-unmount state.
-// The modal only enters the React tree when open, and exits cleanly when closed.
-function ConnectWalletModalGate() {
-  const { isConnectModalOpen } = useWallet();
-  if (!isConnectModalOpen) return null;
+// Keep the wallet modal mounted so SfPopup can play its close animation before
+// the wallet context flips the open state off.
+function ConnectWalletModalMount() {
   return <ConnectWalletModal />;
 }
 
@@ -42,17 +30,17 @@ export default function AppShell({ children }: { children: ReactNode }) {
       <Header />
       <DemoBanner />
       <main className="relative flex-1 flex flex-col min-h-0">
-        <div className="relative w-full flex justify-center px-4 py-8 flex-1 min-h-0">
+        <div className="relative w-full flex justify-center px-2 sm:px-4 py-3 sm:py-8 flex-1 min-h-0">
           {children}
         </div>
       </main>
       <Footer />
       <MobileBottomNav />
       <FloatingActions />
-      <ConnectWalletModalGate />
+      <ConnectWalletModalMount />
       <PendingTxSync />
-      {/* Spacer for mobile bottom nav (nav height + bottom gap + breathing room) */}
-      <div className="h-24 md:hidden" />
+      {/* Spacer for mobile bottom nav (nav height + bottom gap) */}
+      <div className="h-20 md:hidden" />
     </div>
   );
 }

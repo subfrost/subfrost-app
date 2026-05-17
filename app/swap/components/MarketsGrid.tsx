@@ -201,7 +201,7 @@ export default function MarketsGrid({ pools, onSelect, volumePeriod: externalVol
           </colgroup>
           <thead>
             <tr className="border-b border-[color:var(--sf-row-border)]">
-              <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/70">LP Pair</th>
+              <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/70">{t('pool.lpPair')}</th>
               <th className="px-2 py-3 text-right">
                 <button
                   onClick={() => handleSort('tvl')}
@@ -244,7 +244,7 @@ export default function MarketsGrid({ pools, onSelect, volumePeriod: externalVol
                   </span>
                 </button>
               </th>
-              <SortableHeader label="APY" field="apr" currentField={sortField} sortOrder={sortOrder} onSort={handleSort} align="center" />
+              <SortableHeader label="30D APR" field="apr" currentField={sortField} sortOrder={sortOrder} onSort={handleSort} align="center" />
             </tr>
           </thead>
         </table>
@@ -259,16 +259,16 @@ export default function MarketsGrid({ pools, onSelect, volumePeriod: externalVol
           <svg className="mx-auto h-12 w-12 text-[color:var(--sf-text)]/30 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
           </svg>
-          <h3 className="text-lg font-bold text-[color:var(--sf-text)] mb-2">No pools found</h3>
+          <h3 className="text-lg font-bold text-[color:var(--sf-text)] mb-2">{t('pool.noPoolsFound')}</h3>
           <p className="text-sm text-[color:var(--sf-text)]/60">
-            {searchQuery ? `No pools match "${searchQuery}"` : 'No pools available'}
+            {searchQuery ? t('pool.noPoolsMatch', { query: searchQuery }) : t('pool.noPoolsAvailable')}
           </p>
           {searchQuery && (
             <button
               onClick={() => setSearchQuery('')}
               className="mt-4 text-sm font-semibold text-[color:var(--sf-primary)] hover:text-[color:var(--sf-primary-pressed)] transition-all duration-[600ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none"
             >
-              Clear search
+              {t('pool.clearSearch')}
             </button>
           )}
         </div>

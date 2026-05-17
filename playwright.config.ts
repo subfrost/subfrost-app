@@ -81,6 +81,34 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'] },
       testMatch: '**/full-app.spec.ts',
     },
+    {
+      // Devnet keystore smoke test — runs the full AMM regression against
+      // the in-browser devnet (localhost:3000). No wallet extension required.
+      // Run: npx playwright test devnet-smoke --project=chromium-devnet-smoke --headed
+      name: 'chromium-devnet-smoke',
+      use: {
+        ...devices['Desktop Chrome'],
+        baseURL: 'http://localhost:3000',
+        video: 'retain-on-failure',
+        trace: 'retain-on-failure',
+      },
+      testMatch: ['**/devnet-smoke.spec.ts', '**/trace-probe.spec.ts'],
+    },
+    {
+      // Mainnet OYL smoke test — loads the real OYL Chrome extension.
+      // Requires: export SMOKE_SEED="word1 ... word12"
+      // Run: npx playwright test mainnet-smoke --project=chromium-mainnet-oyl --headed
+      name: 'chromium-mainnet-oyl',
+      use: {
+        // Extensions require a non-devices launch — the spec handles
+        // launchPersistentContext itself, so no browserName override needed here.
+        ...devices['Desktop Chrome'],
+        // Disable any video/trace that interferes with extension popups
+        video: 'off',
+        trace: 'off',
+      },
+      testMatch: '**/mainnet-smoke.spec.ts',
+    },
   ],
 
   // Global test timeout — cold devnet boot can take 10-20 min on first run

@@ -457,18 +457,23 @@ export async function restoreWalletFromDrive(
   };
 }
 
-/**
- * Delete a wallet backup from user's Google Drive
- */
-export async function deleteWalletBackup(folderId: string): Promise<void> {
-  await requestDriveAccess();
-  const gapi = (window as any).gapi;
-
-  // Delete the folder (moves to trash)
-  await gapi.client.drive.files.delete({
-    fileId: folderId,
-  });
-}
+// deleteWalletBackup removed 2026-05-17.
+//
+// Previously: `gapi.client.drive.files.delete({ fileId: folderId })` —
+// destroys a folder out of the user's Google Drive (moves to Trash). Per
+// flex's directive there is no scenario where subfrost-app should
+// originate deletes against the user's Drive. If users want to remove a
+// backup they can do it in drive.google.com directly. The
+// WalletListPicker's "View in Drive" ExternalLink takes them there.
+//
+// Don't reintroduce this. The only function call site
+// (WalletListPicker.tsx's nested trash-icon button) nearly cost a real
+// user $5k on 2026-05-17 — the trash icon was opacity-0 until hover, the
+// only safeguard was a native confirm() where Enter == OK, and tap-
+// /Enter-through on a touch device destroyed the only Drive-side copy of
+// the keystore. We don't trust UX safeguards on a destructive single-
+// click destructive op against an asset like this; the only safe answer
+// is to not have the code path.
 
 /**
  * Format timestamp for display

@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
+import SfPopup, { type SfPopupHandle } from './SfPopup';
 import TokenIcon from './TokenIcon';
 import { Search, X } from 'lucide-react';
 import { useTranslation } from '@/hooks/useTranslation';
@@ -80,10 +81,10 @@ type Props = {
 
 // Bridge token definitions
 const BRIDGE_TOKENS = [
-  { symbol: 'USDT', name: 'USDT', enabled: true },
-  { symbol: 'USDC', name: 'USDC', enabled: true },
-  { symbol: 'ETH', name: 'ETH', enabled: true },
-  { symbol: 'ZEC', name: 'ZEC', enabled: true },
+  { symbol: 'USDT', name: 'USDT', enabled: false },
+  { symbol: 'USDC', name: 'USDC', enabled: false },
+  { symbol: 'ETH', name: 'ETH', enabled: false },
+  { symbol: 'ZEC', name: 'ZEC', enabled: false },
 ] as const;
 
 export default function TokenSelectorModal({
@@ -105,6 +106,8 @@ export default function TokenSelectorModal({
   const [searchQuery, setSearchQuery] = useState('');
   const [showComingSoon, setShowComingSoon] = useState(false);
   const [showAlreadySelected, setShowAlreadySelected] = useState(false);
+  const popupRef = useRef<SfPopupHandle>(null);
+  const handleClose = () => popupRef.current?.close();
 
   const filteredTokens = useMemo(() => {
     if (!searchQuery.trim()) return tokens;
@@ -120,21 +123,18 @@ export default function TokenSelectorModal({
 
   const handleSelect = (tokenId: string) => {
     onSelectToken(tokenId);
-    onClose();
+    handleClose();
     setSearchQuery('');
   };
 
-  if (!isOpen) return null;
-
   return (
-    <div
-      className="sf-popup-overlay px-4"
-      onClick={onClose}
+    <SfPopup
+      ref={popupRef}
+      isOpen={isOpen}
+      onClose={onClose}
+      overlayClassName="px-4"
+      panelClassName="h-[80vh] max-h-[600px] max-w-[480px]"
     >
-      <div
-        className="sf-popup h-[80vh] max-h-[600px] max-w-[480px]"
-        onClick={(e) => e.stopPropagation()}
-      >
         {/* Header */}
         <div className="sf-popup-header px-6 py-5">
           <div className="flex items-center justify-between mb-2">
@@ -142,7 +142,7 @@ export default function TokenSelectorModal({
               {title || t('tokenSelector.selectToken')}
             </h2>
             <button
-              onClick={onClose}
+              onClick={handleClose}
               className="sf-popup-close"
               aria-label="Close"
             >
@@ -322,7 +322,6 @@ export default function TokenSelectorModal({
             </div>
           )}
         </div>
-      </div>
-    </div>
+    </SfPopup>
   );
 }

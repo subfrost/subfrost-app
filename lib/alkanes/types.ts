@@ -41,12 +41,17 @@ export interface AlkanesExecuteTypedParams {
   mineEnabled?: boolean;
   autoConfirm?: boolean;
   rawOutput?: boolean;
+  /** Force the unsigned-PSBT path even on local networks. Used by staged
+   *  package builders that need to sign/broadcast multiple txs themselves. */
+  forcePsbt?: boolean;
   /** Controls handling of UTXOs that may contain ordinal inscriptions.
    *  - 'exclude': refuse to spend inscribed UTXOs (default — protects inscriptions/runes)
    *  - 'preserve': split inscribed UTXOs to protect inscriptions
    *  - 'burn': spend inscribed UTXOs without protection (destroys inscriptions)
    */
   ordinalsStrategy?: 'exclude' | 'preserve' | 'burn';
+  /** Selects the SDK's UTXO data source. App default is `espo`. */
+  utxoSource?: 'metashrew' | 'espo';
   /** Protect taproot UTXOs from being spent for BTC fees (default: true).
    *  When true, taproot UTXOs are only used for alkane token spending.
    *  Set to false for single-address wallets (UniSat, OKX) where taproot is the only address.
@@ -57,6 +62,19 @@ export interface AlkanesExecuteTypedParams {
    *  skips lua get_utxos entirely. Alkane UTXOs still discovered via espo.
    */
   paymentUtxos?: string[];
+  /** Synthetic raw transactions that should be overlaid onto UTXO selection.
+   *  Used by package flows where Tx B spends an output from a just-signed Tx A
+   *  before indexers can expose it through address UTXO endpoints. */
+  knownPendingTxHexes?: string[];
+  /** Explicit per-outpoint TxOut and optional alkane balance assertions.
+   *  This is lower-level than `cachedUtxos` and is used for synthetic package
+   *  outputs whose alkane balances are known from the parent protostone. */
+  prefetchedUtxos?: Array<{
+    outpoint: string;
+    value: number;
+    script_pubkey_hex: string;
+    alkanes?: Array<{ block: number; tx: number; amount: string }>;
+  }>;
   /** Pre-warmed UTXO + balance-sheet snapshot from `useWalletUtxoCache`.
    *  When supplied, alkanesExecuteTyped derives `payment_utxos` (clean
    *  BTC carriers) from the cache instead of letting the WASM fan out
@@ -70,10 +88,28 @@ export interface AlkanesExecuteTypedParams {
     vout: number;
     value: number;
     address?: string;
+    scriptPubKeyHex?: string;
+    runes?: unknown[];
     alkanes?: Array<{ block: number; tx: number; amount: bigint }>;
   }>;
   /** Network name — used to reliably detect devnet (instead of URL sniffing). */
   network?: string;
+  /**
+   * Caller-supplied metashrew indexer height. When set, the wrapper emits
+   * `options.max_indexed_height = it` so the SDK's `select_utxos` filters
+   * out UTXOs from blocks the indexer hasn't processed yet — same pattern
+   * subfrost-mobile uses to avoid the SDK's `waitForIndexer` stall while
+   * metashrew catches up to bitcoind.
+   *
+   * Pass `useWalletUtxoCache().height` from any mutation hook — that value
+   * IS the metashrew height the snapshot was pinned to (per the wallet-state
+   * route migration). With this set, the wrapper SKIPS its own per-click
+   * metashrew_height probe RPC.
+   *
+   * Local networks (devnet/regtest) where the user mines manually can leave
+   * this unset — the wrapper preserves the historic skip-probe behavior.
+   */
+  maxIndexedHeight?: number;
   /** Opt-in CPFP-chained 2-tx flow for wrap+execute requests. When true and
    *  the protostones[0] is a wrap (block 32, opcode 77), alkanes-rs splits
    *  the request into Tx A (wrap-only) + Tx B (execute consuming Tx A's

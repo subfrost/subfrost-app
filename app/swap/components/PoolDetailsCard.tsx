@@ -14,7 +14,12 @@ type Props = {
   bare?: boolean;
 };
 
-const ALKANODE_RPC_URL = 'https://api.alkanode.com/rpc';
+// Override via `NEXT_PUBLIC_ESPO_RPC_URL` if alkanode is unreachable. See
+// `lib/alkanes/rpc.ts` for the parallel definition. (Pattern ported from
+// PR #115 on subfrost/subfrost-app, 2026-05-11.)
+const ALKANODE_RPC_URL =
+  (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_ESPO_RPC_URL) ||
+  'https://api.alkanode.com/rpc';
 
 /**
  * Resolve the pizza.fun series ID (symbol) for a given alkane ID.
@@ -55,9 +60,6 @@ function usePizzaFunSymbol(alkaneId?: string) {
   });
 }
 
-// frBTC alkane ID is 32:0 on all networks (genesis alkane)
-const FRBTC_ID = '32:0';
-
 function buildIframeUrl(symbol: string, quote: 'usd' | 'btc'): string {
   const params = new URLSearchParams({
     symbol,
@@ -77,8 +79,7 @@ function buildIframeUrl(symbol: string, quote: 'usd' | 'btc'): string {
  *  - /bUSD pairs  → 'usd' (TOKEN/USD)
  *  - other        → 'usd' (default)
  */
-function getQuoteForPool(pool: PoolSummary): 'usd' | 'btc' {
-  if (pool.token1?.id === FRBTC_ID || pool.token0?.id === FRBTC_ID) return 'btc';
+function getQuoteForPool(_pool: PoolSummary): 'usd' | 'btc' {
   return 'usd';
 }
 
@@ -94,7 +95,7 @@ export default function PoolDetailsCard({ pool, chartTokenId, isWrapPair, bare }
 
   const { data: symbol, isLoading: isSymbolLoading } = usePizzaFunSymbol(resolvedChartTokenId);
 
-  // Chart quote: 'btc' for frBTC pairs, 'usd' for everything else
+  // Chart quote defaults to USD.
   const quote = pool ? getQuoteForPool(pool) : 'usd';
   const iframeUrl = symbol ? buildIframeUrl(symbol, quote) : null;
 

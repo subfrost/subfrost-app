@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useCallback } from 'react';
-import { X, ArrowRight, ArrowDown, Loader2, AlertTriangle } from 'lucide-react';
+import { useEffect, useCallback, useRef, useState } from 'react';
+import { X, ArrowRight, ArrowDown } from 'lucide-react';
 import { useTransactionConfirm, type TransactionDetails } from '@/context/TransactionConfirmContext';
 import { useTranslation } from '@/hooks/useTranslation';
 import TokenIcon from './TokenIcon';
 import { TxPlanCard } from './TxPlanCard';
+import SfPopup, { type SfPopupHandle } from './SfPopup';
 
 function formatAmount(amount: string | undefined, symbol: string | undefined): string {
   if (!amount) return '—';
@@ -259,29 +260,97 @@ function WrapUnwrapDetails({ details, t }: { details: TransactionDetails; t: (ke
 export default function TransactionConfirmModal() {
   const { t } = useTranslation();
   const { pendingTransaction, approve, reject } = useTransactionConfirm();
+  const popupRef = useRef<SfPopupHandle>(null);
+  const [walletSession, setWalletSession] = useState<'idle' | 'checking' | 'ready' | 'locked'>('idle');
+  const [walletSessionMessage, setWalletSessionMessage] = useState('');
+
+  const closeModal = useCallback(() => {
+    popupRef.current?.close();
+  }, []);
+
+  const checkWalletSession = useCallback(async (mode: 'silent' | 'request' = 'silent'): Promise<boolean> => {
+    setWalletSession((current) => {
+      if (mode === 'request') return 'checking';
+      return current === 'idle' ? 'checking' : current;
+    });
+    setWalletSessionMessage('');
+
+    try {
+      const walletSigning = await import('@/lib/wallet/browserWalletSigning');
+      if (mode === 'request') {
+        await walletSigning.ensureWalletSession();
+      }
+      const status = await walletSigning.getBrowserWalletSessionStatus();
+      if (!status.isBrowserWallet || status.isActive) {
+        setWalletSession('ready');
+        return true;
+      }
+      setWalletSession('locked');
+      setWalletSessionMessage(status.error || t('confirm.walletLocked'));
+      return false;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setWalletSession('locked');
+      setWalletSessionMessage(message || t('confirm.walletLocked'));
+      return false;
+    }
+  }, [t]);
+
+  const handleApprove = useCallback(async () => {
+    const ready = await checkWalletSession('request');
+    if (ready) approve();
+  }, [approve, checkWalletSession]);
 
   // Handle escape key
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (e.key === 'Escape' && pendingTransaction) {
-      reject();
+      closeModal();
     }
-  }, [pendingTransaction, reject]);
+  }, [closeModal, pendingTransaction]);
 
   useEffect(() => {
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [handleKeyDown]);
 
+  useEffect(() => {
+    if (!pendingTransaction) {
+      setWalletSession('idle');
+      setWalletSessionMessage('');
+      return;
+    }
+
+    let cancelled = false;
+    let intervalId: ReturnType<typeof setInterval> | undefined;
+
+    const runCheck = async () => {
+      if (cancelled) return;
+      await checkWalletSession('silent');
+    };
+
+    runCheck();
+    intervalId = setInterval(runCheck, 2000);
+
+    return () => {
+      cancelled = true;
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [pendingTransaction?.id, checkWalletSession]);
+
   if (!pendingTransaction) return null;
 
   const { details } = pendingTransaction;
+  const confirmDisabled = walletSession !== 'ready';
 
   return (
-    <div className="sf-popup-overlay p-4" style={{ zIndex: 100 }} onClick={reject}>
-      <div
-        className="sf-popup w-full max-w-md max-h-[92vh] overflow-hidden flex flex-col"
-        onClick={e => e.stopPropagation()}
-      >
+    <SfPopup
+      ref={popupRef}
+      isOpen={!!pendingTransaction}
+      onClose={reject}
+      overlayClassName="p-4"
+      overlayStyle={{ zIndex: 100 }}
+      panelClassName="w-full max-w-md max-h-[92vh] overflow-hidden flex flex-col"
+    >
         {/* Header */}
         <div className="bg-[color:var(--sf-panel-bg)] px-6 py-5 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
           <div className="flex items-center justify-between">
@@ -289,7 +358,7 @@ export default function TransactionConfirmModal() {
               {details.title}
             </h2>
             <button
-              onClick={reject}
+              onClick={closeModal}
               className="flex h-8 w-8 items-center justify-center rounded-lg bg-[color:var(--sf-input-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-[color:var(--sf-text)]/70 transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)] hover:text-[color:var(--sf-text)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] focus:outline-none"
               aria-label="Close"
             >
@@ -339,25 +408,37 @@ export default function TransactionConfirmModal() {
           <div className="p-3 rounded-xl bg-[color:var(--sf-info-yellow-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-sm text-[color:var(--sf-info-yellow-text)]">
             {t('confirm.reviewWarning')}
           </div>
+
+          {walletSession !== 'ready' && (
+            <div className="p-3 rounded-xl bg-[color:var(--sf-panel-bg)] border border-[color:var(--sf-outline)] text-sm text-[color:var(--sf-text)]/70">
+              {walletSession === 'checking'
+                ? t('confirm.checkingWallet')
+                : walletSessionMessage || t('confirm.walletLocked')}
+            </div>
+          )}
         </div>
 
         {/* Actions — sticky bottom so the buttons stay visible while the
          *  body scrolls. */}
         <div className="flex gap-3 px-6 pb-6 pt-3 border-t border-[color:var(--sf-outline)] bg-[color:var(--sf-panel-bg)]/30 backdrop-blur">
           <button
-            onClick={approve}
-            className="flex-1 px-4 py-3 rounded-xl bg-[color:var(--sf-primary)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white font-bold uppercase tracking-wide"
+            onClick={handleApprove}
+            disabled={confirmDisabled}
+            className="flex-1 px-4 py-3 rounded-xl bg-[color:var(--sf-primary)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-white font-bold uppercase tracking-wide disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none"
           >
-            {t('confirm.confirm')}
+            {walletSession === 'checking'
+              ? t('confirm.checkingWallet')
+              : walletSession === 'locked'
+                ? t('confirm.unlockWallet')
+                : t('confirm.confirm')}
           </button>
           <button
-            onClick={reject}
+            onClick={closeModal}
             className="px-4 py-3 rounded-xl bg-[color:var(--sf-panel-bg)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:bg-[color:var(--sf-surface)] hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none text-[color:var(--sf-text)] font-bold uppercase tracking-wide"
           >
             {t('confirm.cancel')}
           </button>
         </div>
-      </div>
-    </div>
+    </SfPopup>
   );
 }

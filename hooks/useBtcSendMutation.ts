@@ -84,6 +84,8 @@ export function useBtcSendMutation() {
       });
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['wallet-utxo-cache'] });
+      queryClient.invalidateQueries({ queryKey: ['btc-balance-fast'] });
       queryClient.invalidateQueries({ queryKey: ['btc-balance'] });
       queryClient.invalidateQueries({ queryKey: ['utxos'] });
       queryClient.invalidateQueries({ queryKey: ['enriched-wallet'] });
@@ -250,6 +252,9 @@ async function sendKeystore(args: {
     toAddresses: [recipientAddress, txContext.alkanesChangeAddress],
     autoConfirm: true,
     network,
+    cachedUtxos: utxoCache.utxos,
+    // Pin to metashrew height we already know — skips SDK's waitForIndexer.
+    maxIndexedHeight: utxoCache.height,
     previewBeforeBroadcast: async (psbtBase64: string) => {
       const plan = buildPlanFromTx({
         psbtBase64,

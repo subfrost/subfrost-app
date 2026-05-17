@@ -310,7 +310,7 @@ Available helpers (canonical surface):
 - `getAddressUtxos(network, address)` — `esplora_address::utxo` (with error-sentinel guard).
 - `getAddressMempoolTxs(network, address)` — `esplora_address::txs:mempool`.
 - `getEsploraTx(network, txid)` — single transaction by id.
-- `getHeight(network)` — `metashrew_height` hedged with `esplora_blocks::tip-height`.
+- `getHeight(network)` — `metashrew_height` against the proxy. No hedge / fallback (stripped 2026-05-11 per flex's "no fallbacks" rule).
 - `broadcastTransaction(network, txHex)` — `esplora_tx::broadcast`.
 - `metashrewView(network, viewFn, hex, blockTag)` — generic raw-view passthrough for protobuf payloads (`simulate`, `protorunesbyaddress`).
 - `getAlkaneInfo(network, alkaneId)` / `getAlkaneInfoBatch(network, ids[])` — `/api/token-details`.
@@ -328,6 +328,28 @@ Available helpers (canonical surface):
 - `app/wallet/components/Brc20BalancesCard.tsx` — BRC-20 balances
 
 When you next edit any of those files, swap the raw fetch for the corresponding `rpc.*` helper.
+
+### Mainnet metashrew routing — ALL traffic on /v4/subfrost. **NEVER /v6.**
+
+**Rule (user directive 2026-05-17)**: subfrost-app must NEVER originate `/v6/subfrost` traffic. `/v4/subfrost` is the only sanctioned mainnet upstream. No exceptions, no fallbacks, no "temporary" splits.
+
+`app/api/rpc/[[...segments]]/route.ts` routes ALL mainnet traffic this way:
+
+| Mainnet upstream | Endpoint |
+|------------------|----------|
+| All JSON-RPC (`metashrew_view`, `metashrew_height`, `alkanes_*`, `bitcoin_*`, `esplora_*`) | `https://mainnet.subfrost.io/v4/subfrost` |
+| REST sub-paths (`/get-pool-details`, `/get-alkanes`, `/get-alkane-details`, etc.) | `oyl.alkanode.com` (canon Espo) |
+
+**Don't add back**:
+- The `METASHREW_RPC_ENDPOINTS` per-method override map (removed 2026-05-17)
+- The `SUBFROST_V6_API_KEY` env var or `buildHeadersForUrl` auth branch (removed 2026-05-17)
+- Any URL substring containing `/v6/` in `app/`, `lib/`, `queries/`, `hooks/`
+
+**If /v4 starts 429-ing under our load**: fix the cadence at the source, NOT by re-adding /v6. Options in priority order: (a) reduce the SDK's `metashrew_height` poll rate (most likely culprit), (b) batch height with view in `metashrewView` calls, (c) ask the upstream operator to raise the bucket. We've already burned a full session debugging the "split metashrew across two upstreams" anti-pattern (PR #117 + the 2026-05-17 revert) — don't repeat it.
+
+**Why this rule exists**: prior revs split `metashrew_view` + `metashrew_height` to `/v6/subfrost` for replica-freshness reasons. Live verification on 2026-05-17 showed /v6 returning HTTP 429 under the SDK's poll cadence, which aborted swaps mid-broadcast. The directive ("we should NEVER have /v6 its always /v4/subfrost") collapses the multi-upstream surface to one — the same "we should never have more than 1 way to do something" rule flex applied to the espo/lua/metashrew fallback chain (PR #116).
+
+**Note on REST sub-paths**: those (`/get-pool-details`, `/get-alkanes`, `/get-alkane-details`, etc.) are NOT routed through subfrost.io at all. Per flex (alkanes-rs maintainer, 2026-05-10): "All of the /v4/subfrost/* routes other than BTC pricing are espo routes. They should be bypassed and go directly to espo." REST sub-paths route to canon Espo on alkanode (`oyl.alkanode.com`) with no subfrost.io fallback. See `REST_PRIMARY_BASE_URLS` in the proxy and the route-specific files (`app/api/pools/cached`, `app/api/pools/stats`, `app/api/token-names`, `app/api/token-details`).
 
 ### Indexer Sync — Proactive Probe in `alkanesExecuteTyped`
 

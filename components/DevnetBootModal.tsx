@@ -1,6 +1,13 @@
 'use client';
 
+import React, { useState } from 'react';
 import { useDevnet } from '@/context/DevnetContext';
+import { clearDevnetState } from '@/lib/devnet/persistence';
+
+function isOomError(error?: string): boolean {
+  if (!error) return false;
+  return error.includes('Out of memory') || error.includes('Cannot allocate Wasm memory') || error.includes('WebAssembly.Instance') || error.includes('memory access out of bounds');
+}
 
 export function DevnetBootModal() {
   const { state } = useDevnet();
@@ -39,8 +46,38 @@ export function DevnetBootModal() {
 
 export function DevnetErrorModal() {
   const { state, shutdown } = useDevnet();
+  const [resetting, setResetting] = useState(false);
+  const oom = isOomError(state.error);
 
   if (state.status !== 'error') return null;
+
+  const handleReset = async () => {
+    setResetting(true);
+    try { await clearDevnetState(); } catch {}
+    window.location.reload();
+  };
+
+  if (oom) {
+    return (
+      <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm">
+        <div className="bg-zinc-900 border border-amber-700 rounded-2xl p-8 max-w-md w-full mx-4 shadow-2xl">
+          <div className="text-center space-y-4">
+            <div className="text-xl font-bold text-amber-400">Devnet Out of Memory</div>
+            <p className="text-zinc-300 text-sm">
+              The devnet ran out of memory — this usually happens when the state grows too large from a previous session. Resetting will clear all cached state and start a fresh devnet.
+            </p>
+            <button
+              onClick={handleReset}
+              disabled={resetting}
+              className="px-4 py-2 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white rounded-lg text-sm"
+            >
+              {resetting ? 'Resetting…' : 'Reset Devnet'}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm">

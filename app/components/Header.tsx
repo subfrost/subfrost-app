@@ -43,10 +43,15 @@ export default function Header() {
     typeof connected === "boolean" ? connected : isConnected;
   // Wallet icon: browser wallet icon from SDK/constants, keystore gets a generic key icon
   const walletIcon = walletType === 'browser' ? (browserWallet?.info?.icon || null) : null;
-  const isDualAddress = !!account?.nativeSegwit?.address && !!account?.taproot?.address;
+  // Header reflects the wallet's TOTAL BTC across every connected address.
+  // For dual-address wallets this previously showed only the segwit balance,
+  // so users who held BTC at the taproot saw "0.00000 BTC" — verified live
+  // 2026-05-15 against bc1psn0925…sjfs7xwmj4 (213k sats clean BTC at the
+  // taproot, 0 at segwit). Spendable-for-fees stays a separate number on
+  // the swap form (`useBtcBalance`).
   const hasFast = btcFast && btcFast.total > 0;
-  const fastSats = isDualAddress ? (btcFast?.p2wpkh ?? 0) : (btcFast?.total ?? 0);
-  const enrichedSats = isDualAddress ? (balances?.bitcoin?.p2wpkh ?? 0) : (balances?.bitcoin?.total ?? 0);
+  const fastSats = btcFast?.total ?? 0;
+  const enrichedSats = balances?.bitcoin?.total ?? 0;
   const spendableSats = hasFast ? fastSats : enrichedSats;
   const btcBalance = spendableSats > 0 ? (spendableSats / 1e8).toFixed(5) : "0.00000";
 
@@ -248,14 +253,9 @@ export default function Header() {
                     </Link>
                     <button
                       type="button"
-                      onClick={async () => {
-                        try {
-                          await disconnect();
-                        } catch (e) {
-                          // noop
-                        } finally {
-                          setMenuOpen(false);
-                        }
+                      onClick={() => {
+                        disconnect();
+                        setMenuOpen(false);
                       }}
                       className="w-full px-4 py-3 text-left text-sm font-medium text-red-500 hover:bg-[color:var(--sf-primary)]/10"
                     >
@@ -331,29 +331,20 @@ export default function Header() {
               >
                 {t("nav.swap")}
               </Link>
-              {swapMenuOpen && (
+              {swapMenuOpen && !isDemoGated && (
                 <div className="absolute left-0 top-full z-50 pt-1 w-44">
                   <div className="overflow-hidden rounded-xl bg-[color:var(--sf-surface)] backdrop-blur-xl shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
-                    {isDemoGated ? (
-                      <span
-                        aria-disabled="true"
-                        className="block w-full px-4 py-1.5 text-left text-sm font-medium text-[color:var(--sf-text)]/30 cursor-not-allowed"
-                      >
-                        {t("nav.advancedTrader")}
-                      </span>
-                    ) : (
-                      <Link
-                        href="/swap/advanced"
-                        onClick={() => setSwapMenuOpen(false)}
-                        className={`block w-full px-4 py-1.5 text-left text-sm font-medium transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
-                          pathname === "/swap/advanced"
-                            ? "bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]"
-                            : "text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10"
-                        }`}
-                      >
-                        {t("nav.advancedTrader")}
-                      </Link>
-                    )}
+                    <Link
+                      href="/swap/advanced"
+                      onClick={() => setSwapMenuOpen(false)}
+                      className={`block w-full px-4 py-1.5 text-left text-sm font-medium transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none ${
+                        pathname === "/swap/advanced"
+                          ? "bg-[color:var(--sf-primary)]/10 text-[color:var(--sf-primary)]"
+                          : "text-[color:var(--sf-text)] hover:bg-[color:var(--sf-primary)]/10"
+                      }`}
+                    >
+                      {t("nav.advancedTrader")}
+                    </Link>
                   </div>
                 </div>
               )}
@@ -508,14 +499,9 @@ export default function Header() {
                     </Link>
                     <button
                       type="button"
-                      onClick={async () => {
-                        try {
-                          await disconnect();
-                        } catch (e) {
-                          // noop
-                        } finally {
-                          setMenuOpen(false);
-                        }
+                      onClick={() => {
+                        disconnect();
+                        setMenuOpen(false);
                       }}
                       className="w-full px-4 py-3 text-left text-sm font-medium text-red-500 hover:bg-[color:var(--sf-primary)]/10"
                     >

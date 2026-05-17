@@ -12,33 +12,31 @@ interface AddressAvatarProps {
  * Generates a deterministic identicon/pixman avatar for a Bitcoin address
  * Based on the address hash, creates a unique geometric pattern
  */
+// Cold-palette hue band: cyan (170°) through indigo/violet (~300°).
+const COLD_HUE_BASE = 170;
+const COLD_HUE_SPAN = 130;
+
 export default function AddressAvatar({ address, size = 32, className = '' }: AddressAvatarProps) {
-  const { bgColor, pattern } = useMemo(() => {
-    // Generate a consistent hash from the address
+  const { bgColor, dotColor, pattern } = useMemo(() => {
     let hash = 0;
     for (let i = 0; i < address.length; i++) {
       hash = ((hash << 5) - hash) + address.charCodeAt(i);
-      hash = hash & hash; // Convert to 32bit integer
+      hash = hash & hash;
     }
-
-    // Generate a color from the hash
-    const hue = Math.abs(hash) % 360;
-    const saturation = 65 + (Math.abs(hash >> 8) % 20);
-    const lightness = 45 + (Math.abs(hash >> 16) % 15);
-    const bgColor = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
-
-    // Generate a 5x5 pattern (symmetric for better aesthetics)
+    const h = COLD_HUE_BASE + (Math.abs(hash) % COLD_HUE_SPAN);
+    const s = 55 + (Math.abs(hash >> 8) % 25);
+    const l = 32 + (Math.abs(hash >> 16) % 18);
+    const dotH = COLD_HUE_BASE + ((h - COLD_HUE_BASE + 35 + (Math.abs(hash >> 4) % 30)) % COLD_HUE_SPAN);
+    const bgColor = `hsl(${h}, ${s}%, ${l}%)`;
+    const dotColor = `hsl(${dotH}, ${Math.min(95, s + 15)}%, ${Math.min(90, l + 38)}%)`;
     const pattern: boolean[] = [];
-    for (let i = 0; i < 15; i++) {
-      const bit = (hash >> i) & 1;
-      pattern.push(bit === 1);
-    }
-
-    return { bgColor, pattern };
+    for (let i = 0; i < 15; i++) pattern.push(((hash >> i) & 1) === 1);
+    return { bgColor, dotColor, pattern };
   }, [address]);
 
   const gridSize = 5;
   const cellSize = size / gridSize;
+  const radius = cellSize * 0.38;
 
   return (
     <svg
@@ -48,30 +46,23 @@ export default function AddressAvatar({ address, size = 32, className = '' }: Ad
       className={`rounded-full ${className}`}
       style={{ backgroundColor: bgColor }}
     >
-      {/* Generate symmetric pixman pattern */}
       {pattern.map((filled, idx) => {
         const row = Math.floor(idx / 3);
         const col = idx % 3;
-        
-        // Create symmetric pattern - mirror column 2 to column 3, column 1 to column 4
-        const positions = [
+        return [
           [row, col],
           [row, gridSize - 1 - col],
-        ];
-
-        return positions.map(([r, c], posIdx) => {
-          if (r >= gridSize || c >= gridSize) return null;
-          
-          return filled ? (
-            <rect
+        ].map(([r, c], posIdx) => {
+          if (!filled || r >= gridSize || c >= gridSize) return null;
+          return (
+            <circle
               key={`${idx}-${posIdx}`}
-              x={c * cellSize}
-              y={r * cellSize}
-              width={cellSize}
-              height={cellSize}
-              fill="rgba(255, 255, 255, 0.9)"
+              cx={c * cellSize + cellSize / 2}
+              cy={r * cellSize + cellSize / 2}
+              r={radius}
+              fill={dotColor}
             />
-          ) : null;
+          );
         });
       })}
     </svg>

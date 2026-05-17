@@ -2,6 +2,7 @@
 
 import { ChevronRight, Plus, Key, Lock, Eye, EyeOff, Copy, Check, Mail, Download, Cloud, Upload, RotateCcw, X, Ticket } from 'lucide-react';
 import { useState, useEffect, useRef, startTransition } from 'react';
+import SfPopup, { type SfPopupHandle } from '@/app/components/SfPopup';
 import { useRouter } from 'next/navigation';
 
 import { useWallet, type BrowserWalletInfo } from '@/context/WalletContext';
@@ -59,6 +60,8 @@ export default function ConnectWalletModal() {
   const [isValidatingCode, setIsValidatingCode] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const wasModalOpenRef = useRef(false);
+
+  const popupRef = useRef<SfPopupHandle>(null);
 
   // Only reset the view when the modal is first opened, not when hasExistingKeystoreFromContext changes
   useEffect(() => {
@@ -138,25 +141,15 @@ export default function ConnectWalletModal() {
     }
   };
 
-  const handleClose = () => {
-    // JOURNAL (2026-03-31): Use startTransition so React treats the modal unmount
-    // as a low-priority transition. This prevents the "removeChild: node is not a
-    // child" error that fires in React 18 Strict Mode when onConnectModalOpenChange(false)
-    // and resetForm() both run synchronously — Strict Mode double-invokes unmounts,
-    // leaving the DOM in a state where React's fiber tree and the real DOM diverge.
-    // The mount guard has also been moved to AppShell (ConnectWalletModalGate) so
-    // this component is never in a partial-unmount state. startTransition provides
-    // a second layer of safety by deferring the state update to a non-blocking pass.
-    startTransition(() => {
-      onConnectModalOpenChange(false);
-      resetForm();
-    });
-  };
+  // JOURNAL (2026-03-31): startTransition wraps the unmount so React 18
+  // Strict Mode's double-invoke can't tear down `onConnectModalOpenChange`
+  // and `resetForm` mid-DOM-diff. Modal mount-guard lives in AppShell's
+  // ConnectWalletModalGate; this is a second-layer safety net.
+  const handleClose = () => popupRef.current?.close();
+  const handleCloseAndNavigate = () => popupRef.current?.close();
 
-  const handleCloseAndNavigate = () => {
-    // Close modal and reset form — stay on current page.
-    // The old behavior (router.push('/wallet')) was disruptive when connecting
-    // from the swap page or any non-wallet page.
+  // Real cleanup runs after SfPopup finishes the 140ms exit animation.
+  const onSfPopupClose = () => {
     startTransition(() => {
       onConnectModalOpenChange(false);
       resetForm();
@@ -403,17 +396,16 @@ export default function ConnectWalletModal() {
   // This component is only rendered when isConnectModalOpen === true, so the
   // guard here is redundant. Keeping it as a safety net in case the component
   // is ever rendered outside AppShell.
-  if (!isConnectModalOpen) return null;
-
   return (
-    <div
-      className="sf-popup-overlay p-4"
-      onClick={connectingWallet ? undefined : handleClose}
+    <SfPopup
+      ref={popupRef}
+      isOpen={isConnectModalOpen}
+      onClose={onSfPopupClose}
+      overlayClassName="p-4"
+      panelClassName="w-[480px] max-w-[92vw] max-h-[90vh]"
+      disableBackdropClose={!!connectingWallet}
+      trackHeight
     >
-      <div
-        className="sf-popup w-[480px] max-w-[92vw] max-h-[90vh]"
-        onClick={(e) => e.stopPropagation()}
-      >
         {/* Header */}
         <div className="bg-[color:var(--sf-panel-bg)] px-6 py-5 shadow-[0_2px_8px_rgba(0,0,0,0.15)]">
           <div className="flex items-center justify-between">
@@ -652,7 +644,7 @@ export default function ConnectWalletModal() {
               ) : (
                 <button
                   onClick={() => setView('invite-code')}
-                  className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[color:var(--sf-primary)] to-[color:var(--sf-primary-pressed)] px-4 py-2.5 text-sm font-bold text-white shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:shadow-[0_6px_24px_rgba(0,0,0,0.4)] hover:scale-[1.02] active:scale-[0.98]"
+                  className="w-full flex items-center justify-center gap-2 rounded-xl bg-[color:var(--sf-input-bg)] px-4 py-2.5 text-sm font-bold text-[color:var(--sf-text)] shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-surface)]/60 hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)]"
                 >
                   <Ticket size={16} />
                   <span>{t('wallet.invited')}</span>
@@ -835,7 +827,7 @@ export default function ConnectWalletModal() {
           {view === 'restore-mnemonic' && (
             <div className="flex flex-col gap-4">
               <div className="rounded-xl bg-[color:var(--sf-info-yellow-bg)] p-4 shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-sm font-medium text-[color:var(--sf-info-yellow-text)]">
-                {t('wallet.restoreMnemonicWarning')}
+                {t('wallet.runesInscriptionsWarning')}
               </div>
               <div>
                 <label className="mb-2 block text-xs font-bold tracking-wider uppercase text-[color:var(--sf-text)]/70">{t('wallet.recoveryPhrase')}</label>
@@ -968,10 +960,13 @@ export default function ConnectWalletModal() {
 
           {view === 'browser-extension' && (
             <div className="flex flex-col gap-3">
+              <div className="rounded-xl bg-[color:var(--sf-info-yellow-bg)] p-4 shadow-[0_2px_8px_rgba(0,0,0,0.15)] text-sm font-medium text-[color:var(--sf-info-yellow-text)]">
+                {t('wallet.runesInscriptionsWarning')}
+              </div>
               <div className="max-h-96 overflow-y-auto space-y-4 px-6 -mx-6">
                 {/* Enabled wallet IDs - only these wallets are fully supported */}
                 {(() => {
-                  const ENABLED_WALLET_IDS = new Set(['oyl', 'xverse', 'unisat']);
+                  const ENABLED_WALLET_IDS = new Set(['oyl', 'okx', 'xverse', 'unisat']);
                   const installedIds = new Set(installedWallets.map(w => w.id));
 
                   // Separate installed wallets into enabled and coming soon
@@ -1222,7 +1217,6 @@ export default function ConnectWalletModal() {
             </div>
           )}
         </div>
-      </div>
-    </div>
+    </SfPopup>
   );
 }

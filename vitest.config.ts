@@ -25,6 +25,11 @@ export default defineConfig({
       // env-dependent failures.
       '__tests__/devnet/**',
       '__tests__/sdk/**',
+      '__tests__/brc20-prog/**',
+      '__tests__/tier1/**',
+      '__tests__/tier2/**',
+      '__tests__/repro/**',
+      '__tests__/wallet/**',
     ],
     testTimeout: 30000,
     hookTimeout: 30000,

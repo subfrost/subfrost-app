@@ -1,31 +1,25 @@
 /**
- * useTokenToBtcSwap — sequential Token → frBTC + Unwrap flow.
+ * useTokenToBtcSwap - CPFP packaged Token -> frBTC -> BTC flow.
  *
- * Two separate transactions (chained, NOT atomic):
- *   1. Swap Token → frBTC via factory router
- *   2. Wait for swap confirmation
- *   3. Unwrap frBTC → BTC
- *
- * Why two-tx instead of atomic: the previous atomic three-protostone path
- * had slippage uncertainty between swap and unwrap, plus complex PSBT
- * signing. Two-tx is simpler and lets the user partially recover (swap
- * succeeded, unwrap failed → user has frBTC, can retry unwrap).
- *
- * Why a hook: the UI shouldn't own confirmation polling, devnet-specific
- * mining, or the cross-tx state transitions (swapping →
- * swap-confirming → unwrapping → complete). Caller passes `onProgress`
- * + `onNotify` callbacks to drive its UI.
+ * Tx A is signed by the user and swaps the sold token into frBTC at an
+ * ephemeral taproot output. Tx B is signed by that ephemeral key, calls frBTC
+ * unwrap, and records the user's wallet address as the BTC receiver.
  */
 'use client';
 
+import BigNumber from 'bignumber.js';
 import { useCallback } from 'react';
+import { useMutation } from '@tanstack/react-query';
 import { useWallet } from '@/context/WalletContext';
-import { useSwapMutation } from '@/hooks/useSwapMutation';
-import { useUnwrapMutation } from '@/hooks/useUnwrapMutation';
+import { useSandshrewProvider } from '@/hooks/useSandshrewProvider';
+import { useEphemeralWrapPackage } from '@/hooks/useEphemeralWrapPackage';
+import { useFrbtcPremium } from '@/hooks/useFrbtcPremium';
 import { useGlobalStore } from '@/stores/global';
-import { getConfig, getRpcUrl } from '@/utils/getConfig';
-import { getEsploraTx, getHeight } from '@/lib/alkanes/rpc';
+import { getConfig } from '@/utils/getConfig';
+import { getFutureBlockHeight } from '@/utils/amm';
+import { FRBTC_UNWRAP_FEE_PER_1000 } from '@/constants/alkanes';
 import type { OperationType } from '@/app/components/SwapSuccessNotification';
+import { alkanesExecuteTyped } from '@/lib/alkanes/execute';
 
 export interface TokenToBtcSwapProgress {
   type:
@@ -50,251 +44,164 @@ export interface TokenToBtcSwapParams {
   fromTokenId: string;
   /** Sell amount in raw sub-units (1e8). */
   sellAmount: string;
-  /** Quote-derived expected buy amount of frBTC. */
-  buyAmount: string;
+  /** Quote-derived minimum BTC amount after slippage and unwrap fee. */
+  minimumReceived: string;
   /** Pool id from the swap quote. */
   poolId?: { block: string | number; tx: string | number };
-  feeRate: number; // sats/vB — pass caller's useFeeRate instance (each hook instance has independent state)
+  feeRate: number;
   /** UI callback fired on every state transition. */
   onProgress: (progress: TokenToBtcSwapProgress) => void;
   /** UI callback fired when a tx is broadcast (for toast notifications). */
   onNotify: (txId: string, operation: OperationType, stepContext?: string) => void;
 }
 
+function grossUpForUnwrapFee(amount: string, unwrapFeePerThousand: number): string {
+  const feeDenominator = 1000 - unwrapFeePerThousand;
+  if (!Number.isFinite(feeDenominator) || feeDenominator <= 0) {
+    throw new Error(`Invalid frBTC unwrap fee: ${unwrapFeePerThousand}`);
+  }
+  return new BigNumber(amount || '0')
+    .multipliedBy(1000)
+    .dividedBy(feeDenominator)
+    .integerValue(BigNumber.ROUND_CEIL)
+    .toString();
+}
+
 export function useTokenToBtcSwap() {
-  const { network, address } = useWallet();
-  const { maxSlippage, deadlineBlocks } = useGlobalStore();
-  const swapMutation = useSwapMutation();
-  const unwrapMutation = useUnwrapMutation();
-  const config = getConfig(network);
+  const { network, address, txContext } = useWallet();
+  const provider = useSandshrewProvider();
+  const executeEphemeralPackage = useEphemeralWrapPackage();
+  const { deadlineBlocks } = useGlobalStore();
+  const { data: premiumData } = useFrbtcPremium();
 
   const executeTokenToBtcSwap = useCallback(
     async (params: TokenToBtcSwapParams): Promise<{ swapTxId: string; unwrapTxId: string }> => {
-      const isRegtest = ['regtest', 'subfrost-regtest', 'oylnet', 'regtest-local', 'devnet'].includes(network);
+      if (!address) throw new Error('No wallet address');
+      if (!txContext) throw new Error('No wallet transaction context');
+      if (!provider) throw new Error('Provider not available');
+      if (!params.poolId) throw new Error('Token -> BTC swap requires a pool id');
 
-      // ---------------------------------------------------------------------
-      // Step 1 — Token → frBTC swap
-      // ---------------------------------------------------------------------
       params.onProgress({ type: 'swapping' });
 
-      const swapRes = await swapMutation.mutateAsync({
-        sellCurrency: params.fromTokenId,
-        buyCurrency: config.FRBTC_ALKANE_ID,
-        direction: 'sell',
+      const config = getConfig(network);
+      const { getSignerAddressDynamic } = await import('@/lib/alkanes/helpers');
+      const { buildSwapProtostone, buildUnwrapProtostones } = await import('@/lib/alkanes/builders');
+
+      // Devnet shortcut: the ephemeral CPFP package flow cannot orchestrate
+      // two-PSBT signing in the in-browser devnet. Execute swap then unwrap
+      // as sequential autoConfirm calls instead.
+      if (network === 'devnet') {
+        const signerAddressDevnet = await getSignerAddressDynamic(network);
+        const deadlineProviderDevnet = provider as Parameters<typeof getFutureBlockHeight>[1];
+        const deadlineDevnet = (await getFutureBlockHeight(deadlineBlocks || 5, deadlineProviderDevnet)).toString();
+        const swapProtostoneDevnet = buildSwapProtostone({
+          factoryId: config.ALKANE_FACTORY_ID,
+          sellTokenId: params.fromTokenId,
+          buyTokenId: config.FRBTC_ALKANE_ID,
+          sellAmount: params.sellAmount,
+          minOutput: '1',
+          deadline: deadlineDevnet,
+        });
+        await alkanesExecuteTyped(provider as any, {
+          network, txContext,
+          toAddresses: [address],
+          inputRequirements: `${params.fromTokenId}:${params.sellAmount}`,
+          protostones: swapProtostoneDevnet,
+          feeRate: params.feeRate,
+          autoConfirm: true,
+        });
+        const unwrapFeeDevnet = premiumData?.unwrapFeePerThousand ?? FRBTC_UNWRAP_FEE_PER_1000;
+        const minimumFrbtcDevnet = grossUpForUnwrapFee(params.minimumReceived || '1', unwrapFeeDevnet);
+        const unwrapProtostoneDevnet = buildUnwrapProtostones({
+          frbtcId: config.FRBTC_ALKANE_ID,
+          dustVout: 2,
+          amount: minimumFrbtcDevnet,
+          pointer: 'v1',
+          refund: 'v0',
+        });
+        const unwrapResult = await alkanesExecuteTyped(provider as any, {
+          network, txContext,
+          toAddresses: [txContext.alkanesChangeAddress, txContext.btcChangeAddress, signerAddressDevnet],
+          inputRequirements: `${config.FRBTC_ALKANE_ID}:${minimumFrbtcDevnet}`,
+          protostones: unwrapProtostoneDevnet,
+          feeRate: params.feeRate,
+          autoConfirm: true,
+        });
+        const unwrapTxId = unwrapResult?.txid || unwrapResult?.reveal_txid || '';
+        params.onNotify(unwrapTxId, 'swap');
+        params.onProgress({ type: 'complete', swapTxId: unwrapTxId, unwrapTxId });
+        return { swapTxId: unwrapTxId, unwrapTxId };
+      }
+
+      const unwrapFee = premiumData?.unwrapFeePerThousand ?? FRBTC_UNWRAP_FEE_PER_1000;
+      const minimumFrbtcAmount = grossUpForUnwrapFee(params.minimumReceived || '1', unwrapFee);
+      const deadlineProvider = provider as Parameters<typeof getFutureBlockHeight>[1];
+      const deadline = (await getFutureBlockHeight(deadlineBlocks || 5, deadlineProvider)).toString();
+      const signerAddress = await getSignerAddressDynamic(network);
+      const payerAddress = txContext.btcChangeAddress;
+      const alkaneRefundAddress = txContext.alkanesChangeAddress;
+      const [frbtcBlock, frbtcTx] = config.FRBTC_ALKANE_ID.split(':').map(Number);
+
+      const parentProtostone = buildSwapProtostone({
+        factoryId: config.ALKANE_FACTORY_ID,
+        sellTokenId: params.fromTokenId,
+        buyTokenId: config.FRBTC_ALKANE_ID,
         sellAmount: params.sellAmount,
-        buyAmount: params.buyAmount,
-        maxSlippage,
-        feeRate: params.feeRate,
-        poolId: params.poolId,
-        deadlineBlocks,
+        minOutput: minimumFrbtcAmount,
+        deadline,
+        pointer: 'v0',
+        refund: 'v0',
       });
 
-      if (!swapRes?.success || !swapRes.transactionId) {
-        params.onProgress({ type: 'error', step: 'swap', message: 'No transaction ID returned' });
-        throw new Error('Swap step failed — no transaction ID returned');
-      }
-      const swapTxId = swapRes.transactionId;
-
-      // Devnet/regtest: mine a block to confirm the swap tx so the unwrap
-      // step can see the frBTC UTXO. JOURNAL (2026-03-26): without this,
-      // unwrap reads stale state and fails with "insufficient alkanes".
-      if (isRegtest && address) {
-        try {
-          if (network === 'devnet') {
-            await fetch(getRpcUrl(network), {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ jsonrpc: '2.0', method: 'generatetoaddress', params: [1, address], id: 1 }),
-            });
-          } else {
-            await fetch('/api/regtest/mine', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ blocks: 1, address }),
-            });
-          }
-        } catch (mineErr) {
-          console.warn('[useTokenToBtcSwap] Mine failed (non-fatal):', mineErr);
-        }
-      }
-
-      // ---------------------------------------------------------------------
-      // Mainnet: poll esplora_tx until swap is confirmed (max ~30 min @ 15s
-      // intervals). Devnet just waits 500ms — the manual mine above already
-      // confirmed it.
-      // ---------------------------------------------------------------------
-      if (network !== 'devnet') {
-        params.onNotify(swapTxId, 'swap', 'Step 1/2');
-
-        const pollInterval = isRegtest ? 1500 : 15000;
-        const maxPollAttempts = isRegtest ? 20 : 120;
-        let swapConfirmed = false;
-
-        for (let attempt = 0; attempt < maxPollAttempts; attempt++) {
-          params.onProgress({ type: 'swap-confirming', txId: swapTxId, attempt: attempt + 1, maxAttempts: maxPollAttempts });
-          await new Promise(resolve => setTimeout(resolve, pollInterval));
-          try {
-            const tx = await getEsploraTx(network!, swapTxId);
-            if (tx?.status?.confirmed) {
-              await new Promise(resolve => setTimeout(resolve, 2000));
-              swapConfirmed = true;
-              break;
-            }
-          } catch {
-            // polling RPC error — keep retrying
-          }
-        }
-
-        if (!swapConfirmed) {
-          params.onProgress({ type: 'error', step: 'swap', message: 'Swap tx did not confirm', swapTxId });
-          throw new Error('Swap tx did not confirm — unwrap frBTC → BTC manually.');
-        }
-      } else {
-        params.onNotify(swapTxId, 'swap', 'Step 1/2');
-        await new Promise(resolve => setTimeout(resolve, 500));
-      }
-
-      // ---------------------------------------------------------------------
-      // Step 2 — Unwrap frBTC → BTC
-      // ---------------------------------------------------------------------
-      params.onProgress({ type: 'unwrapping' });
-
-      // Devnet workaround: quote.buyAmount can be wildly wrong because pool
-      // reserves don't match the quote engine's expectations. Query actual
-      // frBTC balance via the enriched-balances Lua script which reads the
-      // alkanes indexer directly.
-      let frbtcAmount = params.buyAmount;
-      if (network === 'devnet' && address) {
-        try {
-          const resp = await fetch(getRpcUrl(network), {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              jsonrpc: '2.0', id: 1,
-              method: 'lua_evalsaved',
-              params: ['4efbe0cdfe14270cb72eec80bce63e44f9f926951a67a0ad7256fca39046b80f', address, '1'],
-            }),
-          });
-          const data = await resp.json();
-          const assets = data?.result?.returns?.assets || [];
-          let totalFrbtc = 0n;
-          for (const asset of assets) {
-            for (const r of (asset?.runes || [])) {
-              if (r.block === 32 && r.tx === 0) totalFrbtc += BigInt(r.amount || 0);
-            }
-          }
-          if (totalFrbtc > 0n) {
-            // unwrapMutation.amount expects display units; convert from raw 1e8.
-            frbtcAmount = (Number(totalFrbtc) / 1e8).toFixed(8);
-          }
-        } catch (err) {
-          console.warn('[useTokenToBtcSwap] Devnet: could not query frBTC balance, using quote:', err);
-        }
-      }
-
-      const unwrapRes = await unwrapMutation.mutateAsync({
-        amount: frbtcAmount,
-        feeRate: params.feeRate,
+      const childProtostone = buildUnwrapProtostones({
+        frbtcId: config.FRBTC_ALKANE_ID,
+        dustVout: 2,
+        amount: minimumFrbtcAmount,
+        pointer: 'v1',
+        refund: 'v0',
       });
 
-      if (!unwrapRes?.success || !unwrapRes.transactionId) {
-        params.onProgress({ type: 'error', step: 'unwrap', message: 'No transaction ID returned', swapTxId });
-        throw new Error('Unwrap step failed — no transaction ID returned');
+      try {
+        const result = await executeEphemeralPackage({
+          feeRate: params.feeRate,
+          signerAddress,
+          userAddress: payerAddress,
+          parentInputRequirements: `${params.fromTokenId}:${params.sellAmount}`,
+          parentProtostone,
+          parentExtraToAddresses: [],
+          childInputRequirements: `${config.FRBTC_ALKANE_ID}:${minimumFrbtcAmount}`,
+          childProtostone,
+          childAlkanes: [{
+            block: frbtcBlock,
+            tx: frbtcTx,
+            amount: minimumFrbtcAmount,
+          }],
+          // v0 is the taproot alkane refund/change output; v1 is the BTC
+          // recipient the unwrap call reads via pointer=v1.
+          childToAddresses: [alkaneRefundAddress, payerAddress, signerAddress],
+          childAlkanesChangeAddress: alkaneRefundAddress,
+          invalidate: 'swap',
+        });
+
+        const swapTxId = result.wrapTxId || result.transactionId;
+        const unwrapTxId = result.transactionId;
+        params.onNotify(unwrapTxId, 'swap');
+        params.onProgress({ type: 'complete', swapTxId, unwrapTxId });
+        return { swapTxId, unwrapTxId };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        params.onProgress({ type: 'error', step: 'swap', message });
+        throw error;
       }
-
-      const unwrapTxId = unwrapRes.transactionId;
-      params.onNotify(unwrapTxId, 'unwrap', 'Step 2/2');
-
-      // Devnet: mine a block to confirm the unwrap so BTC balance updates.
-      if (network === 'devnet' && address) {
-        try {
-          await fetch(getRpcUrl(network), {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ jsonrpc: '2.0', method: 'generatetoaddress', params: [1, address], id: 1 }),
-          });
-        } catch {
-          // Mining is best-effort; balance will catch up on next poll.
-        }
-      }
-
-      // ---------------------------------------------------------------------
-      // Poll until the unwrap tx confirms. Mirrors the swap-confirming loop
-      // above. Without this the UI flips from "Broadcasting" to "Complete"
-      // the instant `broadcastTransaction` resolves — even though the tx is
-      // still in mempool. The user sees a fake-fast "complete" for the swap
-      // leg followed by a fake-stuck "Broadcasting" for the unwrap leg, when
-      // really both legs go through the same confirm-then-done path.
-      // Devnet skips polling — the manual mine above already confirmed it.
-      // ---------------------------------------------------------------------
-      if (network !== 'devnet') {
-        const pollInterval = isRegtest ? 1500 : 15000;
-        const maxPollAttempts = isRegtest ? 20 : 120;
-        let unwrapConfirmed = false;
-        let confirmationHeight: number | undefined;
-
-        for (let attempt = 0; attempt < maxPollAttempts; attempt++) {
-          params.onProgress({
-            type: 'unwrap-confirming',
-            txId: unwrapTxId,
-            attempt: attempt + 1,
-            maxAttempts: maxPollAttempts,
-            swapTxId,
-          });
-          await new Promise(resolve => setTimeout(resolve, pollInterval));
-          try {
-            const tx = await getEsploraTx(network!, unwrapTxId);
-            if (tx?.status?.confirmed) {
-              unwrapConfirmed = true;
-              confirmationHeight = tx.status.block_height;
-              break;
-            }
-          } catch {
-            // polling RPC error — keep retrying
-          }
-        }
-
-        if (!unwrapConfirmed) {
-          // Soft failure: the unwrap is broadcast and will eventually confirm.
-          // Don't throw — the user's frBTC is already burned and BTC is owed
-          // to them by the protocol. Just stop polling and mark complete so
-          // the UI doesn't hang forever on slow blocks.
-          console.warn('[useTokenToBtcSwap] Unwrap tx did not confirm within poll window; marking complete anyway:', unwrapTxId);
-        }
-
-        // -------------------------------------------------------------------
-        // Indexing beat — confirmed in a block but metashrew may still be
-        // catching up. Without this, the UI ticks ✓ but balances haven't
-        // refreshed yet, leaving the user wondering "did it actually finish?"
-        // We poll metashrew_height until it >= the confirmation block.
-        // Bounded short (max ~30s on mainnet) so a slow indexer doesn't hang
-        // the modal — balance queries will catch up via HeightPoller.
-        // -------------------------------------------------------------------
-        if (unwrapConfirmed && confirmationHeight) {
-          const indexPollInterval = isRegtest ? 1000 : 3000;
-          const maxIndexPolls = isRegtest ? 10 : 10;
-          for (let attempt = 0; attempt < maxIndexPolls; attempt++) {
-            params.onProgress({ type: 'unwrap-indexing', txId: unwrapTxId, swapTxId });
-            try {
-              const h = await getHeight(network!);
-              if (h >= confirmationHeight) break;
-            } catch {
-              // ignore — keep polling
-            }
-            await new Promise(resolve => setTimeout(resolve, indexPollInterval));
-          }
-        }
-      }
-
-      params.onProgress({ type: 'complete', swapTxId, unwrapTxId });
-
-      return { swapTxId, unwrapTxId: unwrapRes.transactionId };
     },
-    [network, address, maxSlippage, deadlineBlocks, swapMutation, unwrapMutation, config.FRBTC_ALKANE_ID],
+    [address, deadlineBlocks, executeEphemeralPackage, network, premiumData, provider, txContext],
   );
 
+  const mutation = useMutation({ mutationFn: executeTokenToBtcSwap });
+
   return {
-    executeTokenToBtcSwap,
-    isPending: swapMutation.isPending || unwrapMutation.isPending,
+    executeTokenToBtcSwap: mutation.mutateAsync,
+    isPending: mutation.isPending,
+    error: mutation.error,
   };
 }

@@ -55,8 +55,10 @@
  * handle_message() returns Err on revert → atomic.commit() never called → rollback.
  */
 
-import { parseMaxVoutFromProtostones, extractPsbtBase64 } from './helpers';
+import * as bitcoin from 'bitcoinjs-lib';
+import { parseMaxVoutFromProtostones, extractPsbtBase64, getBitcoinNetwork } from './helpers';
 import type { AlkanesExecuteTypedParams } from './types';
+import { getAlkanesDataSource } from './dataSource';
 
 type WebProvider = import('@alkanes/ts-sdk/wasm').WebProvider;
 
@@ -92,6 +94,26 @@ export async function alkanesExecuteTyped(
     params.changeAddress ?? params.txContext?.btcChangeAddress ?? 'p2wpkh:0';
   options.alkanes_change_address =
     params.alkanesChangeAddress ?? params.txContext?.alkanesChangeAddress ?? 'p2tr:0';
+  // Default utxo_source logic:
+  //   - explicit per-call `params.utxoSource` wins (e.g. callers that have
+  //     manually verified prefetched_utxos covers alkanes_needed and want
+  //     to engage the alkanes-rs PR #259 skip-sync gate)
+  //   - otherwise fall back to `getAlkanesDataSource(network)` (mainnet=espo)
+  //
+  // Why espo stays the safe default (verified live 2026-05-17 on staging):
+  // even with PR #259 in place (SDK 0.1.6-cbb21f1), the metashrew utxo_source
+  // path triggers heavy `metashrew_height` polling elsewhere in the SDK —
+  // observed 294 metashrew_height calls in 30s during one swap, which
+  // tripped /v6/subfrost's rate limit (8× HTTP 429) and aborted the
+  // broadcast. Espo path doesn't poll height-aggressively, so its 250ms
+  // one-shot `essentials.*` discovery beats the metashrew path end-to-end
+  // until the SDK reduces its sync cadence (or /v6 raises the rate limit).
+  //
+  // The SDK gate from PR #259 is preserved as opt-in: callers like atomic
+  // wrap+swap that thread their own `params.utxoSource='metashrew'` plus
+  // `cachedUtxos` will engage it. They're rare and short-lived enough not
+  // to trip the rate limit.
+  options.utxo_source = params.utxoSource ?? getAlkanesDataSource(params.network);
 
   if (params.traceEnabled !== undefined) options.trace_enabled = params.traceEnabled;
   if (params.mineEnabled !== undefined) options.mine_enabled = params.mineEnabled;
@@ -105,6 +127,23 @@ export async function alkanesExecuteTyped(
   // during the 2026-05-03 mainnet camoufoxd run as "only 1
   // sendrawtransaction observed when wrap+swap should produce 2."
   if (params.splitTransactions !== undefined) options.split_transactions = params.splitTransactions;
+  if (params.knownPendingTxHexes !== undefined) {
+    if (params.knownPendingTxHexes.length > 0) {
+      options.known_pending_tx_hexes = params.knownPendingTxHexes;
+      options.knownPendingTxHexes = params.knownPendingTxHexes;
+    }
+  } else if (typeof window !== 'undefined') {
+    try {
+      const { pendingTxStore } = await import('./pendingTxStore');
+      const pendingHexes = await pendingTxStore.list();
+      if (pendingHexes.length > 0) {
+        options.known_pending_tx_hexes = pendingHexes;
+        options.knownPendingTxHexes = pendingHexes;
+      }
+    } catch (e) {
+      console.warn('[alkanesExecuteTyped] pendingTxStore.list failed:', e);
+    }
+  }
 
   const ordinalsStrategy = params.ordinalsStrategy ?? params.txContext?.defaultOrdinalsStrategy;
   if (ordinalsStrategy !== undefined) options.ordinals_strategy = ordinalsStrategy;
@@ -136,7 +175,7 @@ export async function alkanesExecuteTyped(
   // is the user-visible "click → wallet popup" delay.
   if (!options.payment_utxos && params.cachedUtxos?.length) {
     const clean = params.cachedUtxos
-      .filter((u) => (u.alkanes?.length ?? 0) === 0 && u.value > 1000)
+      .filter((u) => (u.alkanes?.length ?? 0) === 0 && (u.runes?.length ?? 0) === 0 && u.value > 1000)
       .map((u) => ({ txid: u.txid, vout: u.vout, value: u.value }));
     if (clean.length > 0) {
       options.payment_utxos = clean;
@@ -146,34 +185,137 @@ export async function alkanesExecuteTyped(
     }
   }
 
+  // PERF: prefetched_utxos — caller-supplied (outpoint, value, scriptPubKey,
+  // alkanes) map that the SDK consumes inside:
+  //   - `validate_transaction` / `build_psbt_and_fee`: skip per-UTXO
+  //     `getrawtransaction` roundtrips (PR #256).
+  //   - `select_utxos` per-outpoint `protorunesbyoutpoint` fanout
+  //     (mainnet 2026-05-09: 40s on 36-dust-UTXO wallet, second-pass
+  //     extension built on top of #256).
+  // Required by the alkanes-rs change in https://github.com/kungfuflex/alkanes-rs/pull/256
+  // and its second-pass alkanes extension; ignored by older SDKs since the
+  // fields are `#[serde(default)]` Rust-side.
+  //
+  // Every cached UTXO contributes — not just clean BTC carriers. The SDK's
+  // hot loops iterate the FULL selected set (including alkane-bearing dust
+  // and inscribed UTXOs), so anything we cache here saves a roundtrip.
+  //
+  // `alkanes` field semantics (load-bearing, mirrors Rust `Option<Vec<_>>`):
+  //   - `[]`        → Rust `Some(vec![])` → "asserted clean — do not query."
+  //   - `[{...}]`   → Rust `Some([...])`   → authoritative balances.
+  //   - omitted     → Rust `None`          → fall back to RPC for this outpoint.
+  // Every UTXO returned by the wallet UTXO cache is fully covered (dust gets
+  // a populated balance sheet, non-dust gets `[]`), so we always emit `Some`.
+  if (params.cachedUtxos?.length) {
+    try {
+      const btcNetwork = getBitcoinNetwork(params.network ?? 'mainnet');
+      let alkaneAsserted = 0;
+      const prefetched = params.cachedUtxos.map((u) => {
+        let scriptPubKeyHex = u.scriptPubKeyHex;
+        if (!scriptPubKeyHex) {
+          // Derive scriptPubKey from address — pure compute, no RPC.
+          // Falls through to the slow path on per-UTXO derivation failure
+          // (defensive: never let a bad address abort the whole execute).
+          if (!u.address) return null;
+          try {
+            const script = bitcoin.address.toOutputScript(u.address, btcNetwork);
+            scriptPubKeyHex = Buffer.from(script).toString('hex');
+          } catch {
+            return null;
+          }
+        }
+        const alkanesAsserted = (u.alkanes ?? []).map((a) => ({
+          block: a.block,
+          tx: a.tx,
+          amount: a.amount.toString(),
+        }));
+        if (alkanesAsserted.length > 0) alkaneAsserted++;
+        return {
+          outpoint: `${u.txid}:${u.vout}`,
+          value: u.value,
+          script_pubkey_hex: scriptPubKeyHex,
+          alkanes: alkanesAsserted, // [] = "asserted clean" (NOT undefined)
+        };
+      }).filter((x): x is {
+        outpoint: string;
+        value: number;
+        script_pubkey_hex: string;
+        alkanes: Array<{ block: number; tx: number; amount: string }>;
+      } => x !== null);
+      if (prefetched.length > 0) {
+        options.prefetched_utxos = prefetched;
+        options.prefetchedUtxos = prefetched;
+        console.log(
+          `[alkanesExecuteTyped] prefetched_utxos: ${prefetched.length} TxOuts ` +
+          `(${alkaneAsserted} with alkane assertion) from wallet cache ` +
+          `(skips ~${prefetched.length * 2} getrawtransaction + ` +
+          `${prefetched.length} protorunesbyoutpoint roundtrips)`,
+        );
+      }
+    } catch (e) {
+      console.warn('[alkanesExecuteTyped] failed to build prefetched_utxos:', e);
+    }
+  }
+  if (params.prefetchedUtxos?.length) {
+    const prefetchedUtxos = [
+      ...(Array.isArray(options.prefetched_utxos) ? options.prefetched_utxos : []),
+      ...params.prefetchedUtxos,
+    ];
+    options.prefetched_utxos = prefetchedUtxos;
+    options.prefetchedUtxos = prefetchedUtxos;
+  }
+
+  // Indexer-aware UTXO height filter (2026-05-10, replaces global lag wait).
+  //
+  // Setting `options.max_indexed_height` makes the SDK's `select_utxos`
+  // skip any UTXO whose creating block is above this height — metashrew
+  // can't yet read its alkane balance sheet, so coin-selection that
+  // includes it would either fail validation or force the SDK to wait
+  // for sync. With this filter the wallet can transact continuously
+  // even while metashrew is catching up to bitcoind.
+  //
+  // Source precedence:
+  //   1. Per-call `params.maxIndexedHeight` (canonical path — supply from
+  //      `useWalletUtxoCache().height` which is the metashrewHeight the
+  //      wallet snapshot was pinned to). Zero RPC at click time.
+  //   2. Fresh metashrew_height RPC (legacy fallback for callers that
+  //      don't pass the height — e.g. boot path with no wallet cache yet).
+  //
+  // Local networks (devnet/regtest) skip the probe — the user mines
+  // manually and selecting UTXOs above metashrew's height is fine.
+  if (!options.max_indexed_height && typeof params.maxIndexedHeight === 'number' && params.maxIndexedHeight > 0) {
+    options.max_indexed_height = params.maxIndexedHeight;
+    console.log(`[alkanesExecuteTyped] max_indexed_height=${options.max_indexed_height} (from caller, no RPC)`);
+  }
+  if (!options.max_indexed_height && options.utxo_source !== 'espo') {
+    try {
+      const rpcUrl =
+        (typeof window !== 'undefined' &&
+          ((provider as any).sandshrew_rpc_url?.() || null)) ||
+        null;
+      if (rpcUrl && !rpcUrl.includes('localhost:18888')) {
+        const res = await fetch(rpcUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'metashrew_height', params: [] }),
+        });
+        if (res.ok) {
+          const json = await res.json();
+          const r = json?.result;
+          const h = typeof r === 'string' ? parseInt(r, 10) : Number(r);
+          if (Number.isFinite(h) && h > 0) {
+            options.max_indexed_height = h;
+            console.log(`[alkanesExecuteTyped] max_indexed_height=${h} (fallback probe RPC)`);
+          }
+        }
+      }
+    } catch (probeErr) {
+      console.warn('[alkanesExecuteTyped] metashrew_height probe failed, continuing without filter:', probeErr);
+    }
+  }
+
   const toAddressesJson = JSON.stringify(toAddresses);
   const optionsJson = JSON.stringify(options);
-
-  console.log('[alkanesExecuteTyped] to_addresses:', toAddressesJson);
-  console.log('[alkanesExecuteTyped] input_requirements:', params.inputRequirements);
-  console.log('[alkanesExecuteTyped] protostones:', params.protostones);
-  console.log('[alkanesExecuteTyped] fee_rate:', params.feeRate);
-  console.log('[alkanesExecuteTyped] options:', optionsJson);
-
-  // Proactive indexer-sync probe (2026-05-04, fixes "Indexer sync timed out").
-  //
-  // alkanesExecuteWithStrings / alkanesExecuteFull internally call
-  // `webprovider_waitForIndexer` before broadcast and time out at 30s if
-  // metashrew_height < bitcoind_blockcount. On mainnet the gateway is
-  // sometimes one block apart for ~10–30s; the timeout buries the swap on
-  // "Building Transaction" forever. The elegant pattern (97b1aec2 — "fix:
-  // update @alkanes/ts-sdk with indexer sync fix") is to probe the
-  // SDK's sync primitive ourselves first so a transient gap becomes a
-  // short pre-flight wait instead of a deep failure. Catching here in the
-  // central wrapper covers swap / wrap / unwrap / send / addLiquidity in
-  // one place — no per-hook duplication.
-  try {
-    if (typeof (provider as any).waitForIndexer === 'function') {
-      await (provider as any).waitForIndexer();
-    }
-  } catch (syncErr) {
-    console.warn('[alkanesExecuteTyped] proactive waitForIndexer failed, continuing:', syncErr);
-  }
 
   // On devnet, use alkanesExecuteFull which handles signing + mining internally.
   // alkanesExecuteWithStrings relies on the SDK's data API for UTXO discovery,
@@ -194,7 +336,13 @@ export async function alkanesExecuteTyped(
   }
   if (!isLocalNetwork && typeof window !== 'undefined') {
     try {
-      const stored = localStorage.getItem('subfrost_selected_network') ?? '';
+      // Devnet is tab-scoped and stored in sessionStorage (not localStorage).
+      // Without this check, devnet swaps take the PSBT path instead of
+      // alkanesExecuteFull and hang waiting for a wallet-signing popup.
+      const stored =
+        sessionStorage.getItem('subfrost_selected_network') ??
+        localStorage.getItem('subfrost_selected_network') ??
+        '';
       isLocalNetwork = LOCAL_NETWORKS.includes(stored);
     } catch { /* ignore */ }
   }
@@ -213,6 +361,7 @@ export async function alkanesExecuteTyped(
   // path because the user controls block production there.
   const wantPreview = !!params.previewBeforeBroadcast && !isLocalNetwork;
   const useFullExecution =
+    !params.forcePsbt &&
     !wantPreview &&
     (isLocalNetwork || params.autoConfirm) &&
     typeof (provider as any).alkanesExecuteFull === 'function';
@@ -223,7 +372,6 @@ export async function alkanesExecuteTyped(
     }
     options.auto_confirm = true;
     const fullOptionsJson = JSON.stringify(options);
-    console.log(`[alkanesExecuteTyped] Using alkanesExecuteFull (auto_confirm=true, mine_enabled=${!!options.mine_enabled})`);
     const minFeeRate = params.network === 'qubitcoin-regtest' ? 5 : (params.feeRate ?? null);
     const feeRate = params.feeRate && params.feeRate >= (minFeeRate || 0) ? params.feeRate : minFeeRate;
     const result = await (provider as any).alkanesExecuteFull(
