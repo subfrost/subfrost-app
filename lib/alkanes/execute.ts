@@ -94,33 +94,26 @@ export async function alkanesExecuteTyped(
     params.changeAddress ?? params.txContext?.btcChangeAddress ?? 'p2wpkh:0';
   options.alkanes_change_address =
     params.alkanesChangeAddress ?? params.txContext?.alkanesChangeAddress ?? 'p2tr:0';
-  // Default utxo_source logic (revised 2026-05-17, alkanes-rs PR #259 / SDK 0.1.6-cbb21f1):
-  //   - explicit per-call `params.utxoSource` wins
-  //   - if cachedUtxos is populated → prefer 'metashrew' (engages the SDK's
-  //     new "skip provider.sync() when prefetched_utxos cover alkanes_needed"
-  //     gate; downstream discovery short-circuits per-outpoint
-  //     protorunesbyoutpoint via the prefetched-alkanes map → end-to-end
-  //     zero-RPC for alkane discovery on the wallet-cache path)
+  // Default utxo_source logic:
+  //   - explicit per-call `params.utxoSource` wins (e.g. callers that have
+  //     manually verified prefetched_utxos covers alkanes_needed and want
+  //     to engage the alkanes-rs PR #259 skip-sync gate)
   //   - otherwise fall back to `getAlkanesDataSource(network)` (mainnet=espo)
-  //     so callers without a cache (boot path, ad-hoc tools) keep the espo
-  //     spendable-outpoint discovery they relied on pre-cache.
   //
-  // Why this is safe to flip now: the alkanes-rs gate at execute.rs:2067
-  // (PR #259) checks `prefetched_covers_alkanes_needed(prefetched_utxos,
-  // &alkanes_needed)` before falling through to `provider.sync().await?`.
-  // If our cache covers every requirement we skip the sync; if it doesn't
-  // the SDK still syncs (correct fallback, no regression vs. espo path).
+  // Why espo stays the safe default (verified live 2026-05-17 on staging):
+  // even with PR #259 in place (SDK 0.1.6-cbb21f1), the metashrew utxo_source
+  // path triggers heavy `metashrew_height` polling elsewhere in the SDK —
+  // observed 294 metashrew_height calls in 30s during one swap, which
+  // tripped /v6/subfrost's rate limit (8× HTTP 429) and aborted the
+  // broadcast. Espo path doesn't poll height-aggressively, so its 250ms
+  // one-shot `essentials.*` discovery beats the metashrew path end-to-end
+  // until the SDK reduces its sync cadence (or /v6 raises the rate limit).
   //
-  // History (earlier 2026-05-17): pre-PR-#259 the metashrew branch
-  // ALWAYS hit the sync poll, so picking 'metashrew' here traded a
-  // 250ms espo `essentials.*` call for a 30s metashrew_height vs
-  // bitcoind_blockcount wait. Reverted at the time; PR #259 closes that
-  // gap so this flip is now strict-better than the espo default for any
-  // caller threading prefetched_utxos.
-  const hasPrefetchedCache =
-    (params.cachedUtxos?.length ?? 0) > 0 || (params.prefetchedUtxos?.length ?? 0) > 0;
-  options.utxo_source =
-    params.utxoSource ?? (hasPrefetchedCache ? 'metashrew' : getAlkanesDataSource(params.network));
+  // The SDK gate from PR #259 is preserved as opt-in: callers like atomic
+  // wrap+swap that thread their own `params.utxoSource='metashrew'` plus
+  // `cachedUtxos` will engage it. They're rare and short-lived enough not
+  // to trip the rate limit.
+  options.utxo_source = params.utxoSource ?? getAlkanesDataSource(params.network);
 
   if (params.traceEnabled !== undefined) options.trace_enabled = params.traceEnabled;
   if (params.mineEnabled !== undefined) options.mine_enabled = params.mineEnabled;
