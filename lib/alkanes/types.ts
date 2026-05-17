@@ -94,6 +94,22 @@ export interface AlkanesExecuteTypedParams {
   }>;
   /** Network name — used to reliably detect devnet (instead of URL sniffing). */
   network?: string;
+  /**
+   * Caller-supplied metashrew indexer height. When set, the wrapper emits
+   * `options.max_indexed_height = it` so the SDK's `select_utxos` filters
+   * out UTXOs from blocks the indexer hasn't processed yet — same pattern
+   * subfrost-mobile uses to avoid the SDK's `waitForIndexer` stall while
+   * metashrew catches up to bitcoind.
+   *
+   * Pass `useWalletUtxoCache().height` from any mutation hook — that value
+   * IS the metashrew height the snapshot was pinned to (per the wallet-state
+   * route migration). With this set, the wrapper SKIPS its own per-click
+   * metashrew_height probe RPC.
+   *
+   * Local networks (devnet/regtest) where the user mines manually can leave
+   * this unset — the wrapper preserves the historic skip-probe behavior.
+   */
+  maxIndexedHeight?: number;
   /** Opt-in CPFP-chained 2-tx flow for wrap+execute requests. When true and
    *  the protostones[0] is a wrap (block 32, opcode 77), alkanes-rs splits
    *  the request into Tx A (wrap-only) + Tx B (execute consuming Tx A's

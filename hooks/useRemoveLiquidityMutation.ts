@@ -219,6 +219,9 @@ export function useRemoveLiquidityMutation() {
           // Pre-warmed clean BTC UTXOs from the prefetched cache —
           // skips the SDK's internal coinselect fanout.
           cachedUtxos: utxoCache.utxos,
+          // Pin to metashrew height we already know — SDK skips its
+          // waitForIndexer poll loop. Mirrors subfrost-mobile.
+          maxIndexedHeight: utxoCache.height,
         });
 
         console.log('[RemoveLiquidity] Called alkanesExecuteTyped (browser:', isBrowserWallet, ')');

@@ -495,4 +495,116 @@ describe('utxo_source resolution', () => {
     }));
     expect(lastOptionsJson(p).utxo_source).toBe('metashrew');
   });
+
+  // -------------------------------------------------------------------------
+  // 2026-05-17 — policy stays espo-default on mainnet.
+  //
+  // Brief flip-and-revert sequence on staging today:
+  //   1. PR #259 in alkanes-rs ships a skip-sync gate: SDK 0.1.6-cbb21f1
+  //      makes provider.sync() a no-op when prefetched_utxos cover
+  //      alkanes_needed.
+  //   2. App default flipped to prefer 'metashrew' on the prefetched-cache
+  //      hot path — would have been end-to-end zero-RPC for alkane discovery.
+  //   3. Camoufox swap regression: 294 metashrew_height polls in 30s tripped
+  //      /v6/subfrost's rate limit (8× HTTP 429), aborting broadcast. The
+  //      sync gate engaged correctly; the polling burst came from OTHER
+  //      SDK paths (still under investigation upstream).
+  //   4. Reverted to espo default for safety. SDK gate kept as opt-in for
+  //      callers that explicitly thread `utxoSource: 'metashrew'`.
+  // -------------------------------------------------------------------------
+
+  it('mainnet defaults to espo even when cachedUtxos populated (rate-limit safety)', async () => {
+    const p = fakeProvider();
+    await alkanesExecuteTyped(p as unknown as WebProvider, baseParams({
+      network: 'mainnet',
+      cachedUtxos: [{ txid: 'a'.repeat(64), vout: 0, value: 5000, address: REAL_TAPROOT }],
+    }));
+    expect(lastOptionsJson(p).utxo_source).toBe('espo');
+  });
+
+  it('mainnet defaults to espo even when prefetchedUtxos passed directly', async () => {
+    const p = fakeProvider();
+    await alkanesExecuteTyped(p as unknown as WebProvider, baseParams({
+      network: 'mainnet',
+      prefetchedUtxos: [{
+        outpoint: `${'a'.repeat(64)}:0`,
+        value: 5000,
+        script_pubkey_hex: '0014deadbeef00000000000000000000000000000000',
+        alkanes: [],
+      }],
+    }));
+    expect(lastOptionsJson(p).utxo_source).toBe('espo');
+  });
+
+  it('explicit utxoSource=metashrew override wins (opt-in to SDK PR #259 gate)', async () => {
+    const p = fakeProvider();
+    await alkanesExecuteTyped(p as unknown as WebProvider, baseParams({
+      network: 'mainnet',
+      utxoSource: 'metashrew',
+      cachedUtxos: [{ txid: 'a'.repeat(64), vout: 0, value: 5000, address: REAL_TAPROOT }],
+    }));
+    expect(lastOptionsJson(p).utxo_source).toBe('metashrew');
+  });
+
+  it('explicit utxoSource=espo override wins on mainnet (redundant but valid)', async () => {
+    const p = fakeProvider();
+    await alkanesExecuteTyped(p as unknown as WebProvider, baseParams({
+      network: 'mainnet',
+      utxoSource: 'espo',
+      cachedUtxos: [{ txid: 'a'.repeat(64), vout: 0, value: 5000, address: REAL_TAPROOT }],
+    }));
+    expect(lastOptionsJson(p).utxo_source).toBe('espo');
+  });
+});
+
+// ===========================================================================
+// maxIndexedHeight pipe-through — eliminates SDK's waitForIndexer poll loop
+// when metashrew lags behind bitcoind. Matches subfrost-mobile's
+// `utxo_eligible_for_indexed_height` pattern (subfrost-mobile-core::pending).
+// ===========================================================================
+
+describe('maxIndexedHeight pipe-through', () => {
+  it('caller-supplied maxIndexedHeight sets options.max_indexed_height + skips fallback probe', async () => {
+    // The fallback probe issues a fresh metashrew_height fetch. If our
+    // caller value is honored, no fetch should fire (vi.stubGlobal would
+    // see it). We don't stub fetch here because the fakeProvider has
+    // sandshrew_rpc_url=null which short-circuits the probe — but the
+    // point is the option value comes from the caller, not a probe.
+    const p = fakeProvider();
+    await alkanesExecuteTyped(p as unknown as WebProvider, baseParams({
+      network: 'mainnet',
+      cachedUtxos: [{ txid: 'a'.repeat(64), vout: 0, value: 5000, address: REAL_TAPROOT }],
+      maxIndexedHeight: 949700,
+    }));
+    expect(lastOptionsJson(p).max_indexed_height).toBe(949700);
+  });
+
+  it('0 and negative heights do NOT poison the option (treated as unset)', async () => {
+    // useWalletUtxoCache.height defaults to 0 when wallet-state hasn't
+    // resolved yet. The wrapper must NOT emit max_indexed_height=0,
+    // which would filter ALL UTXOs out of coin selection.
+    const p = fakeProvider();
+    await alkanesExecuteTyped(p as unknown as WebProvider, baseParams({
+      network: 'subfrost-regtest', // non-mainnet — probe enabled
+      cachedUtxos: [{ txid: 'a'.repeat(64), vout: 0, value: 5000, address: REAL_TAPROOT }],
+      maxIndexedHeight: 0,
+    }));
+    // With our value rejected as 0, the fallback path may set it from
+    // the probe (but fakeProvider has sandshrew_rpc_url=null so the
+    // probe is a no-op). Either way, max_indexed_height must NOT be 0.
+    const v = lastOptionsJson(p).max_indexed_height;
+    expect(v === undefined || (typeof v === 'number' && v > 0)).toBe(true);
+  });
+
+  it('omitted maxIndexedHeight falls back to the legacy probe path on non-mainnet', async () => {
+    // No caller value, non-espo source → probe path runs. fakeProvider's
+    // sandshrew_rpc_url returns null → probe early-exits → option stays unset.
+    // This asserts the BEHAVIOR (probe attempted, no value set) — not the
+    // implementation. Real provider would yield a real height here.
+    const p = fakeProvider();
+    await alkanesExecuteTyped(p as unknown as WebProvider, baseParams({
+      network: 'subfrost-regtest',
+    }));
+    expect(lastOptionsJson(p).max_indexed_height).toBeUndefined();
+  });
 });

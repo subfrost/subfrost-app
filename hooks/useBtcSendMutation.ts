@@ -252,6 +252,9 @@ async function sendKeystore(args: {
     toAddresses: [recipientAddress, txContext.alkanesChangeAddress],
     autoConfirm: true,
     network,
+    cachedUtxos: utxoCache.utxos,
+    // Pin to metashrew height we already know — skips SDK's waitForIndexer.
+    maxIndexedHeight: utxoCache.height,
     previewBeforeBroadcast: async (psbtBase64: string) => {
       const plan = buildPlanFromTx({
         psbtBase64,
