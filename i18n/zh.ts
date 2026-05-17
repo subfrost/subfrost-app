@@ -597,10 +597,7 @@ const zh: Record<string, string> = {
   'walletPicker.refresh': '\u5237\u65b0',
   'walletPicker.passwordHint': '\u5bc6\u7801\u63d0\u793a\u53ef\u7528',
   'walletPicker.viewInDrive': '\u5728 Google Drive \u4e2d\u67e5\u770b',
-  'walletPicker.deleteBackup': '\u5220\u9664\u5907\u4efd',
   'walletPicker.back': '\u8fd4\u56de',
-  'walletPicker.confirmDelete': '\u60a8\u786e\u5b9a\u8981\u5220\u9664\u6b64\u94b1\u5305\u5907\u4efd\u5417\uff1f\u6b64\u64cd\u4f5c\u65e0\u6cd5\u64a4\u9500\u3002',
-  'walletPicker.deleteFailed': '\u5220\u9664\u94b1\u5305\u5907\u4efd\u5931\u8d25\u3002\u8bf7\u91cd\u8bd5\u3002',
 
   // My Wallet Activity
   'myActivity.title': '我的钱包活动',
