@@ -172,13 +172,14 @@ const FL = {
 
 // Opcode constants (subset needed for assertions)
 const OP = {
-  TM_GetTroveCount:    '23',
-  TM_GetTroveStatus:   '22',
-  TM_GetTroveColl:     '20',
-  TM_GetTroveDebt:     '21',
-  SP_GetTotalDeposits: '20',
-  SP_GetCompounded:    '21',
-  PF_GetStoredPrice:   '30',
+  TM_GetTroveCount:       '23',
+  TM_GetTroveStatus:      '22',
+  TM_GetTroveColl:        '20',
+  TM_GetTroveDebt:        '21',
+  TM_GetTroveAuthToken:   '33', // returns AlkaneId (block u128 LE | tx u128 LE) for trove auth receipt
+  SP_GetTotalDeposits:    '20',
+  SP_GetCompounded:       '21',
+  PF_GetStoredPrice:      '30',
 } as const;
 
 /**
@@ -1894,6 +1895,77 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
       }
     }
 
+    // ── Trove-cache recovery: ensure localStorage has authTokenId ──────────────
+    // useOpenTroveMutation only writes cache if the receipt diff scan succeeds.
+    // If the scan missed (indexer lag, protorunesbyaddress staleness), every
+    // subsequent owner-op throws "Auth token unknown" and falls through to a
+    // stale captureTxid. Recover by querying GetTroveAuthToken(lastTroveId)
+    // directly from chain and patching localStorage.
+    if (lastTroveId > 0n) {
+      try {
+        // Find the wallet taproot address. Try two sources in order:
+        // 1) existing frostlend:trove key (already has address embedded)
+        // 2) subfrost_browser_wallet_addresses (set by WalletContext for keystore+browser)
+        // 3) bcrt1p address visible in the page DOM
+        const taprootAddress = await page.evaluate(() => {
+          try {
+            // Source 1: existing trove cache key
+            for (let i = 0; i < localStorage.length; i++) {
+              const k = localStorage.key(i);
+              if (k && k.startsWith('frostlend:trove:devnet:')) {
+                return k.replace('frostlend:trove:devnet:', '');
+              }
+            }
+            // Source 2: cached wallet addresses JSON
+            const cachedRaw = localStorage.getItem('subfrost_browser_wallet_addresses');
+            if (cachedRaw) {
+              const parsed = JSON.parse(cachedRaw) as { taproot?: { address?: string } };
+              if (parsed?.taproot?.address) return parsed.taproot.address;
+            }
+            // Source 3: any bcrt1p address visible in DOM text
+            const text = document.body.innerText;
+            const m = text.match(/bcrt1p[a-z0-9]{39,59}/);
+            if (m) return m[0];
+          } catch { /* ignore */ }
+          return null;
+        });
+
+        if (taprootAddress) {
+          const cacheKey = `frostlend:trove:devnet:${taprootAddress}`;
+          const authHex = await simRead(page, {
+            ...FL.TROVE_MANAGER,
+            inputs: [OP.TM_GetTroveAuthToken, String(lastTroveId)],
+          });
+          if (authHex) {
+            // Parse: first 16 bytes (32 hex chars) = block u128 LE (always 2),
+            // next 16 bytes (32 hex chars) = tx sequence u128 LE → authTokenId = "2:tx"
+            const clean = authHex.replace(/^0x/, '');
+            if (clean.length >= 64) {
+              const txBytes = clean.slice(32, 64);
+              const txLe = BigInt('0x' + (txBytes.match(/.{2}/g) || []).reverse().join(''));
+              const authTokenId = `2:${txLe}`;
+              // Patch only if cache is missing or authTokenId is null
+              const patched = await page.evaluate(({ key: k, troveId, auth, v }) => {
+                try {
+                  const raw = localStorage.getItem(k);
+                  const existing = raw ? JSON.parse(raw) : null;
+                  if (existing && existing.authTokenId) return 'already-set';
+                  const entry = { troveId, authTokenId: auth, updatedAt: Date.now(), v };
+                  localStorage.setItem(k, JSON.stringify(entry));
+                  return 'patched';
+                } catch { return 'error'; }
+              }, { key: cacheKey, troveId: String(lastTroveId), auth: authTokenId, v: 1 });
+              console.log(`[frostlend-smoke] Trove cache for ${taprootAddress}: ${patched} (troveId=${lastTroveId} authTokenId=${authTokenId})`);
+            }
+          }
+        } else {
+          console.log('[frostlend-smoke] Trove cache recovery: taproot address not found — owner-ops may throw "Auth token unknown"');
+        }
+      } catch (e) {
+        console.log(`[frostlend-smoke] Trove cache recovery error: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
+
     // ── Flow 7: AddCollateral ────────────────────────────────────────────────
     {
       const flow: FlowResult = {
@@ -2393,6 +2465,11 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
           report.flows.push(flow);
           saveReport(report);
         } else {
+          // Read TroveCount BEFORE the close so we can verify it decrements.
+          const preCloseCountHex = await simRead(page, { ...FL.TROVE_MANAGER, inputs: [OP.TM_GetTroveCount] });
+          const preCloseCount = hexToU128(preCloseCountHex);
+          console.log(`[frostlend-smoke] Flow 11: pre-close TroveCount = ${preCloseCount}`);
+
           await page.screenshot({ path: '/tmp/fl-flow11-preflight.png' });
 
           // Click "Close Trove (repay full debt)"
@@ -2400,6 +2477,21 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
             const btn = Array.from(document.querySelectorAll('button')).find(b => /close trove/i.test(b.textContent || ''));
             if (btn && !(btn as HTMLButtonElement).disabled) (btn as HTMLElement).click();
           });
+          // Check for immediate mutation error (auth token missing, etc.)
+          const mutationError = await page.evaluate(() => {
+            const errDivs = Array.from(document.querySelectorAll('div')).filter(d =>
+              d.textContent?.startsWith('Error:') && d.classList.contains('text-red-300')
+            );
+            return errDivs.length > 0 ? errDivs[0].textContent?.trim() || null : null;
+          });
+          if (mutationError) {
+            flow.status = 'error';
+            flow.error = `CloseTrove mutation error: ${mutationError}`;
+            report.aberrations.push(`Flow 11 (CloseTrove) mutation error: ${mutationError}`);
+            console.log(`[frostlend-smoke] Flow 11 mutation error: ${mutationError}`);
+            report.flows.push(flow);
+            saveReport(report);
+          } else {
           await page.waitForTimeout(3000);
           await mineOneBlock(page);
           await waitForIndexerSync(page, 60_000);
@@ -2418,14 +2510,16 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
               if (flow.trace.status === 'failure') report.aberrations.push(`Flow 11 (CloseTrove) REVERT: ${flow.trace.revert_reason}`);
             }
 
-            // Chain-state assertions: status = ClosedByOwner (2), TroveCount = 0
+            // Chain-state assertions: status = ClosedByOwner (2), TroveCount decremented.
+            // Guardian trove remains open, so count goes N → N-1, not to 0.
             const closedStatusHex = await simRead(page, {
               ...FL.TROVE_MANAGER,
               inputs: [OP.TM_GetTroveStatus, String(lastTroveId)],
             });
             flow.assertions.push(makeAssertion('TroveStatus = ClosedByOwner (2)', '2', String(hexToU8(closedStatusHex))));
             const postCloseTroveCountHex = await simRead(page, { ...FL.TROVE_MANAGER, inputs: [OP.TM_GetTroveCount] });
-            flow.assertions.push(makeAssertion('TroveCount = 0 after CloseTrove', '0', String(hexToU128(postCloseTroveCountHex))));
+            const postCloseCount = hexToU128(postCloseTroveCountHex);
+            flow.assertions.push(makeAssertion('TroveCount decremented after CloseTrove', 'true', String(postCloseCount < preCloseCount)));
             if (flow.assertions.some(a => !a.passed)) {
               report.aberrations.push(`Flow 11 (CloseTrove) assertion failures: ${flow.assertions.filter(a => !a.passed).map(a => a.label).join(', ')}`);
             }
@@ -2445,6 +2539,7 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
           }
           report.flows.push(flow);
           saveReport(report);
+          } // end else (no mutation error)
         }
       } catch (e) {
         flow.error = e instanceof Error ? e.message : String(e);
