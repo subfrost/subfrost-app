@@ -94,7 +94,20 @@ export async function alkanesExecuteTyped(
     params.changeAddress ?? params.txContext?.btcChangeAddress ?? 'p2wpkh:0';
   options.alkanes_change_address =
     params.alkanesChangeAddress ?? params.txContext?.alkanesChangeAddress ?? 'p2tr:0';
-  options.utxo_source = params.utxoSource ?? getAlkanesDataSource(params.network);
+  // Default utxo_source logic:
+  //   - explicit per-call `params.utxoSource` wins
+  //   - otherwise, if `cachedUtxos`/`prefetchedUtxos` are populated we know
+  //     the SDK has every input it needs in-memory — force 'metashrew' so
+  //     it does NOT call espo's `essentials.get_address_spendable_outpoints`
+  //     at click time. Verified live 2026-05-17 (HAR): without this, the
+  //     SDK fires the espo lookup on every mainnet swap even when our
+  //     prefetched cache covers every UTXO. Visible 250-1200ms delay
+  //     between CONFIRM click and broadcast.
+  //   - otherwise fall back to `getAlkanesDataSource(network)` (mainnet=espo).
+  //     Only the boot path / cold-load flows without a cache should hit this.
+  const hasCache = (params.cachedUtxos?.length ?? 0) > 0 || (params.prefetchedUtxos?.length ?? 0) > 0;
+  options.utxo_source =
+    params.utxoSource ?? (hasCache ? 'metashrew' : getAlkanesDataSource(params.network));
 
   if (params.traceEnabled !== undefined) options.trace_enabled = params.traceEnabled;
   if (params.mineEnabled !== undefined) options.mine_enabled = params.mineEnabled;

@@ -471,6 +471,13 @@ export function useEphemeralWrapPackage() {
         alkanesChangeAddress: ephemeral.address,
         network,
         cachedUtxos: utxoCache.utxos,
+        // Force metashrew utxo_source to suppress SDK's espo data-API call
+        // (`essentials.get_address_spendable_outpoints`). cachedUtxos +
+        // prefetched_utxos already give the SDK every input it needs;
+        // verified 2026-05-17 via HAR that the espo call fires AT click
+        // time even with cachedUtxos populated unless utxo_source is set
+        // away from the mainnet default of 'espo'.
+        utxoSource: 'metashrew',
         ...(params.splitTransactions !== undefined ? { splitTransactions: params.splitTransactions } : {}),
       });
       const parentReady = parentResult?.readyToSign ?? parentResult?.ready_to_sign;
@@ -562,7 +569,20 @@ export function useEphemeralWrapPackage() {
         alkanesChangeAddress: params.childAlkanesChangeAddress ?? params.userAddress,
         network,
         ordinalsStrategy: 'burn',
+        // Force metashrew utxo_source so the SDK does NOT call its espo
+        // data API (`essentials.get_address_spendable_outpoints`) — verified
+        // 2026-05-17 via HAR that espo path fires twice per atomic flow
+        // even when prefetched_utxos covers the ONLY input the child
+        // selects from. The child only spends from `ephemeral.address` and
+        // the prefetched_utxos entry below is authoritative for that one
+        // outpoint; there's no reason the SDK should ever discover more.
+        utxoSource: 'metashrew',
         knownPendingTxHexes: [parentTx.txHex],
+        // Also pass the user wallet cache as a fallback (covers any edge
+        // case where the SDK does still discover beyond the prefetched
+        // carrier — would happen if the ephemeral address ever held more
+        // than one output, which it shouldn't in this flow).
+        cachedUtxos: utxoCache.utxos,
         prefetchedUtxos: [{
           outpoint: `${parentTx.txid}:${EPHEMERAL_CARRIER_VOUT}`,
           value: Number(carrierOutput.value),
