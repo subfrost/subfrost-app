@@ -1767,13 +1767,14 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
           { timeout: 60_000 },
         ).catch(() => { console.log('[frostlend-smoke] oracle price not visible — proceeding anyway'); });
 
-        // Use Playwright fill() so React onChange fires properly.
+        // pressSequentially triggers React onChange reliably on controlled inputs.
         const collInput2 = page.locator('input[inputmode="decimal"]').nth(0);
         const debtInput2 = page.locator('input[inputmode="decimal"]').nth(1);
-        await collInput2.fill('');
-        await collInput2.fill('0.05');
-        await debtInput2.fill('');
-        await debtInput2.fill('1800');
+        await collInput2.click({ clickCount: 3 });
+        await collInput2.pressSequentially('0.05', { delay: 30 });
+        await page.waitForTimeout(300);
+        await debtInput2.click({ clickCount: 3 });
+        await debtInput2.pressSequentially('1800', { delay: 30 });
         await page.waitForTimeout(500);
 
         const openBtnEnabled = await (async () => {
