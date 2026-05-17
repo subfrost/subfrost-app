@@ -825,20 +825,25 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
       try {
         console.log(`[frostlend-smoke] Step 1b: Setting oracle price to $${ORACLE_PRICE_USD}...`);
         await openDevPanel(page);
-        // The oracle input only appears inside {isDeployed && (...)} — wait for
-        // the FrostlendDevPanel to reflect isDeployed=true before proceeding.
-        // The "deployed" green span is the DOM signal (same as waitForFrostlendDeployed).
-        // refreshPrice() runs async after mount — needs time for simulateAlkane to return.
-        // Fresh deploy + indexer catchup can take 30-60s. Use 90s to be safe.
-        const oracleInputVisible = await page.waitForFunction(
+        // The oracle input only appears inside {isDeployed && (...)} where
+        // isDeployed = priceUsd !== null && priceUsd > 0.
+        // Wait for the "deployed" green span (always rendered, reflects isDeployed) as the
+        // reliable DOM signal before looking for the oracle input.
+        // refreshPrice() fires on DevPanel mount and calls simulateAlkane on the price-feed.
+        // On a fresh deploy, all 11 contracts need to be indexed first (~30-60s). Use 120s.
+        const isDeployedVisible = await page.waitForFunction(
           () => {
-            const inputs = Array.from(document.querySelectorAll('input[inputmode="decimal"]'));
-            return inputs.some(el => el.classList.contains('font-mono'));
+            const spans = Array.from(document.querySelectorAll('span'));
+            return spans.some(s => s.textContent?.trim() === 'deployed' && s.classList.contains('text-green-400'));
           },
-          { timeout: 90_000 },
+          { timeout: 120_000 },
         ).then(() => true).catch(() => false);
+        const oracleInputVisible = isDeployedVisible && await page.evaluate(() => {
+          const inputs = Array.from(document.querySelectorAll('input[inputmode="decimal"]'));
+          return inputs.some(el => el.classList.contains('font-mono'));
+        }).catch(() => false);
         if (!oracleInputVisible) {
-          console.log('[frostlend-smoke] Step 1b: oracle input not found — frostlend may not be deployed yet, skipping price set');
+          console.log(`[frostlend-smoke] Step 1b: oracle input not found (isDeployed=${isDeployedVisible}) — skipping price set`);
           await closeDevPanel(page).catch(() => {});
         } else {
           // The oracle price input has a unique font-mono class in the DevPanel.
