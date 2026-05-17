@@ -14,6 +14,8 @@ import { getConfig, getRpcUrl } from "@/utils/getConfig";
 // useSellableCurrencies removed — used alkanes_protorunesbyaddress (30s).
 // Now reuses walletBalances.alkanes from useEnrichedWalletData (~1s, already cached).
 import { useEnrichedWalletData } from "@/hooks/useEnrichedWalletData";
+import { usePendingTxs } from "@/hooks/usePendingTxs";
+import { getAlkaneAvailabilityBreakdown, type PendingAlkaneEntry } from "@/app/wallet/components/alkaneBalanceBreakdown";
 import { useGlobalStore } from "@/stores/global";
 import { useFeeRate } from "@/hooks/useFeeRate";
 import { useBtcPrice } from "@/hooks/useBtcPrice";
@@ -878,6 +880,25 @@ export default function SwapShell() {
     return map;
   }, [walletBalances?.alkanes]);
 
+  // Pending-tx-derived alkane deltas — same hook + same shape the wallet
+  // card consumes (AlkanesBalancesCard). The swap input's "Balance:"
+  // label MUST subtract outgoing-pending so the user can't try to spend
+  // alkanes they just sold in a still-pending swap. Without this, after
+  // a DIESEL -> TORTILLA swap the swap page kept showing the pre-swap
+  // DIESEL balance as available (mork1e 2026-05-17: "diesel should not
+  // appear as available in the swap input anymore"). Same root cause
+  // class as the AlkanesBalancesCard iter-2 fix; second consumer needs
+  // the same pending-aware adjustment.
+  const { alkaneDeltas: pendingAlkaneDeltas } = usePendingTxs();
+  const pendingByAlkaneSwap = useMemo(() => {
+    const map = new Map<string, PendingAlkaneEntry>();
+    for (const d of pendingAlkaneDeltas) {
+      const key = `${d.alkaneId.block}:${d.alkaneId.tx}`;
+      map.set(key, { delta: d.delta });
+    }
+    return map;
+  }, [pendingAlkaneDeltas]);
+
   const formatBalance = (id?: string): string => {
     if (isBalancesLoading) return t('swap.loadingBalance');
     if (!id) return `${t('swap.balanceColon')} 0`;
@@ -891,11 +912,26 @@ export default function SwapShell() {
 
     // Alkane token balance (frBTC, DIESEL, etc.)
     // Prefer walletAlkaneBalances (from useEnrichedWalletData) over useSellableCurrencies
-    // as it's more reliable and consistent with the wallet dashboard
+    // as it's more reliable and consistent with the wallet dashboard.
+    //
+    // After resolving the confirmed balance, route it through the shared
+    // pure helper `getAlkaneAvailabilityBreakdown` so the swap input's
+    // "available" matches the wallet-card semantics: outgoing-pending
+    // alkanes (e.g. mid-swap) get subtracted from the displayed balance.
     let balance = walletAlkaneBalances.get(id);
     if (!balance) {
       const cur = idToUserCurrency.get(id);
       balance = cur?.balance;
+    }
+    if (balance) {
+      const confirmedRaw = (() => {
+        try { return BigInt(balance); } catch { return 0n; }
+      })();
+      const { availableRaw } = getAlkaneAvailabilityBreakdown(
+        confirmedRaw,
+        pendingByAlkaneSwap.get(id),
+      );
+      balance = availableRaw.toString();
     }
 
     if (!balance) {
