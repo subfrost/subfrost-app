@@ -497,56 +497,33 @@ describe('utxo_source resolution', () => {
   });
 
   // -------------------------------------------------------------------------
-  // Auto-pick: when cachedUtxos / prefetchedUtxos is populated, the SDK
-  // doesn't need its data-API fanout — force 'metashrew' so it does NOT
-  // call espo's `essentials.get_address_spendable_outpoints`. Verified
-  // live 2026-05-17 via HAR that the espo call fires on every mainnet
-  // swap under the old default. A regression of this default would
-  // re-introduce a 250-1200ms RPC at click time on every mutation.
+  // History (2026-05-17): an earlier rev auto-picked 'metashrew' when
+  // cachedUtxos was populated. That cut espo's
+  // `essentials.get_address_spendable_outpoints` (~250ms one-shot) but
+  // triggered alkanes-rs `provider.sync()` (30s poll loop) because the
+  // SDK only skips its sync when `using_espo_source` is true. Net: traded
+  // a 250ms call for a 30s wait. Reverted. The tests below pin the
+  // post-revert default — every mainnet call uses 'espo' unless the
+  // caller explicitly overrides.
   // -------------------------------------------------------------------------
 
-  it('auto-picks metashrew on mainnet when cachedUtxos populated (skip espo data API)', async () => {
+  it('mainnet default stays espo even when cachedUtxos populated', async () => {
     const p = fakeProvider();
     await alkanesExecuteTyped(p as unknown as WebProvider, baseParams({
       network: 'mainnet',
-      cachedUtxos: [
-        { txid: 'a'.repeat(64), vout: 0, value: 5000, address: REAL_TAPROOT },
-      ],
-    }));
-    expect(lastOptionsJson(p).utxo_source).toBe('metashrew');
-  });
-
-  it('auto-picks metashrew when prefetchedUtxos populated (atomic flow child)', async () => {
-    const p = fakeProvider();
-    await alkanesExecuteTyped(p as unknown as WebProvider, baseParams({
-      network: 'mainnet',
-      prefetchedUtxos: [{
-        outpoint: `${'a'.repeat(64)}:0`,
-        value: 5000,
-        script_pubkey_hex: '5120' + 'a'.repeat(64),
-        alkanes: [],
-      }],
-    }));
-    expect(lastOptionsJson(p).utxo_source).toBe('metashrew');
-  });
-
-  it('falls back to espo on mainnet with NO cache (cold-load / boot path)', async () => {
-    const p = fakeProvider();
-    await alkanesExecuteTyped(p as unknown as WebProvider, baseParams({
-      network: 'mainnet',
-      // no cachedUtxos, no prefetchedUtxos
-    }));
-    expect(lastOptionsJson(p).utxo_source).toBe('espo');
-  });
-
-  it('explicit utxoSource still wins even when cache is populated', async () => {
-    const p = fakeProvider();
-    await alkanesExecuteTyped(p as unknown as WebProvider, baseParams({
-      network: 'mainnet',
-      utxoSource: 'espo', // ask for espo despite having cache — explicit wins
       cachedUtxos: [{ txid: 'a'.repeat(64), vout: 0, value: 5000, address: REAL_TAPROOT }],
     }));
     expect(lastOptionsJson(p).utxo_source).toBe('espo');
+  });
+
+  it('explicit utxoSource override still wins on mainnet', async () => {
+    const p = fakeProvider();
+    await alkanesExecuteTyped(p as unknown as WebProvider, baseParams({
+      network: 'mainnet',
+      utxoSource: 'metashrew',
+      cachedUtxos: [{ txid: 'a'.repeat(64), vout: 0, value: 5000, address: REAL_TAPROOT }],
+    }));
+    expect(lastOptionsJson(p).utxo_source).toBe('metashrew');
   });
 });
 

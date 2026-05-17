@@ -96,18 +96,21 @@ export async function alkanesExecuteTyped(
     params.alkanesChangeAddress ?? params.txContext?.alkanesChangeAddress ?? 'p2tr:0';
   // Default utxo_source logic:
   //   - explicit per-call `params.utxoSource` wins
-  //   - otherwise, if `cachedUtxos`/`prefetchedUtxos` are populated we know
-  //     the SDK has every input it needs in-memory — force 'metashrew' so
-  //     it does NOT call espo's `essentials.get_address_spendable_outpoints`
-  //     at click time. Verified live 2026-05-17 (HAR): without this, the
-  //     SDK fires the espo lookup on every mainnet swap even when our
-  //     prefetched cache covers every UTXO. Visible 250-1200ms delay
-  //     between CONFIRM click and broadcast.
   //   - otherwise fall back to `getAlkanesDataSource(network)` (mainnet=espo).
-  //     Only the boot path / cold-load flows without a cache should hit this.
-  const hasCache = (params.cachedUtxos?.length ?? 0) > 0 || (params.prefetchedUtxos?.length ?? 0) > 0;
-  options.utxo_source =
-    params.utxoSource ?? (hasCache ? 'metashrew' : getAlkanesDataSource(params.network));
+  //
+  // History (2026-05-17): an earlier rev auto-picked 'metashrew' whenever
+  // cachedUtxos was populated, on the assumption that prefetched_utxos
+  // would let the SDK skip its data-API call. That cut espo's
+  // `essentials.get_address_spendable_outpoints` (~250ms one-shot) but
+  // triggered the WORSE alkanes-rs branch at
+  // execute.rs:2074 — `if !alkanes_needed.is_empty() && !using_espo_source
+  // { provider.sync().await? }` — a 30s poll loop on metashrew_height vs
+  // bitcoind_blockcount that hangs the swap when metashrew lags.
+  // Net result: trading a 250ms espo call for a 30s sync wait. Reverted.
+  // The proper fix is in alkanes-rs — teach `provider.sync()` to skip
+  // when `prefetched_utxos` cover `alkanes_needed`. Until that lands,
+  // espo is the safer default.
+  options.utxo_source = params.utxoSource ?? getAlkanesDataSource(params.network);
 
   if (params.traceEnabled !== undefined) options.trace_enabled = params.traceEnabled;
   if (params.mineEnabled !== undefined) options.mine_enabled = params.mineEnabled;

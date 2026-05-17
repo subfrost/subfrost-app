@@ -420,14 +420,6 @@ export function useSwapMutation() {
           // BTC payment_utxos from this and skips the WASM's internal
           // fanout. Click-to-popup latency win.
           cachedUtxos: utxoCache.utxos,
-          // Force metashrew utxo_source so the SDK does NOT call its
-          // espo data API (`essentials.get_address_spendable_outpoints`).
-          // Verified 2026-05-17 via HAR: even with cachedUtxos passed,
-          // the SDK's mainnet-default 'espo' source fires the espo
-          // address-keyed lookup at click time. cachedUtxos already
-          // gives the SDK every input it needs — the espo call is pure
-          // waste under our setup.
-          utxoSource: 'metashrew',
           // Tell the SDK exactly which metashrew height our cache reflects.
           // It will filter coin selection to UTXOs at height ≤ this, so
           // there's no need to wait for metashrew to catch up to bitcoind

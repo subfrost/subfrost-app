@@ -471,13 +471,6 @@ export function useEphemeralWrapPackage() {
         alkanesChangeAddress: ephemeral.address,
         network,
         cachedUtxos: utxoCache.utxos,
-        // Force metashrew utxo_source to suppress SDK's espo data-API call
-        // (`essentials.get_address_spendable_outpoints`). cachedUtxos +
-        // prefetched_utxos already give the SDK every input it needs;
-        // verified 2026-05-17 via HAR that the espo call fires AT click
-        // time even with cachedUtxos populated unless utxo_source is set
-        // away from the mainnet default of 'espo'.
-        utxoSource: 'metashrew',
         // Pin to the metashrew height our cache reflects — SDK filters
         // coin selection to UTXOs at height ≤ this and SKIPS waitForIndexer
         // (no need to wait for metashrew to catch up to bitcoind).
@@ -573,14 +566,6 @@ export function useEphemeralWrapPackage() {
         alkanesChangeAddress: params.childAlkanesChangeAddress ?? params.userAddress,
         network,
         ordinalsStrategy: 'burn',
-        // Force metashrew utxo_source so the SDK does NOT call its espo
-        // data API (`essentials.get_address_spendable_outpoints`) — verified
-        // 2026-05-17 via HAR that espo path fires twice per atomic flow
-        // even when prefetched_utxos covers the ONLY input the child
-        // selects from. The child only spends from `ephemeral.address` and
-        // the prefetched_utxos entry below is authoritative for that one
-        // outpoint; there's no reason the SDK should ever discover more.
-        utxoSource: 'metashrew',
         // Skip the SDK's waitForIndexer poll loop — our cache height is
         // authoritative for which UTXOs are safe to select.
         maxIndexedHeight: utxoCache.height,
