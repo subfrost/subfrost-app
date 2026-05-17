@@ -51,7 +51,7 @@
     "test:devnet:cpfp": "vitest run --config vitest.config.devnet.ts __tests__/devnet/e2e-cpfp-wrap-swap.test.ts __tests__/devnet/e2e-cpfp-wrap-addliquidity.test.ts __tests__/devnet/e2e-cpfp-mempool-chain.test.ts"
   },
   "dependencies": {
-    "@alkanes/ts-sdk": "https://pkg.alkanes.build/dist/@alkanes/ts-sdk?v=0.1.6-5265053",
+    "@alkanes/ts-sdk": "https://pkg.alkanes.build/dist/@alkanes/ts-sdk?v=0.1.6-cbb21f1",
     "@bitcoinerlab/secp256k1": "^1.2.0",
     "@bprogress/next": "^3.2.12",
     "@noble/ciphers": "^2.2.0",

@@ -54,6 +54,7 @@ import type { BtcBalanceFast } from '@/queries/account';
 import { queryKeys } from '@/queries/keys';
 import { getAlkanesDataSource } from '@/lib/alkanes/dataSource';
 import { useWalletUtxoCache } from '@/hooks/useWalletUtxoCache';
+import { useWalletState } from '@/hooks/useWalletState';
 
 export interface AlkaneAsset {
   alkaneId: string;
@@ -141,6 +142,14 @@ export function useEnrichedWalletData(): EnrichedWalletData {
   const prevConnectedRef = useRef(false);
   const dataSource = getAlkanesDataSource(network || 'mainnet');
   const walletUtxoCache = useWalletUtxoCache();
+  // New: server-side per-block wallet snapshot from /api/wallet-state.
+  // Opportunistic hydration source — used to backfill BTC totals when
+  // the existing fast/alkane queries haven't responded yet (cold start,
+  // upstream blip). Once `useEnrichedWalletData` becomes the only
+  // consumer of `useWalletUtxoCache`, we can swap the underlying
+  // implementation; for now this layer is additive.
+  const walletStateResult = useWalletState();
+  const walletState = walletStateResult.data;
   const balanceAccount = useMemo(() => ({
     ...account,
     paymentAddress: account?.paymentAddress || paymentAddress || undefined,
@@ -218,7 +227,10 @@ export function useEnrichedWalletData(): EnrichedWalletData {
     return getWalletBalanceAddresses(balanceAccount).sort().join(',');
   }, [balanceAccount]);
 
-  const btcAddressSet = useMemo(() => new Set(getWalletBtcBalanceAddresses(balanceAccount)), [balanceAccount]);
+  const btcSpendableAddressSet = useMemo(
+    () => new Set(getWalletBtcBalanceAddresses(balanceAccount)),
+    [balanceAccount],
+  );
 
   const btcFastFromWalletCache = useMemo<BtcBalanceFast | null>(() => {
     if (dataSource !== 'espo') return null;
@@ -227,22 +239,44 @@ export function useEnrichedWalletData(): EnrichedWalletData {
     const p2trAddress = balanceAccount?.taproot?.address;
     let p2wpkh = 0;
     let p2tr = 0;
+    let spendable = 0;
+    // Iterate every UTXO in the cache (covers both segwit and taproot), so
+    // dual-address wallets with BTC at the taproot still see the right
+    // total. `spendable` keeps the protect_taproot semantics — only the
+    // payment-address bucket counts toward fee inputs on dual wallets.
     for (const utxo of walletUtxoCache.utxos) {
-      if (!btcAddressSet.has(utxo.address)) continue;
       if (utxo.address === p2trAddress) p2tr += utxo.value;
       else p2wpkh += utxo.value;
+      if (btcSpendableAddressSet.has(utxo.address)) spendable += utxo.value;
     }
     return {
       p2wpkh,
       p2tr,
       total: p2wpkh + p2tr,
-      spendable: p2wpkh + p2tr,
+      spendable,
       pendingIn: 0,
       pendingOut: 0,
     };
-  }, [balanceAccount, addressKey, btcAddressSet, dataSource, walletUtxoCache.height, walletUtxoCache.utxos]);
+  }, [balanceAccount, addressKey, btcSpendableAddressSet, dataSource, walletUtxoCache.height, walletUtxoCache.utxos]);
 
-  const btcFast = btcFastQuery.data ?? btcFastFromWalletCache ?? null;
+  // Hydrate from the new /api/wallet-state route when the existing
+  // fast-balance queries haven't arrived yet. Shape conversion is
+  // straightforward — the route already aggregates BTC by address type.
+  const btcFastFromWalletState = useMemo<BtcBalanceFast | null>(() => {
+    if (!walletState) return null;
+    if (walletState.btcSats.total === 0 && walletState.utxos.length === 0) return null;
+    return {
+      p2wpkh: walletState.btcSats.p2wpkh,
+      p2tr: walletState.btcSats.p2tr,
+      total: walletState.btcSats.total,
+      spendable: walletState.btcSats.spendable,
+      pendingIn: 0,
+      pendingOut: 0,
+    };
+  }, [walletState]);
+
+  const btcFast =
+    btcFastQuery.data ?? btcFastFromWalletCache ?? btcFastFromWalletState ?? null;
 
   const espoAlkanesFromWalletCache = useMemo<AlkaneAsset[] | null>(() => {
     if (dataSource !== 'espo') return null;

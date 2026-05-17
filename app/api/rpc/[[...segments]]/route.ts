@@ -20,14 +20,16 @@
  * be bypassed and go directly to espo"). The earlier 2026-02-07 note saying
  * "all methods go to subfrost" no longer holds — see REST_PRIMARY_BASE_URLS
  * below.
- * JOURNAL ENTRY (2026-05-11 EVENING, supersedes earlier same-day notes):
- * `metashrew_view` and `metashrew_height` now route through the same
- * /v4/subfrost gateway as the rest of mainnet JSON-RPC. The temporary
- * /v6 split was removed after the load-balanced metashrew upgrades rolled
- * into /v4 and because /v6's anonymous tier could 429 local/dev flows when
- * SUBFROST_V6_API_KEY was not configured.
+ * JOURNAL ENTRY (2026-05-17, final): **ALL traffic on /v4/subfrost. NEVER /v6.**
+ * Per user directive 2026-05-17: subfrost-app must never originate /v6/subfrost
+ * traffic. /v4/subfrost is the only sanctioned mainnet gateway. Every
+ * JSON-RPC method (metashrew_view, metashrew_height, alkanes_*, esplora_*,
+ * bitcoin_*) and every REST sub-path routes to /v4/subfrost (or to
+ * alkanode for the espo-served REST sub-paths). The METASHREW_RPC_ENDPOINTS
+ * override map and SUBFROST_V6_API_KEY env var were removed — their only
+ * historical purpose was the /v6 split.
  *
- * See pickEndpoint and buildHeadersForUrl below for the routing details.
+ * See pickEndpoint below for the routing details.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -55,49 +57,12 @@ const RPC_ENDPOINTS: Record<string, string> = {
   oylnet: 'https://regtest.subfrost.io/v4/5d37098b75581792a44b9d230d48aa75',
 };
 
-// Per-network metashrew-only endpoint override.
-//
-// 2026-05-11: emptied. Per flex (alkanes-rs maintainer) the load-balanced
-// metashrew upgrades that previously only lived behind /v6/subfrost were
-// rolled out to /v4/subfrost — so the entire RPC surface (alkanes_*,
-// esplora_*, metashrew_view, metashrew_height) is now answered by /v4 with
-// no flap. The /v6 anonymous tier still enforces a 20 req/min rate limit
-// (which we used to side-step with SUBFROST_V6_API_KEY), and flex plans to
-// remove /v6 entirely as redundant. Routing every method through one
-// endpoint also avoids the cross-replica height-vs-view drift PR #117 was
-// chasing.
-//
-// To re-enable a per-method metashrew split (e.g. if /v6 comes back as a
-// dedicated CDN-fronted view-only tier), add `mainnet: '<url>'` back here.
-const METASHREW_RPC_ENDPOINTS: Record<string, string | undefined> = {};
-
-// Subfrost API key for /v6/subfrost authenticated requests. Read once at
-// module load (not per-request) — the key doesn't change at runtime, and
-// re-reading process.env on every request showed up in profiles. Server-
-// side only — DO NOT expose this to the browser by adding NEXT_PUBLIC_*.
-//
-// When set, all requests to /v6/subfrost endpoints carry an
-// `Authorization: Bearer <key>` header which (per subfrost docs at
-// api.subfrost.io) bypasses the anonymous 20 req/min rate bucket.
-// When unset, /v6 calls go out unauthenticated and may 429 under load.
-//
-// Local dev: put `SUBFROST_V6_API_KEY=...` in .env.local
-// Staging/prod: configure as a Cloud Run env var
-const SUBFROST_V6_API_KEY = process.env.SUBFROST_V6_API_KEY ?? '';
-
-// Builds outbound headers for a given upstream URL. Always includes
-// Content-Type. For /v6/subfrost endpoints, attaches the Authorization
-// header when the API key is configured; everything else gets no auth.
-//
-// The "is /v6" check is URL-substring based (rather than coupling to
-// METASHREW_RPC_ENDPOINTS lookup) so that custom upstreams pinned via
-// future env vars also pick up auth automatically when they target /v6.
-function buildHeadersForUrl(url: string): Record<string, string> {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (SUBFROST_V6_API_KEY && url.includes('/v6/subfrost')) {
-    headers['Authorization'] = `Bearer ${SUBFROST_V6_API_KEY}`;
-  }
-  return headers;
+// All upstream requests carry only Content-Type. There is no per-URL auth
+// branching anymore — the /v6 split was removed (2026-05-17, user directive)
+// and /v4/subfrost is sanctioned for unauthenticated traffic at the rate
+// the app produces. Any future auth requirement should live here.
+function buildHeadersForUrl(_url: string): Record<string, string> {
+  return { 'Content-Type': 'application/json' };
 }
 
 function elapsedMs(startMs: number): string {
@@ -213,18 +178,10 @@ function pickEndpoint(body: any, network: string) {
     return BATCH_RPC_ENDPOINTS[network] || BATCH_RPC_ENDPOINTS.regtest;
   }
 
-  // Single requests: route metashrew methods to a network override only
-  // when one is explicitly configured. Mainnet intentionally has no
-  // override right now, so metashrew_view/metashrew_height fall through to
-  // the /v4/subfrost gateway with alkanes_*, bitcoin_*, and esplora_*.
-  // REST sub-paths still bypass subfrost.io and go to alkanode on mainnet.
-  const method = typeof body?.method === 'string' ? body.method : '';
-  const isMetashrewMethod = method === 'metashrew_view' || method === 'metashrew_height';
-  const metashrewUrl = METASHREW_RPC_ENDPOINTS[network];
-  if (isMetashrewMethod && metashrewUrl) {
-    return metashrewUrl;
-  }
-
+  // Single requests: every JSON-RPC method (metashrew_view, metashrew_height,
+  // alkanes_*, bitcoin_*, esplora_*) goes to the /v4/subfrost gateway. No
+  // per-method splits. REST sub-paths still bypass subfrost.io and go to
+  // alkanode on mainnet (handled in the segments-branch above, not here).
   return RPC_ENDPOINTS[network] || RPC_ENDPOINTS.regtest;
 }
 

@@ -301,7 +301,7 @@ export default function ActivityFeed({
   };
   return (
     <div className="rounded-2xl bg-[color:var(--sf-glass-bg)] backdrop-blur-md shadow-[0_4px_20px_rgba(0,0,0,0.2)] border-t border-[color:var(--sf-top-highlight)]">
-      <div className="rounded-t-2xl px-6 py-4 border-b-2 border-[color:var(--sf-row-border)] bg-[color:var(--sf-surface)]/40">
+      <div className="rounded-t-2xl px-4 sm:px-6 py-4 border-b-2 border-[color:var(--sf-row-border)] bg-[color:var(--sf-surface)]/40">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <h3 className="text-base font-bold text-[color:var(--sf-text)]">
@@ -401,7 +401,7 @@ export default function ActivityFeed({
 
       {/* Column Headers */}
       {/* Mobile header (xs only) - 3 columns */}
-      <div className="sm:hidden grid grid-cols-[0.6fr_1fr_auto] gap-2 px-6 py-3 text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/70 border-b border-[color:var(--sf-row-border)]">
+      <div className="sm:hidden grid grid-cols-[0.6fr_1fr_auto] gap-2 px-4 py-3 text-xs font-bold uppercase tracking-wider text-[color:var(--sf-text)]/70 border-b border-[color:var(--sf-row-border)]">
         <div>{t("activity.txn")}</div>
         <div>{t("activity.pair")}</div>
         <div className="text-right">{t("activity.amounts")}</div>
@@ -502,7 +502,7 @@ export default function ActivityFeed({
                 key={(row as any).transactionId + "-" + idx}
                 href={txExplorerHref}
                 target={txExplorerHref === '#' ? undefined : '_blank'}
-                className="block px-6 py-2 text-[11px] leading-[20px] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-primary)]/10 border-b border-[color:var(--sf-row-border)]"
+                className="block px-4 sm:px-6 py-2 text-[11px] leading-[20px] transition-all duration-[400ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none hover:bg-[color:var(--sf-primary)]/10 border-b border-[color:var(--sf-row-border)]"
               >
                 {/* Mobile layout (xs only) - 2 rows */}
                 <div className="sm:hidden">

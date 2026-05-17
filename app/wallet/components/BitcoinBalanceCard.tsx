@@ -145,7 +145,7 @@ export default function BitcoinBalanceCard({ onSend, onReceive, onSettings, sett
 
   if (error) {
     return (
-      <div className="h-full rounded-2xl bg-[color:var(--sf-glass-bg)] p-6 shadow-[0_4px_20px_rgba(0,0,0,0.2)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)]">
+      <div className="h-full rounded-2xl bg-[color:var(--sf-glass-bg)] p-4 sm:p-6 shadow-[0_4px_20px_rgba(0,0,0,0.2)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)]">
         <div className="flex flex-col items-center justify-center py-12">
           <div className="text-red-400 mb-4">{error}</div>
           <button
@@ -160,7 +160,7 @@ export default function BitcoinBalanceCard({ onSend, onReceive, onSettings, sett
   }
 
   return (
-    <div className="relative z-40 h-full overflow-visible rounded-2xl bg-[color:var(--sf-glass-bg)] p-6 shadow-[0_4px_20px_rgba(0,0,0,0.2)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)]">
+    <div className="relative z-40 h-full overflow-visible rounded-2xl bg-[color:var(--sf-glass-bg)] p-4 sm:p-6 shadow-[0_4px_20px_rgba(0,0,0,0.2)] backdrop-blur-md border-t border-[color:var(--sf-top-highlight)]">
       <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl">
         <img
           src="/brand/balance-snowflake-mark.svg"

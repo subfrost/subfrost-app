@@ -12,7 +12,7 @@ export default function SettingsPage() {
   return (
     <PageContent>
       <AlkanesMainWrapper header={<PageHeader title={t('settingsPage.title')} />}>
-        <div className="grid max-w-xl gap-6 rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-6">
+        <div className="grid max-w-xl gap-4 sm:gap-6 rounded-xl border border-[color:var(--sf-glass-border)] bg-[color:var(--sf-glass-bg)] p-4 sm:p-6">
           <div className="grid gap-2">
             <label className="text-sm font-semibold text-[color:var(--sf-text)]">{t('settingsPage.maxSlippage')}</label>
             <input

@@ -36,10 +36,32 @@ export const BLOCK_EXPLORER_URLS: Record<string, string> = {
  * Get the RPC URL for a network. For devnet, returns the localhost URL
  * that the fetch interceptor routes to the in-process server.
  * For other networks, returns the API proxy route.
+ *
+ * Server-side note: Node `fetch` rejects relative paths ("Invalid URL").
+ * Routes that run in the Next.js server runtime (e.g. `/api/wallet-state`
+ * which fans out to `getCurrentTipHash`, `getHeight`, `getAddressUtxos`,
+ * `metashrewView`, all of which live in `lib/alkanes/rpc.ts` and call
+ * `getRpcUrl` to build their target URL) need an absolute self-call URL.
+ * We hit 127.0.0.1 on the same instance's PORT so the routing logic in
+ * `app/api/rpc/[[...segments]]/route.ts` stays the single source of
+ * truth — no per-helper "if (server) hit upstream directly" branching.
+ *
+ * History (2026-05-17): `/api/wallet-state` was silently returning
+ * `{utxos:[], height:null, tipHash:""}` for weeks because every helper
+ * threw "Invalid URL" → was swallowed by per-call `.catch(() => 0)` /
+ * `Promise.allSettled` failure shoulders. Surfaced when the swap path's
+ * `cachedUtxos` ended up empty → utxo_source fell back to espo → the
+ * SDK still ran provider.sync()'s 30s poll loop because alkanes_needed
+ * was non-empty but prefetched_utxos was empty.
  */
 export function getRpcUrl(network: string): string {
   if (network === 'devnet') return 'http://localhost:18888';
-  return `/api/rpc/${network}`;
+  const path = `/api/rpc/${network}`;
+  if (typeof window === 'undefined') {
+    const port = process.env.PORT || '3000';
+    return `http://127.0.0.1:${port}${path}`;
+  }
+  return path;
 }
 
 export function getConfig(network: string) {

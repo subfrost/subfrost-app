@@ -471,6 +471,10 @@ export function useEphemeralWrapPackage() {
         alkanesChangeAddress: ephemeral.address,
         network,
         cachedUtxos: utxoCache.utxos,
+        // Pin to the metashrew height our cache reflects — SDK filters
+        // coin selection to UTXOs at height ≤ this and SKIPS waitForIndexer
+        // (no need to wait for metashrew to catch up to bitcoind).
+        maxIndexedHeight: utxoCache.height,
         ...(params.splitTransactions !== undefined ? { splitTransactions: params.splitTransactions } : {}),
       });
       const parentReady = parentResult?.readyToSign ?? parentResult?.ready_to_sign;
@@ -562,7 +566,15 @@ export function useEphemeralWrapPackage() {
         alkanesChangeAddress: params.childAlkanesChangeAddress ?? params.userAddress,
         network,
         ordinalsStrategy: 'burn',
+        // Skip the SDK's waitForIndexer poll loop — our cache height is
+        // authoritative for which UTXOs are safe to select.
+        maxIndexedHeight: utxoCache.height,
         knownPendingTxHexes: [parentTx.txHex],
+        // Also pass the user wallet cache as a fallback (covers any edge
+        // case where the SDK does still discover beyond the prefetched
+        // carrier — would happen if the ephemeral address ever held more
+        // than one output, which it shouldn't in this flow).
+        cachedUtxos: utxoCache.utxos,
         prefetchedUtxos: [{
           outpoint: `${parentTx.txid}:${EPHEMERAL_CARRIER_VOUT}`,
           value: Number(carrierOutput.value),

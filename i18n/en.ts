@@ -91,6 +91,9 @@ const en: Record<string, string> = {
   'swapSummary.poolFee': 'Pool Fee',
   'swapSummary.highSlippageWarning': 'High Slippage Warning',
   'swapSummary.highSlippageMessage': 'This swap has high slippage ({percentage}%). You may receive significantly less than expected.',
+  'swapSummary.lowLiquidityWarning': 'Low Liquidity Pool',
+  'swapSummary.lowLiquidityMessage': 'This pool has low liquidity. You will receive significantly less than the market rate.',
+  'swapSummary.priceImpact': 'price impact',
   'swapSummary.slow': 'Slow',
   'swapSummary.medium': 'Medium',
   'swapSummary.fast': 'Fast',
@@ -591,10 +594,7 @@ const en: Record<string, string> = {
   'walletPicker.refresh': 'Refresh',
   'walletPicker.passwordHint': 'Password hint available',
   'walletPicker.viewInDrive': 'View in Google Drive',
-  'walletPicker.deleteBackup': 'Delete backup',
   'walletPicker.back': 'Back',
-  'walletPicker.confirmDelete': 'Are you sure you want to delete this wallet backup? This cannot be undone.',
-  'walletPicker.deleteFailed': 'Failed to delete wallet backup. Please try again.',
 
   // My Wallet Activity
   'myActivity.title': 'My Wallet Activity',

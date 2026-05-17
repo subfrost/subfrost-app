@@ -8,7 +8,7 @@ import ActivityFeed from "@/app/components/ActivityFeed";
 export default function ActivityPage() {
   return (
     <AlkanesMainWrapper>
-      <PageContent className="px-4 md:px-5">
+        <PageContent className="px-2 md:px-5">
         <ActivityFeed isFullPage />
       </PageContent>
     </AlkanesMainWrapper>

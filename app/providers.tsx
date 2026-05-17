@@ -25,45 +25,9 @@ import GlobalNotificationArea from '@/app/components/GlobalNotificationArea';
 import { DEMO_MODE_ENABLED } from '@/utils/demoMode';
 
 
-// Define Network type locally
 import type { Network } from '@/utils/constants';
-
-const NETWORK_STORAGE_KEY = 'subfrost_selected_network';
-
-function normalizeNetworkForDemo(network: Network): Network {
-  return DEMO_MODE_ENABLED && network === 'devnet' ? 'mainnet' : network;
-}
-
-// Detect network from storage, hostname, or env variable.
-// Devnet is stored in sessionStorage (tab-scoped) — survives in-tab navigation
-// but resets to mainnet on a new tab/page load. All other networks use localStorage.
-function detectNetwork(): Network {
-  if (typeof window === 'undefined') return 'mainnet';
-
-  // Check sessionStorage first for devnet (tab-scoped, does not persist across tabs)
-  if (!DEMO_MODE_ENABLED && sessionStorage.getItem(NETWORK_STORAGE_KEY) === 'devnet') {
-    return 'devnet';
-  }
-
-  // Restore other network selections from localStorage
-  const stored = localStorage.getItem(NETWORK_STORAGE_KEY);
-  if (stored && ['mainnet', 'testnet', 'signet', 'regtest', 'regtest-local', 'qubitcoin-regtest', 'subfrost-regtest', 'oylnet'].includes(stored)) {
-    return normalizeNetworkForDemo(stored as Network);
-  }
-
-  // Then check hostname
-  const host = window.location.host;
-  if (!process.env.NEXT_PUBLIC_NETWORK) {
-    if (host.startsWith('signet.') || host.startsWith('staging-signet.')) {
-      return 'signet';
-    } else if (host.startsWith('regtest.') || host.startsWith('staging-regtest.')) {
-      return 'subfrost-regtest';
-    }
-    // Default to mainnet for all other cases (including localhost)
-    return 'mainnet';
-  }
-  return normalizeNetworkForDemo(process.env.NEXT_PUBLIC_NETWORK as Network);
-}
+import { detectNetwork, normalizeNetworkForDemo, NETWORK_STORAGE_KEY } from '@/utils/detectNetwork';
+export { detectNetwork };
 
 export default function Providers({ children }: { children: ReactNode }) {
   const [mounted, setMounted] = useState(false);

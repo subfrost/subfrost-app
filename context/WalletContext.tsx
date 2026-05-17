@@ -679,15 +679,50 @@ export function WalletProvider({ children, network }: WalletProviderProps) {
     initializeWallet();
   }, [network, sdkInitialized, loadWallet, getWalletConnector]);
 
-  // Listen for address index changes from WalletSettings
+  // Listen for address index changes from WalletSettings / AccountSwitcher.
+  //
+  // BUG FIX (2026-05-15, reported by Chloe in CN community channel): with the
+  // same mnemonic, account 0 trades fine but switching to account 1+ caused
+  // swaps to fail. The SDK keystore (`walletLoadMnemonic`) was loaded once at
+  // connect time; the React state correctly tracked the new index for display,
+  // but the SDK's internal address-set wasn't refreshed when the index changed,
+  // so when `alkanesExecuteTyped` passed the account-N address as
+  // `from_addresses`, the signer's `select_utxos` / address-lookup didn't
+  // recognise it.
+  //
+  // Fix: on every `derivation-changed`, defensively call `walletGetAddresses`
+  // to enumerate every index from 0 through the active one. The SDK keystore
+  // derives them on-demand from the loaded mnemonic and registers each one
+  // in its known-address set. Idempotent — safe to call repeatedly.
   useEffect(() => {
     const handler = () => {
       const idx = parseInt(localStorage.getItem(STORAGE_KEYS.TAPROOT_ADDRESS_INDEX) || '0', 10) || 0;
       setTaprootAddressIndex(idx);
+      // Warm the SDK keystore for indices 0..idx.
+      if (sdkProvider && typeof (sdkProvider as any).walletGetAddresses === 'function') {
+        try {
+          (sdkProvider as any).walletGetAddresses('p2tr', 0, idx + 1, 0);
+        } catch (e) {
+          console.warn('[WalletContext] walletGetAddresses warm failed:', e);
+        }
+      }
     };
     window.addEventListener('derivation-changed', handler);
     return () => window.removeEventListener('derivation-changed', handler);
-  }, []);
+  }, [sdkProvider]);
+
+  // Initial warm: when the keystore wallet is first loaded, enumerate
+  // every index from 0..taprootAddressIndex so the user's previously-
+  // saved active index works without requiring a UI interaction first.
+  useEffect(() => {
+    if (!sdkProvider || walletType !== 'keystore' || taprootAddressIndex === 0) return;
+    if (typeof (sdkProvider as any).walletGetAddresses !== 'function') return;
+    try {
+      (sdkProvider as any).walletGetAddresses('p2tr', 0, taprootAddressIndex + 1, 0);
+    } catch (e) {
+      console.warn('[WalletContext] initial walletGetAddresses warm failed:', e);
+    }
+  }, [sdkProvider, taprootAddressIndex]);
 
   // Load keystore wallet into SDK provider when sdkInitialized becomes true
   // (separate from main init so it doesn't re-trigger browser wallet reconnect)

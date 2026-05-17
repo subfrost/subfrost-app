@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       '@alkanes/ts-sdk':
-        specifier: https://pkg.alkanes.build/dist/@alkanes/ts-sdk?v=0.1.6-5265053
-        version: https://pkg.alkanes.build/dist/@alkanes/ts-sdk?v=0.1.6-5265053(@types/node@20.19.37)
+        specifier: https://pkg.alkanes.build/dist/@alkanes/ts-sdk?v=0.1.6-cbb21f1
+        version: https://pkg.alkanes.build/dist/@alkanes/ts-sdk?v=0.1.6-cbb21f1(@types/node@20.19.37)
       '@bitcoinerlab/secp256k1':
         specifier: ^1.2.0
         version: 1.2.0
@@ -164,7 +164,7 @@ importers:
         version: 5.9.3
       vite-plugin-top-level-await:
         specifier: ^1.6.0
-        version: 1.6.0(rollup@4.59.0)(vite@7.3.1(@types/node@20.19.37)(jiti@2.6.1)(lightningcss@1.31.1))
+        version: 1.6.0(@swc/helpers@0.5.15)(rollup@4.59.0)(vite@7.3.1(@types/node@20.19.37)(jiti@2.6.1)(lightningcss@1.31.1))
       vite-plugin-wasm:
         specifier: ^3.5.0
         version: 3.5.0(vite@7.3.1(@types/node@20.19.37)(jiti@2.6.1)(lightningcss@1.31.1))
@@ -180,9 +180,9 @@ packages:
   '@adobe/css-tools@4.4.4':
     resolution: {integrity: sha512-Elp+iwUx5rN5+Y8xLt5/GRoG20WGoDCQ/1Fb+1LiGtvwbDavuSk0jhD/eZdckHAuzcDzccnkv+rEjyWfRx18gg==}
 
-  '@alkanes/ts-sdk@https://pkg.alkanes.build/dist/@alkanes/ts-sdk?v=0.1.6-5265053':
-    resolution: {tarball: https://pkg.alkanes.build/dist/@alkanes/ts-sdk?v=0.1.6-5265053}
-    version: 0.1.6-5265053
+  '@alkanes/ts-sdk@https://pkg.alkanes.build/dist/@alkanes/ts-sdk?v=0.1.6-cbb21f1':
+    resolution: {tarball: https://pkg.alkanes.build/dist/@alkanes/ts-sdk?v=0.1.6-cbb21f1}
+    version: 0.1.6-cbb21f1
     hasBin: true
     peerDependencies:
       '@oyl/sdk': '*'
@@ -4079,7 +4079,7 @@ snapshots:
 
   '@adobe/css-tools@4.4.4': {}
 
-  '@alkanes/ts-sdk@https://pkg.alkanes.build/dist/@alkanes/ts-sdk?v=0.1.6-5265053(@types/node@20.19.37)':
+  '@alkanes/ts-sdk@https://pkg.alkanes.build/dist/@alkanes/ts-sdk?v=0.1.6-cbb21f1(@types/node@20.19.37)':
     dependencies:
       '@bitcoinerlab/secp256k1': 1.2.0
       bip32: 4.0.0
@@ -4809,7 +4809,7 @@ snapshots:
   '@swc/core-win32-x64-msvc@1.15.18':
     optional: true
 
-  '@swc/core@1.15.18':
+  '@swc/core@1.15.18(@swc/helpers@0.5.15)':
     dependencies:
       '@swc/counter': 0.1.3
       '@swc/types': 0.1.25
@@ -4824,6 +4824,7 @@ snapshots:
       '@swc/core-win32-arm64-msvc': 1.15.18
       '@swc/core-win32-ia32-msvc': 1.15.18
       '@swc/core-win32-x64-msvc': 1.15.18
+      '@swc/helpers': 0.5.15
 
   '@swc/counter@0.1.3': {}
 
@@ -6080,7 +6081,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  eslint-module-utils@2.12.1(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.10.1)(eslint@9.39.4(jiti@2.6.1)):
+  eslint-module-utils@2.12.1(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.10.1(eslint-plugin-import@2.32.0)(eslint@9.39.4(jiti@2.6.1)))(eslint@9.39.4(jiti@2.6.1)):
     dependencies:
       debug: 3.2.7
     optionalDependencies:
@@ -6101,7 +6102,7 @@ snapshots:
       doctrine: 2.1.0
       eslint: 9.39.4(jiti@2.6.1)
       eslint-import-resolver-node: 0.3.9
-      eslint-module-utils: 2.12.1(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.10.1)(eslint@9.39.4(jiti@2.6.1))
+      eslint-module-utils: 2.12.1(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.10.1(eslint-plugin-import@2.32.0)(eslint@9.39.4(jiti@2.6.1)))(eslint@9.39.4(jiti@2.6.1))
       hasown: 2.0.2
       is-core-module: 2.16.1
       is-glob: 4.0.3
@@ -7963,10 +7964,10 @@ snapshots:
     dependencies:
       uint8array-tools: 0.0.8
 
-  vite-plugin-top-level-await@1.6.0(rollup@4.59.0)(vite@7.3.1(@types/node@20.19.37)(jiti@2.6.1)(lightningcss@1.31.1)):
+  vite-plugin-top-level-await@1.6.0(@swc/helpers@0.5.15)(rollup@4.59.0)(vite@7.3.1(@types/node@20.19.37)(jiti@2.6.1)(lightningcss@1.31.1)):
     dependencies:
       '@rollup/plugin-virtual': 3.0.2(rollup@4.59.0)
-      '@swc/core': 1.15.18
+      '@swc/core': 1.15.18(@swc/helpers@0.5.15)
       '@swc/wasm': 1.15.18
       uuid: 10.0.0
       vite: 7.3.1(@types/node@20.19.37)(jiti@2.6.1)(lightningcss@1.31.1)

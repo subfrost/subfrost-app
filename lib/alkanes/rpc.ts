@@ -35,10 +35,11 @@ import { getRpcUrl } from '@/utils/getConfig';
  * something"), every browser-side RPC call funnels through the
  * same-origin Next.js proxy at /api/rpc/${network} regardless of method.
  * The proxy is the only place that knows the subfrost.io routing matrix
- * (`metashrew_view` + `metashrew_height` → /v6/subfrost; everything else
- * → /v4 gateway; REST sub-paths → canon Espo on alkanode). Letting each
- * helper pick its own upstream resurrects the routing-bug parade PR #116
- * deleted.
+ * — all JSON-RPC (metashrew_view, metashrew_height, alkanes_*, bitcoin_*,
+ * esplora_*) → /v4/subfrost; REST sub-paths → canon Espo on alkanode.
+ * NEVER /v6/subfrost — see proxy route docstring for the durable rule.
+ * Letting each helper pick its own upstream resurrects the routing-bug
+ * parade PR #116 deleted.
  *
  * History: this used to point straight at SUBFROST_API_URLS[network],
  * which on mainnet is /v4/<token>. That path was returning
@@ -295,11 +296,14 @@ export async function getAddressMempoolTxs(
  * Returns the current metashrew height for a network.
  *
  * Single upstream — `metashrew_height` against the proxy (which routes
- * to /v6/subfrost on mainnet, gateway on other networks). No hedge with
+ * to /v4/subfrost on mainnet, gateway on other networks). No hedge with
  * `esplora_blocks::tip-height`: per flex 2026-05-11 ("we should never
  * have more than 1 way to do something") fallbacks just hide the real
  * failure mode. If `metashrew_height` starts failing again, the proxy
  * is the right place to add an explicit retry, not this client helper.
+ *
+ * NEVER route metashrew (or anything else) to /v6/subfrost. Per user
+ * directive 2026-05-17: /v4/subfrost is the only sanctioned upstream.
  */
 export async function getHeight(network: string, signal?: AbortSignal): Promise<number> {
   const url = subfrostRpcUrl(network);
@@ -416,9 +420,9 @@ export async function metashrewView(
   blockTag: string = 'latest',
   signal?: AbortSignal,
 ): Promise<string> {
-  // Single upstream — the same-origin /api/rpc proxy. The proxy already
-  // routes metashrew_view to /v6/subfrost on mainnet (sticky, fast) and
-  // to the gateway on other networks. See subfrostRpcUrl above.
+  // Single upstream — the same-origin /api/rpc proxy. The proxy routes
+  // metashrew_view to /v4/subfrost on mainnet (and the gateway on other
+  // networks). NEVER /v6 — see proxy docstring. See subfrostRpcUrl above.
   return jsonRpcCall<string>(
     subfrostRpcUrl(network),
     'metashrew_view',

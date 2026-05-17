@@ -94,6 +94,25 @@ export async function alkanesExecuteTyped(
     params.changeAddress ?? params.txContext?.btcChangeAddress ?? 'p2wpkh:0';
   options.alkanes_change_address =
     params.alkanesChangeAddress ?? params.txContext?.alkanesChangeAddress ?? 'p2tr:0';
+  // Default utxo_source logic:
+  //   - explicit per-call `params.utxoSource` wins (e.g. callers that have
+  //     manually verified prefetched_utxos covers alkanes_needed and want
+  //     to engage the alkanes-rs PR #259 skip-sync gate)
+  //   - otherwise fall back to `getAlkanesDataSource(network)` (mainnet=espo)
+  //
+  // Why espo stays the safe default (verified live 2026-05-17 on staging):
+  // even with PR #259 in place (SDK 0.1.6-cbb21f1), the metashrew utxo_source
+  // path triggers heavy `metashrew_height` polling elsewhere in the SDK —
+  // observed 294 metashrew_height calls in 30s during one swap, which
+  // tripped /v6/subfrost's rate limit (8× HTTP 429) and aborted the
+  // broadcast. Espo path doesn't poll height-aggressively, so its 250ms
+  // one-shot `essentials.*` discovery beats the metashrew path end-to-end
+  // until the SDK reduces its sync cadence (or /v6 raises the rate limit).
+  //
+  // The SDK gate from PR #259 is preserved as opt-in: callers like atomic
+  // wrap+swap that thread their own `params.utxoSource='metashrew'` plus
+  // `cachedUtxos` will engage it. They're rare and short-lived enough not
+  // to trip the rate limit.
   options.utxo_source = params.utxoSource ?? getAlkanesDataSource(params.network);
 
   if (params.traceEnabled !== undefined) options.trace_enabled = params.traceEnabled;
@@ -248,23 +267,26 @@ export async function alkanesExecuteTyped(
 
   // Indexer-aware UTXO height filter (2026-05-10, replaces global lag wait).
   //
-  // Fetch the alkanes indexer's current height and pass it as
-  // `max_indexed_height` so the SDK's `select_utxos` skips any confirmed
-  // UTXO whose creating block is above this height (metashrew can't yet
-  // read its alkane balance sheet). Alkane balance sheets are immutable
-  // per-outpoint, so any UTXO at height ≤ max_indexed_height is safe.
+  // Setting `options.max_indexed_height` makes the SDK's `select_utxos`
+  // skip any UTXO whose creating block is above this height — metashrew
+  // can't yet read its alkane balance sheet, so coin-selection that
+  // includes it would either fail validation or force the SDK to wait
+  // for sync. With this filter the wallet can transact continuously
+  // even while metashrew is catching up to bitcoind.
   //
-  // Why this beats waiting for full sync:
-  //   - esplora indexes new blocks ~immediately; metashrew takes longer
-  //     because it re-runs every protostone in the block.
-  //   - Steady-state on mainnet has esplora 1–2 blocks ahead of metashrew.
-  //     Waiting for `lag === 0` would stall every mutation for several
-  //     minutes after each block lands.
-  //   - With this filter we just don't pick UTXOs above metashrew's view —
-  //     correctness preserved without the wait.
+  // Source precedence:
+  //   1. Per-call `params.maxIndexedHeight` (canonical path — supply from
+  //      `useWalletUtxoCache().height` which is the metashrewHeight the
+  //      wallet snapshot was pinned to). Zero RPC at click time.
+  //   2. Fresh metashrew_height RPC (legacy fallback for callers that
+  //      don't pass the height — e.g. boot path with no wallet cache yet).
   //
-  // On local networks (devnet/regtest) we skip this probe — the user
-  // mines manually and selecting UTXOs above metashrew's height is fine.
+  // Local networks (devnet/regtest) skip the probe — the user mines
+  // manually and selecting UTXOs above metashrew's height is fine.
+  if (!options.max_indexed_height && typeof params.maxIndexedHeight === 'number' && params.maxIndexedHeight > 0) {
+    options.max_indexed_height = params.maxIndexedHeight;
+    console.log(`[alkanesExecuteTyped] max_indexed_height=${options.max_indexed_height} (from caller, no RPC)`);
+  }
   if (!options.max_indexed_height && options.utxo_source !== 'espo') {
     try {
       const rpcUrl =
@@ -283,7 +305,7 @@ export async function alkanesExecuteTyped(
           const h = typeof r === 'string' ? parseInt(r, 10) : Number(r);
           if (Number.isFinite(h) && h > 0) {
             options.max_indexed_height = h;
-            console.log(`[alkanesExecuteTyped] max_indexed_height=${h} (per-UTXO indexer filter)`);
+            console.log(`[alkanesExecuteTyped] max_indexed_height=${h} (fallback probe RPC)`);
           }
         }
       }
