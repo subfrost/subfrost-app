@@ -16,6 +16,7 @@ import { useFuelAllocation } from '@/hooks/useFuelAllocation';
 import { saveSwapIntent } from '@/app/swap/swapPair';
 
 import type { AlkaneAsset } from '@/hooks/useEnrichedWalletData';
+import { getAvailabilityBreakdownFor } from './alkaneBalanceBreakdown';
 
 const FRBTC_ID = '32:0';
 const DIESEL_ID = '2:0';
@@ -232,18 +233,24 @@ export default function AlkanesBalancesCard({
       return 0n;
     }
   };
-  const getAvailabilityBreakdown = (alkane: AlkaneAsset) => {
-    if (isBitcoinAsset(alkane)) {
-      return {
-        availableRaw: BigInt(Math.max(0, btcAvailableSats)),
-        mempoolRaw: BigInt(Math.max(0, btcMempoolSats)),
-      };
-    }
-    const confirmedRaw = parseRawBalance(alkane.balance);
-    const availableRaw = parseRawBalance(spendableByAlkane.get(alkane.alkaneId)?.balance);
-    const mempoolRaw = confirmedRaw > availableRaw ? confirmedRaw - availableRaw : 0n;
-    return { availableRaw, mempoolRaw };
-  };
+  // Delegates to the pure helper in ./alkaneBalanceBreakdown — see that file's
+  // header for the 2026-05-17 mork1e incident the fix addresses. Short version:
+  // the old `mempoolRaw = confirmedRaw - availableRaw` heuristic conflated a
+  // data-source mismatch (espoAlkanesFromWalletCache silently dropped some
+  // alkane IDs that addressAlkanes had) with "100% of this alkane is in the
+  // mempool", panicking users with no actual pending tx activity. New
+  // behaviour: mempool deltas come ONLY from `pendingByAlkane` (the explicit
+  // pending-tx-derived map), never from aggregation-delta inference.
+  // `spendableByAlkane` is kept around because the LP/staked-position
+  // rendering still reads from it elsewhere in this file.
+  const getAvailabilityBreakdown = (alkane: AlkaneAsset) =>
+    getAvailabilityBreakdownFor({
+      alkane,
+      pendingByAlkane,
+      isBitcoinAsset: isBitcoinAsset(alkane),
+      btcAvailableSats,
+      btcMempoolSats,
+    });
 
   const formatDepositAmount = (amount: string, decimals: number, symbol: string): string => {
     const val = BigInt(amount);
