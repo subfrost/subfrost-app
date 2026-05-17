@@ -1,0 +1,66 @@
+{
+  "run_at": "2026-05-16T23:53:19.014Z",
+  "wallet": "OYL",
+  "network": "mainnet",
+  "seed_hint": "panic ... myself",
+  "flows": [
+    {
+      "name": "btc_to_diesel",
+      "status": "success",
+      "txid": "05412cb541a2306b1da3f0272003c5f59964d2777d62647705e44730f0421dde",
+      "fee_sats": null,
+      "fee_usd": null,
+      "skip_reason": null,
+      "error": null
+    },
+    {
+      "name": "diesel_to_btc",
+      "status": "skipped",
+      "txid": null,
+      "fee_sats": null,
+      "fee_usd": null,
+      "skip_reason": "insufficient_diesel_balance_flow1_not_confirmed",
+      "error": null
+    },
+    {
+      "name": "btc_to_frbtc_wrap",
+      "status": "success",
+      "txid": "05412cb541a2306b1da3f0272003c5f59964d2777d62647705e44730f0421dde",
+      "fee_sats": null,
+      "fee_usd": null,
+      "skip_reason": null,
+      "error": null
+    },
+    {
+      "name": "frbtc_to_btc_unwrap",
+      "status": "success",
+      "txid": "05412cb541a2306b1da3f0272003c5f59964d2777d62647705e44730f0421dde",
+      "fee_sats": null,
+      "fee_usd": null,
+      "skip_reason": null,
+      "error": null
+    },
+    {
+      "name": "add_liquidity_btc_diesel",
+      "status": "error",
+      "txid": null,
+      "fee_sats": null,
+      "fee_usd": null,
+      "skip_reason": null,
+      "error": "txid not found in page after submit"
+    },
+    {
+      "name": "remove_liquidity",
+      "status": "skipped",
+      "txid": null,
+      "fee_sats": null,
+      "fee_usd": null,
+      "skip_reason": "remove_button_disabled",
+      "error": null
+    }
+  ],
+  "total_fee_sats": 0,
+  "total_fee_usd": 0,
+  "btc_price_usd": 77887.26790616543,
+  "aberrations": []
+}
