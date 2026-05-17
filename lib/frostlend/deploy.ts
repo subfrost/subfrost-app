@@ -331,3 +331,71 @@ export async function liquidateTroves(maxCount: number): Promise<void> {
     'B:50000:v0',
   );
 }
+
+/**
+ * Open a "guardian" trove from the deployer account. Used in E2E tests to ensure
+ * a second healthy trove exists before running a liquidation scenario.
+ *
+ * Liquity invariant: the sole trove cannot be liquidated (system would have 0
+ * collateral). This guardian trove stays safe through the oracle drop because
+ * its collateral is set high enough (collateralSats argument).
+ *
+ * The function wraps fresh BTC → frBTC at the deployer address first, then
+ * calls BorrowerOps.OpenTrove with the wrapped frBTC as collateral.
+ *
+ * @param collateralSats frBTC amount (8-decimal sat units). E.g. 10_000_000 = 0.10 frBTC.
+ * @param debtSats frostUSD amount to draw (8-decimal sat units). Must ≥ MIN_NET_DEBT.
+ */
+export async function openGuardianTrove(collateralSats: bigint, debtSats: bigint): Promise<void> {
+  const provider = getProvider();
+  const harness = getHarness();
+  if (!provider || !harness) throw new Error('Devnet not booted');
+  const { segwit, taproot } = getBootAddresses();
+
+  // 1. Get frBTC signer address (opcode 103 on frBTC contract [32:0]).
+  let signerAddr = taproot;
+  try {
+    const signerResult = await (provider as any).sandshrew_rpc_url
+      ? fetch('http://localhost:18888', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            jsonrpc: '2.0', id: 1,
+            method: 'alkanes_simulate',
+            params: [{ target: { block: '32', tx: '0' }, inputs: ['103'], alkanes: [],
+              transaction: '0x', block: '0x', height: '999', txindex: 0, vout: 0 }],
+          }),
+        }).then(r => r.json())
+      : null;
+    const raw = signerResult?.result?.execution?.data;
+    if (raw) {
+      const hex = raw.replace('0x', '');
+      const chunks: string[] = [];
+      for (let i = 0; i < hex.length; i += 2) chunks.push(hex.slice(i, i + 2));
+      const bytes = chunks.map(h => parseInt(h, 16));
+      const text = String.fromCharCode(...bytes).replace(/\0/g, '');
+      if (text.startsWith('bcrt') || text.startsWith('bc1') || text.startsWith('tb1')) {
+        signerAddr = text.trim();
+      }
+    }
+  } catch { /* fall through — use taproot as signer */ }
+
+  // 2. Wrap BTC → frBTC at deployer address. Use 1.5× the collateral so there's
+  //    enough for the OpenTrove inputRequirements AND fee dust.
+  const wrapSats = collateralSats * 2n; // wrap 2× to have buffer
+  await executeCall(
+    provider, harness, segwit, taproot,
+    '[32,0,77]:v1:v1',
+    `B:${wrapSats}:v0`,
+    [signerAddr, taproot],
+  );
+
+  // 3. Open the guardian trove.
+  await executeCall(
+    provider, harness, segwit, taproot,
+    `[4,${BORROWER_OPS_TX},${BORROWER_OPS_OPCODES.OpenTrove},${debtSats},0,0,${MAX_BORROWING_FEE}]:v0:v0`,
+    `32:0:${collateralSats}`,
+    [taproot],
+    [taproot],
+  );
+}

@@ -18,7 +18,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Loader2, Zap, AlertTriangle, RefreshCcw } from 'lucide-react';
-import { deployFrostlend, setOraclePrice, liquidateTrove, liquidateTroves } from '@/lib/frostlend/deploy';
+import { deployFrostlend, setOraclePrice, liquidateTrove, liquidateTroves, openGuardianTrove } from '@/lib/frostlend/deploy';
 import {
   DEFAULT_INITIAL_PRICE_18DEC,
   FROSTLEND_CONTRACTS,
@@ -36,6 +36,7 @@ type Busy =
   | 'set-price'
   | 'liquidate'
   | 'batch-liquidate'
+  | 'open-guardian'
   | 'refresh';
 
 const PRICE_DROP_PRESETS = [10, 25, 50, 75]; // percent
@@ -246,6 +247,21 @@ export default function FrostlendDevPanel({ network }: { network: string }) {
               Batch
             </button>
           </div>
+          {/* Guardian trove — opens a 2nd trove from deployer account for 2-trove liquidation testing */}
+          <button
+            disabled={busy !== null}
+            onClick={() =>
+              run('open-guardian', async () => {
+                // 0.10 frBTC (10_000_000 sats), 1800 frostUSD (180_000_000_000 sats)
+                await openGuardianTrove(10_000_000n, 180_000_000_000n);
+                return 'Guardian trove opened (0.10 frBTC / 1800 frostUSD)';
+              })
+            }
+            className="w-full px-2 py-1 bg-zinc-800/60 hover:bg-zinc-700/60 text-zinc-400 rounded text-xs border border-zinc-700/40"
+            title="Open a 2nd trove from deployer account — used to satisfy Liquity 2-trove requirement before liquidation test"
+          >
+            Open Guardian
+          </button>
         </div>
       )}
 
