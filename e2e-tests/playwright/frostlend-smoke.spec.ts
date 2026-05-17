@@ -827,12 +827,14 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
         // The oracle input only appears inside {isDeployed && (...)} — wait for
         // the FrostlendDevPanel to reflect isDeployed=true before proceeding.
         // The "deployed" green span is the DOM signal (same as waitForFrostlendDeployed).
+        // refreshPrice() runs async after mount — needs time for simulateAlkane to return.
+        // Fresh deploy + indexer catchup can take 30-60s. Use 90s to be safe.
         const oracleInputVisible = await page.waitForFunction(
           () => {
             const inputs = Array.from(document.querySelectorAll('input[inputmode="decimal"]'));
             return inputs.some(el => el.classList.contains('font-mono'));
           },
-          { timeout: 15_000 },
+          { timeout: 90_000 },
         ).then(() => true).catch(() => false);
         if (!oracleInputVisible) {
           console.log('[frostlend-smoke] Step 1b: oracle input not found — frostlend may not be deployed yet, skipping price set');
