@@ -94,23 +94,33 @@ export async function alkanesExecuteTyped(
     params.changeAddress ?? params.txContext?.btcChangeAddress ?? 'p2wpkh:0';
   options.alkanes_change_address =
     params.alkanesChangeAddress ?? params.txContext?.alkanesChangeAddress ?? 'p2tr:0';
-  // Default utxo_source logic:
+  // Default utxo_source logic (revised 2026-05-17, alkanes-rs PR #259 / SDK 0.1.6-cbb21f1):
   //   - explicit per-call `params.utxoSource` wins
-  //   - otherwise fall back to `getAlkanesDataSource(network)` (mainnet=espo).
+  //   - if cachedUtxos is populated → prefer 'metashrew' (engages the SDK's
+  //     new "skip provider.sync() when prefetched_utxos cover alkanes_needed"
+  //     gate; downstream discovery short-circuits per-outpoint
+  //     protorunesbyoutpoint via the prefetched-alkanes map → end-to-end
+  //     zero-RPC for alkane discovery on the wallet-cache path)
+  //   - otherwise fall back to `getAlkanesDataSource(network)` (mainnet=espo)
+  //     so callers without a cache (boot path, ad-hoc tools) keep the espo
+  //     spendable-outpoint discovery they relied on pre-cache.
   //
-  // History (2026-05-17): an earlier rev auto-picked 'metashrew' whenever
-  // cachedUtxos was populated, on the assumption that prefetched_utxos
-  // would let the SDK skip its data-API call. That cut espo's
-  // `essentials.get_address_spendable_outpoints` (~250ms one-shot) but
-  // triggered the WORSE alkanes-rs branch at
-  // execute.rs:2074 — `if !alkanes_needed.is_empty() && !using_espo_source
-  // { provider.sync().await? }` — a 30s poll loop on metashrew_height vs
-  // bitcoind_blockcount that hangs the swap when metashrew lags.
-  // Net result: trading a 250ms espo call for a 30s sync wait. Reverted.
-  // The proper fix is in alkanes-rs — teach `provider.sync()` to skip
-  // when `prefetched_utxos` cover `alkanes_needed`. Until that lands,
-  // espo is the safer default.
-  options.utxo_source = params.utxoSource ?? getAlkanesDataSource(params.network);
+  // Why this is safe to flip now: the alkanes-rs gate at execute.rs:2067
+  // (PR #259) checks `prefetched_covers_alkanes_needed(prefetched_utxos,
+  // &alkanes_needed)` before falling through to `provider.sync().await?`.
+  // If our cache covers every requirement we skip the sync; if it doesn't
+  // the SDK still syncs (correct fallback, no regression vs. espo path).
+  //
+  // History (earlier 2026-05-17): pre-PR-#259 the metashrew branch
+  // ALWAYS hit the sync poll, so picking 'metashrew' here traded a
+  // 250ms espo `essentials.*` call for a 30s metashrew_height vs
+  // bitcoind_blockcount wait. Reverted at the time; PR #259 closes that
+  // gap so this flip is now strict-better than the espo default for any
+  // caller threading prefetched_utxos.
+  const hasPrefetchedCache =
+    (params.cachedUtxos?.length ?? 0) > 0 || (params.prefetchedUtxos?.length ?? 0) > 0;
+  options.utxo_source =
+    params.utxoSource ?? (hasPrefetchedCache ? 'metashrew' : getAlkanesDataSource(params.network));
 
   if (params.traceEnabled !== undefined) options.trace_enabled = params.traceEnabled;
   if (params.mineEnabled !== undefined) options.mine_enabled = params.mineEnabled;

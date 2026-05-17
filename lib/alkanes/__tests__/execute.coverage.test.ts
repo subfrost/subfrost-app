@@ -497,33 +497,58 @@ describe('utxo_source resolution', () => {
   });
 
   // -------------------------------------------------------------------------
-  // History (2026-05-17): an earlier rev auto-picked 'metashrew' when
-  // cachedUtxos was populated. That cut espo's
-  // `essentials.get_address_spendable_outpoints` (~250ms one-shot) but
-  // triggered alkanes-rs `provider.sync()` (30s poll loop) because the
-  // SDK only skips its sync when `using_espo_source` is true. Net: traded
-  // a 250ms call for a 30s wait. Reverted. The tests below pin the
-  // post-revert default — every mainnet call uses 'espo' unless the
-  // caller explicitly overrides.
+  // 2026-05-17 — policy upgraded after alkanes-rs PR #259 / SDK 0.1.6-cbb21f1
+  // landed. The new SDK skips `provider.sync()` when prefetched_utxos cover
+  // alkanes_needed, so picking 'metashrew' on the prefetched path no longer
+  // resurrects the 30s sync wait. Mainnet now prefers 'metashrew' whenever
+  // cachedUtxos (or explicit prefetchedUtxos) is supplied — end-to-end
+  // zero-RPC for alkane discovery on the wallet-cache path. Callers without
+  // a cache still get the legacy espo default (boot path, ad-hoc tools).
+  //
+  // Historical detour (also 2026-05-17, pre-#259): an earlier rev did the
+  // same flip without the SDK gate; that traded a 250ms espo call for a
+  // 30s metashrew sync wait. Reverted at the time. PR #259 closes the gap.
   // -------------------------------------------------------------------------
 
-  it('mainnet default stays espo even when cachedUtxos populated', async () => {
+  it('mainnet prefers metashrew when cachedUtxos populated (engages SDK skip-sync gate)', async () => {
     const p = fakeProvider();
     await alkanesExecuteTyped(p as unknown as WebProvider, baseParams({
       network: 'mainnet',
       cachedUtxos: [{ txid: 'a'.repeat(64), vout: 0, value: 5000, address: REAL_TAPROOT }],
+    }));
+    expect(lastOptionsJson(p).utxo_source).toBe('metashrew');
+  });
+
+  it('mainnet prefers metashrew when prefetchedUtxos passed directly', async () => {
+    const p = fakeProvider();
+    await alkanesExecuteTyped(p as unknown as WebProvider, baseParams({
+      network: 'mainnet',
+      prefetchedUtxos: [{
+        outpoint: `${'a'.repeat(64)}:0`,
+        value: 5000,
+        script_pubkey_hex: '0014deadbeef00000000000000000000000000000000',
+        alkanes: [],
+      }],
+    }));
+    expect(lastOptionsJson(p).utxo_source).toBe('metashrew');
+  });
+
+  it('mainnet without any cache still defaults to espo (boot path / ad-hoc tools)', async () => {
+    const p = fakeProvider();
+    await alkanesExecuteTyped(p as unknown as WebProvider, baseParams({
+      network: 'mainnet',
     }));
     expect(lastOptionsJson(p).utxo_source).toBe('espo');
   });
 
-  it('explicit utxoSource override still wins on mainnet', async () => {
+  it('explicit utxoSource override still wins on mainnet (even with cachedUtxos)', async () => {
     const p = fakeProvider();
     await alkanesExecuteTyped(p as unknown as WebProvider, baseParams({
       network: 'mainnet',
-      utxoSource: 'metashrew',
+      utxoSource: 'espo',
       cachedUtxos: [{ txid: 'a'.repeat(64), vout: 0, value: 5000, address: REAL_TAPROOT }],
     }));
-    expect(lastOptionsJson(p).utxo_source).toBe('metashrew');
+    expect(lastOptionsJson(p).utxo_source).toBe('espo');
   });
 });
 
