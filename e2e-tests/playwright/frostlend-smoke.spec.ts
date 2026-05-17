@@ -99,6 +99,13 @@ interface TraceDigest {
   raw_hex_path: string | null;
 }
 
+interface AssertionResult {
+  label: string;
+  passed: boolean;
+  expected: string;
+  actual: string;
+}
+
 interface FlowResult {
   name: string;
   status: 'success' | 'skipped' | 'error';
@@ -108,6 +115,7 @@ interface FlowResult {
   error: string | null;
   trace: TraceDigest | null;
   note: string | null;
+  assertions: AssertionResult[];
 }
 
 interface FrostlendSmokeReport {
@@ -137,6 +145,94 @@ function saveReport(report: FrostlendSmokeReport) {
   try { existing = JSON.parse(fs.readFileSync(REPORT_PATH, 'utf8')); } catch { /* first run */ }
   const merged = { ...existing, frostlend: report };
   fs.writeFileSync(REPORT_PATH, JSON.stringify(merged, null, 2));
+}
+
+// ============================================================================
+// Chain-state assertion helpers
+// ============================================================================
+
+// Contract IDs — mirrors constants/frostlend.ts (duplicated here so page.evaluate
+// closures can inline them; evaluate runs in the browser context, not Node).
+const FL = {
+  TROVE_MANAGER:  { block: '4', tx: '513' },
+  STABILITY_POOL: { block: '4', tx: '515' },
+  PRICE_FEED:     { block: '4', tx: '518' },
+} as const;
+
+// Opcode constants (subset needed for assertions)
+const OP = {
+  TM_GetTroveCount:    '23',
+  TM_GetTroveStatus:   '22',
+  TM_GetTroveColl:     '20',
+  TM_GetTroveDebt:     '21',
+  SP_GetTotalDeposits: '20',
+  SP_GetCompounded:    '21',
+  PF_GetStoredPrice:   '30',
+} as const;
+
+/**
+ * Run a single alkanes_simulate read against localhost:18888.
+ * Returns the response as a hex string, or null on failure.
+ * Must be called via page.evaluate() so it can reach the devnet fetch interceptor.
+ */
+type SimPayload = { block: string; tx: string; inputs: string[] };
+
+async function simRead(page: Page, payload: SimPayload): Promise<string | null> {
+  return page.evaluate(async ({ block, tx, inputs }) => {
+    try {
+      const res = await fetch('http://localhost:18888', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'alkanes_simulate',
+          params: [{
+            target: { block, tx },
+            inputs,
+            alkanes: [],
+            transaction: '0x',
+            block: '0x',
+            height: '999999',
+            txindex: 0,
+            vout: 0,
+          }],
+          id: 1,
+        }),
+      });
+      const data = await res.json() as { result?: { execution?: { data?: string } } };
+      return data?.result?.execution?.data ?? null;
+    } catch { return null; }
+  }, payload);
+}
+
+/** Parse a hex response (with or without 0x) as a little-endian u128 BigInt string. */
+function hexToU128(hex: string | null): bigint {
+  if (!hex) return 0n;
+  const clean = hex.replace(/^0x/, '').slice(0, 32); // first 16 bytes = 32 hex chars
+  if (!clean) return 0n;
+  let v = 0n;
+  for (let i = clean.length - 2; i >= 0; i -= 2) {
+    v = (v << 8n) | BigInt(parseInt(clean.slice(i, i + 2), 16) || 0);
+  }
+  return v;
+}
+
+/** Parse hex as u8 (first byte). */
+function hexToU8(hex: string | null): number {
+  if (!hex) return 0;
+  const clean = hex.replace(/^0x/, '');
+  return parseInt(clean.slice(0, 2), 16) || 0;
+}
+
+/**
+ * Assert a chain-state value and return an AssertionResult.
+ * `actual` is always recorded even on failure, for diagnostics.
+ */
+function makeAssertion(label: string, expected: string, actual: string): AssertionResult {
+  const passed = expected === actual;
+  if (!passed) console.warn(`[assert FAIL] ${label}: expected=${expected} actual=${actual}`);
+  else console.log(`[assert OK]   ${label}: ${actual}`);
+  return { label, passed, expected, actual };
 }
 
 // ============================================================================
@@ -516,6 +612,9 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
   let browserContext: import('@playwright/test').BrowserContext;
   const report = initReport();
   let lastTxid: string | null = null;
+  // Tracks the TroveManager trove ID of the most recently opened trove so
+  // adjust-flow assertions can query the correct trove slot.
+  let lastTroveId: bigint = 0n;
 
   test.beforeAll(async () => {
     const lockFiles = [
@@ -644,6 +743,7 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
         error: null,
         trace: null,
         note: null,
+        assertions: [],
       };
 
       try {
@@ -729,6 +829,7 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
         error: null,
         trace: null,
         note: null,
+        assertions: [],
       };
 
       try {
@@ -831,6 +932,43 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
                   report.aberrations.push(`Flow 2 (OpenTrove) REVERT: ${flow.trace.revert_reason}`);
                 }
               }
+
+              // Chain-state assertions: TroveCount ≥ 1, trove status = Active (1)
+              const troveCountHex = await simRead(page, { ...FL.TROVE_MANAGER, inputs: [OP.TM_GetTroveCount] });
+              const troveCount = hexToU128(troveCountHex);
+              flow.assertions.push(makeAssertion('TroveCount ≥ 1', 'true', String(troveCount >= 1n)));
+
+              // Get the trove ID from the TroveManager — trove IDs are sequential u64 starting at 1.
+              // troveId = troveCount (last opened). Query its status.
+              const troveId = troveCount;
+              lastTroveId = troveId;
+              const troveStatusHex = await simRead(page, {
+                ...FL.TROVE_MANAGER,
+                inputs: [OP.TM_GetTroveStatus, String(troveId)],
+              });
+              const troveStatus = hexToU8(troveStatusHex);
+              flow.assertions.push(makeAssertion('TroveStatus = Active (1)', '1', String(troveStatus)));
+
+              // Trove coll > 0
+              const troveCollHex = await simRead(page, {
+                ...FL.TROVE_MANAGER,
+                inputs: [OP.TM_GetTroveColl, String(troveId)],
+              });
+              const troveColl = hexToU128(troveCollHex);
+              flow.assertions.push(makeAssertion('TroveColl > 0', 'true', String(troveColl > 0n)));
+
+              // Trove debt ≥ MIN_NET_DEBT (180_000_000_000 sats = 1800 frostUSD)
+              const troveDebtHex = await simRead(page, {
+                ...FL.TROVE_MANAGER,
+                inputs: [OP.TM_GetTroveDebt, String(troveId)],
+              });
+              const troveDebt = hexToU128(troveDebtHex);
+              flow.assertions.push(makeAssertion('TroveDebt ≥ 1800 frostUSD', 'true', String(troveDebt >= 180_000_000_000n)));
+
+              const failedAssertions = flow.assertions.filter(a => !a.passed);
+              if (failedAssertions.length > 0) {
+                report.aberrations.push(`Flow 2 (OpenTrove) assertion failures: ${failedAssertions.map(a => a.label).join(', ')}`);
+              }
             } else {
               flow.error = 'txid not found in toast after OpenTrove';
             }
@@ -857,6 +995,7 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
         error: null,
         trace: null,
         note: null,
+        assertions: [],
       };
 
       try {
@@ -951,6 +1090,17 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
                 report.aberrations.push(`Flow 3 (SP deposit) REVERT: ${flow.trace.revert_reason}`);
               }
             }
+
+            // Chain-state assertion: SP total deposits ≥ 500 frostUSD (50_000_000_000 sats)
+            const spTotalHex = await simRead(page, { ...FL.STABILITY_POOL, inputs: [OP.SP_GetTotalDeposits] });
+            const spTotal = hexToU128(spTotalHex);
+            flow.assertions.push(makeAssertion('SP total deposits ≥ 500 frostUSD', 'true', String(spTotal >= 50_000_000_000n)));
+            flow.note = `SP total: ${Number(spTotal) / 1e8} frostUSD`;
+
+            const failedAssertions = flow.assertions.filter(a => !a.passed);
+            if (failedAssertions.length > 0) {
+              report.aberrations.push(`Flow 3 (SP deposit) assertion failures: ${failedAssertions.map(a => a.label).join(', ')}`);
+            }
           } else {
             flow.error = 'txid not found in toast after SP deposit';
           }
@@ -976,6 +1126,7 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
         error: null,
         trace: null,
         note: null,
+        assertions: [],
       };
 
       try {
@@ -1045,6 +1196,29 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
             flow.note = (flow.note || '') + ' | ICR bar color not confirmed red (may need higher oracle drop)';
           }
 
+          // Chain-state assertion: stored oracle price < initial price (50k * 1e18)
+          // After 25% drop: price ≈ 37500 * 1e18 = 37500000000000000000000n
+          const priceHex = await simRead(page, { ...FL.PRICE_FEED, inputs: [OP.PF_GetStoredPrice] });
+          const storedPrice = hexToU128(priceHex);
+          const initialPrice18 = 50_000n * (10n ** 18n);
+          const droppedPrice18 = initialPrice18 * 75n / 100n; // 25% drop lower bound
+          flow.assertions.push(makeAssertion(
+            'Oracle price < initial (price dropped)',
+            'true',
+            String(storedPrice < initialPrice18 && storedPrice > 0n),
+          ));
+          flow.assertions.push(makeAssertion(
+            'Oracle price ≥ 75% of initial (not over-dropped)',
+            'true',
+            String(storedPrice >= droppedPrice18),
+          ));
+          flow.note = (flow.note || '') + ` | stored price: ${Number(storedPrice / (10n ** 16n)) / 100} USD/BTC`;
+
+          const failedAssertions = flow.assertions.filter(a => !a.passed);
+          if (failedAssertions.length > 0) {
+            report.aberrations.push(`Flow 4 (oracle drop) assertion failures: ${failedAssertions.map(a => a.label).join(', ')}`);
+          }
+
           report.flows.push(flow);
           saveReport(report);
         }
@@ -1068,6 +1242,7 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
         error: null,
         trace: null,
         note: null,
+        assertions: [],
       };
 
       try {
@@ -1155,6 +1330,22 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
             flow.note = 'trove close not reflected in UI (may be cache lag)';
           }
 
+          // Chain-state assertions: TroveCount = 0, SP total deposits decreased
+          const postLiqTroveCountHex = await simRead(page, { ...FL.TROVE_MANAGER, inputs: [OP.TM_GetTroveCount] });
+          const postLiqTroveCount = hexToU128(postLiqTroveCountHex);
+          flow.assertions.push(makeAssertion('TroveCount = 0 after liquidation', '0', String(postLiqTroveCount)));
+
+          // SP total should have decreased (liquidation consumed frostUSD from the SP)
+          const postLiqSpHex = await simRead(page, { ...FL.STABILITY_POOL, inputs: [OP.SP_GetTotalDeposits] });
+          const postLiqSp = hexToU128(postLiqSpHex);
+          flow.assertions.push(makeAssertion('SP deposits decreased after liquidation', 'true', String(postLiqSp < 50_000_000_000n)));
+          flow.note = (flow.note || '') + ` | SP remaining: ${Number(postLiqSp) / 1e8} frostUSD`;
+
+          const failedAssertions = flow.assertions.filter(a => !a.passed);
+          if (failedAssertions.length > 0) {
+            report.aberrations.push(`Flow 5 (batch liquidate) assertion failures: ${failedAssertions.map(a => a.label).join(', ')}`);
+          }
+
           report.flows.push(flow);
           saveReport(report);
         }
@@ -1178,6 +1369,7 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
         error: null,
         trace: null,
         note: null,
+        assertions: [],
       };
 
       try {
@@ -1277,6 +1469,17 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
             if (frbtcGainText) {
               flow.note = `frBTC gain shown: ${frbtcGainText}`;
             }
+
+            // Chain-state assertion: SP total deposits = 0 (full withdrawal of 500 frostUSD)
+            const postWithdrawSpHex = await simRead(page, { ...FL.STABILITY_POOL, inputs: [OP.SP_GetTotalDeposits] });
+            const postWithdrawSp = hexToU128(postWithdrawSpHex);
+            flow.assertions.push(makeAssertion('SP total = 0 after full withdrawal', '0', String(postWithdrawSp)));
+            flow.note = (flow.note || '') + ` | SP after withdraw: ${Number(postWithdrawSp) / 1e8} frostUSD`;
+
+            const failedAssertions = flow.assertions.filter(a => !a.passed);
+            if (failedAssertions.length > 0) {
+              report.aberrations.push(`Flow 6 (SP withdraw) assertion failures: ${failedAssertions.map(a => a.label).join(', ')}`);
+            }
           } else {
             flow.error = 'txid not found in toast after SP withdraw';
           }
@@ -1348,7 +1551,14 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
           await mineOneBlock(page);
           await waitForIndexerSync(page, 60_000);
           const t = await captureTxid(page, 60_000, lastTxid ?? undefined);
-          if (t) { lastTxid = t; console.log(`[frostlend-smoke] Second trove txid: ${t}`); }
+          if (t) {
+            lastTxid = t;
+            console.log(`[frostlend-smoke] Second trove txid: ${t}`);
+            // Update lastTroveId — second trove = TroveCount at this point
+            const tc2Hex = await simRead(page, { ...FL.TROVE_MANAGER, inputs: [OP.TM_GetTroveCount] });
+            lastTroveId = hexToU128(tc2Hex);
+            console.log(`[frostlend-smoke] Second trove ID: ${lastTroveId}`);
+          }
         } else {
           console.log('[frostlend-smoke] Second Open Trove button not enabled — adjust flows may skip');
         }
@@ -1368,6 +1578,7 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
         error: null,
         trace: null,
         note: null,
+        assertions: [],
       };
 
       try {
@@ -1452,6 +1663,18 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
                 flow.trace = await fetchDevnetTrace(page, txid, voutCount);
                 if (flow.trace.status === 'failure') report.aberrations.push(`Flow 7 (AddColl) REVERT: ${flow.trace.revert_reason}`);
               }
+
+              // Chain-state assertions
+              const statusHex = await simRead(page, { ...FL.TROVE_MANAGER, inputs: [OP.TM_GetTroveStatus, String(lastTroveId)] });
+              flow.assertions.push(makeAssertion('TroveStatus = Active after AddColl', '1', String(hexToU8(statusHex))));
+              const collHex = await simRead(page, { ...FL.TROVE_MANAGER, inputs: [OP.TM_GetTroveColl, String(lastTroveId)] });
+              const coll = hexToU128(collHex);
+              // 0.05 + 0.001 frBTC = 5_100_000 sats minimum
+              flow.assertions.push(makeAssertion('TroveColl ≥ 5_100_000 sats after AddColl', 'true', String(coll >= 5_100_000n)));
+              flow.note = `coll after add: ${Number(coll) / 1e8} frBTC`;
+              if (flow.assertions.some(a => !a.passed)) {
+                report.aberrations.push(`Flow 7 (AddColl) assertion failures: ${flow.assertions.filter(a => !a.passed).map(a => a.label).join(', ')}`);
+              }
             } else {
               flow.error = 'txid not found in toast after AddCollateral';
             }
@@ -1478,6 +1701,7 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
         error: null,
         trace: null,
         note: null,
+        assertions: [],
       };
 
       try {
@@ -1554,6 +1778,18 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
                 flow.trace = await fetchDevnetTrace(page, txid, voutCount);
                 if (flow.trace.status === 'failure') report.aberrations.push(`Flow 8 (WithdrawColl) REVERT: ${flow.trace.revert_reason}`);
               }
+
+              // Chain-state assertions
+              const statusHex = await simRead(page, { ...FL.TROVE_MANAGER, inputs: [OP.TM_GetTroveStatus, String(lastTroveId)] });
+              flow.assertions.push(makeAssertion('TroveStatus = Active after WithdrawColl', '1', String(hexToU8(statusHex))));
+              const collHex = await simRead(page, { ...FL.TROVE_MANAGER, inputs: [OP.TM_GetTroveColl, String(lastTroveId)] });
+              const coll = hexToU128(collHex);
+              // After add (+0.001) then withdraw (-0.001) we are back to ~0.05 frBTC = 5_000_000 sats
+              flow.assertions.push(makeAssertion('TroveColl > 0 after WithdrawColl', 'true', String(coll > 0n)));
+              flow.note = `coll after withdraw: ${Number(coll) / 1e8} frBTC`;
+              if (flow.assertions.some(a => !a.passed)) {
+                report.aberrations.push(`Flow 8 (WithdrawColl) assertion failures: ${flow.assertions.filter(a => !a.passed).map(a => a.label).join(', ')}`);
+              }
             } else {
               flow.error = 'txid not found in toast after WithdrawCollateral';
             }
@@ -1580,6 +1816,7 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
         error: null,
         trace: null,
         note: null,
+        assertions: [],
       };
 
       try {
@@ -1656,6 +1893,20 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
                 flow.trace = await fetchDevnetTrace(page, txid, voutCount);
                 if (flow.trace.status === 'failure') report.aberrations.push(`Flow 9 (DrawFrostUsd) REVERT: ${flow.trace.revert_reason}`);
               }
+
+              // Chain-state assertions: debt increased beyond original 1800 + gas comp
+              // Original = 180_000_000_000 net + 20_000_000_000 gas comp = 200_000_000_000
+              // After drawing 100 more: debt ≥ 200_000_000_000 + 10_000_000_000 = 210_000_000_000
+              const debtHex = await simRead(page, { ...FL.TROVE_MANAGER, inputs: [OP.TM_GetTroveDebt, String(lastTroveId)] });
+              const debt = hexToU128(debtHex);
+              flow.assertions.push(makeAssertion('TroveDebt > 1800 frostUSD after Draw', 'true', String(debt > 180_000_000_000n)));
+              flow.assertions.push(makeAssertion('TroveStatus = Active after Draw', '1', String(hexToU8(
+                await simRead(page, { ...FL.TROVE_MANAGER, inputs: [OP.TM_GetTroveStatus, String(lastTroveId)] })
+              ))));
+              flow.note = `debt after draw: ${Number(debt) / 1e8} frostUSD`;
+              if (flow.assertions.some(a => !a.passed)) {
+                report.aberrations.push(`Flow 9 (DrawFrostUsd) assertion failures: ${flow.assertions.filter(a => !a.passed).map(a => a.label).join(', ')}`);
+              }
             } else {
               flow.error = 'txid not found in toast after DrawFrostUsd';
             }
@@ -1682,6 +1933,7 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
         error: null,
         trace: null,
         note: null,
+        assertions: [],
       };
 
       try {
@@ -1758,6 +2010,18 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
                 flow.trace = await fetchDevnetTrace(page, txid, voutCount);
                 if (flow.trace.status === 'failure') report.aberrations.push(`Flow 10 (RepayFrostUsd) REVERT: ${flow.trace.revert_reason}`);
               }
+
+              // Chain-state assertions: debt ≥ MIN_NET_DEBT (trove still viable), Active
+              const debtHex = await simRead(page, { ...FL.TROVE_MANAGER, inputs: [OP.TM_GetTroveDebt, String(lastTroveId)] });
+              const debt = hexToU128(debtHex);
+              flow.assertions.push(makeAssertion('TroveDebt ≥ min net debt after Repay', 'true', String(debt >= 180_000_000_000n)));
+              flow.assertions.push(makeAssertion('TroveStatus = Active after Repay', '1', String(hexToU8(
+                await simRead(page, { ...FL.TROVE_MANAGER, inputs: [OP.TM_GetTroveStatus, String(lastTroveId)] })
+              ))));
+              flow.note = `debt after repay: ${Number(debt) / 1e8} frostUSD`;
+              if (flow.assertions.some(a => !a.passed)) {
+                report.aberrations.push(`Flow 10 (RepayFrostUsd) assertion failures: ${flow.assertions.filter(a => !a.passed).map(a => a.label).join(', ')}`);
+              }
             } else {
               flow.error = 'txid not found in toast after RepayFrostUsd';
             }
@@ -1784,6 +2048,7 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
         error: null,
         trace: null,
         note: null,
+        assertions: [],
       };
 
       try {
@@ -1826,6 +2091,18 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
               if (flow.trace.status === 'failure') report.aberrations.push(`Flow 11 (CloseTrove) REVERT: ${flow.trace.revert_reason}`);
             }
 
+            // Chain-state assertions: status = ClosedByOwner (2), TroveCount = 0
+            const closedStatusHex = await simRead(page, {
+              ...FL.TROVE_MANAGER,
+              inputs: [OP.TM_GetTroveStatus, String(lastTroveId)],
+            });
+            flow.assertions.push(makeAssertion('TroveStatus = ClosedByOwner (2)', '2', String(hexToU8(closedStatusHex))));
+            const postCloseTroveCountHex = await simRead(page, { ...FL.TROVE_MANAGER, inputs: [OP.TM_GetTroveCount] });
+            flow.assertions.push(makeAssertion('TroveCount = 0 after CloseTrove', '0', String(hexToU128(postCloseTroveCountHex))));
+            if (flow.assertions.some(a => !a.passed)) {
+              report.aberrations.push(`Flow 11 (CloseTrove) assertion failures: ${flow.assertions.filter(a => !a.passed).map(a => a.label).join(', ')}`);
+            }
+
             // Verify "Open Trove" form appears (trove closed)
             await page.waitForTimeout(3000);
             const openTroveVisible = await page.evaluate(() =>
@@ -1864,6 +2141,7 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
         error: null,
         trace: null,
         note: null,
+        assertions: [],
       };
 
       try {
