@@ -1498,6 +1498,15 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
         console.log(`[frostlend-smoke] Flow 5: pre-liquidation TroveCount = ${preLiqTroveCount}`);
         await openDevPanel(page);
 
+        // Wait for DevPanel deployed status before the Batch button (inside isDeployed section)
+        await page.waitForFunction(
+          () => {
+            const spans = Array.from(document.querySelectorAll('span'));
+            return spans.some(s => s.textContent?.trim() === 'deployed' && s.classList.contains('text-green-400'));
+          },
+          { timeout: 90_000 },
+        ).catch(() => console.log('[frostlend-smoke] Flow 5: DevPanel deployed status (batch) not seen — continuing'));
+
         // Click "Batch" button in FrostlendDevPanel liquidate section
         const batchClicked = await page.evaluate(() => {
           const btns = Array.from(document.querySelectorAll('button'));
