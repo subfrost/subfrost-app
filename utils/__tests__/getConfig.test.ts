@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { getConfig, SUBFROST_API_URLS, BLOCK_EXPLORER_URLS } from '../getConfig';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { getConfig, SUBFROST_API_URLS, BLOCK_EXPLORER_URLS, getRpcUrl } from '../getConfig';
 
 describe('getConfig', () => {
   // --- Factory IDs ---
@@ -143,5 +143,66 @@ describe('getConfig', () => {
   it('regtest has empty ETH explorer', () => {
     const config = getConfig('regtest');
     expect(config.BLOCK_EXPLORER_URL_ETH).toBe('');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getRpcUrl — server-side absolute URL contract.
+//
+// Pins the 2026-05-17 fix: Node `fetch` rejects relative paths with
+// "Invalid URL", so any route that runs server-side (e.g. /api/wallet-state
+// fanning out to getCurrentTipHash / getHeight / getAddressUtxos / metashrewView
+// in lib/alkanes/rpc.ts) must receive an absolute self-call URL. Without
+// this, the route silently returned an empty WalletState
+// (`{utxos:[], height:null, tipHash:""}`) for weeks because every helper
+// threw "Invalid URL" → swallowed by per-call `.catch(() => 0)` and
+// `Promise.allSettled` failure shoulders.
+// ---------------------------------------------------------------------------
+describe('getRpcUrl — server vs browser URL shape', () => {
+  const realWindow = (globalThis as any).window;
+  const realPort = process.env.PORT;
+
+  beforeEach(() => {
+    vi.unstubAllGlobals();
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    if (realWindow === undefined) delete (globalThis as any).window;
+    else (globalThis as any).window = realWindow;
+    if (realPort === undefined) delete process.env.PORT;
+    else process.env.PORT = realPort;
+  });
+
+  it('browser-side returns a relative path (no host)', () => {
+    vi.stubGlobal('window', { location: { host: 'staging-app.subfrost.io' } });
+    expect(getRpcUrl('mainnet')).toBe('/api/rpc/mainnet');
+    expect(getRpcUrl('regtest')).toBe('/api/rpc/regtest');
+  });
+
+  it('server-side returns absolute 127.0.0.1:PORT URL (Node fetch needs absolute)', () => {
+    // Simulate server runtime: no `window` in globalThis.
+    vi.stubGlobal('window', undefined);
+    process.env.PORT = '3000';
+    expect(getRpcUrl('mainnet')).toBe('http://127.0.0.1:3000/api/rpc/mainnet');
+    expect(getRpcUrl('signet')).toBe('http://127.0.0.1:3000/api/rpc/signet');
+  });
+
+  it('server-side respects PORT env override', () => {
+    vi.stubGlobal('window', undefined);
+    process.env.PORT = '8080';
+    expect(getRpcUrl('mainnet')).toBe('http://127.0.0.1:8080/api/rpc/mainnet');
+  });
+
+  it('server-side defaults to PORT=3000 when env is unset', () => {
+    vi.stubGlobal('window', undefined);
+    delete process.env.PORT;
+    expect(getRpcUrl('mainnet')).toBe('http://127.0.0.1:3000/api/rpc/mainnet');
+  });
+
+  it('devnet always returns the in-process WASM endpoint regardless of runtime', () => {
+    vi.stubGlobal('window', { location: { host: 'staging-app.subfrost.io' } });
+    expect(getRpcUrl('devnet')).toBe('http://localhost:18888');
+    vi.stubGlobal('window', undefined);
+    expect(getRpcUrl('devnet')).toBe('http://localhost:18888');
   });
 });
