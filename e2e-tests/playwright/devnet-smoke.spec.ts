@@ -1166,6 +1166,50 @@ test.describe.serial('Devnet AMM Smoke — keystore wallet', () => {
       }
     }
 
+    // ── UTXO fragmentation pre-step ──────────────────────────────────────────
+    // Reproduce the "Insufficient spendable 2:0: need X, have Y" failure mode
+    // that appears after multiple swap flows split DIESEL across many change
+    // UTXOs. Before the useWalletState devnet fix (2026-05-17), the server
+    // route rejected network=devnet with HTTP 400, leaving the UTXO cache
+    // empty so the SDK only found the most recent change outpoint via its own
+    // protorunesbyaddress scan. With the fix, fetchDevnetWalletState fans out
+    // per-outpoint client-side and the SDK sees the full aggregated balance.
+    //
+    // We run 3 micro BTC→DIESEL swaps here (0.00001 BTC each) to fragment
+    // DIESEL into 4+ separate change UTXOs before Flow 5 tests add liquidity.
+    {
+      console.log('[smoke] UTXO fragmentation: running 3 BTC→DIESEL micro-swaps to split DIESEL across multiple UTXOs');
+      await page.evaluate(() => { const a = document.querySelector('a[href="/swap"]') as HTMLAnchorElement | null; if (a) a.click(); });
+      await page.waitForTimeout(2000);
+
+      for (let i = 0; i < 3; i++) {
+        try {
+          await dismissExistingToast(page);
+          await selectTokenOnSide(page, 'sell', 'BTC');
+          await selectTokenOnSide(page, 'buy', 'DIESEL');
+          await page.waitForTimeout(500);
+          await setNumberInput(page, 0, '0.00001');
+          const enabled = await waitForConfirmButton(page, 15_000);
+          if (!enabled) {
+            console.log(`[smoke] UTXO fragmentation swap ${i + 1}: confirm disabled — skipping`);
+            continue;
+          }
+          await waitForPopupOverlayClose(page, 3000);
+          await clickConfirmSwap(page);
+          await page.waitForTimeout(2000);
+          await mineOneBlock(page);
+          await waitForIndexerSync(page, 30_000);
+          const fragTxid = await captureTxid(page, 30_000, lastTxid ?? undefined);
+          if (fragTxid) lastTxid = fragTxid;
+          console.log(`[smoke] UTXO fragmentation swap ${i + 1} txid: ${fragTxid ?? 'none'}`);
+          await page.waitForTimeout(1000);
+        } catch (fragErr) {
+          console.log(`[smoke] UTXO fragmentation swap ${i + 1} error (non-fatal): ${fragErr}`);
+        }
+      }
+      console.log('[smoke] UTXO fragmentation complete — DIESEL is now split across multiple UTXOs');
+    }
+
     // ── Flow 5: Add liquidity (BTC+DIESEL) ────────────────────────────────────
     {
       const flow: FlowResult = {
