@@ -2548,18 +2548,31 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
 
           await page.screenshot({ path: '/tmp/fl-flow11-preflight.png' });
 
+          // Snapshot pre-existing error divs so we only detect errors introduced by CloseTrove,
+          // not stale errors from prior adjust mutations (addColl.error etc. persist in DOM).
+          const preExistingErrors = await page.evaluate(() => {
+            const errDivs = Array.from(document.querySelectorAll('div')).filter(d =>
+              d.textContent?.startsWith('Error:') && d.classList.contains('text-red-300')
+            );
+            return errDivs.map(d => d.textContent?.trim() ?? '');
+          });
+
           // Click "Close Trove (repay full debt)"
           await page.evaluate(() => {
             const btn = Array.from(document.querySelectorAll('button')).find(b => /close trove/i.test(b.textContent || ''));
             if (btn && !(btn as HTMLButtonElement).disabled) (btn as HTMLElement).click();
           });
-          // Check for immediate mutation error (auth token missing, etc.)
-          const mutationError = await page.evaluate(() => {
+          // Wait briefly for the async mutation to either throw synchronously or
+          // show a quick-fail error (auth token missing, SDK init failure, etc.).
+          await page.waitForTimeout(1500);
+          // Check for NEW error divs introduced by the CloseTrove click.
+          const mutationError = await page.evaluate((preExisting) => {
             const errDivs = Array.from(document.querySelectorAll('div')).filter(d =>
               d.textContent?.startsWith('Error:') && d.classList.contains('text-red-300')
             );
-            return errDivs.length > 0 ? errDivs[0].textContent?.trim() || null : null;
-          });
+            const newErrors = errDivs.filter(d => !preExisting.includes(d.textContent?.trim() ?? ''));
+            return newErrors.length > 0 ? newErrors[0].textContent?.trim() || null : null;
+          }, preExistingErrors);
           if (mutationError) {
             flow.status = 'error';
             flow.error = `CloseTrove mutation error: ${mutationError}`;
