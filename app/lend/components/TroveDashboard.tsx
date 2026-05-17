@@ -7,9 +7,14 @@
  * v1 affordances:
  *   - If no trove: "Open Trove" form (frBTC collateral + frostUSD borrow)
  *   - If trove exists: read-only stats + Add Coll / Withdraw Coll / Draw / Repay / Close
+ *   - If trove was liquidated with surplus: "Claim Surplus Collateral" button
  *
  * MCR/CCR thresholds are visualized via a colored ICR bar so the user can see
  * how close their trove is to liquidation as the price moves.
+ *
+ * Toast wiring: every mutation calls showNotification(txid, 'lend') on success
+ * so the SwapSuccessNotification toast fires — consistent with AMM flows and
+ * required by the frostlend smoke test (captureTxid looks for espo.sh links).
  */
 
 import { useMemo, useState } from 'react';
@@ -32,7 +37,9 @@ import {
   useDrawFrostUsdMutation,
   useRepayFrostUsdMutation,
   useCloseTroveMutation,
+  useClaimCollateralMutation,
 } from '@/hooks/frostlend';
+import { useNotification } from '@/context/NotificationContext';
 
 const MCR_PCT = icrToPercent(MCR);
 const CCR_PCT = icrToPercent(CCR);
@@ -52,11 +59,14 @@ function frostUsdToSats(usd: string): bigint {
 export default function TroveDashboard() {
   const { data: trove } = useTroveData();
   const hasTrove = !!trove && trove.status === TROVE_STATUS.Active;
+  // Show claim button when trove has been liquidated but auth token still exists in cache
+  // (capped liquidation leaves surplus in CollSurplusPool).
+  const showClaim = !!trove && trove.status === TROVE_STATUS.ClosedByLiquidation;
 
   return (
     <div className="sf-card p-5">
       <h2 className="mb-4 text-base font-semibold text-zinc-100">Your Trove</h2>
-      {hasTrove ? <ExistingTrovePanel /> : <OpenTrovePanel />}
+      {hasTrove ? <ExistingTrovePanel /> : showClaim ? <ClaimSurplusPanel /> : <OpenTrovePanel />}
     </div>
   );
 }
@@ -66,6 +76,7 @@ export default function TroveDashboard() {
 function OpenTrovePanel() {
   const { data: system } = useSystemData();
   const open = useOpenTroveMutation();
+  const { showNotification } = useNotification();
   // Defaults sized to fit a small starter balance from the devnet faucet.
   // 0.03 frBTC × $1M oracle (devnet test value) = $30k → ICR ~1666% on 1800 debt.
   // At default $50k oracle, 0.03 × $50k = $1500 → ICR 83%, would liquidate; user
@@ -123,12 +134,19 @@ function OpenTrovePanel() {
         type="button"
         disabled={disabled}
         onClick={() =>
-          open.mutate({
-            collateralFrbtcSats: collSats,
-            debtFrostUsdSats: debtSats,
-            maxFeePercentage: MAX_BORROWING_FEE,
-            feeRate: 1,
-          })
+          open.mutate(
+            {
+              collateralFrbtcSats: collSats,
+              debtFrostUsdSats: debtSats,
+              maxFeePercentage: MAX_BORROWING_FEE,
+              feeRate: 1,
+            },
+            {
+              onSuccess: (data) => {
+                if (data?.txid) showNotification(data.txid, 'lend');
+              },
+            },
+          )
         }
         className="w-full rounded-md bg-cyan-500/90 px-4 py-2 font-medium text-black hover:bg-cyan-400 disabled:opacity-50"
       >
@@ -149,6 +167,7 @@ function OpenTrovePanel() {
 function ExistingTrovePanel() {
   const { data: trove } = useTroveData();
   const { data: system } = useSystemData();
+  const { showNotification, showError } = useNotification();
   const addColl = useAddCollateralMutation();
   const withdrawColl = useWithdrawCollateralMutation();
   const drawDebt = useDrawFrostUsdMutation();
@@ -164,11 +183,18 @@ function ExistingTrovePanel() {
   const collBtc = frbtcSatsToBtc(trove.collateralFrbtc);
   const debtUsd = frostUsdToFloat(trove.debtFrostUsd);
 
+  const onSuccess = (data: { txid: string } | undefined) => {
+    if (data?.txid) showNotification(data.txid, 'lend');
+  };
+  const onError = (e: unknown) => {
+    showError((e as Error)?.message || 'Transaction failed');
+  };
+
   const submit = () => {
-    if (tab === 'add') addColl.mutate({ collateralFrbtcSats: frBtcToSats(amount), feeRate: 1 });
-    else if (tab === 'withdraw') withdrawColl.mutate({ amountFrbtcSats: frBtcToSats(amount), feeRate: 1 });
-    else if (tab === 'draw') drawDebt.mutate({ amountFrostUsdSats: frostUsdToSats(amount), feeRate: 1 });
-    else repay.mutate({ amountFrostUsdSats: frostUsdToSats(amount), feeRate: 1 });
+    if (tab === 'add') addColl.mutate({ collateralFrbtcSats: frBtcToSats(amount), feeRate: 1 }, { onSuccess, onError });
+    else if (tab === 'withdraw') withdrawColl.mutate({ amountFrbtcSats: frBtcToSats(amount), feeRate: 1 }, { onSuccess, onError });
+    else if (tab === 'draw') drawDebt.mutate({ amountFrostUsdSats: frostUsdToSats(amount), feeRate: 1 }, { onSuccess, onError });
+    else repay.mutate({ amountFrostUsdSats: frostUsdToSats(amount), feeRate: 1 }, { onSuccess, onError });
   };
   const submitting = addColl.isPending || withdrawColl.isPending || drawDebt.isPending || repay.isPending;
   const lastError =
@@ -230,8 +256,13 @@ function ExistingTrovePanel() {
         type="button"
         disabled={close.isPending}
         onClick={() => {
-          // Close pays back trove.debt + 200 frostUSD gas comp; for v1 we send debt as-is.
-          close.mutate({ totalDebtFrostUsdSats: trove.debtFrostUsd, feeRate: 1 });
+          close.mutate(
+            { totalDebtFrostUsdSats: trove.debtFrostUsd, feeRate: 1 },
+            {
+              onSuccess: (data) => { if (data?.txid) showNotification(data.txid, 'lend'); },
+              onError,
+            },
+          );
         }}
         className="w-full rounded-md border border-zinc-700/60 px-4 py-2 text-zinc-200 hover:border-red-500/50 hover:text-red-300 disabled:opacity-50"
       >
@@ -248,6 +279,41 @@ function ExistingTrovePanel() {
         System TCR: {system?.tcr ? `${icrToPercent(system.tcr).toFixed(1)}%` : '—'}{' '}
         · CCR threshold: {CCR_PCT}%
       </p>
+    </div>
+  );
+}
+
+// -- Claim surplus collateral (after capped liquidation) --------------------
+
+function ClaimSurplusPanel() {
+  const claim = useClaimCollateralMutation();
+  const { showNotification, showError } = useNotification();
+
+  return (
+    <div className="space-y-4 text-sm">
+      <p className="text-zinc-400">
+        Your trove was liquidated but had an ICR above the minimum — surplus collateral
+        is waiting in the CollSurplusPool. Claim it to return the frBTC to your wallet.
+      </p>
+      <button
+        type="button"
+        disabled={claim.isPending}
+        onClick={() =>
+          claim.mutate(
+            { feeRate: 1 },
+            {
+              onSuccess: (data) => { if (data?.txid) showNotification(data.txid, 'lend'); },
+              onError: (e) => { showError((e as Error)?.message || 'Claim failed'); },
+            },
+          )
+        }
+        className="w-full rounded-md bg-amber-500/90 px-4 py-2 font-medium text-black hover:bg-amber-400 disabled:opacity-50"
+      >
+        {claim.isPending ? 'Claiming…' : 'Claim Surplus Collateral'}
+      </button>
+      {claim.isError && (
+        <div className="text-xs text-red-300">Error: {(claim.error as Error)?.message}</div>
+      )}
     </div>
   );
 }

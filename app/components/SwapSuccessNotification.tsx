@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useTranslation } from '@/hooks/useTranslation';
 import { useTxConfirmed } from '@/hooks/useTxConfirmed';
 
-export type OperationType = 'swap' | 'wrap' | 'unwrap' | 'addLiquidity' | 'removeLiquidity' | 'send';
+export type OperationType = 'swap' | 'wrap' | 'unwrap' | 'addLiquidity' | 'removeLiquidity' | 'send' | 'lend';
 
 type Props = {
   txId: string;
@@ -41,6 +41,7 @@ export default function SwapSuccessNotification({
     addLiquidity: t('success.addLiquidity'),
     removeLiquidity: t('success.removeLiquidity'),
     send: t('success.send'),
+    lend: t('success.lend'),
   };
 
   const operationLabel = OPERATION_LABELS[operationType];

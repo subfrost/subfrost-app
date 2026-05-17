@@ -173,6 +173,7 @@ const en: Record<string, string> = {
   'success.addLiquidity': 'Add Liquidity',
   'success.removeLiquidity': 'Remove Liquidity',
   'success.send': 'Send',
+  'success.lend': 'Frostlend',
   'success.submitted': '{operation} Submitted',
   'success.transactionId': 'Transaction ID:',
 

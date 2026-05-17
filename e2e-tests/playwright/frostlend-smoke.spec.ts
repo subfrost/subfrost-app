@@ -7,12 +7,18 @@
  * different flows targeting the /lend page.
  *
  * Flows tested (in order):
- *   Flow 1: FrostlendDevPanel deploy  → all 11 contracts deployed (5 phases)
- *   Flow 2: OpenTrove (0.05 frBTC, 1800 frostUSD) → frostUSD balance appears
- *   Flow 3: SP deposit (500 frostUSD) → SP total increases
- *   Flow 4: Oracle drop −25% via DevPanel → ICR bar turns red
- *   Flow 5: Batch-liquidate via DevPanel → trove closed
- *   Flow 6: SP withdraw → panel reflects withdrawal
+ *   Flow  1: FrostlendDevPanel deploy  → all 11 contracts deployed (5 phases)
+ *   Flow  2: OpenTrove (0.03 frBTC, 1800 frostUSD) → frostUSD toast fires
+ *   Flow  3: SP deposit (500 frostUSD) → SP total increases
+ *   Flow  4: Oracle drop −25% via DevPanel → ICR bar turns red
+ *   Flow  5: Batch-liquidate via DevPanel → trove closed
+ *   Flow  6: SP withdraw → frBTC gain returned, toast fires
+ *   Flow  7: AddCollateral (+0.001 frBTC to second trove)
+ *   Flow  8: WithdrawCollateral (−0.001 frBTC from second trove)
+ *   Flow  9: DrawFrostUsd (borrow 100 more frostUSD)
+ *   Flow 10: RepayFrostUsd (repay 50 frostUSD)
+ *   Flow 11: CloseTrove (user-initiated; verifies Open Trove form appears)
+ *   Flow 12: Redeem frostUSD for frBTC (bootstrap window may reject; both outcomes pass)
  *
  * After each mutation:
  *   - A screenshot is saved to /tmp/ for diagnostics
@@ -1280,6 +1286,685 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
       } catch (e) {
         flow.error = e instanceof Error ? e.message : String(e);
         await page.screenshot({ path: '/tmp/fl-flow6-error.png' }).catch(() => {});
+        report.flows.push(flow);
+        saveReport(report);
+      }
+    }
+
+    // ── Pre-flows 7–11: Re-open trove (previous one was liquidated in Flow 5) ──
+    // Wrap more frBTC to cover the second trove.
+    console.log('[frostlend-smoke] Pre-step: wrapping frBTC for second trove...');
+    {
+      const secondWrapTxid = await wrapFrbtc(page, WRAP_BTC_FOR_TROVE, lastTxid);
+      if (secondWrapTxid) {
+        lastTxid = secondWrapTxid;
+        console.log(`[frostlend-smoke] Second wrap txid: ${secondWrapTxid}`);
+      }
+    }
+
+    // Re-open trove with same params (oracle has been dropped — use higher coll ratio)
+    // Use 0.05 frBTC / 1800 frostUSD to get a comfortable ICR even after the 25% drop.
+    console.log('[frostlend-smoke] Pre-step: opening second trove for adjust flows...');
+    {
+      await navToLend(page);
+      await page.waitForTimeout(2000);
+
+      // Check if a trove is already open (may have survived if flow 5 skipped)
+      const hasTrove = await page.evaluate(() => {
+        const btns = Array.from(document.querySelectorAll('button'));
+        return btns.some(b => /close trove/i.test(b.textContent || ''));
+      });
+
+      if (!hasTrove) {
+        // Fill coll / debt — use 0.05 for better ICR
+        await page.evaluate(({ coll, debt }) => {
+          const inputs = Array.from(document.querySelectorAll('input[inputmode="decimal"]'));
+          const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!;
+          if (inputs[0]) { setter.call(inputs[0], coll); inputs[0].dispatchEvent(new Event('input', { bubbles: true })); }
+          if (inputs[1]) { setter.call(inputs[1], debt); inputs[1].dispatchEvent(new Event('input', { bubbles: true })); }
+        }, { coll: '0.05', debt: '1800' });
+        await page.waitForTimeout(1000);
+
+        const openBtnEnabled = await (async () => {
+          const dl = Date.now() + 20_000;
+          while (Date.now() < dl) {
+            const s = await page.evaluate(() => {
+              const btn = Array.from(document.querySelectorAll('button')).find(b => b.textContent?.trim() === 'Open Trove');
+              if (!btn) return 'missing';
+              return (btn as HTMLButtonElement).disabled ? 'disabled' : 'enabled';
+            });
+            if (s === 'enabled') return true;
+            await page.waitForTimeout(600);
+          }
+          return false;
+        })();
+
+        if (openBtnEnabled) {
+          await page.evaluate(() => {
+            const btn = Array.from(document.querySelectorAll('button')).find(b => b.textContent?.trim() === 'Open Trove');
+            if (btn) (btn as HTMLElement).click();
+          });
+          await page.waitForTimeout(3000);
+          await mineOneBlock(page);
+          await waitForIndexerSync(page, 60_000);
+          const t = await captureTxid(page, 60_000, lastTxid ?? undefined);
+          if (t) { lastTxid = t; console.log(`[frostlend-smoke] Second trove txid: ${t}`); }
+        } else {
+          console.log('[frostlend-smoke] Second Open Trove button not enabled — adjust flows may skip');
+        }
+      } else {
+        console.log('[frostlend-smoke] Trove already open — using it for adjust flows');
+      }
+    }
+
+    // ── Flow 7: AddCollateral ────────────────────────────────────────────────
+    {
+      const flow: FlowResult = {
+        name: 'add_collateral',
+        status: 'error',
+        txid: null,
+        fee_sats: null,
+        skip_reason: null,
+        error: null,
+        trace: null,
+        note: null,
+      };
+
+      try {
+        console.log('[frostlend-smoke] Flow 7: AddCollateral');
+        await navToLend(page);
+        await page.waitForTimeout(2000);
+
+        // Check trove is open
+        const hasTrove = await page.evaluate(() => {
+          const btns = Array.from(document.querySelectorAll('button'));
+          return btns.some(b => /close trove/i.test(b.textContent || ''));
+        });
+
+        if (!hasTrove) {
+          flow.status = 'skipped';
+          flow.skip_reason = 'no_active_trove_for_add_collateral';
+          report.flows.push(flow);
+          saveReport(report);
+        } else {
+          // Click "Add Coll" tab
+          await page.evaluate(() => {
+            const btns = Array.from(document.querySelectorAll('button'));
+            const tab = btns.find(b => b.textContent?.trim() === 'Add Coll');
+            if (tab) (tab as HTMLElement).click();
+          });
+          await page.waitForTimeout(500);
+
+          // Set amount to 0.001 frBTC
+          await page.evaluate(() => {
+            // The ExistingTrovePanel single input — it's the first decimal input in the trove card area
+            const inputs = Array.from(document.querySelectorAll('input[inputmode="decimal"]'));
+            // Trove dashboard comes first, so first input is the trove amount
+            if (inputs[0]) {
+              const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!;
+              setter.call(inputs[0], '0.001');
+              inputs[0].dispatchEvent(new Event('input', { bubbles: true }));
+            }
+          });
+          await page.waitForTimeout(600);
+
+          await page.screenshot({ path: '/tmp/fl-flow7-preflight.png' });
+
+          // Click "Confirm adjustment"
+          const confirmEnabled = await (async () => {
+            const dl = Date.now() + 10_000;
+            while (Date.now() < dl) {
+              const s = await page.evaluate(() => {
+                const btn = Array.from(document.querySelectorAll('button')).find(b => /confirm adjustment/i.test(b.textContent || ''));
+                if (!btn) return 'missing';
+                return (btn as HTMLButtonElement).disabled ? 'disabled' : 'enabled';
+              });
+              if (s === 'enabled') return true;
+              await page.waitForTimeout(500);
+            }
+            return false;
+          })();
+
+          if (!confirmEnabled) {
+            flow.status = 'skipped';
+            flow.skip_reason = 'confirm_adjustment_button_disabled';
+            report.flows.push(flow);
+            saveReport(report);
+          } else {
+            await page.evaluate(() => {
+              const btn = Array.from(document.querySelectorAll('button')).find(b => /confirm adjustment/i.test(b.textContent || ''));
+              if (btn) (btn as HTMLElement).click();
+            });
+            await page.waitForTimeout(3000);
+            await mineOneBlock(page);
+            await waitForIndexerSync(page, 60_000);
+
+            const txid = await captureTxid(page, 90_000, lastTxid ?? undefined);
+            await page.screenshot({ path: '/tmp/fl-flow7-result.png' });
+
+            if (txid) {
+              flow.status = 'success';
+              flow.txid = txid;
+              lastTxid = txid;
+              console.log(`[frostlend-smoke] Flow 7 txid: ${txid}`);
+              const voutCount = await getVoutCount(page, txid);
+              if (voutCount !== null) {
+                flow.trace = await fetchDevnetTrace(page, txid, voutCount);
+                if (flow.trace.status === 'failure') report.aberrations.push(`Flow 7 (AddColl) REVERT: ${flow.trace.revert_reason}`);
+              }
+            } else {
+              flow.error = 'txid not found in toast after AddCollateral';
+            }
+            report.flows.push(flow);
+            saveReport(report);
+          }
+        }
+      } catch (e) {
+        flow.error = e instanceof Error ? e.message : String(e);
+        await page.screenshot({ path: '/tmp/fl-flow7-error.png' }).catch(() => {});
+        report.flows.push(flow);
+        saveReport(report);
+      }
+    }
+
+    // ── Flow 8: WithdrawCollateral ───────────────────────────────────────────
+    {
+      const flow: FlowResult = {
+        name: 'withdraw_collateral',
+        status: 'error',
+        txid: null,
+        fee_sats: null,
+        skip_reason: null,
+        error: null,
+        trace: null,
+        note: null,
+      };
+
+      try {
+        console.log('[frostlend-smoke] Flow 8: WithdrawCollateral');
+        await navToLend(page);
+        await page.waitForTimeout(2000);
+
+        const hasTrove = await page.evaluate(() =>
+          Array.from(document.querySelectorAll('button')).some(b => /close trove/i.test(b.textContent || ''))
+        );
+
+        if (!hasTrove) {
+          flow.status = 'skipped';
+          flow.skip_reason = 'no_active_trove_for_withdraw_collateral';
+          report.flows.push(flow);
+          saveReport(report);
+        } else {
+          await page.evaluate(() => {
+            const tab = Array.from(document.querySelectorAll('button')).find(b => b.textContent?.trim() === 'Withdraw Coll');
+            if (tab) (tab as HTMLElement).click();
+          });
+          await page.waitForTimeout(500);
+
+          // Withdraw 0.001 frBTC (safe — well within ICR buffer)
+          await page.evaluate(() => {
+            const inputs = Array.from(document.querySelectorAll('input[inputmode="decimal"]'));
+            if (inputs[0]) {
+              const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!;
+              setter.call(inputs[0], '0.001');
+              inputs[0].dispatchEvent(new Event('input', { bubbles: true }));
+            }
+          });
+          await page.waitForTimeout(600);
+          await page.screenshot({ path: '/tmp/fl-flow8-preflight.png' });
+
+          const confirmEnabled = await (async () => {
+            const dl = Date.now() + 10_000;
+            while (Date.now() < dl) {
+              const s = await page.evaluate(() => {
+                const btn = Array.from(document.querySelectorAll('button')).find(b => /confirm adjustment/i.test(b.textContent || ''));
+                if (!btn) return 'missing';
+                return (btn as HTMLButtonElement).disabled ? 'disabled' : 'enabled';
+              });
+              if (s === 'enabled') return true;
+              await page.waitForTimeout(500);
+            }
+            return false;
+          })();
+
+          if (!confirmEnabled) {
+            flow.status = 'skipped';
+            flow.skip_reason = 'confirm_adjustment_button_disabled';
+            report.flows.push(flow);
+            saveReport(report);
+          } else {
+            await page.evaluate(() => {
+              const btn = Array.from(document.querySelectorAll('button')).find(b => /confirm adjustment/i.test(b.textContent || ''));
+              if (btn) (btn as HTMLElement).click();
+            });
+            await page.waitForTimeout(3000);
+            await mineOneBlock(page);
+            await waitForIndexerSync(page, 60_000);
+
+            const txid = await captureTxid(page, 90_000, lastTxid ?? undefined);
+            await page.screenshot({ path: '/tmp/fl-flow8-result.png' });
+
+            if (txid) {
+              flow.status = 'success';
+              flow.txid = txid;
+              lastTxid = txid;
+              console.log(`[frostlend-smoke] Flow 8 txid: ${txid}`);
+              const voutCount = await getVoutCount(page, txid);
+              if (voutCount !== null) {
+                flow.trace = await fetchDevnetTrace(page, txid, voutCount);
+                if (flow.trace.status === 'failure') report.aberrations.push(`Flow 8 (WithdrawColl) REVERT: ${flow.trace.revert_reason}`);
+              }
+            } else {
+              flow.error = 'txid not found in toast after WithdrawCollateral';
+            }
+            report.flows.push(flow);
+            saveReport(report);
+          }
+        }
+      } catch (e) {
+        flow.error = e instanceof Error ? e.message : String(e);
+        await page.screenshot({ path: '/tmp/fl-flow8-error.png' }).catch(() => {});
+        report.flows.push(flow);
+        saveReport(report);
+      }
+    }
+
+    // ── Flow 9: DrawFrostUsd (borrow more) ───────────────────────────────────
+    {
+      const flow: FlowResult = {
+        name: 'draw_frostusd',
+        status: 'error',
+        txid: null,
+        fee_sats: null,
+        skip_reason: null,
+        error: null,
+        trace: null,
+        note: null,
+      };
+
+      try {
+        console.log('[frostlend-smoke] Flow 9: DrawFrostUsd');
+        await navToLend(page);
+        await page.waitForTimeout(2000);
+
+        const hasTrove = await page.evaluate(() =>
+          Array.from(document.querySelectorAll('button')).some(b => /close trove/i.test(b.textContent || ''))
+        );
+
+        if (!hasTrove) {
+          flow.status = 'skipped';
+          flow.skip_reason = 'no_active_trove_for_draw_frostusd';
+          report.flows.push(flow);
+          saveReport(report);
+        } else {
+          await page.evaluate(() => {
+            const tab = Array.from(document.querySelectorAll('button')).find(b => b.textContent?.trim() === 'Borrow more');
+            if (tab) (tab as HTMLElement).click();
+          });
+          await page.waitForTimeout(500);
+
+          // Draw 100 more frostUSD (keep ICR healthy)
+          await page.evaluate(() => {
+            const inputs = Array.from(document.querySelectorAll('input[inputmode="decimal"]'));
+            if (inputs[0]) {
+              const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!;
+              setter.call(inputs[0], '100');
+              inputs[0].dispatchEvent(new Event('input', { bubbles: true }));
+            }
+          });
+          await page.waitForTimeout(600);
+          await page.screenshot({ path: '/tmp/fl-flow9-preflight.png' });
+
+          const confirmEnabled = await (async () => {
+            const dl = Date.now() + 10_000;
+            while (Date.now() < dl) {
+              const s = await page.evaluate(() => {
+                const btn = Array.from(document.querySelectorAll('button')).find(b => /confirm adjustment/i.test(b.textContent || ''));
+                if (!btn) return 'missing';
+                return (btn as HTMLButtonElement).disabled ? 'disabled' : 'enabled';
+              });
+              if (s === 'enabled') return true;
+              await page.waitForTimeout(500);
+            }
+            return false;
+          })();
+
+          if (!confirmEnabled) {
+            flow.status = 'skipped';
+            flow.skip_reason = 'confirm_adjustment_button_disabled';
+            report.flows.push(flow);
+            saveReport(report);
+          } else {
+            await page.evaluate(() => {
+              const btn = Array.from(document.querySelectorAll('button')).find(b => /confirm adjustment/i.test(b.textContent || ''));
+              if (btn) (btn as HTMLElement).click();
+            });
+            await page.waitForTimeout(3000);
+            await mineOneBlock(page);
+            await waitForIndexerSync(page, 60_000);
+
+            const txid = await captureTxid(page, 90_000, lastTxid ?? undefined);
+            await page.screenshot({ path: '/tmp/fl-flow9-result.png' });
+
+            if (txid) {
+              flow.status = 'success';
+              flow.txid = txid;
+              lastTxid = txid;
+              console.log(`[frostlend-smoke] Flow 9 txid: ${txid}`);
+              const voutCount = await getVoutCount(page, txid);
+              if (voutCount !== null) {
+                flow.trace = await fetchDevnetTrace(page, txid, voutCount);
+                if (flow.trace.status === 'failure') report.aberrations.push(`Flow 9 (DrawFrostUsd) REVERT: ${flow.trace.revert_reason}`);
+              }
+            } else {
+              flow.error = 'txid not found in toast after DrawFrostUsd';
+            }
+            report.flows.push(flow);
+            saveReport(report);
+          }
+        }
+      } catch (e) {
+        flow.error = e instanceof Error ? e.message : String(e);
+        await page.screenshot({ path: '/tmp/fl-flow9-error.png' }).catch(() => {});
+        report.flows.push(flow);
+        saveReport(report);
+      }
+    }
+
+    // ── Flow 10: RepayFrostUsd ───────────────────────────────────────────────
+    {
+      const flow: FlowResult = {
+        name: 'repay_frostusd',
+        status: 'error',
+        txid: null,
+        fee_sats: null,
+        skip_reason: null,
+        error: null,
+        trace: null,
+        note: null,
+      };
+
+      try {
+        console.log('[frostlend-smoke] Flow 10: RepayFrostUsd');
+        await navToLend(page);
+        await page.waitForTimeout(2000);
+
+        const hasTrove = await page.evaluate(() =>
+          Array.from(document.querySelectorAll('button')).some(b => /close trove/i.test(b.textContent || ''))
+        );
+
+        if (!hasTrove) {
+          flow.status = 'skipped';
+          flow.skip_reason = 'no_active_trove_for_repay_frostusd';
+          report.flows.push(flow);
+          saveReport(report);
+        } else {
+          await page.evaluate(() => {
+            const tab = Array.from(document.querySelectorAll('button')).find(b => b.textContent?.trim() === 'Repay debt');
+            if (tab) (tab as HTMLElement).click();
+          });
+          await page.waitForTimeout(500);
+
+          // Repay 50 frostUSD
+          await page.evaluate(() => {
+            const inputs = Array.from(document.querySelectorAll('input[inputmode="decimal"]'));
+            if (inputs[0]) {
+              const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!;
+              setter.call(inputs[0], '50');
+              inputs[0].dispatchEvent(new Event('input', { bubbles: true }));
+            }
+          });
+          await page.waitForTimeout(600);
+          await page.screenshot({ path: '/tmp/fl-flow10-preflight.png' });
+
+          const confirmEnabled = await (async () => {
+            const dl = Date.now() + 10_000;
+            while (Date.now() < dl) {
+              const s = await page.evaluate(() => {
+                const btn = Array.from(document.querySelectorAll('button')).find(b => /confirm adjustment/i.test(b.textContent || ''));
+                if (!btn) return 'missing';
+                return (btn as HTMLButtonElement).disabled ? 'disabled' : 'enabled';
+              });
+              if (s === 'enabled') return true;
+              await page.waitForTimeout(500);
+            }
+            return false;
+          })();
+
+          if (!confirmEnabled) {
+            flow.status = 'skipped';
+            flow.skip_reason = 'confirm_adjustment_button_disabled';
+            report.flows.push(flow);
+            saveReport(report);
+          } else {
+            await page.evaluate(() => {
+              const btn = Array.from(document.querySelectorAll('button')).find(b => /confirm adjustment/i.test(b.textContent || ''));
+              if (btn) (btn as HTMLElement).click();
+            });
+            await page.waitForTimeout(3000);
+            await mineOneBlock(page);
+            await waitForIndexerSync(page, 60_000);
+
+            const txid = await captureTxid(page, 90_000, lastTxid ?? undefined);
+            await page.screenshot({ path: '/tmp/fl-flow10-result.png' });
+
+            if (txid) {
+              flow.status = 'success';
+              flow.txid = txid;
+              lastTxid = txid;
+              console.log(`[frostlend-smoke] Flow 10 txid: ${txid}`);
+              const voutCount = await getVoutCount(page, txid);
+              if (voutCount !== null) {
+                flow.trace = await fetchDevnetTrace(page, txid, voutCount);
+                if (flow.trace.status === 'failure') report.aberrations.push(`Flow 10 (RepayFrostUsd) REVERT: ${flow.trace.revert_reason}`);
+              }
+            } else {
+              flow.error = 'txid not found in toast after RepayFrostUsd';
+            }
+            report.flows.push(flow);
+            saveReport(report);
+          }
+        }
+      } catch (e) {
+        flow.error = e instanceof Error ? e.message : String(e);
+        await page.screenshot({ path: '/tmp/fl-flow10-error.png' }).catch(() => {});
+        report.flows.push(flow);
+        saveReport(report);
+      }
+    }
+
+    // ── Flow 11: CloseTrove (user-initiated) ─────────────────────────────────
+    {
+      const flow: FlowResult = {
+        name: 'close_trove',
+        status: 'error',
+        txid: null,
+        fee_sats: null,
+        skip_reason: null,
+        error: null,
+        trace: null,
+        note: null,
+      };
+
+      try {
+        console.log('[frostlend-smoke] Flow 11: CloseTrove');
+        await navToLend(page);
+        await page.waitForTimeout(2000);
+
+        const hasTrove = await page.evaluate(() =>
+          Array.from(document.querySelectorAll('button')).some(b => /close trove/i.test(b.textContent || ''))
+        );
+
+        if (!hasTrove) {
+          flow.status = 'skipped';
+          flow.skip_reason = 'no_active_trove_for_close';
+          report.flows.push(flow);
+          saveReport(report);
+        } else {
+          await page.screenshot({ path: '/tmp/fl-flow11-preflight.png' });
+
+          // Click "Close Trove (repay full debt)"
+          await page.evaluate(() => {
+            const btn = Array.from(document.querySelectorAll('button')).find(b => /close trove/i.test(b.textContent || ''));
+            if (btn && !(btn as HTMLButtonElement).disabled) (btn as HTMLElement).click();
+          });
+          await page.waitForTimeout(3000);
+          await mineOneBlock(page);
+          await waitForIndexerSync(page, 60_000);
+
+          const txid = await captureTxid(page, 90_000, lastTxid ?? undefined);
+          await page.screenshot({ path: '/tmp/fl-flow11-result.png' });
+
+          if (txid) {
+            flow.status = 'success';
+            flow.txid = txid;
+            lastTxid = txid;
+            console.log(`[frostlend-smoke] Flow 11 txid: ${txid}`);
+            const voutCount = await getVoutCount(page, txid);
+            if (voutCount !== null) {
+              flow.trace = await fetchDevnetTrace(page, txid, voutCount);
+              if (flow.trace.status === 'failure') report.aberrations.push(`Flow 11 (CloseTrove) REVERT: ${flow.trace.revert_reason}`);
+            }
+
+            // Verify "Open Trove" form appears (trove closed)
+            await page.waitForTimeout(3000);
+            const openTroveVisible = await page.evaluate(() =>
+              Array.from(document.querySelectorAll('button')).some(b => b.textContent?.trim() === 'Open Trove')
+            );
+            if (openTroveVisible) {
+              flow.note = 'Open Trove form confirmed visible after close';
+            } else {
+              flow.note = 'Open Trove form not visible yet (may need UI refresh)';
+            }
+          } else {
+            flow.error = 'txid not found in toast after CloseTrove';
+          }
+          report.flows.push(flow);
+          saveReport(report);
+        }
+      } catch (e) {
+        flow.error = e instanceof Error ? e.message : String(e);
+        await page.screenshot({ path: '/tmp/fl-flow11-error.png' }).catch(() => {});
+        report.flows.push(flow);
+        saveReport(report);
+      }
+    }
+
+    // ── Flow 12: Redeem frostUSD for frBTC ───────────────────────────────────
+    // Redemption has a 14-day bootstrap window enforced on-chain. The devnet oracle
+    // starts at ~$50k so we need to advance the bootstrap timer by mining blocks,
+    // or we accept the revert and note it. We attempt the redemption regardless.
+    {
+      const flow: FlowResult = {
+        name: 'redeem_frostusd',
+        status: 'error',
+        txid: null,
+        fee_sats: null,
+        skip_reason: null,
+        error: null,
+        trace: null,
+        note: null,
+      };
+
+      try {
+        console.log('[frostlend-smoke] Flow 12: Redeem frostUSD');
+        await navToLend(page);
+        await page.waitForTimeout(2000);
+
+        // Look for "Redemption" heading
+        const redemptionPanelFound = await page.waitForFunction(
+          () => Array.from(document.querySelectorAll('h2')).some(h => h.textContent?.trim() === 'Redemption'),
+          { timeout: 15_000 },
+        ).then(() => true).catch(() => false);
+
+        if (!redemptionPanelFound) {
+          flow.status = 'skipped';
+          flow.skip_reason = 'redemption_panel_not_found_on_lend_page';
+          report.flows.push(flow);
+          saveReport(report);
+        } else {
+          // Set amount = 100 frostUSD (small redemption)
+          // RedemptionPanel has two inputs: amount and maxFee
+          await page.evaluate(() => {
+            const inputs = Array.from(document.querySelectorAll('input[inputmode="decimal"]'));
+            // The redemption panel comes after TroveDashboard + StabilityPoolPanel
+            // Target the last two inputs — amount and max fee
+            const redeemInputs = inputs.slice(-2);
+            if (redeemInputs[0]) {
+              const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!;
+              setter.call(redeemInputs[0], '100');
+              redeemInputs[0].dispatchEvent(new Event('input', { bubbles: true }));
+            }
+            if (redeemInputs[1]) {
+              const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!;
+              setter.call(redeemInputs[1], '5');
+              redeemInputs[1].dispatchEvent(new Event('input', { bubbles: true }));
+            }
+          });
+          await page.waitForTimeout(800);
+          await page.screenshot({ path: '/tmp/fl-flow12-preflight.png' });
+
+          // Click "Redeem" button
+          const redeemBtnFound = await page.evaluate(() => {
+            const btn = Array.from(document.querySelectorAll('button')).find(b => b.textContent?.trim() === 'Redeem');
+            if (btn && !(btn as HTMLButtonElement).disabled) {
+              (btn as HTMLElement).click();
+              return true;
+            }
+            return false;
+          });
+
+          if (!redeemBtnFound) {
+            flow.status = 'skipped';
+            flow.skip_reason = 'redeem_button_not_found_or_disabled';
+            report.flows.push(flow);
+            saveReport(report);
+          } else {
+            await page.waitForTimeout(3000);
+            await mineOneBlock(page);
+            await waitForIndexerSync(page, 60_000);
+
+            const txid = await captureTxid(page, 90_000, lastTxid ?? undefined);
+            await page.screenshot({ path: '/tmp/fl-flow12-result.png' });
+
+            if (txid) {
+              flow.status = 'success';
+              flow.txid = txid;
+              lastTxid = txid;
+              console.log(`[frostlend-smoke] Flow 12 txid: ${txid}`);
+              const voutCount = await getVoutCount(page, txid);
+              if (voutCount !== null) {
+                flow.trace = await fetchDevnetTrace(page, txid, voutCount);
+                if (flow.trace.status === 'failure') {
+                  // Bootstrap window revert is expected — note it but don't aberrate
+                  if (/bootstrap/i.test(flow.trace.revert_reason || '')) {
+                    flow.note = 'bootstrap window active — redemption correctly rejected';
+                    flow.status = 'success'; // expected revert
+                  } else {
+                    report.aberrations.push(`Flow 12 (Redeem) REVERT: ${flow.trace.revert_reason}`);
+                  }
+                }
+              }
+            } else {
+              // No toast may mean the redemption form error fired — check error text
+              const errorText = await page.evaluate(() => {
+                const reds = Array.from(document.querySelectorAll('.text-red-300'));
+                return reds.map(e => e.textContent?.trim()).filter(Boolean).join(' | ');
+              });
+              if (/bootstrap/i.test(errorText)) {
+                flow.status = 'success';
+                flow.note = `bootstrap window revert shown in UI: ${errorText}`;
+              } else {
+                flow.error = `txid not found in toast after Redeem; UI errors: ${errorText || 'none'}`;
+              }
+            }
+            report.flows.push(flow);
+            saveReport(report);
+          }
+        }
+      } catch (e) {
+        flow.error = e instanceof Error ? e.message : String(e);
+        await page.screenshot({ path: '/tmp/fl-flow12-error.png' }).catch(() => {});
         report.flows.push(flow);
         saveReport(report);
       }

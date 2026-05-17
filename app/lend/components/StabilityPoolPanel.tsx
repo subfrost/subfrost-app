@@ -16,6 +16,7 @@ import {
   fetchSpTotalDeposits,
 } from '@/hooks/frostlend';
 import { useWallet } from '@/context/WalletContext';
+import { useNotification } from '@/context/NotificationContext';
 import { frbtcSatsToBtc, frostUsdToFloat } from '@/constants/frostlend';
 
 function frostUsdToSats(usd: string): bigint {
@@ -26,6 +27,7 @@ function frostUsdToSats(usd: string): bigint {
 
 export default function StabilityPoolPanel() {
   const { network } = useWallet();
+  const { showNotification, showError } = useNotification();
   const deposit = useSpDepositMutation();
   const withdraw = useSpWithdrawMutation();
   const { data: myDeposit } = useSpDepositData();
@@ -45,10 +47,17 @@ export default function StabilityPoolPanel() {
   const submitting = deposit.isPending || withdraw.isPending;
   const lastError = deposit.error || withdraw.error;
 
+  const onSuccess = (data: { txid: string } | undefined) => {
+    if (data?.txid) showNotification(data.txid, 'lend');
+  };
+  const onError = (e: unknown) => {
+    showError((e as Error)?.message || 'Transaction failed');
+  };
+
   const submit = () => {
     const sats = frostUsdToSats(amount);
-    if (tab === 'deposit') deposit.mutate({ amountFrostUsdSats: sats, feeRate: 1 });
-    else withdraw.mutate({ amountFrostUsdSats: sats, feeRate: 1 });
+    if (tab === 'deposit') deposit.mutate({ amountFrostUsdSats: sats, feeRate: 1 }, { onSuccess, onError });
+    else withdraw.mutate({ amountFrostUsdSats: sats, feeRate: 1 }, { onSuccess, onError });
   };
 
   return (

@@ -10,6 +10,7 @@
 import { useState } from 'react';
 import { useRedeemMutation } from '@/hooks/frostlend';
 import { MAX_BORROWING_FEE } from '@/constants/frostlend';
+import { useNotification } from '@/context/NotificationContext';
 
 function frostUsdToSats(usd: string): bigint {
   const n = Number(usd);
@@ -19,6 +20,7 @@ function frostUsdToSats(usd: string): bigint {
 
 export default function RedemptionPanel() {
   const redeem = useRedeemMutation();
+  const { showNotification, showError } = useNotification();
   const [amount, setAmount] = useState('500');
   const [maxFee, setMaxFee] = useState('5'); // percent
 
@@ -63,12 +65,18 @@ export default function RedemptionPanel() {
         type="button"
         disabled={redeem.isPending || sats === 0n}
         onClick={() =>
-          redeem.mutate({
-            amountFrostUsdSats: sats,
-            maxFeePercentage: maxFeeBig === 0n ? MAX_BORROWING_FEE : maxFeeBig,
-            maxIterations: 100n,
-            feeRate: 1,
-          })
+          redeem.mutate(
+            {
+              amountFrostUsdSats: sats,
+              maxFeePercentage: maxFeeBig === 0n ? MAX_BORROWING_FEE : maxFeeBig,
+              maxIterations: 100n,
+              feeRate: 1,
+            },
+            {
+              onSuccess: (data) => { if (data?.txid) showNotification(data.txid, 'lend'); },
+              onError: (e) => { showError((e as Error)?.message || 'Redemption failed'); },
+            },
+          )
         }
         className="mt-3 w-full rounded-md bg-cyan-500/90 px-4 py-2 text-sm font-medium text-black hover:bg-cyan-400 disabled:opacity-50"
       >
