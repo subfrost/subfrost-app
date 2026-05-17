@@ -594,10 +594,7 @@ const en: Record<string, string> = {
   'walletPicker.refresh': 'Refresh',
   'walletPicker.passwordHint': 'Password hint available',
   'walletPicker.viewInDrive': 'View in Google Drive',
-  'walletPicker.deleteBackup': 'Delete backup',
   'walletPicker.back': 'Back',
-  'walletPicker.confirmDelete': 'Are you sure you want to delete this wallet backup? This cannot be undone.',
-  'walletPicker.deleteFailed': 'Failed to delete wallet backup. Please try again.',
 
   // My Wallet Activity
   'myActivity.title': 'My Wallet Activity',

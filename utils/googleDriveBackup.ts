@@ -178,44 +178,13 @@ export async function restoreWalletFromDrive(
   }
 }
 
-/**
- * Delete a wallet backup from Google Drive
- */
-export async function deleteWalletBackup(
-  email: string,
-  folderId: string
-): Promise<void> {
-  if (!SCRIPT_URL) {
-    throw new Error('Google Apps Script URL not configured');
-  }
-
-  try {
-    const response = await fetch(SCRIPT_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        action: 'delete',
-        email: email,
-        folderId: folderId,
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    const result = await response.json();
-    
-    if (!result.success) {
-      throw new Error(result.error || result.message || 'Failed to delete backup');
-    }
-  } catch (error) {
-    console.error('Delete backup error:', error);
-    throw error;
-  }
-}
+// deleteWalletBackup removed 2026-05-17 — see clientSideDrive.ts header
+// for the rationale. This server-side Apps-Script variant was never wired
+// to any UI surface (verified: `grep -rn "import.*googleDriveBackup"` came
+// back empty), so removing it is dead-code cleanup with no behavior
+// change. The companion `action: 'delete'` route on the Apps Script side
+// can stay (we don't control redeploys here), but no client in this repo
+// will invoke it again.
 
 /**
  * Format timestamp for display
