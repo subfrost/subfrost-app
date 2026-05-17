@@ -190,6 +190,9 @@ export function useWrapMutation() {
           mineEnabled: false,
           // Pre-warmed clean BTC UTXOs — skips the WASM coinselect fanout.
           cachedUtxos: utxoCache.utxos,
+          // Pin to metashrew height we already know — SDK skips its
+          // waitForIndexer poll loop. Mirrors subfrost-mobile.
+          maxIndexedHeight: utxoCache.height,
         });
 
         console.log('[WRAP] Execute result:', result);

@@ -356,6 +356,9 @@ export function useAddLiquidityMutation() {
           // for consistency; the cache is already mounted via
           // WalletStatePrewarmer at connect time.
           cachedUtxos: utxoCache.utxos,
+          // Pin to metashrew height we already know — SDK skips its
+          // waitForIndexer poll loop. Mirrors subfrost-mobile.
+          maxIndexedHeight: utxoCache.height,
         });
 
         console.log('[AddLiquidity] Called alkanesExecuteTyped (browser:', isBrowserWallet, ')');

@@ -428,6 +428,13 @@ export function useSwapMutation() {
           // gives the SDK every input it needs — the espo call is pure
           // waste under our setup.
           utxoSource: 'metashrew',
+          // Tell the SDK exactly which metashrew height our cache reflects.
+          // It will filter coin selection to UTXOs at height ≤ this, so
+          // there's no need to wait for metashrew to catch up to bitcoind
+          // — the SDK skips its waitForIndexer poll loop entirely. Same
+          // pattern subfrost-mobile uses (see subfrost-mobile-core
+          // ::pending::utxo_eligible_for_indexed_height).
+          maxIndexedHeight: utxoCache.height,
           // Opt-in CPFP-chained 2-tx flow when caller knows the combined wrap
           // + execute fuel cost would exceed the per-tx floor. The SDK splits
           // the wrap into Tx A and the execute into Tx B; each gets its own

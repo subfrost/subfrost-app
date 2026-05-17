@@ -84,6 +84,9 @@ export function useAlkaneSendMutation() {
         autoConfirm: isKeystoreWallet,
         network,
         cachedUtxos: utxoCache.utxos,
+          // Pin to metashrew height we already know — SDK skips its
+          // waitForIndexer poll loop. Mirrors subfrost-mobile.
+          maxIndexedHeight: utxoCache.height,
         // Keystore-only: PSBT preview before broadcast.
         previewBeforeBroadcast: isKeystoreWallet
           ? async (psbtBase64: string) => {

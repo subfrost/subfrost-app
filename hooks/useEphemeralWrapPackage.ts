@@ -478,6 +478,10 @@ export function useEphemeralWrapPackage() {
         // time even with cachedUtxos populated unless utxo_source is set
         // away from the mainnet default of 'espo'.
         utxoSource: 'metashrew',
+        // Pin to the metashrew height our cache reflects — SDK filters
+        // coin selection to UTXOs at height ≤ this and SKIPS waitForIndexer
+        // (no need to wait for metashrew to catch up to bitcoind).
+        maxIndexedHeight: utxoCache.height,
         ...(params.splitTransactions !== undefined ? { splitTransactions: params.splitTransactions } : {}),
       });
       const parentReady = parentResult?.readyToSign ?? parentResult?.ready_to_sign;
@@ -577,6 +581,9 @@ export function useEphemeralWrapPackage() {
         // the prefetched_utxos entry below is authoritative for that one
         // outpoint; there's no reason the SDK should ever discover more.
         utxoSource: 'metashrew',
+        // Skip the SDK's waitForIndexer poll loop — our cache height is
+        // authoritative for which UTXOs are safe to select.
+        maxIndexedHeight: utxoCache.height,
         knownPendingTxHexes: [parentTx.txHex],
         // Also pass the user wallet cache as a fallback (covers any edge
         // case where the SDK does still discover beyond the prefetched
