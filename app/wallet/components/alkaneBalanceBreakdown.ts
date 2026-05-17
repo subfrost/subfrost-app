@@ -70,28 +70,51 @@ export function parseRawBalanceSafe(balance?: string | null): bigint {
  *
  * Inputs:
  *   confirmedRaw  — what the indexer reports as confirmed for this alkane
- *   pendingEntry  — pending-tx-derived delta for this alkane, or undefined
+ *   pendingEntry  — pending-tx-derived delta for this alkane, or undefined.
+ *                   `delta` is SIGNED — positive = incoming (buy/wrap),
+ *                   negative = outgoing (sell/unwrap/send).
  *
- * Output:
- *   availableRaw  — `confirmedRaw` (every confirmed sub-unit is available
- *                   unless an explicit pending-out tx is recorded; the
- *                   pending-out subtraction happens in a follow-up iter
- *                   when we wire `pendingByAlkane.delta < 0` cases — for
- *                   now the conservative behaviour mirrors what BTC does
- *                   and shows full confirmed as available)
- *   mempoolRaw    — only the positive part of `pendingEntry.delta`, or 0
- *                   if no pending tx is recorded. NEVER inferred from a
- *                   delta between addressAlkanes and spendableAlkanes.
+ * Semantics:
+ *
+ *   No pending tx:        available=confirmed,  mempool=0
+ *   Pending incoming +N:  available=confirmed,  mempool=+N
+ *   Pending outgoing -N:  available=max(0, confirmed-N), mempool=N
+ *
+ * Both directions surface as a single `mempoolRaw` magnitude so the
+ * existing UI consumer (`AlkanesBalancesCard`'s "mempool: X" label)
+ * works unchanged. The directional context is implicit from the diff
+ * between availableRaw and confirmedRaw — if outgoing, available drops;
+ * if incoming, available is unchanged but mempool > 0.
+ *
+ * 2026-05-17 incident — TWO iterations:
+ *   Iter 1: removed buggy `confirmedRaw - availableRaw` heuristic that
+ *           panicked users with "mempool: <full balance>" when there
+ *           was no pending tx. Only incoming deltas counted as mempool;
+ *           outgoing-swap pending was silently invisible.
+ *   Iter 2 (THIS REV): mork1e tested staging and reported "now when it's
+ *           in mempool, [the swap] no longer appears in mempool". The
+ *           "vanishing pending" was the outgoing side — confirmed
+ *           balance was shown as fully spendable even while a pending
+ *           swap was draining it. Now both directions render correctly.
  */
 export function getAlkaneAvailabilityBreakdown(
   confirmedRaw: bigint,
   pendingEntry: PendingAlkaneEntry | undefined,
 ): AvailabilityBreakdown {
-  const incomingRaw = pendingEntry && pendingEntry.delta > 0n ? pendingEntry.delta : 0n;
-  return {
-    availableRaw: confirmedRaw,
-    mempoolRaw: incomingRaw,
-  };
+  const delta = pendingEntry?.delta ?? 0n;
+  if (delta === 0n) {
+    return { availableRaw: confirmedRaw, mempoolRaw: 0n };
+  }
+  if (delta > 0n) {
+    // Pending incoming — confirmed stays spendable, mempool surfaces the
+    // soon-to-arrive amount as a separate line.
+    return { availableRaw: confirmedRaw, mempoolRaw: delta };
+  }
+  // delta < 0n — pending outgoing: subtract locked amount from spendable,
+  // surface as mempool magnitude so the user sees the lockup.
+  const lockedRaw = -delta;
+  const availableRaw = confirmedRaw > lockedRaw ? confirmedRaw - lockedRaw : 0n;
+  return { availableRaw, mempoolRaw: lockedRaw };
 }
 
 /**

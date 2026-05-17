@@ -104,19 +104,36 @@ describe('getAlkaneAvailabilityBreakdown — pending mempool cases', () => {
     expect(mempoolRaw).toBe(500n);   // incoming pending
   });
 
-  it('Outgoing pending tx (negative delta) does NOT inflate mempool incoming', () => {
-    // Negative delta = user has a pending tx spending some of their alkanes.
-    // For the "available / mempool incoming" split shown on the wallet card,
-    // only positive deltas matter. (A future iteration may surface
-    // "pending outgoing" separately; this test pins the current contract
-    // so negative deltas don't accidentally show up as incoming.)
+  // mork1e iter-2 regression (2026-05-17): outgoing pending used to vanish.
+  // After iter 1 ship, mork said "now when it's in mempool, it no longer
+  // appears in mempool" — the swap-out side wasn't surfacing because we
+  // only handled positive deltas. These pin the both-directions contract.
+
+  it('Outgoing pending tx: subtracts from available + surfaces magnitude as mempool', () => {
+    // Wallet has 1000 confirmed. User initiated a pending tx spending 200.
+    // Available drops to 800 (can\'t double-spend the 200). Mempool shows
+    // 200 (the locked amount) so the user knows where the missing balance
+    // went without needing to dig into tx history.
     const pending: PendingAlkaneEntry = { delta: -200n };
     const { availableRaw, mempoolRaw } = getAlkaneAvailabilityBreakdown(
       1000n,
       pending,
     );
-    expect(availableRaw).toBe(1000n);
-    expect(mempoolRaw).toBe(0n);
+    expect(availableRaw).toBe(800n);
+    expect(mempoolRaw).toBe(200n);
+  });
+
+  it('Outgoing pending tx larger than confirmed clamps available to 0', () => {
+    // Edge: rounding / race conditions could theoretically produce a
+    // pending-out larger than current confirmed (e.g. confirmed dropped
+    // between snapshot and now). Don\'t go negative — clamp.
+    const pending: PendingAlkaneEntry = { delta: -1500n };
+    const { availableRaw, mempoolRaw } = getAlkaneAvailabilityBreakdown(
+      1000n,
+      pending,
+    );
+    expect(availableRaw).toBe(0n);
+    expect(mempoolRaw).toBe(1500n);
   });
 
   it('Real-world: user has 100 DIESEL confirmed + a pending swap inbound of 50 → shows available=100, mempool=50', () => {
@@ -126,6 +143,20 @@ describe('getAlkaneAvailabilityBreakdown — pending mempool cases', () => {
       pending,
     );
     expect(availableRaw).toBe(100n);
+    expect(mempoolRaw).toBe(50n);
+  });
+
+  it('mork1e scenario: 100 DIESEL confirmed + pending swap OUT of 50 → available=50, mempool=50', () => {
+    // The exact regression mork hit on staging — swapping DIESEL away
+    // should reduce available immediately so he can\'t accidentally
+    // double-spend, and the locked 50 should appear as mempool so he
+    // knows where it went.
+    const pending: PendingAlkaneEntry = { delta: -50n };
+    const { availableRaw, mempoolRaw } = getAlkaneAvailabilityBreakdown(
+      100n,
+      pending,
+    );
+    expect(availableRaw).toBe(50n);
     expect(mempoolRaw).toBe(50n);
   });
 });
