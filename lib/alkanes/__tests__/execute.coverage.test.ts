@@ -179,6 +179,80 @@ describe('Address synthesis defaults', () => {
     expect(opts.protect_taproot).toBe(false);
     expect(opts.ordinals_strategy).toBe('burn');
   });
+
+  // -------------------------------------------------------------------------
+  // 2026-05-17 c12 incident — pre-condition pin for alkanes-rs PR #260.
+  //
+  // c12hz reported via ALKANES #general-chat that UniSat preview showed the
+  // entire BTC balance being spent on a 25% BTC->alkane swap with no change
+  // output. Root cause was in alkanes-rs `build_psbt_and_fee` — when no
+  // zero-value change placeholder existed and the last output was OP_RETURN,
+  // change_value was silently dropped into miner fees (~89% of wallet
+  // siphoned in the reported scenario). Fixed in alkanes-rs PR #260 (SDK
+  // 0.1.6-ee5c226+): walk outputs backwards to find the last non-OP_RETURN
+  // target; error if none exists.
+  //
+  // The SDK fix only works if our wrapper actually GIVES the SDK a place
+  // to put change. The two pins below guarantee that:
+  //   1. Single-address browser wallets (UniSat, OKX) — change goes to the
+  //      one address the wallet owns. UniSat preview will recognize it as
+  //      "back to wallet".
+  //   2. Dual-address browser wallets (Xverse, Leather, OYL) — BTC change
+  //      goes to segwit, alkane change to taproot.
+  //
+  // A regression where `btcChangeAddress` resolves to the symbolic SDK
+  // dummy `'p2wpkh:0'` for browser wallets (the historical class of bug
+  // that lost funds on mainnet — see CLAUDE.md "Address Handling") would
+  // route change to the SDK's internal wallet instead of UniSat's. These
+  // pins catch that class of regression at the wrapper layer.
+  // -------------------------------------------------------------------------
+  it('UniSat single-address: change_address resolves to the user\'s actual taproot (not symbolic)', async () => {
+    const p = fakeProvider();
+    const userTaproot = 'bc1pnezcayj9vk7ga3rgjfszcgkhzzzq80r0as8lzuvt6w2tsp2cmumqwpu5pu';
+    await alkanesExecuteTyped(p as unknown as WebProvider, baseParams({
+      txContext: {
+        // UniSat exposes one address; WalletContext collapses both buckets
+        // onto the single value (see WalletContext.tsx:988-1003).
+        feeSourceAddresses: [userTaproot],
+        btcChangeAddress: userTaproot,
+        alkanesChangeAddress: userTaproot,
+        shouldProtectTaproot: false, // single-address: cannot reserve taproot for alkanes
+        defaultOrdinalsStrategy: 'preserve',
+        walletType: 'browser',
+        browserWalletId: 'unisat',
+      },
+    }));
+    const opts = lastOptionsJson(p);
+    expect(opts.change_address).toBe(userTaproot);
+    expect(opts.alkanes_change_address).toBe(userTaproot);
+    // Hard pin: NEVER symbolic for browser wallets — symbolic resolves to
+    // the SDK's dummy wallet and silently sends funds away from the user.
+    expect(opts.change_address).not.toBe('p2wpkh:0');
+    expect(opts.change_address).not.toBe('p2tr:0');
+    expect(opts.alkanes_change_address).not.toBe('p2tr:0');
+  });
+
+  it('Dual-address browser wallet (Xverse): BTC change → segwit, alkane change → taproot', async () => {
+    const p = fakeProvider();
+    const userSegwit = 'bc1qrealsegwitaddress00000000000000000000000';
+    const userTaproot = 'bc1prealtaprootaddress00000000000000000000000000000000000000000000';
+    await alkanesExecuteTyped(p as unknown as WebProvider, baseParams({
+      txContext: {
+        feeSourceAddresses: [userSegwit, userTaproot],
+        btcChangeAddress: userSegwit,
+        alkanesChangeAddress: userTaproot,
+        shouldProtectTaproot: true,
+        defaultOrdinalsStrategy: 'preserve',
+        walletType: 'browser',
+        browserWalletId: 'xverse',
+      },
+    }));
+    const opts = lastOptionsJson(p);
+    expect(opts.change_address).toBe(userSegwit);
+    expect(opts.alkanes_change_address).toBe(userTaproot);
+    expect(opts.change_address).not.toContain(':0');
+    expect(opts.alkanes_change_address).not.toContain(':0');
+  });
 });
 
 // ===========================================================================
