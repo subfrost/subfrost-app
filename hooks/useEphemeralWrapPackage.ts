@@ -467,7 +467,30 @@ export function useEphemeralWrapPackage() {
         autoConfirm: false,
         forcePsbt: true,
         toAddresses: [ephemeral.address, ...(params.parentExtraToAddresses ?? [params.signerAddress])],
-        changeAddress: ephemeral.address,
+        // BTC change goes BACK TO THE USER — not to the ephemeral CPFP carrier.
+        //
+        // 2026-05-17 (c12 incident, ticket-0480): previously this was set to
+        // `ephemeral.address`, which made UniSat's transaction preview show
+        // the user's entire BTC balance going to "addresses I don't control"
+        // — because the parent tx in isolation routed all change to the
+        // ephemeral key. The child tx returned the funds, but UniSat couldn't
+        // know about it. Users with a security mindset would (correctly)
+        // refuse to sign.
+        //
+        // After the fix: parent outputs are
+        //   v0: ephemeral.address (CPFP carrier — funds the child tx, sized
+        //                          to ephemeralFunding ≈ dust + child fee + reserve)
+        //   v1: signer.address    (the wrap amount)
+        //   v?: user btc change   (txContext.btcChangeAddress — what UniSat
+        //                          will recognize as "My Address")
+        //   OP_RETURNs            (protostones)
+        // The child tx still consumes the ephemeral carrier, but the bulk
+        // of the user's BTC stays at their own address from the start.
+        //
+        // Alkanes change address stays on the ephemeral side because alkane
+        // change semantics on the parent wrap are moot (no alkane inputs) and
+        // leaving it as ephemeral matches the established CPFP convention.
+        changeAddress: txContext.btcChangeAddress,
         alkanesChangeAddress: ephemeral.address,
         network,
         cachedUtxos: utxoCache.utxos,
