@@ -53,6 +53,7 @@
   },
   "dependencies": {
     "@alkanes/ts-sdk": "https://pkg.alkanes.build/dist/@alkanes/ts-sdk?v=0.1.6-cbb21f1",
+    "@qubitcoin/sdk": "link:vendor/@qubitcoin/sdk",
     "@bitcoinerlab/secp256k1": "^1.2.0",
     "@bprogress/next": "^3.2.12",
     "@noble/ciphers": "^2.2.0",
