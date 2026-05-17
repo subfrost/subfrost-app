@@ -780,18 +780,16 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
           console.log('[frostlend-smoke] Flow 1: waiting for 5-phase deploy...');
           await page.waitForTimeout(5_000); // let progress text appear
 
+          // Wait for the "deployed" green span to appear — this is the ONLY reliable
+          // signal. The "Deploy frostlend" button text changes to "Deploying…" during
+          // the deploy, so checking for button-gone fires prematurely.
           const deployFinished = await page.waitForFunction(
             () => {
-              // FrostlendDevPanel hides the deploy button when isDeployed=true
-              const deployBtn = Array.from(document.querySelectorAll('button'))
-                .find(b => b.textContent?.trim() === 'Deploy frostlend');
-              if (!deployBtn) return true; // button gone = deployed
-              // Or: deployed span appeared
               const spans = Array.from(document.querySelectorAll('span'));
               return spans.some(s => s.textContent?.trim() === 'deployed' &&
                 s.classList.contains('text-green-400'));
             },
-            { timeout: 180_000 },
+            { timeout: 240_000 },
           ).then(() => true).catch(() => false);
 
           await page.screenshot({ path: '/tmp/fl-flow1-deploy-result.png' });
@@ -830,14 +828,36 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
         // Wait for the "deployed" green span (always rendered, reflects isDeployed) as the
         // reliable DOM signal before looking for the oracle input.
         // refreshPrice() fires on DevPanel mount and calls simulateAlkane on the price-feed.
-        // On a fresh deploy, all 11 contracts need to be indexed first (~30-60s). Use 120s.
-        const isDeployedVisible = await page.waitForFunction(
-          () => {
-            const spans = Array.from(document.querySelectorAll('span'));
-            return spans.some(s => s.textContent?.trim() === 'deployed' && s.classList.contains('text-green-400'));
-          },
-          { timeout: 120_000 },
-        ).then(() => true).catch(() => false);
+        // On a fresh deploy, all 11 contracts need to be indexed before refreshPrice()
+        // returns a non-zero price and isDeployed becomes true. The panel only calls
+        // refreshPrice() once on mount — but Step 1b opens the panel before PostPrice
+        // has run (deploy is still in progress). Click the manual Refresh button (the
+        // RefreshCcw icon) to re-trigger refreshPrice() after deploy completes.
+        // Then wait up to 120s for the "deployed" green span to appear.
+        await page.evaluate(() => {
+          // The Refresh button is a button with title="Refresh oracle price"
+          const btn = document.querySelector('button[title="Refresh oracle price"]') as HTMLButtonElement | null;
+          if (btn && !btn.disabled) btn.click();
+        });
+        await page.waitForTimeout(2000);
+        // Poll the refresh button every 5s until deployed span appears or 120s elapses.
+        const isDeployedVisible = await (async () => {
+          const deadline = Date.now() + 120_000;
+          while (Date.now() < deadline) {
+            const deployed = await page.evaluate(() => {
+              const spans = Array.from(document.querySelectorAll('span'));
+              return spans.some(s => s.textContent?.trim() === 'deployed' && s.classList.contains('text-green-400'));
+            }).catch(() => false);
+            if (deployed) return true;
+            // Re-click refresh every 5s while waiting
+            await page.evaluate(() => {
+              const btn = document.querySelector('button[title="Refresh oracle price"]') as HTMLButtonElement | null;
+              if (btn && !btn.disabled) btn.click();
+            });
+            await page.waitForTimeout(5000);
+          }
+          return false;
+        })();
         const oracleInputVisible = isDeployedVisible && await page.evaluate(() => {
           const inputs = Array.from(document.querySelectorAll('input[inputmode="decimal"]'));
           return inputs.some(el => el.classList.contains('font-mono'));
