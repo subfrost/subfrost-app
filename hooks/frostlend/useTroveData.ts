@@ -3,10 +3,10 @@
 /**
  * useTroveData / useTroveById — read a trove's coll/debt/status/ICR from TroveManager.
  *
- * Trove identity strategy: the OpenTrove response contains the assigned u128 trove_id
- * in its first 16 bytes. The mutation hook persists this to localStorage via
- * `writeCachedTrove(network, address, troveId, authTokenId)`. This hook reads from
- * that cache, then queries TroveManager via alkanes_simulate.
+ * Trove identity strategy: the receipt alkane at [2, sequence_n] IS the trove's identity.
+ * It lives in the user's wallet — whoever holds it owns the trove. localStorage is a
+ * performance cache only; if it's missing we scan the wallet's [2,*] holdings and
+ * reverse-lookup via TM.GetTroveAuthToken(i) to recover (troveId, authTokenId).
  *
  * The Trove dashboard renders these fields:
  *   - collateralFrbtc:   /troves/{id}/coll  (u128 sats)
@@ -29,7 +29,8 @@ import {
   computeIcr,
 } from '@/constants/frostlend';
 import { parseAlkaneTarget, parseU128, parseU8, simulateAlkane } from '@/lib/frostlend/rpc';
-import { readCachedTrove } from '@/lib/frostlend/troveCache';
+import { readCachedTrove, writeCachedTrove } from '@/lib/frostlend/troveCache';
+import { fetchUserBlock2Receipts } from '@/lib/frostlend/receipts';
 
 export type TroveData = {
   troveId: string;
@@ -68,8 +69,50 @@ async function fetchOraclePrice(network: string): Promise<bigint> {
 }
 
 /**
- * Read the connected wallet's trove (looked up from localStorage cache).
- * Returns null if no cached trove ID is present, or if the trove is non-existent.
+ * Scan the wallet's [2,*] holdings and reverse-lookup via TM.GetTroveAuthToken(i)
+ * to find the active trove. Returns (troveId, authTokenId) or null.
+ * Used as cold-start fallback when localStorage is empty.
+ */
+async function discoverTroveFromWallet(
+  network: string,
+  address: string,
+): Promise<{ troveId: string; authTokenId: string } | null> {
+  const receipts = await fetchUserBlock2Receipts(network, address);
+  if (receipts.length === 0) return null;
+
+  const walletTxSet = new Set(receipts.map(r => r.tx.toString()));
+  const tmTarget = parseAlkaneTarget(FROSTLEND_CONTRACTS.TROVE_MANAGER);
+
+  const countExec = await simulateAlkane(network, tmTarget, [
+    TROVE_MANAGER_OPCODES.GetTroveCount.toString(),
+  ]);
+  const count = parseU128(countExec);
+  if (count === 0n) return null;
+
+  // Scan trove IDs 1..count*2+5 (allows for closed troves inflating next_id).
+  const upperBound = Number(count) * 2 + 5;
+  for (let i = 1; i <= upperBound; i++) {
+    const authExec = await simulateAlkane(network, tmTarget, [
+      TROVE_MANAGER_OPCODES.GetTroveAuthToken.toString(),
+      i.toString(),
+    ]);
+    const raw = authExec?.data;
+    if (!raw || typeof raw !== 'string') continue;
+    const clean = raw.replace(/^0x/, '');
+    if (clean.length < 64) continue;
+    const txBytes = clean.slice(32, 64);
+    const txLe = BigInt('0x' + (txBytes.match(/.{2}/g) || []).reverse().join(''));
+    if (walletTxSet.has(txLe.toString())) {
+      return { troveId: i.toString(), authTokenId: `2:${txLe}` };
+    }
+  }
+  return null;
+}
+
+/**
+ * Read the connected wallet's trove. localStorage is checked first (fast path);
+ * if empty, the wallet's [2,*] receipt holdings are scanned to recover the trove.
+ * The receipt alkane IS the source of truth — localStorage is a cache only.
  */
 export function useTroveData() {
   const { account, network, isConnected } = useWallet();
@@ -81,25 +124,42 @@ export function useTroveData() {
   }, [network, address]);
 
   return useQuery({
-    queryKey: ['frostlend', 'trove', network, address, cached?.troveId],
+    queryKey: ['frostlend', 'trove', network, address],
     queryFn: async (): Promise<TroveData | null> => {
-      if (!network || !cached) return null;
-      const fields = await fetchTroveById(network, cached.troveId);
+      if (!network || !address) return null;
+
+      // Fast path: use cached (troveId, authTokenId) from localStorage.
+      let resolved = cached
+        ? { troveId: cached.troveId, authTokenId: cached.authTokenId }
+        : null;
+
+      // Cold-start path: scan wallet [2,*] receipts and reverse-lookup via TM.
+      if (!resolved) {
+        const discovered = await discoverTroveFromWallet(network, address);
+        if (discovered) {
+          writeCachedTrove(network, address, discovered.troveId, discovered.authTokenId);
+          resolved = discovered;
+        }
+      }
+
+      if (!resolved) return null;
+
+      const fields = await fetchTroveById(network, resolved.troveId);
       if (!fields) return null;
       if (fields.status === TROVE_STATUS.NonExistent) return null;
       const price = await fetchOraclePrice(network);
       const currentIcr = computeIcr(fields.collateralFrbtc, fields.debtFrostUsd, price);
       return {
-        troveId: cached.troveId,
+        troveId: resolved.troveId,
         collateralFrbtc: fields.collateralFrbtc,
         debtFrostUsd: fields.debtFrostUsd,
         status: fields.status,
         currentIcr,
-        authTokenId: cached.authTokenId,
+        authTokenId: resolved.authTokenId,
         isActive: fields.status === TROVE_STATUS.Active,
       };
     },
-    enabled: isConnected && !!network && !!cached,
+    enabled: isConnected && !!network && !!address,
     staleTime: 5_000,
     refetchInterval: 15_000,
   });

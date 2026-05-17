@@ -12,10 +12,10 @@
  *     token in incoming_alkanes; SP verifies, processes, returns frostUSD +
  *     frBTC gains. Auth token is consumed (no return) on full withdrawal.
  *
- * The contract does not maintain ownership records — whoever holds the receipt
- * is the owner of that depositor_id. The frontend captures (depositor_id,
- * authTokenId) at deposit time and stores it in localStorage so subsequent
- * Withdraw calls can pass the receipt back via inputRequirements.
+ * The receipt alkane IS the source of truth — whoever holds it owns the position.
+ * localStorage is a performance cache only. If it's empty, useSpWithdrawMutation
+ * and useSpDepositData scan the wallet's [2,*] holdings and probe
+ * SP.GetDepositorAuthToken(i) to recover (depositor_id, authTokenId).
  *
  * Capture technique (no GetDepositorCount opcode exists):
  *   1. Pre-deposit: snapshot user's [2,*] outpoints.
@@ -47,6 +47,28 @@ const FROST_USD_TX = 0x200;
 function buildSpCellpack(opcode: number, args: bigint[]): string {
   const cellpack = [4, STABILITY_POOL_TX, opcode, ...args.map(a => a.toString())].join(',');
   return `[${cellpack}]:v0:v0`;
+}
+
+/**
+ * Scan wallet [2,*] receipts and probe SP.GetDepositorAuthToken(i) to find
+ * which depositor_id maps to a receipt the user holds. Returns the cached
+ * representation or null. Used as cold-start fallback when localStorage is empty.
+ */
+async function discoverSpDepositFromWallet(
+  network: string,
+  address: string,
+): Promise<{ depositorId: string; authTokenId: string } | null> {
+  const receipts = await fetchUserBlock2Receipts(network, address);
+  if (receipts.length === 0) return null;
+
+  const walletTxSet = new Set(receipts.map(r => r.tx.toString()));
+  const authTokenTx = receipts.reduce<bigint | null>((best, r) =>
+    best === null || r.tx > best ? r.tx : best, null);
+  if (authTokenTx === null) return null;
+
+  const depositorId = await findDepositorIdByAuthToken(network, authTokenTx);
+  if (!depositorId) return null;
+  return { depositorId, authTokenId: `2:${authTokenTx}` };
 }
 
 // -- Deposit -----------------------------------------------------------------
@@ -110,24 +132,40 @@ export type SpWithdrawParams = {
 };
 
 export function useSpWithdrawMutation() {
-  const { execute, ready } = useFrostlendExecute();
+  const { execute, ready, primaryAddress, network: execNetwork } = useFrostlendExecute();
   const { account, network } = useWallet();
-  const address = account?.taproot?.address || account?.nativeSegwit?.address || '';
+  const address = account?.taproot?.address || account?.nativeSegwit?.address || primaryAddress || '';
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async (params: SpWithdrawParams) => {
       if (!ready) throw new Error('Wallet/SDK not ready');
-      const cached = network && address ? readCachedSpDeposit(network, address) : null;
-      if (!cached) throw new Error('No SP deposit cached on this client. Deposit first.');
-      if (!cached.authTokenId) throw new Error('Auth token unknown — deposit again to refresh.');
+      if (!network || !address) throw new Error('No wallet address');
+
+      // Fast path: use localStorage cache.
+      const cached = readCachedSpDeposit(network, address);
+      let depositorId = cached?.depositorId ?? null;
+      let authTokenId = cached?.authTokenId ?? null;
+
+      // Cold-start path: scan wallet [2,*] receipts to discover the SP deposit.
+      if (!depositorId || !authTokenId) {
+        const discovered = await discoverSpDepositFromWallet(network, address);
+        if (discovered) {
+          writeCachedSpDeposit(network, address, discovered.depositorId, discovered.authTokenId);
+          depositorId = discovered.depositorId;
+          authTokenId = discovered.authTokenId;
+        }
+      }
+
+      if (!depositorId || !authTokenId) throw new Error('No SP deposit found in wallet or cache.');
+
 
       const protostones = buildSpCellpack(STABILITY_POOL_OPCODES.Withdraw, [
-        BigInt(cached.depositorId),
+        BigInt(depositorId),
         params.amountFrostUsdSats,
       ]);
       // Pass the depositor receipt as incoming alkane — boiler's receipt-by-passage idiom.
-      const inputRequirements = `${cached.authTokenId}:1`;
+      const inputRequirements = `${authTokenId}:1`;
 
       const { txid } = await execute({ protostones, inputRequirements, feeRate: params.feeRate });
       return { txid };
@@ -153,10 +191,10 @@ export type SpDepositData = {
 };
 
 /**
- * Read the user's current SP position (compounded deposit + accrued frBTC gains)
- * using the (depositor_id, authTokenId) tuple cached at deposit time. Returns null
- * if the user has no cached deposit, or if the cached depositor_id no longer exists
- * (e.g. fully withdrawn elsewhere).
+ * Read the user's current SP position (compounded deposit + accrued frBTC gains).
+ * localStorage is checked first (fast path); if empty, the wallet's [2,*] receipt
+ * holdings are scanned to recover (depositor_id, authTokenId). The receipt alkane
+ * IS the source of truth — localStorage is a cache only.
  */
 export function useSpDepositData() {
   const { account, network } = useWallet();
@@ -166,17 +204,33 @@ export function useSpDepositData() {
     queryKey: ['frostlend', 'sp-deposit', network, address],
     queryFn: async (): Promise<SpDepositData | null> => {
       if (!network || !address) return null;
+
+      // Fast path.
       const cached = readCachedSpDeposit(network, address);
-      if (!cached || !cached.authTokenId) return null;
+      let depositorId = cached?.depositorId ?? null;
+      let authTokenId = cached?.authTokenId ?? null;
+
+      // Cold-start path: scan wallet receipts.
+      if (!depositorId || !authTokenId) {
+        const discovered = await discoverSpDepositFromWallet(network, address);
+        if (discovered) {
+          writeCachedSpDeposit(network, address, discovered.depositorId, discovered.authTokenId);
+          depositorId = discovered.depositorId;
+          authTokenId = discovered.authTokenId;
+        }
+      }
+
+      if (!depositorId || !authTokenId) return null;
+
       const [compoundedDeposit, frbtcGain] = await Promise.all([
-        fetchCompoundedDeposit(network, cached.depositorId),
-        fetchDepositorFrbtcGain(network, cached.depositorId),
+        fetchCompoundedDeposit(network, depositorId),
+        fetchDepositorFrbtcGain(network, depositorId),
       ]);
       // If both are zero, treat as no active deposit.
       if (compoundedDeposit === 0n && frbtcGain === 0n) return null;
       return {
-        depositorId: cached.depositorId,
-        authTokenId: cached.authTokenId,
+        depositorId,
+        authTokenId,
         compoundedDeposit,
         frbtcGain,
       };

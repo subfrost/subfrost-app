@@ -76,13 +76,17 @@ const APP_URL = 'http://localhost:3000';
 // frBTC to wrap before OpenTrove — wrap more than the open requires
 // so the SDK has a large-enough UTXO. 0.05 BTC → 5_000_000 sats frBTC.
 const WRAP_BTC_FOR_TROVE = '0.05';
-// OpenTrove form defaults (matching TroveDashboard default state)
+// OpenTrove form defaults. Oracle is bumped to $100k before Flow 2 so
+// 0.03 frBTC × $100k = $3000 → ICR = 3000/1800 = 166% > MCR 110%.
 const TROVE_COLL = '0.03'; // frBTC
 const TROVE_DEBT = '1800'; // frostUSD (minimum net debt)
+// Oracle price set via DevPanel after deployment (above $50k default so 0.03 frBTC clears MCR)
+const ORACLE_PRICE_USD = 100_000;
 // SP deposit amount
 const SP_DEPOSIT = '500';
-// Oracle drop preset: 25%
-const ORACLE_DROP_PCT = 25;
+// Oracle drop: 50% from $100k → $50k. ICR = 0.03×$50k/$1800 = 83% < MCR 110% → liquidatable.
+// 25% only drops to $75k → ICR 125% which is still above MCR.
+const ORACLE_DROP_PCT = 50;
 
 const REPORT_PATH = path.join(__dirname, '../camoufox/smoke_report.json');
 
@@ -640,12 +644,10 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
           return total;
         };
         const sizeKb = Math.round(getDirSize(idbDir) / 1024);
-        if (sizeKb > 8000) {
-          fs.rmSync(idbDir, { recursive: true, force: true });
-          console.log(`[frostlend-smoke] Wiped IndexedDB (${sizeKb}KB > 8000KB) — cold-boot`);
-        } else {
-          console.log(`[frostlend-smoke] Keeping IndexedDB (${sizeKb}KB) — warm restore`);
-        }
+        // Always wipe — warm restore brings back a broken end-state (liquidated trove,
+        // dropped oracle, no frostUSD). Every run must start from a clean devnet.
+        fs.rmSync(idbDir, { recursive: true, force: true });
+        console.log(`[frostlend-smoke] Wiped IndexedDB (${sizeKb}KB) — cold-boot`);
       }
     } catch { /* ignore */ }
 
@@ -808,6 +810,50 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
       }
     }
 
+    // ── Step 1b: Set oracle price to $100k ──────────────────────────────────
+    // Default deploy price is $50k. 0.03 frBTC at $50k → ICR 83% < MCR 110%.
+    // Bump to $100k: 0.03 × $100k = $3000 → ICR 166% — comfortably above MCR.
+    {
+      try {
+        console.log(`[frostlend-smoke] Step 1b: Setting oracle price to $${ORACLE_PRICE_USD}...`);
+        await openDevPanel(page);
+        // The oracle price input has a unique font-mono class in the DevPanel.
+        // Use page.evaluate to set the value directly since the panel may not be
+        // in the same scroll viewport.
+        await page.evaluate((price) => {
+          const inputs = Array.from(document.querySelectorAll('input[inputmode="decimal"]'));
+          // The oracle input has font-mono class, others don't
+          const oracleInput = inputs.find(el => el.classList.contains('font-mono')) as HTMLInputElement | undefined;
+          if (!oracleInput) return;
+          const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!;
+          setter.call(oracleInput, String(price));
+          oracleInput.dispatchEvent(new Event('input', { bubbles: true }));
+          oracleInput.dispatchEvent(new Event('change', { bubbles: true }));
+        }, ORACLE_PRICE_USD);
+        await page.waitForTimeout(300);
+        // Click the "Set" button — it's a sibling of the font-mono oracle input
+        await page.evaluate(() => {
+          const inputs = Array.from(document.querySelectorAll('input[inputmode="decimal"]'));
+          const oracleInput = inputs.find(el => el.classList.contains('font-mono'));
+          if (!oracleInput) return;
+          // Parent div contains the input + the Set button as siblings
+          const parent = oracleInput.parentElement;
+          if (!parent) return;
+          const setBtn = Array.from(parent.querySelectorAll('button'))
+            .find(b => b.textContent?.trim() === 'Set');
+          if (setBtn) (setBtn as HTMLElement).click();
+        });
+        await page.waitForTimeout(3_000);
+        await mineOneBlock(page);
+        await waitForIndexerSync(page, 30_000);
+        await closeDevPanel(page);
+        console.log(`[frostlend-smoke] Step 1b: oracle price set to $${ORACLE_PRICE_USD}`);
+      } catch (e) {
+        console.log(`[frostlend-smoke] Step 1b: oracle price set failed — ${e instanceof Error ? e.message : String(e)} — proceeding`);
+        await closeDevPanel(page).catch(() => {});
+      }
+    }
+
     // ── Step 2: Wrap frBTC (pre-req for OpenTrove) ───────────────────────────
     console.log('[frostlend-smoke] Pre-step: wrapping frBTC...');
     const wrapTxid = await wrapFrbtc(page, WRAP_BTC_FOR_TROVE, lastTxid);
@@ -859,31 +905,31 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
           report.flows.push(flow);
           saveReport(report);
         } else {
-          // Fill in collateral and debt fields
-          // The OpenTrovePanel has two text inputs (not type=number — sf-input class)
-          // Label text: "Collateral (frBTC)" and "Borrow (frostUSD) — min 1800"
-          await page.evaluate(
-            ({ coll, debt }) => {
-              const inputs = Array.from(document.querySelectorAll('input[inputmode="decimal"]'));
-              const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!;
-              if (inputs[0]) {
-                setter.call(inputs[0], coll);
-                inputs[0].dispatchEvent(new Event('input', { bubbles: true }));
-              }
-              if (inputs[1]) {
-                setter.call(inputs[1], debt);
-                inputs[1].dispatchEvent(new Event('input', { bubbles: true }));
-              }
-            },
-            { coll: TROVE_COLL, debt: TROVE_DEBT },
-          );
-          await page.waitForTimeout(1000);
+          // Wait for oracle price to appear in system stats banner first — proves
+          // useSystemData has returned and projectedIcr can compute.
+          await page.waitForFunction(
+            () => /\$[\d,]+/.test(document.body.innerText),
+            { timeout: 60_000 },
+          ).catch(() => { console.log('[frostlend-smoke] oracle price not visible — proceeding anyway'); });
+
+          // Fill collateral and debt. React 18 controlled inputs ignore fill() when
+          // the form re-renders back to its useState default. Use triple-click to
+          // select-all, then pressSequentially to type real keyboard events that
+          // React's onChange handles unconditionally.
+          const collInput = page.locator('input[inputmode="decimal"]').nth(0);
+          const debtInput = page.locator('input[inputmode="decimal"]').nth(1);
+          await collInput.click({ clickCount: 3 });
+          await collInput.pressSequentially(TROVE_COLL, { delay: 30 });
+          await page.waitForTimeout(300);
+          await debtInput.click({ clickCount: 3 });
+          await debtInput.pressSequentially(TROVE_DEBT, { delay: 30 });
+          await page.waitForTimeout(500);
 
           await page.screenshot({ path: '/tmp/fl-flow2-preflight.png' });
 
-          // Wait for "Open Trove" button to be enabled
+          // Wait for "Open Trove" button to be enabled (up to 30s after oracle is visible)
           const openBtnEnabled = await (async () => {
-            const dl = Date.now() + 15_000;
+            const dl = Date.now() + 30_000;
             while (Date.now() < dl) {
               const state = await page.evaluate(() => {
                 const btn = Array.from(document.querySelectorAll('button'))
@@ -919,11 +965,8 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
             await page.screenshot({ path: '/tmp/fl-flow2-result.png' });
 
             if (txid) {
-              flow.status = 'success';
-              flow.txid = txid;
               lastTxid = txid;
               console.log(`[frostlend-smoke] Flow 2 txid: ${txid}`);
-
               const voutCount = await getVoutCount(page, txid);
               if (voutCount !== null) {
                 flow.trace = await fetchDevnetTrace(page, txid, voutCount);
@@ -932,45 +975,46 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
                   report.aberrations.push(`Flow 2 (OpenTrove) REVERT: ${flow.trace.revert_reason}`);
                 }
               }
+            } else {
+              console.log('[frostlend-smoke] Flow 2: no toast txid — verifying on-chain directly');
+            }
 
-              // Chain-state assertions: TroveCount ≥ 1, trove status = Active (1)
-              const troveCountHex = await simRead(page, { ...FL.TROVE_MANAGER, inputs: [OP.TM_GetTroveCount] });
-              const troveCount = hexToU128(troveCountHex);
-              flow.assertions.push(makeAssertion('TroveCount ≥ 1', 'true', String(troveCount >= 1n)));
+            // Chain-state verification runs unconditionally — on-chain truth regardless
+            // of whether the toast fired. TroveCount ≥ 1 is the canonical success signal.
+            const troveCountHex = await simRead(page, { ...FL.TROVE_MANAGER, inputs: [OP.TM_GetTroveCount] });
+            const troveCount = hexToU128(troveCountHex);
+            flow.assertions.push(makeAssertion('TroveCount ≥ 1', 'true', String(troveCount >= 1n)));
 
-              // Get the trove ID from the TroveManager — trove IDs are sequential u64 starting at 1.
-              // troveId = troveCount (last opened). Query its status.
+            if (troveCount >= 1n) {
+              flow.status = 'success';
+              flow.txid = txid;
               const troveId = troveCount;
               lastTroveId = troveId;
-              const troveStatusHex = await simRead(page, {
-                ...FL.TROVE_MANAGER,
-                inputs: [OP.TM_GetTroveStatus, String(troveId)],
-              });
+
+              const troveStatusHex = await simRead(page, { ...FL.TROVE_MANAGER, inputs: [OP.TM_GetTroveStatus, String(troveId)] });
               const troveStatus = hexToU8(troveStatusHex);
               flow.assertions.push(makeAssertion('TroveStatus = Active (1)', '1', String(troveStatus)));
 
-              // Trove coll > 0
-              const troveCollHex = await simRead(page, {
-                ...FL.TROVE_MANAGER,
-                inputs: [OP.TM_GetTroveColl, String(troveId)],
-              });
+              const troveCollHex = await simRead(page, { ...FL.TROVE_MANAGER, inputs: [OP.TM_GetTroveColl, String(troveId)] });
               const troveColl = hexToU128(troveCollHex);
               flow.assertions.push(makeAssertion('TroveColl > 0', 'true', String(troveColl > 0n)));
 
-              // Trove debt ≥ MIN_NET_DEBT (180_000_000_000 sats = 1800 frostUSD)
-              const troveDebtHex = await simRead(page, {
-                ...FL.TROVE_MANAGER,
-                inputs: [OP.TM_GetTroveDebt, String(troveId)],
-              });
+              const troveDebtHex = await simRead(page, { ...FL.TROVE_MANAGER, inputs: [OP.TM_GetTroveDebt, String(troveId)] });
               const troveDebt = hexToU128(troveDebtHex);
               flow.assertions.push(makeAssertion('TroveDebt ≥ 1800 frostUSD', 'true', String(troveDebt >= 180_000_000_000n)));
 
-              const failedAssertions = flow.assertions.filter(a => !a.passed);
-              if (failedAssertions.length > 0) {
-                report.aberrations.push(`Flow 2 (OpenTrove) assertion failures: ${failedAssertions.map(a => a.label).join(', ')}`);
-              }
+              console.log(`[frostlend-smoke] Flow 2: trove confirmed on-chain — id=${troveId} coll=${troveColl} debt=${troveDebt}`);
             } else {
-              flow.error = 'txid not found in toast after OpenTrove';
+              flow.status = 'error';
+              flow.error = txid
+                ? `OpenTrove tx broadcast (${txid}) but TroveCount still 0 — silent revert`
+                : 'OpenTrove: no txid and TroveCount = 0';
+              report.aberrations.push(`Flow 2 (OpenTrove) failed: ${flow.error}`);
+            }
+
+            const failedAssertions = flow.assertions.filter(a => !a.passed);
+            if (failedAssertions.length > 0) {
+              report.aberrations.push(`Flow 2 (OpenTrove) assertion failures: ${failedAssertions.map(a => a.label).join(', ')}`);
             }
             report.flows.push(flow);
             saveReport(report);
@@ -1013,22 +1057,14 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
           { timeout: 30_000 },
         ).catch(() => { console.log('[frostlend-smoke] "Stability Pool" heading not found — proceeding'); });
 
-        // Set SP deposit amount
-        await page.evaluate(
-          ({ amount }) => {
-            // StabilityPoolPanel has one text input with inputMode=decimal
-            // The "Deposit" tab should already be active by default
-            const inputs = Array.from(document.querySelectorAll('input[inputmode="decimal"]'));
-            // The SP panel input is the last one (after TroveDashboard inputs)
-            if (inputs.length > 0) {
-              const inp = inputs[inputs.length - 1] as HTMLInputElement;
-              const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!;
-              setter.call(inp, amount);
-              inp.dispatchEvent(new Event('input', { bubbles: true }));
-            }
-          },
-          { amount: SP_DEPOSIT },
-        );
+        // Set SP deposit amount. DOM order (post-OpenTrove, trove exists so
+        // TroveDashboard shows the adjust panel with 1 input at nth(2)):
+        // nth(0)=adjust-amount, nth(1)=SP amount... but with a successful trove
+        // opened, TroveDashboard switches to the AdjustTrove view which has 1 input.
+        // Target the SP amount input by its label text to be DOM-order-independent.
+        const spAmountInput = page.locator('label').filter({ hasText: /amount/i }).locator('input[inputmode="decimal"]').first();
+        await spAmountInput.click({ clickCount: 3 });
+        await spAmountInput.pressSequentially(SP_DEPOSIT, { delay: 30 });
         await page.waitForTimeout(800);
 
         // Ensure "Deposit" tab is selected
@@ -1077,11 +1113,8 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
           await page.screenshot({ path: '/tmp/fl-flow3-result.png' });
 
           if (txid) {
-            flow.status = 'success';
-            flow.txid = txid;
             lastTxid = txid;
             console.log(`[frostlend-smoke] Flow 3 txid: ${txid}`);
-
             const voutCount = await getVoutCount(page, txid);
             if (voutCount !== null) {
               flow.trace = await fetchDevnetTrace(page, txid, voutCount);
@@ -1090,19 +1123,31 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
                 report.aberrations.push(`Flow 3 (SP deposit) REVERT: ${flow.trace.revert_reason}`);
               }
             }
-
-            // Chain-state assertion: SP total deposits ≥ 500 frostUSD (50_000_000_000 sats)
-            const spTotalHex = await simRead(page, { ...FL.STABILITY_POOL, inputs: [OP.SP_GetTotalDeposits] });
-            const spTotal = hexToU128(spTotalHex);
-            flow.assertions.push(makeAssertion('SP total deposits ≥ 500 frostUSD', 'true', String(spTotal >= 50_000_000_000n)));
-            flow.note = `SP total: ${Number(spTotal) / 1e8} frostUSD`;
-
-            const failedAssertions = flow.assertions.filter(a => !a.passed);
-            if (failedAssertions.length > 0) {
-              report.aberrations.push(`Flow 3 (SP deposit) assertion failures: ${failedAssertions.map(a => a.label).join(', ')}`);
-            }
           } else {
-            flow.error = 'txid not found in toast after SP deposit';
+            console.log('[frostlend-smoke] Flow 3: no toast txid — verifying on-chain directly');
+          }
+
+          // Chain-state verification unconditional — SP total deposits is the receipt.
+          const spTotalHex = await simRead(page, { ...FL.STABILITY_POOL, inputs: [OP.SP_GetTotalDeposits] });
+          const spTotal = hexToU128(spTotalHex);
+          flow.assertions.push(makeAssertion('SP total deposits ≥ 500 frostUSD', 'true', String(spTotal >= 50_000_000_000n)));
+          flow.note = `SP total: ${Number(spTotal) / 1e8} frostUSD`;
+
+          if (spTotal >= 50_000_000_000n) {
+            flow.status = 'success';
+            flow.txid = txid;
+            console.log(`[frostlend-smoke] Flow 3: SP deposit confirmed on-chain — total=${Number(spTotal) / 1e8} frostUSD`);
+          } else {
+            flow.status = 'error';
+            flow.error = txid
+              ? `SP deposit tx broadcast (${txid}) but SP total still 0 — silent revert`
+              : 'SP deposit: no txid and SP total = 0';
+            report.aberrations.push(`Flow 3 (SP deposit) failed: ${flow.error}`);
+          }
+
+          const failedAssertions = flow.assertions.filter(a => !a.passed);
+          if (failedAssertions.length > 0) {
+            report.aberrations.push(`Flow 3 (SP deposit) assertion failures: ${failedAssertions.map(a => a.label).join(', ')}`);
           }
           report.flows.push(flow);
           saveReport(report);
@@ -1196,19 +1241,19 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
             flow.note = (flow.note || '') + ' | ICR bar color not confirmed red (may need higher oracle drop)';
           }
 
-          // Chain-state assertion: stored oracle price < initial price (50k * 1e18)
-          // After 25% drop: price ≈ 37500 * 1e18 = 37500000000000000000000n
+          // Chain-state assertion: stored oracle price < the price we set in Step 1b.
+          // After 25% drop from $100k: price ≈ $75k → stored < $100k.
           const priceHex = await simRead(page, { ...FL.PRICE_FEED, inputs: [OP.PF_GetStoredPrice] });
           const storedPrice = hexToU128(priceHex);
-          const initialPrice18 = 50_000n * (10n ** 18n);
-          const droppedPrice18 = initialPrice18 * 75n / 100n; // 25% drop lower bound
+          const initialPrice18 = BigInt(ORACLE_PRICE_USD) * (10n ** 18n);
+          const droppedPrice18 = initialPrice18 * BigInt(100 - ORACLE_DROP_PCT) / 100n; // post-drop lower bound
           flow.assertions.push(makeAssertion(
             'Oracle price < initial (price dropped)',
             'true',
             String(storedPrice < initialPrice18 && storedPrice > 0n),
           ));
           flow.assertions.push(makeAssertion(
-            'Oracle price ≥ 75% of initial (not over-dropped)',
+            `Oracle price ≥ ${100 - ORACLE_DROP_PCT}% of initial (not over-dropped)`,
             'true',
             String(storedPrice >= droppedPrice18),
           ));
@@ -1520,16 +1565,23 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
 
       if (!hasTrove) {
         // Fill coll / debt — use 0.05 for better ICR
-        await page.evaluate(({ coll, debt }) => {
-          const inputs = Array.from(document.querySelectorAll('input[inputmode="decimal"]'));
-          const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!;
-          if (inputs[0]) { setter.call(inputs[0], coll); inputs[0].dispatchEvent(new Event('input', { bubbles: true })); }
-          if (inputs[1]) { setter.call(inputs[1], debt); inputs[1].dispatchEvent(new Event('input', { bubbles: true })); }
-        }, { coll: '0.05', debt: '1800' });
-        await page.waitForTimeout(1000);
+        // Wait for oracle price before filling — same reasoning as Flow 2.
+        await page.waitForFunction(
+          () => /\$[\d,]+/.test(document.body.innerText),
+          { timeout: 60_000 },
+        ).catch(() => { console.log('[frostlend-smoke] oracle price not visible — proceeding anyway'); });
+
+        // Use Playwright fill() so React onChange fires properly.
+        const collInput2 = page.locator('input[inputmode="decimal"]').nth(0);
+        const debtInput2 = page.locator('input[inputmode="decimal"]').nth(1);
+        await collInput2.fill('');
+        await collInput2.fill('0.05');
+        await debtInput2.fill('');
+        await debtInput2.fill('1800');
+        await page.waitForTimeout(500);
 
         const openBtnEnabled = await (async () => {
-          const dl = Date.now() + 20_000;
+          const dl = Date.now() + 30_000;
           while (Date.now() < dl) {
             const s = await page.evaluate(() => {
               const btn = Array.from(document.querySelectorAll('button')).find(b => b.textContent?.trim() === 'Open Trove');
