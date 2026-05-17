@@ -32,16 +32,36 @@
  * `Uint128` is itself a nested message:
  *   message Uint128 { uint64 lo = 1; uint64 hi = 2; }
  *
- * Response wire format `OutpointResponse`:
+ * Response wire format `OutpointResponse` (CORRECT — verified against
+ * alkanes-rs/crates/protorune-support/proto/protorune.proto on 2026-05-17):
  *   message OutpointResponse {
- *     Output output       = 1;
- *     BalanceSheet balances = 2;
+ *     BalanceSheet balances = 1;   // ← field 1 (NOT Output)
+ *     Outpoint outpoint   = 2;     // (we don't need it; we already have the
+ *                                  //  txid/vout we asked for, ignored on decode)
+ *     Output output       = 3;     // ← field 3 (NOT field 1)
+ *     uint32 height       = 4;
+ *     uint32 txindex      = 5;
  *   }
- *   message Output { uint64 value = 1; bytes script = 2; }
+ *   message Output { bytes script = 1; uint64 value = 2; }
  *   message BalanceSheet { repeated BalanceSheetItem entries = 1; }
  *   message BalanceSheetItem { Rune rune = 1; Uint128 balance = 2; }
  *   message Rune { RuneId rune_id = 1; }
  *   message RuneId { Uint128 height = 1; Uint128 txindex = 2; }
+ *
+ * History (2026-05-17): an earlier version of this docstring had `Output`
+ * at field 1 and `BalanceSheet` at field 2 — fully inverted. The decoder
+ * below faithfully implemented that wrong schema, so every per-outpoint
+ * call against subfrost.io's metashrew_view returned `balances: []` even
+ * when the outpoint genuinely held DIESEL/METHANE/frBTC. Symptom on prod:
+ * the Liquidity tab showed `Balance: 0` for the alkane side of every
+ * pair even when the wallet provably held the token (mork1e reported
+ * this; verified live by comparing legacy `alkanes_protorunesbyoutpoint`
+ * — which decodes correctly inside the SDK — against our route's empty
+ * output). The fix is purely a field-number swap in `decodeOutpointResponse`.
+ * The test fixtures were also wrong (manually crafted from the wrong doc),
+ * so they passed the broken impl; the new fixture is a captured real-wire
+ * response from mainnet outpoint
+ * 8c0c67a612dff64a4b305a9a73b798751d1eb6b9f94908f7ed8a107aa2c632e5:0.
  */
 
 import { metashrewView } from './rpc';
@@ -141,12 +161,15 @@ export function decodeOutpointResponse(hex: string): ProtoruneOutpointResponse {
     const [fn, wt, val, next] = field;
     pos = next;
     if (fn === 1 && wt === 2) {
-      // Output { uint64 value = 1; bytes script = 2; }
-      outputValue = parseOutputValue(val as Uint8Array);
-    } else if (fn === 2 && wt === 2) {
-      // BalanceSheet { repeated BalanceSheetItem entries = 1; }
+      // BalanceSheet { repeated BalanceSheetItem entries = 1; } — field 1.
       balances.push(...parseBalanceSheet(val as Uint8Array));
+    } else if (fn === 3 && wt === 2) {
+      // Output { bytes script = 1; uint64 value = 2; } — field 3.
+      outputValue = parseOutputValue(val as Uint8Array);
     }
+    // field 2 (Outpoint), field 4 (height), field 5 (txindex) — intentionally
+    // ignored; we already have the outpoint we asked about, and height/txindex
+    // aren't currently consumed by any caller.
   }
 
   return {
@@ -231,13 +254,15 @@ function readField(
 }
 
 function parseOutputValue(buf: Uint8Array): number | null {
+  // Output { bytes script = 1; uint64 value = 2; }
+  // We only need value (field 2) — script is ignored.
   let pos = 0;
   while (pos < buf.length) {
     const f = readField(buf, pos);
     if (!f) break;
     const [fn, wt, val, next] = f;
     pos = next;
-    if (fn === 1 && wt === 0) return Number(val as bigint);
+    if (fn === 2 && wt === 0) return Number(val as bigint);
   }
   return null;
 }

@@ -60,95 +60,106 @@ describe('decodeOutpointResponse', () => {
     });
   });
 
-  it('parses a value-only output (no balance sheet)', () => {
-    // Output { value: 546 }
-    const hex = '0a0408a204';
+  it('parses real mainnet response — DIESEL + METHANE + frBTC on one dust outpoint', () => {
+    // Captured wire from app.subfrost.io /api/rpc proxy on 2026-05-17:
+    //   metashrew_view protorunesbyoutpoint against outpoint
+    //   8c0c67a612dff64a4b305a9a73b798751d1eb6b9f94908f7ed8a107aa2c632e5:0
+    //
+    // This is the fixture that catches the field-1/field-2 inversion bug
+    // that took down the LP balance display on prod for every user. The
+    // hand-rolled fixtures below this one use synthetic bytes; this one
+    // is the real wire format the indexer returns, so any future swap of
+    // field numbers in OutpointResponse breaks this test immediately.
+    const hex =
+      '0a6e0a240a1a0a060a0208021200120644494553454c18012a0644494553454c' +
+      '120608c7bd92dd010a250a1a0a080a0208021202081012074d455448414e4518' +
+      '012a03434834120708f8f3e0edd6050a1f0a180a060a02082012001205667242' +
+      '544318012a056672425443120308f96712220a20e532c6a27a108aedf70849f9' +
+      'b9b61e1d7598b7739a5a304b4af6df12a6670c8c1a270a2251207ab57455a9be' +
+      '2f87f4d3dfc3ddf2ac2a3ebc0163159f36130f7ceb9e527fa2c310a2042002';
+    const decoded = decodeOutpointResponse(hex);
+    const balances = decoded.balance_sheet?.cached?.balances ?? [];
+
+    // DIESEL = (2:0), METHANE = (2:16), frBTC = (32:0). Same wallet that
+    // showed "Balance: 0" on the broken LP UI — these three balances must
+    // be non-empty here or we've reintroduced the inversion bug.
+    const byId = new Map(balances.map(b => [`${b.block}:${b.tx}`, b.amount]));
+    expect(byId.get('2:0')).toBeDefined();   // DIESEL
+    expect(byId.get('2:16')).toBeDefined();  // METHANE
+    expect(byId.get('32:0')).toBeDefined();  // frBTC
+    expect(BigInt(byId.get('2:0')!)).toBeGreaterThan(0n);
+    expect(BigInt(byId.get('2:16')!)).toBeGreaterThan(0n);
+    expect(BigInt(byId.get('32:0')!)).toBeGreaterThan(0n);
+    // Output (value at field 3) — dust outpoint, 546 sats.
+    expect(decoded.output?.value).toBe(546);
+  });
+
+  it('parses a value-only output (no balance sheet) — Output.value at field 2', () => {
+    // OutpointResponse with only the Output field (field 3) set.
+    // Output { bytes script = 1; uint64 value = 2; } — value is field 2.
+    //   field 3 wire 2 tag (outer): (3 << 3) | 2 = 0x1a
+    //   Output body: 10 a2 04  (field 2 varint, value 546)
+    //   outer len = 3
+    const hex = '1a0310a204';
     const decoded = decodeOutpointResponse(hex);
     expect(decoded.output).toEqual({ value: 546 });
     expect(decoded.balance_sheet?.cached?.balances).toEqual([]);
   });
 
-  it('parses balance sheet entries with rune id + balance', () => {
-    // BalanceSheet { entries: [ BalanceSheetItem { rune: Rune { rune_id: { height: 2, txindex: 0 } }, balance: 1_000_000_000 } ] }
+  it('parses a hand-crafted BalanceSheet at field 1 — 100M of (2:0)', () => {
+    // OutpointResponse {
+    //   balances = BalanceSheet {                              ← field 1
+    //     entries: [ BalanceSheetItem {
+    //       rune = Rune { rune_id = RuneId { height=2, txindex=0 } },
+    //       balance = Uint128 { lo = 100_000_000 }
+    //     } ]
+    //   }
+    // }
     //
-    // Inner-most:
-    //   RuneId.height = Uint128{lo=2}     → 0x08 0x02 (2 bytes)
-    //   RuneId.txindex = Uint128{lo=0}    → 0x08 0x00 (2 bytes)
-    //
-    //   RuneId = field1 (height, len=2) + field2 (txindex, len=2):
-    //     0x0a 0x02 0x08 0x02 0x12 0x02 0x08 0x00  (8 bytes)
-    //
-    //   Rune.rune_id = field1, len=8:
-    //     0x0a 0x08 <8 RuneId bytes>  (10 bytes total)
-    //
-    //   BalanceSheetItem.rune = field1, len=10:
-    //     0x0a 0x0a <10 Rune bytes>  (12 bytes total)
-    //   BalanceSheetItem.balance = field2, len=variant
-    //     balance = Uint128{lo=1_000_000_000}
-    //       0x08 0xc0 0x96 0xb1 0x02 (1B in varint = 5 bytes)
-    //     wrapper: 0x12 0x05 <5 bytes>  (7 bytes)
-    //   BalanceSheetItem total = 19 bytes
-    //
-    //   BalanceSheet.entries = field1, len=19:
-    //     0x0a 0x13 <19 bytes>
-    //   OutpointResponse.balances = field2, len=21:
-    //     0x12 0x15 <21 bytes>
-    //
-    // RuneId inner (8 bytes):    "0a0208021202080" + "0" wait let me do bytes:
-    //   0a 02 08 02            (height field1, len2, varint 2)
-    //   12 02 08 00            (txindex field2, len2, varint 0)
-    //
-    // Rune (10 bytes):  0a 08 <8>
-    //   0a 08 0a 02 08 02 12 02 08 00
-    //
-    // Balance Uint128 (5 bytes): 08 c0 96 b1 02
-    //
-    // BalanceSheetItem (19 bytes):
-    //   0a 0a <10 Rune bytes> 12 05 <5 balance bytes>
-    //   0a 0a 0a 08 0a 02 08 02 12 02 08 00 12 05 08 c0 96 b1 02
-    //
-    // BalanceSheet (21 bytes):
-    //   0a 13 <19 BalanceSheetItem bytes>
-    //
-    // OutpointResponse:
-    //   12 15 <21 BalanceSheet bytes>
-    // 100_000_000 in varint = 0x80 0xc2 0xd7 0x2f (4 bytes) — small enough
-    // to fit cleanly in this hand-rolled wire example.
+    // Inner build:
+    //   RuneId.height = Uint128{lo=2}  → 08 02 (2 bytes)
+    //     wrap as field 1, wire 2:     0a 02 08 02 (4 bytes)
+    //   RuneId.txindex = Uint128{lo=0} → 08 00 (2 bytes)
+    //     wrap as field 2, wire 2:     12 02 08 00 (4 bytes)
+    //   RuneId total = 8 bytes
+    //   Rune.rune_id = field 1, wire 2, len 8:
+    //     0a 08 <8>  → 10 bytes
+    //   BalanceSheetItem.rune = field 1, wire 2, len 10:
+    //     0a 0a <10>
+    //   BalanceSheetItem.balance = field 2, wire 2:
+    //     Uint128 { lo = 100_000_000 } → 08 80 c2 d7 2f (5 bytes)
+    //     wrap: 12 05 <5> (7 bytes)
+    //   BalanceSheetItem total = 12 + 7 = 19 bytes
+    //   BalanceSheet.entries = field 1, wire 2, len 19:
+    //     0a 13 <19>  → 21 bytes
+    //   OutpointResponse.balances = field 1 (NOT field 2), wire 2, len 21:
+    //     0a 15 <21>
     const hex =
-      '12150a130a0a0a080a0208021202080012050880c2d72f'
+      '0a150a130a0a0a080a0208021202080012050880c2d72f'
         .replace(/\s+/g, '');
     const decoded = decodeOutpointResponse(hex);
-    expect(decoded.output).toBeUndefined(); // no Output field in this fixture
+    expect(decoded.output).toBeUndefined(); // no field-3 Output in this fixture
     const balances = decoded.balance_sheet?.cached?.balances ?? [];
     expect(balances).toHaveLength(1);
-    // amount is decimal STRING (mobile services.rs JSON shape) so 10^18-scale
-    // DIESEL totals don't round-trip-corrupt through Number coercion.
     expect(balances[0]).toEqual({ block: 2, tx: 0, amount: '100000000' });
   });
 
-  it('preserves precision on > 2^53 amounts (DIESEL-scale)', () => {
-    // Hand-roll a BalanceSheet with an amount that overflows Number.MAX_SAFE_INTEGER.
-    // Amount = 10^18 = 1000000000000000000 = 0x0de0b6b3a7640000.
-    // As varint (LE 7-bit groups): bytes for 1e18:
-    //   1000000000000000000 → varint encoding 8 bytes:
-    //     0x80 0x80 0x90 0xbf 0xc2 0xd7 0x2f → let me recompute
-    // Easier: bypass the manual hex and round-trip via encode → decode using a
-    // larger amount, then assert the string form survives.
+  it('preserves precision on > 2^53 amounts (DIESEL-scale) at field 1', () => {
+    // OutpointResponse { balances = BalanceSheet { entries: [{
+    //   rune = RuneId{ height=2, txindex=0 },
+    //   balance = Uint128 { lo=0, hi=2 }   // = 2^65, exceeds Number.MAX_SAFE_INTEGER
+    // }] } }
     //
-    // Instead, just assert the parseUint128 helper handles hi+lo composition.
-    // We pick balance = 2^65 = 36893488147419103232 → lo=0, hi=2
-    //   Uint128 wire:
-    //     lo varint 0 → 08 00 (2 bytes)
-    //     hi varint 2 → 10 02 (2 bytes)
-    //   = 4-byte body
-    //   Wrap: 12 04 08 00 10 02  (6 bytes, but it's "field 2" of a BalanceSheetItem)
-    // RuneId height=2, txindex=0 → 0a 02 08 02 12 02 08 00 (8 bytes)
-    // Rune wrapping: 0a 08 <8> (10 bytes)
-    // BalanceSheetItem: rune(field1)=10b + balance(field2)=6b
-    //   0a 0a <10 Rune bytes> 12 04 08 00 10 02  → 18 bytes
-    // BalanceSheet: 0a 12 <18 BalanceSheetItem bytes>  → 20 bytes
-    // OutpointResponse: 12 14 <20 BalanceSheet bytes>
-    const hex = '12140a120a0a0a080a020802120208001204080010 02'.replace(/\s+/g, '');
+    // Build:
+    //   Uint128 { lo=0, hi=2 } → 08 00 10 02 (4 bytes)
+    //   balance wrap (field 2 wire 2 len 4): 12 04 08 00 10 02 (6 bytes)
+    //   RuneId same as previous test (8 bytes)
+    //   Rune wrap: 0a 08 <8> (10 bytes)
+    //   BalanceSheetItem.rune wrap: 0a 0a <10> (12 bytes)
+    //   BalanceSheetItem total = 12 + 6 = 18 bytes
+    //   BalanceSheet.entries wrap: 0a 12 <18> (20 bytes)
+    //   OutpointResponse.balances (field 1, wire 2, len 20): 0a 14 <20>
+    const hex = '0a140a120a0a0a080a02080212020800120408001002'.replace(/\s+/g, '');
     const decoded = decodeOutpointResponse(hex);
     const balances = decoded.balance_sheet?.cached?.balances ?? [];
     expect(balances).toHaveLength(1);
