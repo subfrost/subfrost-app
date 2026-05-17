@@ -317,12 +317,6 @@ export async function alkanesExecuteTyped(
   const toAddressesJson = JSON.stringify(toAddresses);
   const optionsJson = JSON.stringify(options);
 
-  console.log('[alkanesExecuteTyped] to_addresses:', toAddressesJson);
-  console.log('[alkanesExecuteTyped] input_requirements:', params.inputRequirements);
-  console.log('[alkanesExecuteTyped] protostones:', params.protostones);
-  console.log('[alkanesExecuteTyped] fee_rate:', params.feeRate);
-  console.log('[alkanesExecuteTyped] options:', optionsJson);
-
   // On devnet, use alkanesExecuteFull which handles signing + mining internally.
   // alkanesExecuteWithStrings relies on the SDK's data API for UTXO discovery,
   // which routes through quspo on devnet. Quspo may not have indexed all blocks,
@@ -378,7 +372,6 @@ export async function alkanesExecuteTyped(
     }
     options.auto_confirm = true;
     const fullOptionsJson = JSON.stringify(options);
-    console.log(`[alkanesExecuteTyped] Using alkanesExecuteFull (auto_confirm=true, mine_enabled=${!!options.mine_enabled})`);
     const minFeeRate = params.network === 'qubitcoin-regtest' ? 5 : (params.feeRate ?? null);
     const feeRate = params.feeRate && params.feeRate >= (minFeeRate || 0) ? params.feeRate : minFeeRate;
     const result = await (provider as any).alkanesExecuteFull(

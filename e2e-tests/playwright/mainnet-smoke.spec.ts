@@ -64,7 +64,7 @@ const OYL_EXT_PATH = path.join(
   'Library/Application Support/Google/Chrome/Default/Extensions/ilolmnhjbbggkmopnemiphomhaojndmb/1.17.1_0',
 );
 
-const APP_URL = 'https://app.subfrost.io';
+const APP_URL = process.env.SMOKE_APP_URL || 'http://localhost:3000';
 
 // Seed phrase injected via SMOKE_SEED env var — never hardcode in source.
 // Set before running: export SMOKE_SEED="word1 word2 ... word12"
@@ -306,6 +306,23 @@ async function unlockOylWallet(oylPage: Page, password: string): Promise<void> {
 // ============================================================================
 // App helpers
 // ============================================================================
+
+/**
+ * Set the app network to mainnet via localStorage + reload.
+ * Required when pointing at localhost:3000 which may default to devnet.
+ */
+async function setNetworkMainnet(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    localStorage.setItem('subfrost_selected_network', 'mainnet');
+    window.dispatchEvent(new CustomEvent('network-changed', { detail: 'mainnet' }));
+  });
+  // Reload to make network stick across all providers
+  await page.reload({ waitUntil: 'domcontentloaded', timeout: 30_000 });
+  await page.waitForTimeout(2000);
+  // Verify
+  const network = await page.evaluate(() => localStorage.getItem('subfrost_selected_network'));
+  console.log(`[network] Set to: ${network}`);
+}
 
 /** Dismiss the subfrost "I Understand" / beta disclaimer modal. */
 async function dismissDisclaimer(page: Page): Promise<void> {
@@ -759,6 +776,11 @@ test.describe('Mainnet OYL Smoke Test', () => {
     await appPage.goto(`${APP_URL}/swap`, { waitUntil: 'domcontentloaded', timeout: 30_000 });
     await dismissDisclaimer(appPage);
     await appPage.waitForTimeout(2000);
+
+    // Ensure network is mainnet (critical when running against localhost:3000)
+    await setNetworkMainnet(appPage);
+    await dismissDisclaimer(appPage);
+    await appPage.waitForTimeout(1500);
 
     // Connect OYL wallet to the app
     await connectOylToApp(appPage, context);

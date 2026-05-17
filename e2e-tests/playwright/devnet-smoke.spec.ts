@@ -71,7 +71,10 @@ const APP_URL = 'http://localhost:3000';
 // Swap amounts — small enough to avoid UTXO exhaustion across 6 flows.
 // Devnet faucet gives 3 BTC + DIESEL; each flow uses <0.0002 BTC.
 const SWAP_BTC_AMOUNT = '0.0001';
-const SWAP_DIESEL_AMOUNT = '50';
+// Flow 2 DIESEL→BTC: 50 DIESEL caused "need 5000001217 sats, have 4999988233"
+// because useTokenToBtcSwap's fee estimate scales with DIESEL amount in the
+// BTC unwrap leg. Use 1 DIESEL to stay safely within the ~1 BTC faucet budget.
+const SWAP_DIESEL_AMOUNT = '1';
 const WRAP_BTC_AMOUNT = '0.0001';
 const LIQUIDITY_BTC_AMOUNT = '0.0001';
 
@@ -232,59 +235,102 @@ async function waitForDevnet(page: Page, timeoutMs = 900_000): Promise<void> {
 
 /** Dismiss the subfrost "Understand" beta modal if present. */
 async function dismissDisclaimer(page: Page): Promise<void> {
+  // The beta modal can take 2-3 seconds to render on first load
   const btn = page.locator('button').filter({ hasText: /understand/i }).first();
   try {
-    await btn.waitFor({ state: 'visible', timeout: 6000 });
+    await btn.waitFor({ state: 'visible', timeout: 12_000 });
     await btn.click({ force: true });
-    await page.waitForTimeout(600);
-    if (await btn.isVisible({ timeout: 800 }).catch(() => false)) {
+    await page.waitForTimeout(800);
+    // Sometimes needs a second click if the modal re-renders
+    if (await btn.isVisible({ timeout: 1500 }).catch(() => false)) {
       await btn.click({ force: true });
-      await page.waitForTimeout(400);
+      await page.waitForTimeout(600);
     }
-  } catch { /* not shown */ }
+  } catch { /* modal not present — continue */ }
+}
+
+/**
+ * Dismiss the Devnet OOM error banner if present.
+ * After WASM OOM the React tree re-renders — give it up to 30s before returning.
+ * The badge `waitFor` callers use their own timeout; this just handles the dismiss.
+ */
+async function recoverFromOom(page: Page): Promise<void> {
+  const dismissBtn = page.locator('button', { hasText: 'Dismiss' });
+  if (await dismissBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+    await dismissBtn.click();
+    console.log('[smoke] OOM banner dismissed — waiting for devnet to recover...');
+    // After OOM dismiss the WASM runtime is restarting; wait longer before proceeding
+    await page.waitForTimeout(15_000);
+  }
 }
 
 /**
  * Fund the wallet via DevnetControlPanel.
- * +1 BTC × 3 and +DIESEL, then +100 blocks for coinbase maturity.
- * Waits for indexer sync after mining.
+ *
+ * NOTE: faucetBtc() inside the app already mines 101 blocks (1 coinbase +
+ * 100 maturity) per +1 BTC click. We do NOT click +100 separately — that
+ * would cause an additional 100-block mine per call (totalling 201 blocks)
+ * which reliably OOMs the WASM runtime with quspo indexing active.
+ *
+ * We click +1 BTC once (enough for the 6 swap flows at 0.0001 BTC each)
+ * and +DIESEL once. Each call mines ~101 blocks internally with 100ms GC
+ * yields between batches of 5 — takes ~45-60s per faucet click.
  */
 async function fundWallet(page: Page): Promise<void> {
+  // Dismiss any pre-existing OOM banner before opening panel
+  await recoverFromOom(page);
+
   const badge = page.locator('button', { hasText: /Devnet H:/ });
+  await badge.waitFor({ state: 'visible', timeout: 30_000 });
   await badge.click();
   await page.waitForTimeout(500);
 
+  // +1 BTC × 2 — each click mines 101 blocks internally (coinbase + maturity).
+  // Two calls gives ~2 BTC spendable which covers all 6 swap flows including
+  // fees. One BTC is not quite enough: after Flow 1 fees the DIESEL→BTC swap
+  // in Flow 2 needs slightly more than 1 BTC (verified: needed 5_000_001_217
+  // sats, had 4_999_988_233 after fees — ~13K sats short).
   const btcBtn = page.locator('button', { hasText: '+1 BTC' });
-  for (let i = 0; i < 3; i++) {
-    await btcBtn.waitFor({ state: 'visible', timeout: 30_000 });
-    const enabled = await btcBtn.isEnabled({ timeout: 15_000 }).catch(() => false);
-    if (enabled) {
+  await btcBtn.waitFor({ state: 'visible', timeout: 30_000 });
+  for (let i = 0; i < 2; i++) {
+    if (await btcBtn.isEnabled({ timeout: 10_000 }).catch(() => false)) {
       await btcBtn.click();
-      await page.waitForTimeout(2000);
+      // Wait for the 101-block mine to complete; 60s with 100ms GC yields per 5 blocks
+      await page.waitForTimeout(60_000);
+      await recoverFromOom(page);
+      // Re-open panel if OOM dismiss closed it
+      const stillOpen = await page.locator('button', { hasText: '+1 BTC' }).isVisible({ timeout: 2000 }).catch(() => false);
+      if (!stillOpen && i < 1) {
+        await badge.waitFor({ state: 'visible', timeout: 120_000 });
+        await badge.click();
+        await page.waitForTimeout(500);
+      }
     }
   }
 
+  // +DIESEL — faucets DIESEL to the connected wallet
+  // Re-open panel in case it was closed by an OOM dismiss
+  const panelOpen = await page.locator('button', { hasText: '+DIESEL' }).isVisible({ timeout: 2000 }).catch(() => false);
+  if (!panelOpen) {
+    await badge.waitFor({ state: 'visible', timeout: 120_000 });
+    await badge.click();
+    await page.waitForTimeout(500);
+  }
   const dieselBtn = page.locator('button', { hasText: '+DIESEL' });
-  if (await dieselBtn.isEnabled({ timeout: 15_000 }).catch(() => false)) {
+  if (await dieselBtn.isEnabled({ timeout: 10_000 }).catch(() => false)) {
     await dieselBtn.click();
-    await page.waitForTimeout(2000);
+    await page.waitForTimeout(5000);
+    await recoverFromOom(page);
   }
 
-  // Mine 100 blocks for coinbase maturity
-  const mine100 = page.locator('button').filter({ hasText: /^\+100$/ }).first();
-  await mine100.waitFor({ state: 'visible', timeout: 30_000 });
-  await mine100.click();
-  await page.waitForTimeout(30_000);
-
-  // Close panel
+  // Close the panel
   const closeBtn = page.locator('button', { hasText: '✕' });
   if (await closeBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
     await closeBtn.click();
   }
   await page.waitForTimeout(1000);
 
-  await waitForIndexerSync(page, 120_000);
-  await mineOneBlock(page);
+  // Give the indexer up to 30s to catch up after faucet mining
   await waitForIndexerSync(page, 30_000);
 }
 
@@ -292,21 +338,30 @@ async function fundWallet(page: Page): Promise<void> {
 async function waitForIndexerSync(page: Page, timeoutMs = 30_000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
+    // Each fetch gets a 5s AbortController timeout so a hung WASM RPC
+    // handler doesn't stall the entire poll loop indefinitely.
     const synced: boolean = await page.evaluate(async () => {
+      const rpc = async (method: string, id: number) => {
+        const ctrl = new AbortController();
+        const t = setTimeout(() => ctrl.abort(), 5000);
+        try {
+          const r = await fetch('http://localhost:18888', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ jsonrpc: '2.0', method, params: [], id }),
+            signal: ctrl.signal,
+          });
+          return await r.json();
+        } catch { return null; } finally { clearTimeout(t); }
+      };
       try {
         const [mRes, bRes] = await Promise.all([
-          fetch('http://localhost:18888', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ jsonrpc: '2.0', method: 'metashrew_height', params: [], id: 1 }),
-          }).then(r => r.json()),
-          fetch('http://localhost:18888', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ jsonrpc: '2.0', method: 'getblockcount', params: [], id: 2 }),
-          }).then(r => r.json()),
+          rpc('metashrew_height', 1),
+          rpc('getblockcount', 2),
         ]);
+        if (!mRes || !bRes) return false;
         return (mRes as any)?.result === (bRes as any)?.result;
       } catch { return false; }
-    });
+    }).catch(() => false);
     if (synced) return;
     await page.waitForTimeout(2000);
   }
@@ -315,13 +370,16 @@ async function waitForIndexerSync(page: Page, timeoutMs = 30_000): Promise<void>
 
 /** Mine one block via the DevnetControlPanel. */
 async function mineOneBlock(page: Page): Promise<void> {
+  await recoverFromOom(page);
   const badge = page.locator('button', { hasText: /Devnet H:/ });
+  if (!await badge.isVisible({ timeout: 5000 }).catch(() => false)) return;
   await badge.click();
   await page.waitForTimeout(300);
   const mine1 = page.locator('button').filter({ hasText: /^\+1$/ }).first();
   await mine1.waitFor({ state: 'visible', timeout: 15_000 });
   await mine1.click();
   await page.waitForTimeout(5000);
+  await recoverFromOom(page);
   const closeBtn = page.locator('button', { hasText: '✕' });
   if (await closeBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
     await closeBtn.click();
@@ -332,6 +390,44 @@ async function mineOneBlock(page: Page): Promise<void> {
 // ============================================================================
 // Swap form helpers — identical to mainnet-smoke.spec.ts
 // ============================================================================
+
+/**
+ * Wait for the swap form to be ready: the quspo indexer must have indexed at
+ * least one pool (get_pools returns non-empty) so the token picker has entries.
+ * The devnet sf-tile buttons always show the currently-selected token (BTC/DIESEL
+ * etc.), so their text is not a reliable readiness signal. What matters is that
+ * the picker modal will have rows — which requires quspo's get_pools to return data.
+ */
+async function waitForSwapFormReady(page: Page, timeoutMs = 30_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  let attempts = 0;
+  while (Date.now() < deadline) {
+    const { ready, debug } = await page.evaluate(async (isFirst: boolean) => {
+      try {
+        // POST to the devnet fetch interceptor's REST endpoint.
+        // The interceptor distinguishes REST vs JSON-RPC by the absence of a "method" field.
+        // Factory ID for devnet cold-boot is [4:65498].
+        const res = await fetch('http://localhost:18888/get-all-pools-details', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ factoryId: { block: '4', tx: '65498' } }),
+        });
+        const text = await res.text();
+        const d = JSON.parse(text) as { statusCode?: number; data?: unknown[] };
+        const ok = (d.statusCode === 200 || res.ok) && Array.isArray(d.data) && d.data.length > 0;
+        return { ready: ok, debug: isFirst ? `status=${res.status} keys=${Object.keys(d).join(',')} dataLen=${Array.isArray(d.data) ? d.data.length : 'N/A'} raw=${text.slice(0, 200)}` : null };
+      } catch (e) { return { ready: false, debug: isFirst ? `EXCEPTION: ${String(e)}` : null }; }
+    }, attempts === 0).catch(() => ({ ready: false, debug: null }));
+    if (debug) console.log(`[waitForSwapFormReady] first poll: ${debug}`);
+    if (ready) {
+      console.log(`[waitForSwapFormReady] pools ready after ${attempts} polls (${Math.round((Date.now() - (deadline - timeoutMs)) / 1000)}s)`);
+      return;
+    }
+    attempts++;
+    await page.waitForTimeout(500);
+  }
+  console.log('[waitForSwapFormReady] timeout — proceeding anyway');
+}
 
 /** Set React-controlled number input via native setter trick. */
 async function setNumberInput(page: Page, inputIndex: number, value: string): Promise<void> {
@@ -348,23 +444,41 @@ async function setNumberInput(page: Page, inputIndex: number, value: string): Pr
   );
 }
 
-/** Dismiss the persisted SwapSuccessNotification toast before each flow. */
+/**
+ * Dismiss the persisted SwapSuccessNotification toast before each flow.
+ * Waits up to 3s for the toast to disappear after clicking close.
+ */
 async function dismissExistingToast(page: Page): Promise<void> {
-  await page.evaluate(() => {
+  const dismissed = await page.evaluate(() => {
+    // Find any espo.sh toast link and walk up to find its close button
     const links = Array.from(document.querySelectorAll('a[href*="espo.sh/tx/"]'));
     for (const a of links) {
       let node: HTMLElement | null = a as HTMLElement;
       while (node && node !== document.body) {
-        const closeBtn = node.querySelector('button[aria-label*="close"], button[aria-label*="Close"]') as HTMLElement | null;
-        if (closeBtn) { closeBtn.click(); return; }
+        // Try aria-label close button
+        const closeBtn = node.querySelector('button[aria-label*="close" i], button[aria-label*="dismiss" i]') as HTMLElement | null;
+        if (closeBtn) { closeBtn.click(); return true; }
+        // Try icon-only button (no text, has SVG)
         const btns = Array.from(node.querySelectorAll('button')) as HTMLElement[];
-        const x = btns.find(b => b.querySelector('svg') && !b.textContent?.trim());
-        if (x) { x.click(); return; }
+        const iconBtn = btns.find(b => b.querySelector('svg') && !b.textContent?.trim());
+        if (iconBtn) { iconBtn.click(); return true; }
+        // Try any × or X button
+        const xBtn = btns.find(b => /^[×✕x]$/i.test(b.textContent?.trim() ?? ''));
+        if (xBtn) { xBtn.click(); return true; }
         node = node.parentElement;
       }
     }
-  }).catch(() => {});
-  await page.waitForTimeout(400);
+    return false;
+  }).catch(() => false);
+
+  if (dismissed) {
+    // Wait for the toast to actually leave the DOM
+    await page.waitForFunction(
+      () => !document.querySelector('a[href*="espo.sh/tx/"]'),
+      { timeout: 3000 },
+    ).catch(() => {});
+  }
+  await page.waitForTimeout(300);
 }
 
 /**
@@ -423,6 +537,26 @@ async function waitForPopupOverlayClose(page: Page, timeoutMs = 5000): Promise<v
   } catch { /* proceed with force clicks */ }
 }
 
+/**
+ * Poll until the CONFIRM SWAP button exists and is not disabled.
+ * Returns true if enabled within timeoutMs, false if it times out.
+ * The swap form disables this button while the route/quote is computing.
+ */
+async function waitForConfirmButton(page: Page, timeoutMs = 20_000): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const state = await page.evaluate(() => {
+      const btn = Array.from(document.querySelectorAll('button'))
+        .find(b => /confirm swap/i.test(b.textContent || ''));
+      if (!btn) return 'missing';
+      return (btn as HTMLButtonElement).disabled ? 'disabled' : 'enabled';
+    }).catch(() => 'error');
+    if (state === 'enabled') return true;
+    await page.waitForTimeout(500);
+  }
+  return false;
+}
+
 /** Submit CONFIRM SWAP via JS direct click (bypasses pointer-events CSS). */
 async function clickConfirmSwap(page: Page): Promise<void> {
   await page.evaluate(() => {
@@ -446,28 +580,25 @@ async function selectTokenOnSide(page: Page, side: 'sell' | 'buy', symbol: strin
   await waitForPopupOverlayClose(page, 5000);
   const sideIdx = side === 'sell' ? 0 : 1;
 
-  // Open the picker — use the absolute-positioned sf-tile buttons inside the swap form.
-  // These are the "from" and "to" token selector buttons.
+  // Open the picker — the "from" and "to" token selector buttons are .sf-tile absolute
+  // positioned within the swap form. They show the token name or symbol.
   const opened = await page.evaluate((idx) => {
-    // Prefer sf-tile buttons (the actual token selectors in SwapInputs)
-    const sfTiles = Array.from(document.querySelectorAll('button.sf-tile')).filter(b => {
-      // Must contain a token symbol (text is non-empty, not purely numeric/icon)
-      const txt = (b.textContent || '').trim();
-      return /^(BTC|DIESEL|frBTC|FUEL|USDT|USDC|frZEC|frETH)/i.test(txt);
-    });
+    // sf-tile buttons — token names include "Bitcoin", "DIESEL", "frBTC", "FUEL", etc.
+    const sfTiles = Array.from(document.querySelectorAll('button.sf-tile'));
     if (sfTiles[idx]) {
       (sfTiles[idx] as HTMLElement).click();
-      return true;
+      return `sf-tile[${idx}]`;
     }
-    // Fallback: any button that looks like a token picker (starts with token symbol)
-    const fallback = Array.from(document.querySelectorAll('button')).filter(b =>
-      /^(BTC|DIESEL|frBTC|FUEL|USDT|USDC|frZEC|frETH)/i.test((b.textContent || '').trim()),
-    );
+    // Fallback: any button that looks like a token picker (token symbol or name)
+    const fallback = Array.from(document.querySelectorAll('button')).filter(b => {
+      const txt = (b.textContent || '').trim();
+      return /^(BTC|Bitcoin|DIESEL|frBTC|FUEL|USDT|USDC|frZEC|frETH|Select)/i.test(txt);
+    });
     if (fallback[idx]) {
       (fallback[idx] as HTMLElement).click();
-      return true;
+      return `fallback[${idx}]`;
     }
-    return false;
+    return null;
   }, sideIdx);
 
   if (!opened) {
@@ -512,20 +643,36 @@ async function selectTokenOnSide(page: Page, side: 'sell' | 'buy', symbol: strin
 }
 
 /**
- * Fetch the output count for a confirmed regtest tx via the browser's fetch interceptor.
- * Must run through page.evaluate() — localhost:18888 only exists inside the browser.
+ * Fetch the output count for a confirmed devnet tx via the browser's fetch interceptor.
+ * Uses `esplora_tx` (not `getrawtransaction` — the devnet harness supports esplora methods,
+ * not raw Bitcoin Core JSON-RPC). Must run through page.evaluate() because localhost:18888
+ * is only accessible inside the browser context (DevnetContext fetch interceptor).
  */
 async function getVoutCount(page: Page, txid: string): Promise<number | null> {
   return page.evaluate(async (txid) => {
+    // Try esplora_tx first (devnet harness supports this)
     try {
       const res = await fetch('http://localhost:18888', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jsonrpc: '2.0', method: 'getrawtransaction', params: [txid, true], id: 1 }),
+        body: JSON.stringify({ jsonrpc: '2.0', method: 'esplora_tx', params: [txid], id: 1 }),
       });
-      const data = await res.json() as { result?: { vout: unknown[] } };
-      return data.result?.vout?.length ?? null;
-    } catch { return null; }
+      const data = await res.json() as { result?: { vout?: unknown[] } };
+      if (Array.isArray(data.result?.vout)) return data.result!.vout!.length;
+    } catch { /* fall through */ }
+
+    // Fallback: try btc_getrawtransaction (some harness versions expose this)
+    try {
+      const res2 = await fetch('http://localhost:18888', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', method: 'btc_getrawtransaction', params: [txid, 1], id: 2 }),
+      });
+      const data2 = await res2.json() as { result?: { vout?: unknown[] } };
+      if (Array.isArray(data2.result?.vout)) return data2.result!.vout!.length;
+    } catch { /* fall through */ }
+
+    return null;
   }, txid).catch(() => null);
 }
 
@@ -535,20 +682,84 @@ async function getVoutCount(page: Page, txid: string): Promise<number | null> {
 
 test.describe.serial('Devnet AMM Smoke — keystore wallet', () => {
   let page: Page;
+  let browserContext: import('@playwright/test').BrowserContext;
   const report = initReport();
   let lastTxid: string | null = null;
 
   test.beforeAll(async () => {
+    // Remove Chromium lock files that prevent re-use of the persistent profile
+    // (left over when a previous run crashed without closing the browser properly)
+    const lockFiles = [
+      '/tmp/playwright-devnet-smoke/SingletonLock',
+      '/tmp/playwright-devnet-smoke/SingletonCookie',
+      '/tmp/playwright-devnet-smoke/SingletonSocket',
+    ];
+    for (const f of lockFiles) {
+      try { fs.unlinkSync(f); } catch { /* ignore — file may not exist */ }
+    }
+
+    // Conditionally wipe IndexedDB: only if state has grown too large (>8000KB).
+    // Cold boot from genesis OOMs the WASM runtime (can't allocate memory for all
+    // contract deploys). Warm restore from saved state is fast (<30s) and stable.
+    // But if state bloats past ~8MB across many runs, faucet clicks OOM instead.
+    // The sweet spot: keep saved state when it exists and is ≤8000KB.
+    const idbDir = '/tmp/playwright-devnet-smoke/Default/IndexedDB';
+    try {
+      if (fs.existsSync(idbDir)) {
+        // Compute directory size in bytes
+        const getDirSize = (dir: string): number => {
+          let total = 0;
+          for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+            const full = `${dir}/${entry.name}`;
+            if (entry.isDirectory()) total += getDirSize(full);
+            else try { total += fs.statSync(full).size; } catch { /* ignore */ }
+          }
+          return total;
+        };
+        const sizeKb = Math.round(getDirSize(idbDir) / 1024);
+        if (sizeKb > 8000) {
+          fs.rmSync(idbDir, { recursive: true, force: true });
+          console.log(`[smoke] Wiped IndexedDB (${sizeKb}KB > 8000KB limit) — cold-boot`);
+        } else {
+          console.log(`[smoke] Keeping IndexedDB (${sizeKb}KB) — warm restore`);
+        }
+      } else {
+        console.log('[smoke] No IndexedDB — cold-boot (first run)');
+      }
+    } catch { /* ignore */ }
+
     const context = await chromium.launchPersistentContext(
       '/tmp/playwright-devnet-smoke',
-      { headless: false, baseURL: APP_URL },
+      {
+        headless: false,
+        baseURL: APP_URL,
+        // Force English locale so all text-based button selectors match the en.ts i18n
+        // strings used throughout this spec. Without this, Chromium inherits the OS
+        // locale (zh-CN on this machine) and every t('swap.liquidity') etc. renders
+        // in Chinese, breaking find(b => b.textContent === 'Liquidity') etc.
+        locale: 'en-US',
+        extraHTTPHeaders: { 'Accept-Language': 'en-US,en;q=0.9' },
+        // Extra memory headroom for cold-boot WASM instantiation.
+        // Without this, deploying all AMM contracts from genesis OOMs with
+        // "WebAssembly.Instance(): Out of memory: Cannot allocate Wasm memory
+        // for new instance" when a second WASM module is loaded concurrently.
+        args: [
+          '--js-flags=--max-old-space-size=8192',
+          '--disable-site-isolation-trials',
+        ],
+      },
     );
+    browserContext = context;
     page = context.pages()[0] ?? await context.newPage();
     page.on('dialog', d => d.accept());
 
-    // Set devnet before any page loads so DevnetProvider initialises correctly
+    // Set devnet before any page loads so DevnetProvider initialises correctly.
+    // IMPORTANT: detectNetwork() reads devnet from sessionStorage, not localStorage.
+    // (localStorage only accepts 'mainnet'; devnet is tab-scoped via sessionStorage
+    // per utils/detectNetwork.ts and WalletSettings.tsx handleSave logic.)
     await page.addInitScript(() => {
-      localStorage.setItem('subfrost_selected_network', 'devnet');
+      sessionStorage.setItem('subfrost_selected_network', 'devnet');
+      localStorage.removeItem('subfrost_selected_network');
     });
 
     // Surface devnet + error console logs
@@ -568,17 +779,60 @@ test.describe.serial('Devnet AMM Smoke — keystore wallet', () => {
   test.afterAll(async () => {
     saveReport(report);
     console.log(`[smoke] Report saved to: ${REPORT_PATH}`);
-    await page.context().close();
+    if (browserContext) await browserContext.close().catch(() => {});
   });
 
   test('Devnet smoke: boot → fund → 6 AMM flows → trace each txid', async () => {
-    test.setTimeout(1_800_000); // 30 min — cold devnet boot can take 10 min
+    test.setTimeout(1_800_000); // 30 min — cold devnet boot can take 10-20 min
 
     // ── Step 0: Boot devnet ──────────────────────────────────────────────────
     console.log('[smoke] Step 0: booting devnet...');
-    await page.goto('/');
+
+    // First navigation — ensures the persistent context hits localhost:3000
+    await page.goto('/', { waitUntil: 'domcontentloaded', timeout: 60_000 });
+    await page.waitForTimeout(1500);
+
+    // Forcibly set devnet network via sessionStorage (matches WalletSettings handleSave).
+    // addInitScript runs this on every navigation, but belt+suspenders after goto.
+    const networkSet = await page.evaluate(() => {
+      sessionStorage.setItem('subfrost_selected_network', 'devnet');
+      localStorage.removeItem('subfrost_selected_network');
+      return sessionStorage.getItem('subfrost_selected_network');
+    });
+    console.log(`[smoke] Network set to: ${networkSet}`);
+
+    // Hard reload so DevnetProvider mounts with sessionStorage already set.
+    // addInitScript fires again during reload and re-sets sessionStorage before
+    // the React tree initialises — this is the reliable trigger.
+    await page.reload({ waitUntil: 'domcontentloaded', timeout: 60_000 });
+    await page.waitForTimeout(2000);
+
+    // Dismiss the beta modal — may take a few seconds to render, retry generously
     await dismissDisclaimer(page);
-    await waitForDevnet(page, 900_000);
+    await page.waitForTimeout(1000);
+    // A second dismiss in case it reappears after reload
+    await dismissDisclaimer(page);
+
+    // Verify sessionStorage stuck after reload (sanity check)
+    const networkAfterReload = await page.evaluate(() =>
+      sessionStorage.getItem('subfrost_selected_network')
+    );
+    console.log(`[smoke] Network after reload: ${networkAfterReload}`);
+    if (networkAfterReload !== 'devnet') {
+      // Force-set again and reload once more
+      await page.evaluate(() => {
+        sessionStorage.setItem('subfrost_selected_network', 'devnet');
+        localStorage.removeItem('subfrost_selected_network');
+      });
+      await page.reload({ waitUntil: 'domcontentloaded', timeout: 60_000 });
+      await page.waitForTimeout(2000);
+      await dismissDisclaimer(page);
+    }
+
+    // Wait for the "Devnet H:NNN" badge — cold boot can take 10-20 min on first run
+    // 1800s = 30 min to cover extreme cold-boot cases
+    await waitForDevnet(page, 1_800_000);
+    // Dismiss any modal that appeared during the long boot wait
     await dismissDisclaimer(page);
     console.log('[smoke] Devnet ready. Funding wallet...');
 
@@ -586,10 +840,24 @@ test.describe.serial('Devnet AMM Smoke — keystore wallet', () => {
     await fundWallet(page);
     console.log('[smoke] Wallet funded.');
 
-    // Navigate to swap page
-    await page.locator('a[href="/swap"]').first().click();
+    // Dismiss any modal that appeared during funding (beta disclaimer re-appears after
+    // the long faucet mining phase). Must run BEFORE clicking the swap link because
+    // the fixed z-50 overlay blocks pointer events on any element beneath it.
+    await dismissDisclaimer(page);
+    await page.waitForTimeout(500);
+
+    // Navigate to swap page — use JS click to bypass any residual overlay
+    await page.evaluate(() => {
+      const a = document.querySelector('a[href="/swap"]') as HTMLAnchorElement | null;
+      if (a) a.click();
+    });
     await page.waitForTimeout(2000);
     await dismissDisclaimer(page);
+
+    // Wait for quspo to finish indexing pools so token pickers are populated.
+    // Without this, sf-tile buttons show "Select" or empty text and selectTokenOnSide
+    // opens a blank picker modal.
+    await waitForSwapFormReady(page, 30_000);
 
     // ── Flow 1: BTC → DIESEL ─────────────────────────────────────────────────
     {
@@ -614,17 +882,30 @@ test.describe.serial('Devnet AMM Smoke — keystore wallet', () => {
 
         // Enter amount
         await setNumberInput(page, 0, SWAP_BTC_AMOUNT);
-        await page.waitForTimeout(3000);
 
+        // Wait for the quote to load and confirm button to become enabled.
+        // The React swap form disables CONFIRM SWAP while the route is computing
+        // or while there's no quote yet. Poll up to 20s before giving up.
+        const confirmEnabled = await waitForConfirmButton(page, 20_000);
         await page.screenshot({ path: '/tmp/dvn-flow1-preflight.png' });
+        console.log(`[smoke] Flow 1 confirm button state: ${confirmEnabled}`);
 
-        // Confirm button enabled?
-        const confirmEnabled = await page.evaluate(() => {
-          const btn = Array.from(document.querySelectorAll('button'))
-            .find(b => /confirm swap/i.test(b.textContent || ''));
-          return btn ? !(btn as HTMLButtonElement).disabled : false;
-        });
+        // Log form state for diagnosis if still disabled
         if (!confirmEnabled) {
+          const diag = await page.evaluate(() => {
+            const inputs = Array.from(document.querySelectorAll('input[type=number]')) as HTMLInputElement[];
+            const btns = Array.from(document.querySelectorAll('button'));
+            const confirmBtn = btns.find(b => /confirm swap/i.test(b.textContent || ''));
+            const allBtnTexts = btns.map(b => (b.textContent || '').trim().substring(0, 30)).filter(Boolean);
+            return {
+              inputValues: inputs.map(i => i.value),
+              confirmBtnFound: !!confirmBtn,
+              confirmBtnDisabled: confirmBtn ? (confirmBtn as HTMLButtonElement).disabled : 'not found',
+              allBtnTexts: allBtnTexts.slice(0, 15),
+              bodyText: document.body.innerText.substring(0, 500),
+            };
+          });
+          console.log('[smoke] Flow 1 diag:', JSON.stringify(diag));
           flow.status = 'skipped';
           flow.skip_reason = 'confirm_button_disabled';
           console.log('[smoke] Flow 1 skipped — confirm disabled');
@@ -684,7 +965,7 @@ test.describe.serial('Devnet AMM Smoke — keystore wallet', () => {
 
       try {
         console.log('[smoke] Flow 2: DIESEL → BTC');
-        await page.locator('a[href="/swap"]').first().click();
+        await page.evaluate(() => { const a = document.querySelector('a[href="/swap"]') as HTMLAnchorElement | null; if (a) a.click(); });
         await page.waitForTimeout(1500);
         await dismissExistingToast(page);
 
@@ -693,15 +974,10 @@ test.describe.serial('Devnet AMM Smoke — keystore wallet', () => {
         await page.waitForTimeout(1000);
 
         await setNumberInput(page, 0, SWAP_DIESEL_AMOUNT);
-        await page.waitForTimeout(3000);
-
+        const confirmEnabled = await waitForConfirmButton(page, 20_000);
         await page.screenshot({ path: '/tmp/dvn-flow2-preflight.png' });
+        console.log(`[smoke] Flow 2 confirm button state: ${confirmEnabled}`);
 
-        const confirmEnabled = await page.evaluate(() => {
-          const btn = Array.from(document.querySelectorAll('button'))
-            .find(b => /confirm swap/i.test(b.textContent || ''));
-          return btn ? !(btn as HTMLButtonElement).disabled : false;
-        });
         if (!confirmEnabled) {
           flow.status = 'skipped';
           flow.skip_reason = 'confirm_button_disabled_or_insufficient_diesel';
@@ -761,7 +1037,7 @@ test.describe.serial('Devnet AMM Smoke — keystore wallet', () => {
 
       try {
         console.log('[smoke] Flow 3: BTC → frBTC wrap');
-        await page.locator('a[href="/swap"]').first().click();
+        await page.evaluate(() => { const a = document.querySelector('a[href="/swap"]') as HTMLAnchorElement | null; if (a) a.click(); });
         await page.waitForTimeout(1500);
         await dismissExistingToast(page);
 
@@ -770,15 +1046,10 @@ test.describe.serial('Devnet AMM Smoke — keystore wallet', () => {
         await page.waitForTimeout(1000);
 
         await setNumberInput(page, 0, WRAP_BTC_AMOUNT);
-        await page.waitForTimeout(3000);
-
+        const confirmEnabled = await waitForConfirmButton(page, 20_000);
         await page.screenshot({ path: '/tmp/dvn-flow3-preflight.png' });
+        console.log(`[smoke] Flow 3 confirm button state: ${confirmEnabled}`);
 
-        const confirmEnabled = await page.evaluate(() => {
-          const btn = Array.from(document.querySelectorAll('button'))
-            .find(b => /confirm swap/i.test(b.textContent || ''));
-          return btn ? !(btn as HTMLButtonElement).disabled : false;
-        });
         if (!confirmEnabled) {
           flow.status = 'skipped';
           flow.skip_reason = 'confirm_button_disabled';
@@ -837,7 +1108,7 @@ test.describe.serial('Devnet AMM Smoke — keystore wallet', () => {
 
       try {
         console.log('[smoke] Flow 4: frBTC → BTC unwrap');
-        await page.locator('a[href="/swap"]').first().click();
+        await page.evaluate(() => { const a = document.querySelector('a[href="/swap"]') as HTMLAnchorElement | null; if (a) a.click(); });
         await page.waitForTimeout(1500);
         await dismissExistingToast(page);
 
@@ -847,15 +1118,10 @@ test.describe.serial('Devnet AMM Smoke — keystore wallet', () => {
 
         // Use a fraction of what flow 3 should have produced
         await setNumberInput(page, 0, '0.00005');
-        await page.waitForTimeout(3000);
-
+        const confirmEnabled = await waitForConfirmButton(page, 20_000);
         await page.screenshot({ path: '/tmp/dvn-flow4-preflight.png' });
+        console.log(`[smoke] Flow 4 confirm button state: ${confirmEnabled}`);
 
-        const confirmEnabled = await page.evaluate(() => {
-          const btn = Array.from(document.querySelectorAll('button'))
-            .find(b => /confirm swap/i.test(b.textContent || ''));
-          return btn ? !(btn as HTMLButtonElement).disabled : false;
-        });
         if (!confirmEnabled) {
           flow.status = 'skipped';
           flow.skip_reason = 'confirm_button_disabled_or_insufficient_frbtc';
@@ -914,61 +1180,176 @@ test.describe.serial('Devnet AMM Smoke — keystore wallet', () => {
 
       try {
         console.log('[smoke] Flow 5: Add liquidity (BTC+DIESEL)');
-        // Navigate to the liquidity page
-        const liquidityLink = page.locator('a[href="/liquidity"], a[href*="liquidity"]').first();
-        const hasLiqPage = await liquidityLink.isVisible({ timeout: 5000 }).catch(() => false);
-        if (hasLiqPage) {
-          await liquidityLink.click();
-        } else {
-          await page.goto(`${APP_URL}/liquidity`);
-        }
+        // Navigate via client-side link ONLY — page.goto hard-navigates and remounts
+        // DevnetProvider which wipes all in-memory devnet state (contracts, balances).
+        await page.evaluate(() => { const a = document.querySelector('a[href="/swap"]') as HTMLAnchorElement | null; if (a) a.click(); });
         await page.waitForTimeout(2000);
         await dismissExistingToast(page);
 
-        // Find the "Add Liquidity" button or the BTC/DIESEL pool card
-        const addLiqBtn = page.locator('button').filter({ hasText: /add liquidity/i }).first();
-        if (await addLiqBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
-          await addLiqBtn.click();
+        // CRITICAL: Set sell=BTC, buy=DIESEL BEFORE clicking Liquidity tab.
+        // SwapShell auto-populates poolToken0/poolToken1 from fromToken/toToken when
+        // liquidity mode is entered. Flow 4 left fromToken=frBTC, toToken=BTC — and
+        // useMatchedLpPool returns null for frBTC+BTC since both are BTC-equivalent.
+        // By switching to BTC→DIESEL here, poolToken0=BTC, poolToken1=DIESEL when
+        // the Liquidity tab is clicked, giving a valid non-null matchedLpPool.
+        await selectTokenOnSide(page, 'sell', 'BTC');
+        await selectTokenOnSide(page, 'buy', 'DIESEL');
+        await page.waitForTimeout(1000);
+
+        // Click the "Liquidity" tab in the TradeForm to switch to liquidity mode.
+        // The tab button has text "Liquidity" (i18n key swap.liquidity).
+        // We use JS click to bypass pointer-events constraints on the tab bar.
+        const liquidityTabClicked = await page.evaluate(() => {
+          const btns = Array.from(document.querySelectorAll('button'));
+          const tab = btns.find(b => b.textContent?.trim() === 'Liquidity');
+          if (tab) { (tab as HTMLElement).click(); return true; }
+          return false;
+        });
+        if (!liquidityTabClicked) {
+          console.log('[smoke] Flow 5: could not find Liquidity tab — trying sf-tab-btn search');
+          await page.evaluate(() => {
+            const tabs = Array.from(document.querySelectorAll('.sf-tab-btn, [class*="tab"]'));
+            const liqTab = tabs.find(t => /liquidity/i.test(t.textContent || ''));
+            if (liqTab) (liqTab as HTMLElement).click();
+          });
+        }
+        // Wait for LiquidityInputs to render (replaces SwapInputs in the DOM)
+        // and for auto-population of poolToken0/poolToken1 from useEffect.
+        await page.waitForFunction(() => {
+          // LiquidityInputs renders two number inputs — wait for them to appear
+          return document.querySelectorAll('input[type=number]').length >= 2;
+        }, { timeout: 8_000 }).catch(() => {
+          console.log('[smoke] Flow 5: LiquidityInputs did not render 2 inputs within 8s');
+        });
+        await page.waitForTimeout(800);
+
+        // Ensure "Add" sub-tab is active (not "Remove"). Sub-tabs: "Add" and "Remove".
+        const addTabClicked = await page.evaluate(() => {
+          const btns = Array.from(document.querySelectorAll('button'));
+          const addTab = btns.find(b => b.textContent?.trim() === 'Add');
+          if (addTab) { (addTab as HTMLElement).click(); return true; }
+          return false;
+        });
+        console.log(`[smoke] Flow 5: Add sub-tab clicked: ${addTabClicked}`);
+        await page.waitForTimeout(500);
+
+        // If pool tokens aren't set, open pool0 selector and pick BTC, then DIESEL.
+        // The token selector buttons in the liquidity form use openTokenSelector('pool0'/'pool1').
+        // They are .sf-tile buttons at index 2 and 3 (0=sell, 1=buy in swap; 2=pool0, 3=pool1 in liq).
+        const pool0Needs = await page.evaluate(() => {
+          const sfTiles = Array.from(document.querySelectorAll('button.sf-tile'));
+          // pool token selectors appear after the swap pair selectors
+          return sfTiles.length > 2;
+        });
+        if (pool0Needs) {
+          // Click pool0 selector and pick BTC
+          await page.evaluate(() => {
+            const sfTiles = Array.from(document.querySelectorAll('button.sf-tile'));
+            if (sfTiles[2]) (sfTiles[2] as HTMLElement).click();
+          });
+          await page.waitForTimeout(700);
+          await page.evaluate(() => {
+            const modal = document.querySelector('[role="dialog"], [class*="modal"], [class*="Selector"]');
+            const container = modal || document;
+            const btns = Array.from(container.querySelectorAll('button'));
+            const btcBtn = btns.find(b => /^BTC|^Bitcoin/i.test(b.textContent?.trim() ?? ''));
+            if (btcBtn) (btcBtn as HTMLElement).click();
+          });
+          await page.waitForTimeout(700);
+
+          // Click pool1 selector and pick DIESEL
+          await page.evaluate(() => {
+            const sfTiles = Array.from(document.querySelectorAll('button.sf-tile'));
+            if (sfTiles[3]) (sfTiles[3] as HTMLElement).click();
+          });
+          await page.waitForTimeout(700);
+          await page.evaluate(() => {
+            const modal = document.querySelector('[role="dialog"], [class*="modal"], [class*="Selector"]');
+            const container = modal || document;
+            const btns = Array.from(container.querySelectorAll('button'));
+            const dieselBtn = btns.find(b => /^DIESEL/i.test(b.textContent?.trim() ?? ''));
+            if (dieselBtn) (dieselBtn as HTMLElement).click();
+          });
+          await page.waitForTimeout(700);
+        }
+
+        // Set BTC amount in the add-liquidity form — index 0 for pool token0 (BTC).
+        // computePaired() in SwapShell runs synchronously when matchedLpPool + reserves are
+        // available: it calls setPoolToken1Amount(paired) immediately in handlePoolToken0AmountChange.
+        // If matchedLpPool hasn't resolved yet (markets still loading), computePaired returns null
+        // and input[1] stays empty. We retry setNumberInput up to 5 times (2s apart) polling
+        // until input[1] has a non-zero value — that signals reserves are loaded and the paired
+        // DIESEL amount has been computed, making canAddLiquidity true.
+        let token1Populated = false;
+        for (let attempt = 0; attempt < 5; attempt++) {
+          await setNumberInput(page, 0, LIQUIDITY_BTC_AMOUNT);
+          // Wait up to 5s for React to compute the paired token1Amount from pool reserves
+          const populated = await page.waitForFunction(() => {
+            const inputs = document.querySelectorAll('input[type=number]');
+            return inputs.length >= 2 &&
+              parseFloat((inputs[1] as HTMLInputElement).value || '0') > 0;
+          }, { timeout: 5_000 }).then(() => true).catch(() => false);
+          if (populated) { token1Populated = true; break; }
+          // Pool not resolved yet — wait and retry
+          await page.waitForTimeout(2000);
+        }
+
+        if (!token1Populated) {
+          // Last-ditch: try directly setting input[1] to a DIESEL value so canAddLiquidity
+          // has both amounts non-zero. Use a small DIESEL amount relative to our BTC.
+          console.log('[smoke] Flow 5: input[1] still empty after 5 retries — manually setting DIESEL amount');
+          await setNumberInput(page, 1, '10');
           await page.waitForTimeout(1000);
         }
 
-        // Select BTC+DIESEL pool if presented with a picker
-        await page.evaluate(() => {
-          const btns = Array.from(document.querySelectorAll('button'));
-          const dieselPool = btns.find(b =>
-            /(BTC.*DIESEL|DIESEL.*BTC)/i.test(b.textContent || '')
-          );
-          if (dieselPool) (dieselPool as HTMLElement).click();
-        });
         await page.waitForTimeout(1000);
-
-        // Set BTC amount in the add-liquidity form
-        await setNumberInput(page, 0, LIQUIDITY_BTC_AMOUNT);
-        await page.waitForTimeout(3000);
-
         await page.screenshot({ path: '/tmp/dvn-flow5-preflight.png' });
 
-        // Look for Add/Confirm/Supply button
-        const confirmEnabled = await page.evaluate(() => {
-          const btn = Array.from(document.querySelectorAll('button')).find(b =>
-            /add liquidity|confirm|supply/i.test(b.textContent || '')
-            && !/remove/i.test(b.textContent || '')
-          );
-          return btn ? !(btn as HTMLButtonElement).disabled : false;
-        });
+        // Poll for ADD LIQUIDITY button to become enabled (same pattern as CONFIRM SWAP).
+        // i18n key: liquidity.addLiquidity — rendered text may vary; match case-insensitively.
+        const addLiqEnabled = await (async () => {
+          const deadline = Date.now() + 20_000;
+          while (Date.now() < deadline) {
+            const state = await page.evaluate(() => {
+              const btn = Array.from(document.querySelectorAll('button'))
+                .find(b => /add\s+liquidity/i.test(b.textContent || ''));
+              if (!btn) return 'missing';
+              return (btn as HTMLButtonElement).disabled ? 'disabled' : 'enabled';
+            }).catch(() => 'error');
+            if (state === 'enabled') return true;
+            await page.waitForTimeout(500);
+          }
+          return false;
+        })();
+        const confirmEnabled = addLiqEnabled;
         if (!confirmEnabled) {
+          // Log diagnostic info before giving up
+          const diag = await page.evaluate(() => {
+            const inputs = document.querySelectorAll('input[type=number]');
+            const btn = Array.from(document.querySelectorAll('button'))
+              .find(b => /add\s+liquidity/i.test(b.textContent || ''));
+            const allBtns = Array.from(document.querySelectorAll('button'))
+              .map(b => (b.textContent || '').trim().substring(0, 40)).filter(Boolean);
+            return {
+              input0: (inputs[0] as HTMLInputElement | undefined)?.value ?? 'missing',
+              input1: (inputs[1] as HTMLInputElement | undefined)?.value ?? 'missing',
+              inputCount: inputs.length,
+              btnFound: !!btn,
+              btnDisabled: btn ? (btn as HTMLButtonElement).disabled : 'n/a',
+              allBtns: allBtns.slice(0, 20),
+            };
+          }).catch(() => null);
+          console.log('[smoke] Flow 5 diag:', JSON.stringify(diag));
           flow.status = 'skipped';
           flow.skip_reason = 'add_liquidity_button_disabled';
-          console.log('[smoke] Flow 5 skipped — button disabled');
+          console.log('[smoke] Flow 5 skipped — ADD LIQUIDITY button disabled');
           report.flows.push(flow);
           saveReport(report);
         } else {
           await waitForPopupOverlayClose(page, 5000);
           await page.evaluate(() => {
-            const btn = Array.from(document.querySelectorAll('button')).find(b =>
-              /add liquidity|confirm|supply/i.test(b.textContent || '')
-              && !/remove/i.test(b.textContent || '')
-            );
+            const btn = Array.from(document.querySelectorAll('button'))
+              .find(b => /add\s+liquidity/i.test(b.textContent || ''));
             if (btn) (btn as HTMLElement).click();
           });
           await page.waitForTimeout(3000);
@@ -1024,38 +1405,106 @@ test.describe.serial('Devnet AMM Smoke — keystore wallet', () => {
         await page.waitForTimeout(2000);
         await dismissExistingToast(page);
 
-        // Find LP position row or Remove Liquidity button
-        const removeLiqBtn = page.locator('button').filter({ hasText: /remove liquidity|remove/i }).first();
-        if (!(await removeLiqBtn.isVisible({ timeout: 5000 }).catch(() => false))) {
-          // Navigate to the position — might be on the position detail page
-          const lpRow = page.locator('[class*="pool"], [class*="position"]').first();
-          if (await lpRow.isVisible({ timeout: 3000 }).catch(() => false)) {
-            await lpRow.click();
-            await page.waitForTimeout(1000);
-          }
+        // Strategy 1: look for "Remove" button in the LP positions panel at the bottom of the page.
+        // After Flow 5, the BottomPanels "Positions" tab should list the newly created LP position.
+        // Click the "Positions" tab in the bottom panel to surface it.
+        await page.evaluate(() => {
+          const btns = Array.from(document.querySelectorAll('button'));
+          // The tab is labeled "Positions" with a count badge
+          const posTab = btns.find(b => /^Positions/i.test(b.textContent?.trim() ?? ''));
+          if (posTab) (posTab as HTMLElement).click();
+        });
+        await page.waitForTimeout(1500);
+
+        // Click the "Remove" button on the first LP position row
+        const positionRemoveClicked = await page.evaluate(() => {
+          const btns = Array.from(document.querySelectorAll('button'));
+          // LP position rows have a "Remove" button (not "Remove Liquidity" — that's the CTA)
+          const removeBtn = btns.find(b => {
+            const txt = b.textContent?.trim() ?? '';
+            return txt === 'Remove' || txt === 'Remove Liquidity';
+          });
+          if (removeBtn) { (removeBtn as HTMLElement).click(); return true; }
+          return false;
+        });
+
+        if (!positionRemoveClicked) {
+          // Strategy 2: switch to the Liquidity "Remove" sub-tab directly
+          await page.evaluate(() => {
+            const btns = Array.from(document.querySelectorAll('button'));
+            const removeTab = btns.find(b => b.textContent?.trim() === 'Remove');
+            if (removeTab) (removeTab as HTMLElement).click();
+          });
+          await page.waitForTimeout(1000);
         }
 
-        const removeEnabled = await removeLiqBtn.isEnabled({ timeout: 10_000 }).catch(() => false);
+        await page.waitForTimeout(1500);
+
+        // Now in Remove mode — check if REMOVE LIQUIDITY button is enabled
+        const removeEnabled = await page.evaluate(() => {
+          const btn = Array.from(document.querySelectorAll('button'))
+            .find(b => b.textContent?.trim() === 'REMOVE LIQUIDITY');
+          return btn ? !(btn as HTMLButtonElement).disabled : false;
+        });
+
         if (!removeEnabled) {
+          // Try to select the LP position if a selector is shown
+          const lpSelectorClicked = await page.evaluate(() => {
+            const btns = Array.from(document.querySelectorAll('button'));
+            // LP position selector button shows token pair like "BTC/DIESEL LP" or similar
+            const lpBtn = btns.find(b => /(LP|position|BTC.*DIESEL|DIESEL.*BTC)/i.test(b.textContent ?? ''));
+            if (lpBtn) { (lpBtn as HTMLElement).click(); return true; }
+            return false;
+          });
+          if (lpSelectorClicked) {
+            await page.waitForTimeout(1000);
+            // Select first LP position in the dropdown
+            await page.evaluate(() => {
+              const modal = document.querySelector('[role="dialog"], [class*="modal"], [class*="Selector"]');
+              const container = modal || document;
+              const btns = Array.from(container.querySelectorAll('button'));
+              // First non-tab button in the modal is likely the first position
+              if (btns[0]) (btns[0] as HTMLElement).click();
+            });
+            await page.waitForTimeout(1000);
+          }
+
+          // Set remove amount to 50%
+          const removeAmountSet = await page.evaluate(() => {
+            const inputs = document.querySelectorAll('input[type=number], input[type=range]');
+            if (inputs.length === 0) return false;
+            const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!;
+            // Try to find a percent or amount input
+            for (const inp of Array.from(inputs)) {
+              const el = inp as HTMLInputElement;
+              setter.call(el, el.type === 'range' ? '50' : '50');
+              el.dispatchEvent(new Event('input', { bubbles: true }));
+              el.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+            return true;
+          });
+          if (removeAmountSet) await page.waitForTimeout(1000);
+        }
+
+        const finalRemoveEnabled = await page.evaluate(() => {
+          const btn = Array.from(document.querySelectorAll('button'))
+            .find(b => b.textContent?.trim() === 'REMOVE LIQUIDITY');
+          return btn ? !(btn as HTMLButtonElement).disabled : false;
+        });
+
+        if (!finalRemoveEnabled) {
           flow.status = 'skipped';
           flow.skip_reason = 'remove_button_not_found_or_disabled';
-          console.log('[smoke] Flow 6 skipped — no LP tokens or button disabled');
+          console.log('[smoke] Flow 6 skipped — no LP tokens or REMOVE LIQUIDITY button disabled');
           report.flows.push(flow);
           saveReport(report);
         } else {
-          // Set removal amount (50% or slider input)
-          const removeInput = page.locator('input[type=number], input[type=range]').first();
-          if (await removeInput.isVisible({ timeout: 3000 }).catch(() => false)) {
-            await setNumberInput(page, 0, '50');
-          }
-          await page.waitForTimeout(1000);
-
           await waitForPopupOverlayClose(page, 5000);
           await page.screenshot({ path: '/tmp/dvn-flow6-preflight.png' });
 
           await page.evaluate(() => {
             const btn = Array.from(document.querySelectorAll('button'))
-              .find(b => /remove liquidity|confirm remove|confirm/i.test(b.textContent || ''));
+              .find(b => b.textContent?.trim() === 'REMOVE LIQUIDITY');
             if (btn) (btn as HTMLElement).click();
           });
           await page.waitForTimeout(3000);

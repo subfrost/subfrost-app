@@ -626,47 +626,9 @@ export function useSwapMutation() {
           // The PSBT comes as Uint8Array from serde_wasm_bindgen (or as object with indices)
           const psbtBase64 = extractPsbtBase64(readyToSign.psbt);
 
-          // Helper to classify script type from raw bytes
-          const classifyScript = (script: Uint8Array | Buffer): string => {
-            const s = Buffer.from(script);
-            if (s.length === 34 && s[0] === 0x51 && s[1] === 0x20) return 'P2TR';
-            if (s.length === 22 && s[0] === 0x00 && s[1] === 0x14) return 'P2WPKH';
-            if (s.length === 23 && s[0] === 0xa9 && s[1] === 0x14 && s[22] === 0x87) return 'P2SH';
-            if (s.length === 34 && s[0] === 0x00 && s[1] === 0x20) return 'P2WSH';
-            return `UNKNOWN(len=${s.length},op=${s[0]?.toString(16)})`;
-          };
-
-          const logSwapInputDetails = (psbt: bitcoin.Psbt, label: string) => {
-            psbt.data.inputs.forEach((input, idx) => {
-              const ws = input.witnessUtxo?.script;
-              const scriptHex = ws ? Buffer.from(ws).toString('hex') : 'NONE';
-              const scriptType = ws ? classifyScript(ws) : 'NO_WITNESS_UTXO';
-            });
-            psbt.txOutputs.forEach((out, idx) => {
-              try {
-                const addr = bitcoin.address.fromOutputScript(out.script, btcNetwork);
-              } catch {
-              }
-            });
-          };
-
-          // DIAGNOSTIC: Log PSBT state before patching
-          {
-            const tempPsbt = bitcoin.Psbt.fromBase64(psbtBase64, { network: btcNetwork });
-            logSwapInputDetails(tempPsbt, 'BEFORE PATCHING');
-          }
-
-          // ============================================================================
-          // Input patching for ALL browser wallet types
-          // ============================================================================
-          // Different wallets have different requirements:
-          // - Xverse: P2SH-P2WPKH (starts with '3'/'2'). Needs redeemScript injection.
-          // - UniSat/OKX: Single-address P2TR or P2WPKH. Need witnessUtxo.script patching.
-          // - OYL/Leather/Phantom: Native P2WPKH (bc1q). Need witnessUtxo.script patching.
-          //
-          // patchInputsOnly handles ALL these cases. It does NOT touch outputs (the SDK
-          // already creates correct output addresses when we pass actual addresses).
-          // ============================================================================
+          // Input patching required for browser wallets AND OYL's P2SH-P2WPKH inputs.
+          // OYL's nativeSegwit.pubkey may be empty on first load; the P2SH recovery
+          // below handles that case by extracting the pubkey from partialSig after signing.
           let finalPsbtBase64 = psbtBase64;
           if (isBrowserWallet) {
             if (!taprootAddress) {
@@ -684,37 +646,6 @@ export function useSwapMutation() {
               paymentPubkeyHex: account?.nativeSegwit?.pubkey,
             });
             finalPsbtBase64 = result.psbtBase64;
-            if (result.inputsPatched > 0) {
-            }
-          }
-
-          {
-            const tempPsbt = bitcoin.Psbt.fromBase64(finalPsbtBase64, { network: btcNetwork });
-            tempPsbt.data.inputs.forEach((inp, idx) => {
-              if (inp.witnessUtxo) {
-                try {
-                  const addr = bitcoin.address.fromOutputScript(
-                    Buffer.from(inp.witnessUtxo.script),
-                    btcNetwork
-                  );
-                  const hasRedeemScript = inp.redeemScript ? ' [has redeemScript]' : '';
-                } catch (e) {
-                }
-              } else {
-              }
-            });
-            tempPsbt.txOutputs.forEach((out, idx) => {
-              try {
-                const addr = bitcoin.address.fromOutputScript(out.script, btcNetwork);
-              } catch (e) {
-              }
-            });
-          }
-
-          // DIAGNOSTIC: Log PSBT state after patching
-          {
-            const tempPsbt = bitcoin.Psbt.fromBase64(psbtBase64, { network: btcNetwork });
-            logSwapInputDetails(tempPsbt, 'AFTER PATCHING');
           }
 
           // For keystore wallets, request user confirmation before signing.
@@ -826,27 +757,10 @@ export function useSwapMutation() {
           // ============================================================================
           // Single signing path. Browser wallets sign all input types via the wallet
           // adapter; keystore is taproot-only (BIP86) — `signSegwitPsbt` throws.
-          let signedPsbtBase64: string;
-          const signStartTime = Date.now();
-          try {
-            signedPsbtBase64 = await signTaprootPsbt(finalPsbtBase64);
-          } catch (signErr: any) {
-            console.error('[useSwapMutation][OYL-DEBUG] ===== signTaprootPsbt FAILED =====');
-            console.error('[useSwapMutation][OYL-DEBUG] Error:', signErr?.message || signErr);
-            console.error('[useSwapMutation][OYL-DEBUG] Error type:', signErr?.constructor?.name);
-            console.error('[useSwapMutation][OYL-DEBUG] Full error:', signErr);
-            throw signErr;
-          }
+          const signedPsbtBase64 = await signTaprootPsbt(finalPsbtBase64);
 
           // Parse the signed PSBT, finalize, and extract the raw transaction
           const signedPsbt = bitcoin.Psbt.fromBase64(signedPsbtBase64, { network: btcNetwork });
-
-          // DIAGNOSTIC: Log per-input state after signing
-          signedPsbt.data.inputs.forEach((inp, idx) => {
-            const ws = inp.witnessUtxo?.script;
-            const scriptType = ws ? classifyScript(ws) : 'NO_WITNESS_UTXO';
-            const scriptHex = ws ? Buffer.from(ws).toString('hex') : 'NONE';
-          });
 
           // Check if already finalized by the wallet
           const alreadyFinalized = signedPsbt.data.inputs.every(input =>
@@ -854,22 +768,8 @@ export function useSwapMutation() {
           );
 
           // Finalize all inputs
-          if (alreadyFinalized) {
-          } else {
-            try {
-              signedPsbt.finalizeAllInputs();
-            } catch (e: any) {
-              console.error('[useSwapMutation] Finalization error:', e.message);
-              // Dump per-input state for debugging
-              console.error('[SWAP-DIAG] === FINALIZATION FAILURE DUMP ===');
-              signedPsbt.data.inputs.forEach((inp, idx) => {
-                const ws = inp.witnessUtxo?.script;
-                const sType = ws ? classifyScript(ws) : 'NO_WITNESS_UTXO';
-                const sHex = ws ? Buffer.from(ws).toString('hex') : 'NONE';
-                console.error(`  Input ${idx}: type=${sType} script=${sHex} redeemScript=${inp.redeemScript ? Buffer.from(inp.redeemScript).toString('hex') : 'NONE'} tapKeySig=${!!inp.tapKeySig} partialSig=${inp.partialSig?.length || 0} finalScriptWitness=${!!inp.finalScriptWitness}`);
-              });
-              throw e;
-            }
+          if (!alreadyFinalized) {
+            signedPsbt.finalizeAllInputs();
           }
 
           // Extract the raw transaction
@@ -921,14 +821,6 @@ export function useSwapMutation() {
         console.error('[useSwapMutation] No txid found in result:', result);
         throw new Error('Swap execution did not return a transaction ID');
       } catch (executeError: any) {
-        console.error('═══════════════════════════════════════════════════════════════');
-        console.error('[useSwapMutation] ████ EXECUTE ERROR ████');
-        console.error('═══════════════════════════════════════════════════════════════');
-        console.error('[useSwapMutation] Error message:', executeError?.message);
-        console.error('[useSwapMutation] Error name:', executeError?.name);
-        console.error('[useSwapMutation] Error stack:', executeError?.stack);
-        console.error('[useSwapMutation] Full error:', executeError);
-        console.error('═══════════════════════════════════════════════════════════════');
         throw executeError;
       }
     },

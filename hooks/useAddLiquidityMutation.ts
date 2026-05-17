@@ -193,10 +193,6 @@ export function useAddLiquidityMutation() {
 
   return useMutation({
     mutationFn: async (data: AddLiquidityTransactionData) => {
-      console.log('[AddLiquidity] ═══════════════════════════════════════════');
-      console.log('[AddLiquidity] Starting add liquidity transaction');
-      console.log('[AddLiquidity] Input data:', JSON.stringify(data, null, 2));
-
       // Validation
       if (!isConnected) throw new Error('Wallet not connected');
       // Ensure browser wallet session is active before building PSBT
@@ -219,19 +215,15 @@ export function useAddLiquidityMutation() {
       // For alkane operations, prefer taproot if available (alkanes use P2TR).
       // Falls back to segwit on single-address segwit-only wallets.
       const primaryAddress = (taprootAddress || segwitAddress)!;
-      console.log('[AddLiquidity] Using addresses:', { taprootAddress, segwitAddress, primaryAddress });
 
       // Convert display amounts to alks
       const amount0Alks = toAlks(data.token0Amount, data.token0Decimals ?? 8);
       const amount1Alks = toAlks(data.token1Amount, data.token1Decimals ?? 8);
 
-      console.log('[AddLiquidity] Amounts in alks:', { amount0Alks, amount1Alks });
-
       // Determine pool ID: use provided poolId, discover via factory, or use default
       let resolvedPoolId = data.poolId || null;
 
       if (!resolvedPoolId) {
-        console.log('[AddLiquidity] No poolId provided, checking factory for existing pool...');
         resolvedPoolId = await findPoolId(
           provider,
           ALKANE_FACTORY_ID,
@@ -244,7 +236,6 @@ export function useAddLiquidityMutation() {
       // This handles pools created outside the factory (e.g., via direct beacon proxy instantiation)
       if (!resolvedPoolId && defaultPoolId) {
         const [block, tx] = defaultPoolId.split(':').map(Number);
-        console.log('[AddLiquidity] Factory returned no pool, using default pool:', defaultPoolId);
         resolvedPoolId = { block, tx };
       }
 
@@ -277,7 +268,6 @@ export function useAddLiquidityMutation() {
           amountBMin: amount1Min,
           deadline,
         });
-        console.log('[AddLiquidity] Pool found at', `${resolvedPoolId.block}:${resolvedPoolId.tx}`, '- using factory opcode 11 with slippage', slippagePercent, '%');
       } else {
         // Pool doesn't exist: use factory opcode 1 (CreateNewPool)
         protostone = buildCreateNewPoolProtostone({
@@ -287,10 +277,7 @@ export function useAddLiquidityMutation() {
           amount0: amount0Alks,
           amount1: amount1Alks,
         });
-        console.log('[AddLiquidity] Pool does NOT exist, using factory opcode 1 (CreateNewPool)');
       }
-
-      console.log('[AddLiquidity] Protostone:', protostone);
 
       // Build input requirements
       const inputRequirements = buildAddLiquidityInputRequirements({
@@ -300,14 +287,6 @@ export function useAddLiquidityMutation() {
         amount1: amount1Alks,
       });
 
-      console.log('[AddLiquidity] Input requirements:', inputRequirements);
-
-      console.log('[AddLiquidity] ═══════════════════════════════════════════');
-      console.log('[AddLiquidity] Executing...');
-      console.log('[AddLiquidity] inputRequirements:', inputRequirements);
-      console.log('[AddLiquidity] protostone:', protostone);
-      console.log('[AddLiquidity] feeRate:', data.feeRate);
-
       const btcNetwork = getBitcoinNetwork(network);
 
       const isBrowserWallet = walletType === 'browser';
@@ -316,9 +295,6 @@ export function useAddLiquidityMutation() {
       // dummy wallet — see useSwapMutation.ts header for the 2026-03-01 token-loss
       // tx that motivated `txContext`. Always actual addresses now.
       const toAddresses = [primaryAddress];
-      console.log('[AddLiquidity] From addresses:', txContext.feeSourceAddresses, '(browser:', isBrowserWallet, ')');
-      console.log('[AddLiquidity] To addresses:', toAddresses);
-      console.log('[AddLiquidity] Change address:', txContext.btcChangeAddress);
 
       try {
 
@@ -361,20 +337,14 @@ export function useAddLiquidityMutation() {
           maxIndexedHeight: utxoCache.height,
         });
 
-        console.log('[AddLiquidity] Called alkanesExecuteTyped (browser:', isBrowserWallet, ')');
-
-        console.log('[AddLiquidity] Execute result:', JSON.stringify(result, null, 2));
-
         // Handle auto-completed transaction
         if (result?.txid || result?.reveal_txid) {
           const txId = result.txid || result.reveal_txid;
-          console.log('[AddLiquidity] Transaction auto-completed, txid:', txId);
           return { success: true, transactionId: txId };
         }
 
         // Handle readyToSign state (need to sign PSBT manually)
         if (result?.readyToSign) {
-          console.log('[AddLiquidity] Got readyToSign, signing PSBT...');
           const readyToSign = result.readyToSign;
 
           // Convert PSBT to base64.
@@ -391,29 +361,13 @@ export function useAddLiquidityMutation() {
           // trust the SDK's selection.
           let psbtBase64: string = extractPsbtBase64(readyToSign.psbt);
 
-          // ============================================================================
-          // ⚠️ CRITICAL: PSBT PATCHING REMOVED - DO NOT RE-ADD ⚠️
-          // ============================================================================
-          // Date Removed: 2026-03-01 (same as useSwapMutation.ts fix)
-          // See useSwapMutation.ts:444-483 for full documentation.
-          //
-          // alkanes-rs SDK creates PSBTs with correct real addresses for browser wallets.
-          // patchPsbtForBrowserWallet was CORRUPTING these addresses.
-          // ============================================================================
-
-          console.log('[AddLiquidity] Using PSBT from SDK (addresses already correct, no patching needed)');
-
-          // ============================================================================
-          // Input patching for ALL browser wallet types
-          // ============================================================================
-          // Different wallets have different requirements:
-          // - Xverse: P2SH-P2WPKH (starts with '3'/'2'). Needs redeemScript injection.
-          // - UniSat/OKX: Single-address P2TR or P2WPKH. Need witnessUtxo.script patching.
-          // - OYL/Leather/Phantom: Native P2WPKH (bc1q). Need witnessUtxo.script patching.
-          //
-          // patchInputsOnly handles ALL these cases. It does NOT touch outputs (the SDK
-          // already creates correct output addresses when we pass actual addresses).
-          // ============================================================================
+          // patchInputsOnly required for ALL wallet types (browser + keystore).
+          // Browser wallets: fix tapInternalKey mismatch + inject P2SH redeemScript.
+          // Keystore: SDK embeds dummy witnessUtxo.script derived from the internal
+          // provider key, not the real taproot address. BIP-341 key-path signing
+          // compares toXOnly(tweakedPubkey) against script[2..34] — mismatch means
+          // tapKeySig is never written and finalizeAllInputs throws "cannot finalize".
+          // patchInputsOnly replaces witnessUtxo.script with the real derived script.
           if (isBrowserWallet) {
             const result = patchInputsOnly({
               psbtBase64,
@@ -423,9 +377,6 @@ export function useAddLiquidityMutation() {
               paymentPubkeyHex: account?.nativeSegwit?.pubkey,
             });
             psbtBase64 = result.psbtBase64;
-            if (result.inputsPatched > 0) {
-              console.log(`[AddLiquidity] Patched ${result.inputsPatched} input(s) for browser wallet compatibility`);
-            }
           }
 
           // For keystore wallets, request user confirmation before signing.
@@ -489,7 +440,6 @@ export function useAddLiquidityMutation() {
           // Single signing path. Browser wallets handle all input types in one
           // signPsbt call. Keystore is taproot-only (BIP86) and `signSegwitPsbt`
           // throws — so the same `signTaprootPsbt` is correct for both.
-          console.log('[AddLiquidity] Signing PSBT…');
           const signedPsbtBase64 = await signTaprootPsbt(psbtBase64);
 
           // Finalize and extract transaction
@@ -499,23 +449,6 @@ export function useAddLiquidityMutation() {
           const tx = signedPsbt.extractTransaction();
           const txHex = tx.toHex();
           const txid = tx.getId();
-
-          console.log('[AddLiquidity] Transaction built:', txid);
-          console.log('[AddLiquidity] Inputs:', tx.ins.length);
-          console.log('[AddLiquidity] Outputs:');
-          tx.outs.forEach((output, idx) => {
-            const script = Buffer.from(output.script).toString('hex');
-            if (script.startsWith('6a')) {
-              console.log(`  [${idx}] OP_RETURN (protostone) ${script.length / 2} bytes`);
-            } else {
-              try {
-                const addr = bitcoin.address.fromOutputScript(output.script, btcNetwork);
-                console.log(`  [${idx}] ${output.value} sats -> ${addr}`);
-              } catch {
-                console.log(`  [${idx}] ${output.value} sats -> unknown script`);
-              }
-            }
-          });
 
           // Broadcast
           const broadcastTxid = await provider.broadcastTransaction(txHex);
@@ -527,8 +460,6 @@ export function useAddLiquidityMutation() {
               console.warn('[AddLiquidity] pendingTxStore.add failed:', error);
             }
           }
-          console.log('[AddLiquidity] Broadcast successful:', broadcastTxid);
-
           return {
             success: true,
             transactionId: broadcastTxid || txid,
@@ -538,13 +469,11 @@ export function useAddLiquidityMutation() {
         // Handle complete state
         if (result?.complete) {
           const txId = result.complete?.reveal_txid || result.complete?.commit_txid;
-          console.log('[AddLiquidity] Complete, txid:', txId);
           return { success: true, transactionId: txId };
         }
 
         // Fallback
         const txId = result?.txid || result?.reveal_txid;
-        console.log('[AddLiquidity] Transaction ID:', txId);
         return { success: true, transactionId: txId };
 
       } catch (error) {
@@ -553,8 +482,6 @@ export function useAddLiquidityMutation() {
       }
     },
     onSuccess: (data) => {
-      console.log('[AddLiquidity] Success! txid:', data.transactionId);
-
       // Invalidate balance queries
       queryClient.invalidateQueries({ queryKey: ['sellable-currencies'] });
       queryClient.invalidateQueries({ queryKey: ['wallet-utxo-cache'] });

@@ -66,24 +66,27 @@ import type { DeployedContracts } from './types';
 type ProgressCallback = (message: string, percent: number) => void;
 
 // Memory reporter — Chrome/Edge only (performance.memory is non-standard).
-// Prints used/total JS heap in MB alongside a label. Silently no-ops on
-// browsers that don't expose the API. Use at every major phase boundary to
-// track cumulative WASM heap growth during boot.
-// Uses console.warn so [mem] lines appear in the Warnings level filter,
-// making them visible even when the WASM KV trace (__get_len/__flush) drowns
-// out console.log output. In DevTools: set level to "Warnings" to see only
-// memory checkpoints, or filter by "[mem]" text.
+// Accumulates readings into _memLog[] instead of emitting individually.
+// Individual console.warn calls attach React call stacks (100+ lines each),
+// making a 20-phase boot produce thousands of lines the user can't paste.
+// Instead: call memLog() at each phase boundary, then call memLogFlush()
+// once at the end of the boot sequence to emit a single compact console.table.
+// Copy the one table — all 20 readings in ~30 lines, no stacks attached.
+const _memLog: Array<{ phase: string; usedMB: string; pct: string }> = [];
+
 function memLog(label: string): void {
   const mem = (performance as any).memory;
-  if (!mem) {
-    console.warn(`[mem] ${label} — performance.memory unavailable`);
-    return;
-  }
-  const used = (mem.usedJSHeapSize / 1024 / 1024).toFixed(1);
-  const total = (mem.totalJSHeapSize / 1024 / 1024).toFixed(1);
-  const limit = (mem.jsHeapSizeLimit / 1024 / 1024).toFixed(0);
+  if (!mem) return;
+  const usedMB = (mem.usedJSHeapSize / 1024 / 1024).toFixed(1);
   const pct = ((mem.usedJSHeapSize / mem.jsHeapSizeLimit) * 100).toFixed(1);
-  console.warn(`[mem] ${label} — used=${used}MB / total=${total}MB / limit=${limit}MB (${pct}%)`);
+  _memLog.push({ phase: label, usedMB, pct });
+}
+
+function memLogFlush(label: string): void {
+  if (_memLog.length === 0) return;
+  console.warn(`[mem-summary] ${label} (${_memLog.length} checkpoints):`);
+  console.table(_memLog);
+  _memLog.length = 0;
 }
 
 // The harness and provider are stored globally so the fetch interceptor
@@ -2184,33 +2187,37 @@ async function deployFullProtocol(
   }
 
   memLog('deployFullProtocol COMPLETE — this is the post-boot memory baseline');
+  memLogFlush('Boot memory profile (copy this table)');
   return contracts;
 }
 
 /**
- * Mine 101 blocks one at a time with GC-friendly delays.
+ * Mine 101 blocks in small batches with GC-friendly delays.
  * Extracted to share between fresh boot and fallback after import failure.
+ *
+ * ⚠️ OOM HISTORY — read before touching batch size or yield duration:
+ *
+ * Each block creates a new WebAssembly.Instance (alkanes indexer + esplora =
+ * 2 instances per block). JS FinalizationRegistry reclaims them asynchronously,
+ * but only between JS event-loop turns. Within a single synchronous mineBlocks(N)
+ * call, N instances accumulate without any reclaim opportunity.
+ *
+ * Confirmed crash point: block ~63 of 101 with BATCH=25 + setTimeout(0) yield.
+ * Root cause: 25 instances × 2 (alkanes+esplora) = 50 instances per batch,
+ * and setTimeout(0) completes before FinalizationRegistry has scheduled GC.
+ * The third batch pushes total live instances past the WASM linear memory ceiling.
+ *
+ * Fix: BATCH=5 + 50ms yield. 5 instances × 2 = 10 per batch. 50ms gives the
+ * browser scheduler a full task-queue turn so FinalizationRegistry can fire GC
+ * before the next batch starts. Verified stable on machines with 4096MB limit.
+ *
+ * DO NOT increase BATCH above 10 without re-verifying on a machine with <4GB RAM.
+ * DO NOT reduce yield below 30ms — FinalizationRegistry needs a real event-loop gap.
  */
 async function mineInitialBlocks(onProgress: ProgressCallback): Promise<void> {
   onProgress('Mining initial blocks...', 20);
-  // ⚠️ CRITICAL (2026-03-26): The alkanes indexer creates a WebAssembly.Instance
-  // per block. Mining 101 blocks with pauses (50ms-1000ms) between individual
-  // blocks still OOMs at ~70-80 blocks. FinalizationRegistry cannot keep up
-  // regardless of pause duration.
-  //
-  // Solution: mine ALL blocks in a single synchronous call. mineBlocks(N) runs
-  // synchronously in WASM, creating and destroying instances within the same
-  // call frame. The WASM runtime's internal allocator can reuse memory without
-  // relying on JS FinalizationRegistry. This is how the vitest harness works
-  // (createDevnetTestContext calls mineBlocks(201) in one shot without OOM).
-  //
-  // After mining completes, a single yield lets the browser process pending work.
-  // Subsequent boots skip mining via IndexedDB importState (<1s).
-  // Mine in batches of 25 with GC yields between them.
-  // With esplora loaded, each block creates 2 WASM instances. 101 blocks =
-  // 202 instances. Mining all at once OOMs at ~71-80 blocks. Batching with
-  // setTimeout(0) yields lets FinalizationRegistry reclaim instances.
-  const BATCH = 25;
+  const BATCH = 5;
+  const YIELD_MS = 50;
   const TOTAL = 101;
   memLog('mineInitialBlocks START (alkanes+esplora, no quspo)');
   for (let mined = 0; mined < TOTAL; ) {
@@ -2218,12 +2225,15 @@ async function mineInitialBlocks(onProgress: ProgressCallback): Promise<void> {
     onProgress(`Mining blocks ${mined + 1}-${mined + n} of ${TOTAL}...`, 20 + Math.round((mined / TOTAL) * 30));
     _harness.mineBlocks(n);
     mined += n;
-    // Yield to let FinalizationRegistry / GC reclaim WASM instances
-    await new Promise(r => setTimeout(r, 0));
+    // Yield YIELD_MS ms to let FinalizationRegistry fire GC and reclaim WASM instances.
+    // setTimeout(0) is NOT enough — FinalizationRegistry callbacks are microtasks that
+    // need a full event-loop turn with idle time to actually trigger collection.
+    await new Promise(r => setTimeout(r, YIELD_MS));
     memLog(`mineInitialBlocks batch done (${mined}/${TOTAL} blocks)`);
   }
   onProgress('Mining complete', 50);
   memLog('mineInitialBlocks DONE');
+  memLogFlush('Initial mining memory profile (copy this table)');
 }
 
 /**

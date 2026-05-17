@@ -462,19 +462,20 @@ export function DevnetProvider({ children, network }: { children: React.ReactNod
         // WebAssembly.Instance per block — without a yield the browser GC has
         // no opportunity to reclaim instances from the prior call, exhausting
         // WASM linear memory on the very first post-boot mine.
-        const memLog = (label: string) => {
+        // [mem-mine] uses console.log (not warn) to avoid React fiber call stack
+        // capture. Filter DevTools by text "[mem-mine]" to isolate mine readings.
+        const memMine = (label: string) => {
           const mem = (performance as any).memory;
           if (!mem) return;
           const used = (mem.usedJSHeapSize / 1024 / 1024).toFixed(1);
           const pct = ((mem.usedJSHeapSize / mem.jsHeapSizeLimit) * 100).toFixed(1);
-          console.warn(`[mem] ${label} — used=${used}MB (${pct}% of limit)`);
+          console.log(`[mem-mine] ${label} — ${used}MB (${pct}%)`);
         };
-        memLog(`controls.mineBlocks(${count}) CALLED — pre-yield baseline`);
+        memMine(`mineBlocks(${count}) pre-yield`);
         for (let i = 0; i < count; i++) {
           await new Promise(r => setTimeout(r, 200));
-          memLog(`controls.mineBlocks block ${i + 1}/${count} BEFORE`);
           harnessRef.current.mineBlocks(1);
-          memLog(`controls.mineBlocks block ${i + 1}/${count} AFTER`);
+          memMine(`mineBlocks block ${i + 1}/${count}`);
         }
         setState(prev => ({ ...prev, chainHeight: harnessRef.current.height }));
         debounceSave();

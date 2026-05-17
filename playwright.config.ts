@@ -92,7 +92,7 @@ export default defineConfig({
         video: 'retain-on-failure',
         trace: 'retain-on-failure',
       },
-      testMatch: '**/devnet-smoke.spec.ts',
+      testMatch: ['**/devnet-smoke.spec.ts', '**/trace-probe.spec.ts'],
     },
     {
       // Mainnet OYL smoke test — loads the real OYL Chrome extension.

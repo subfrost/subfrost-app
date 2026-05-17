@@ -120,8 +120,9 @@ function isP2WPKH(script: Buffer): boolean {
   return script[0] === 0x00 && script.length === 22;
 }
 
+// Exported for use in useSwapMutation's post-sign P2SH redeemScript recovery.
 /** P2SH: OP_HASH160 <20-byte script hash> OP_EQUAL → [0xa9, 0x14, ...20 bytes, 0x87] = 23 bytes */
-function isP2SH(script: Buffer): boolean {
+export function isP2SH(script: Buffer): boolean {
   return script.length === 23 && script[0] === 0xa9 && script[1] === 0x14 && script[22] === 0x87;
 }
 

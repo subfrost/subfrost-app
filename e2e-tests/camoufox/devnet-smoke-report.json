@@ -1,0 +1,62 @@
+{
+  "run_at": "2026-05-17T13:34:18.192Z",
+  "wallet": "keystore",
+  "network": "devnet",
+  "flows": [
+    {
+      "name": "btc_to_diesel",
+      "status": "success",
+      "txid": "6eb980a30124aa44feb0fcd7713d43bf5d7ab895472850d0a0485fa47e9c8730",
+      "fee_sats": null,
+      "skip_reason": null,
+      "error": null,
+      "trace": null
+    },
+    {
+      "name": "diesel_to_btc",
+      "status": "success",
+      "txid": "2b1ddd33b338eeb6469f15f7479d4942be3ddcd3f09be0367c8e94b5c7e8f607",
+      "fee_sats": null,
+      "skip_reason": null,
+      "error": null,
+      "trace": null
+    },
+    {
+      "name": "btc_to_frbtc_wrap",
+      "status": "success",
+      "txid": "a67dbc2f16ac7821392c9194e2f596b9d9e1dd2294a63204ecbf3340afe3f3f5",
+      "fee_sats": null,
+      "skip_reason": null,
+      "error": null,
+      "trace": null
+    },
+    {
+      "name": "frbtc_to_btc_unwrap",
+      "status": "success",
+      "txid": "580c048c1f65d214bfb2be36bb458c409e39bd070514268434ffae0c026b4420",
+      "fee_sats": null,
+      "skip_reason": null,
+      "error": null,
+      "trace": null
+    },
+    {
+      "name": "add_liquidity_btc_diesel",
+      "status": "success",
+      "txid": "123a6c7850e694453b36d2d923eb96c494acd6ac3752bb096455bd379575f989",
+      "fee_sats": null,
+      "skip_reason": null,
+      "error": null,
+      "trace": null
+    },
+    {
+      "name": "remove_liquidity",
+      "status": "skipped",
+      "txid": null,
+      "fee_sats": null,
+      "skip_reason": "remove_button_not_found_or_disabled",
+      "error": null,
+      "trace": null
+    }
+  ],
+  "aberrations": []
+}
