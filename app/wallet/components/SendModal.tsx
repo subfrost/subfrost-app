@@ -389,7 +389,18 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
         value: utxo.value,
         address: utxo.address,
         status: {
-          confirmed: (utxo.confirmations ?? 0) > 0,
+          // Gate on BITCOIND confirmation (blockHeight !== null), NOT on
+          // metashrew `confirmations >= 1`. Metashrew is the alkane
+          // indexer; using its catch-up status to gate BTC spendability
+          // surfaces as "Available: <wrong-small-number> BTC" in the
+          // Send modal whenever metashrew lags bitcoind by even one
+          // block. mork1e 2026-05-17: 211k-sat UTXO at block 949865
+          // dropped from Send-modal "Available" because metashrew was
+          // at 949862 → confirmations=0 → confirmed=false → filtered
+          // out at line 510. Same fix already shipped for the
+          // wallet-state `spendable` aggregate in 4270ea1a; this is
+          // the second consumer that maintains its own filter chain.
+          confirmed: (utxo.blockHeight ?? null) !== null,
           block_height: utxo.blockHeight ?? undefined,
         },
         alkanes,
