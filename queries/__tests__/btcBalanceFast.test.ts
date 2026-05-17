@@ -40,15 +40,57 @@ const TAPROOT_TOTAL = 219_269;
 
 type FetchInit = { method?: string; body?: string };
 
-function stubEsploraFetch(perAddressUtxos: Record<string, unknown[]>) {
+/** Derive chain_stats from a fixture UTXO list (all assumed unspent). */
+function statsFromUtxos(utxos: Array<{ value: number }>, mempoolFunded = 0, mempoolSpent = 0) {
+  return {
+    chain_stats: {
+      funded_txo_sum: utxos.reduce((s, u) => s + u.value, 0),
+      spent_txo_sum: 0,
+      funded_txo_count: utxos.length,
+      spent_txo_count: 0,
+      tx_count: utxos.length,
+    },
+    mempool_stats: {
+      funded_txo_sum: mempoolFunded,
+      spent_txo_sum: mempoolSpent,
+      funded_txo_count: mempoolFunded > 0 ? 1 : 0,
+      spent_txo_count: mempoolSpent > 0 ? 1 : 0,
+      tx_count: 0,
+    },
+  };
+}
+
+/**
+ * Stub the /api/rpc transport. Supports both endpoints fetchAddressBalance
+ * has historically used:
+ *   - `esplora_address` (current) → stats with chain_stats + mempool_stats
+ *   - `esplora_address::utxo` (legacy, kept for any test still on the
+ *     gross-UTXO-list shape) → array of UTXO objects
+ *
+ * For `esplora_address`, optional perAddressMempool maps a per-address
+ * { funded, spent } pair to drive mempool_stats independently of the
+ * confirmed UTXO list (mork's IMG screenshot regression).
+ */
+function stubEsploraFetch(
+  perAddressUtxos: Record<string, Array<{ value: number; [k: string]: unknown }>>,
+  perAddressMempool: Record<string, { funded: number; spent: number }> = {},
+) {
   vi.stubGlobal(
     'fetch',
     vi.fn(async (_url: string, init: FetchInit) => {
       const body = JSON.parse(init.body ?? '{}');
       const addr = body?.params?.[0] as string | undefined;
+      const method = body?.method as string | undefined;
       const utxos = (addr && perAddressUtxos[addr]) ?? [];
+      let result: unknown;
+      if (method === 'esplora_address') {
+        const mp = (addr && perAddressMempool[addr]) ?? { funded: 0, spent: 0 };
+        result = statsFromUtxos(utxos, mp.funded, mp.spent);
+      } else {
+        result = utxos;
+      }
       return new Response(
-        JSON.stringify({ jsonrpc: '2.0', id: body?.id ?? 1, result: utxos }),
+        JSON.stringify({ jsonrpc: '2.0', id: body?.id ?? 1, result }),
         { status: 200, headers: { 'content-type': 'application/json' } },
       );
     }),
@@ -139,5 +181,64 @@ describe('btcBalanceFastQueryOptions — dual-address taproot BTC visibility', (
     expect(balance.p2tr).toBe(TAPROOT_TOTAL);
     expect(balance.total).toBe(100_000 + TAPROOT_TOTAL);
     expect(balance.spendable).toBe(100_000);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// mork1e 2026-05-17 FB6 regression: pending was 0.0001 BTC actual but app
+// showed 0.0006 BTC. Previous fetchAddressBalance used
+// esplora_address::utxo and summed mempool UTXO values — only counted
+// INCOMING mempool outputs, ignored confirmed UTXOs being SPENT in
+// mempool. Fix: use esplora_address (stats endpoint) and compute NET
+// pending from mempool_stats.funded_txo_sum - spent_txo_sum.
+// ---------------------------------------------------------------------------
+describe('btcBalanceFastQueryOptions — net mempool pending (mork1e)', () => {
+  const SINGLE_ADDR = 'bc1psn0925c2p5mjnvkg0xkntpd26wtcyktmwt3shuw7ue04yed5sjfs7xwmj4';
+  const account = {
+    nativeSegwit: undefined,
+    taproot: { address: SINGLE_ADDR, pubkey: '', pubKeyXOnly: '', hdPath: '' },
+    paymentAddress: undefined,
+    payerAddress: undefined,
+  };
+
+  it('net pending: incoming > outgoing reports pendingIn = net', async () => {
+    // 100k confirmed; pending tx funds 30k AND spends 5k -> net pending +25k.
+    stubEsploraFetch(
+      { [SINGLE_ADDR]: [{ value: 100_000, status: { confirmed: true, block_height: 949_900 } }] },
+      { [SINGLE_ADDR]: { funded: 30_000, spent: 5_000 } },
+    );
+    const balance = await btcBalanceFastQueryOptions({
+      account, isConnected: true, network: 'mainnet', walletType: 'keystore',
+    }).queryFn!({} as never);
+    expect(balance.pendingIn).toBe(25_000);
+    expect(balance.pendingOut).toBe(0);
+  });
+
+  it('mork scenario: pending tx spends more than it funds -> pendingOut populated, pendingIn = 0', async () => {
+    // Confirmed 100k; pending tx spends a confirmed 60k UTXO and creates
+    // a 50k change output back -> mempool_stats: funded=50k, spent=60k.
+    // Old code returned pendingIn = 50k (gross incoming, false alarm).
+    // New code: net mempool = funded - spent = -10k -> pendingOut=10k.
+    stubEsploraFetch(
+      { [SINGLE_ADDR]: [{ value: 100_000, status: { confirmed: true, block_height: 949_900 } }] },
+      { [SINGLE_ADDR]: { funded: 50_000, spent: 60_000 } },
+    );
+    const balance = await btcBalanceFastQueryOptions({
+      account, isConnected: true, network: 'mainnet', walletType: 'keystore',
+    }).queryFn!({} as never);
+    expect(balance.pendingIn).toBe(0);
+    expect(balance.pendingOut).toBe(10_000);
+  });
+
+  it('no mempool activity: both pending fields are 0', async () => {
+    stubEsploraFetch(
+      { [SINGLE_ADDR]: [{ value: 100_000, status: { confirmed: true, block_height: 949_900 } }] },
+      { [SINGLE_ADDR]: { funded: 0, spent: 0 } },
+    );
+    const balance = await btcBalanceFastQueryOptions({
+      account, isConnected: true, network: 'mainnet', walletType: 'keystore',
+    }).queryFn!({} as never);
+    expect(balance.pendingIn).toBe(0);
+    expect(balance.pendingOut).toBe(0);
   });
 });

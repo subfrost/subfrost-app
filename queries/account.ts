@@ -731,36 +731,57 @@ function isConfirmedUtxo(raw: any): boolean {
 }
 
 async function fetchAddressBalance(rpcPath: string, address: string) {
-  // Use esplora_address::utxo (proven working in codebase) and sum values
+  // Use esplora_address (the address-stats endpoint) instead of
+  // esplora_address::utxo. The stats endpoint returns BOTH funded_txo_sum
+  // AND spent_txo_sum for chain + mempool independently, so we can compute
+  // the NET mempool delta — which is what the UI's "pending" label needs.
+  //
+  // 2026-05-17 mork1e regression: previously this summed mempool UTXOs
+  // at the address from esplora_address::utxo. That counted only INCOMING
+  // mempool outputs and silently ignored confirmed UTXOs being SPENT in
+  // mempool, so pending displayed as gross-incoming instead of net.
+  // Concrete: a pending tx spending one of mork's confirmed UTXOs to make
+  // a small payment + change showed pending = ~the full change amount
+  // (~60k sats) when the actual net pending was ~10k. Mork's chat
+  // ("Actual pending was 0.0001, app showed 0.0006"). The esplora_address
+  // stats endpoint gives both legs so the net is honest.
+  //
+  // chain_stats math: confirmed BTC at the address = funded_txo_sum - spent_txo_sum.
+  // mempool_stats math: pendingIn = funded_txo_sum, pendingOut = spent_txo_sum,
+  //                     net pending = funded_txo_sum - spent_txo_sum (signed).
   const response = await fetch(rpcPath, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     signal: AbortSignal.timeout(10_000),
     body: JSON.stringify({
       jsonrpc: '2.0',
-      method: 'esplora_address::utxo',
+      method: 'esplora_address',
       params: [address],
       id: 1,
     }),
   });
-  // Throw on HTTP errors — React Query will retry and preserve the last
-  // known balance rather than overwriting it with zeros.
-  if (!response.ok) throw new Error(`esplora_address::utxo HTTP ${response.status} for ${address}`);
+  if (!response.ok) throw new Error(`esplora_address HTTP ${response.status} for ${address}`);
   const json = await response.json();
-  if (json.error) throw new Error(`esplora_address::utxo: ${json.error?.message ?? JSON.stringify(json.error)}`);
-  const utxos = json.result;
-  if (!Array.isArray(utxos)) throw new Error(`esplora_address::utxo: unexpected result shape for ${address}`);
-
-  let confirmed = 0;
-  let mempool = 0;
-  for (const utxo of utxos) {
-    // esplora UTXO shape: always has integer `value` in sats.
-    const value = Number(utxo?.value ?? 0);
-    if (isConfirmedUtxo(utxo)) confirmed += value;
-    else mempool += value;
+  if (json.error) throw new Error(`esplora_address: ${json.error?.message ?? JSON.stringify(json.error)}`);
+  const stats = json.result;
+  if (!stats || typeof stats !== 'object') {
+    throw new Error(`esplora_address: unexpected result shape for ${address}`);
   }
 
-  return { confirmed, mempool, total: confirmed + mempool };
+  const chainFunded = Number(stats.chain_stats?.funded_txo_sum ?? 0);
+  const chainSpent = Number(stats.chain_stats?.spent_txo_sum ?? 0);
+  const mempoolFunded = Number(stats.mempool_stats?.funded_txo_sum ?? 0);
+  const mempoolSpent = Number(stats.mempool_stats?.spent_txo_sum ?? 0);
+
+  // confirmed = net BTC owned by the address on-chain.
+  // mempool = NET incoming pending (positive when more is coming in than
+  //   leaving; clamped to >=0 here — outgoing-net surfaces via mempool_out
+  //   for any consumer that wants the symmetric view).
+  const confirmed = Math.max(0, chainFunded - chainSpent);
+  const mempool = Math.max(0, mempoolFunded - mempoolSpent);
+  const mempool_out = Math.max(0, mempoolSpent - mempoolFunded);
+
+  return { confirmed, mempool, mempool_out, total: confirmed + mempool };
 }
 
 const BTC_BALANCE_CACHE_KEY = 'subfrost_btc_balance_cache';
@@ -849,10 +870,16 @@ export function btcBalanceFastQueryOptions(deps: BtcBalanceFastDeps) {
 
       const results = await Promise.all(addresses.map(addr => fetchAddressBalance(rpcPath, addr)));
 
-      let p2wpkh = 0, p2tr = 0, confirmedSpendable = 0, pendingIn = 0;
+      let p2wpkh = 0, p2tr = 0, confirmedSpendable = 0, pendingIn = 0, pendingOut = 0;
       for (let i = 0; i < addresses.length; i++) {
         const result = results[i];
+        // result.mempool / result.mempool_out are net per-address
+        // (funded_txo_sum vs spent_txo_sum from esplora_address stats —
+        // not gross UTXO sums). Aggregating those across addresses gives
+        // a wallet-wide net pending — which is what mork's "Actual
+        // pending was 0.0001 / app showed 0.0006" report demanded.
         pendingIn += result.mempool;
+        pendingOut += result.mempool_out;
         if (isWalletTaprootAddress(deps.account, addresses[i])) {
           p2tr += result.total;
         } else {
@@ -873,7 +900,7 @@ export function btcBalanceFastQueryOptions(deps: BtcBalanceFastDeps) {
         total: p2wpkh + p2tr,
         spendable: confirmedSpendable,
         pendingIn,
-        pendingOut: 0,
+        pendingOut,
       };
       cacheBtcBalance(deps.network, addressKey, balance);
       return balance;
