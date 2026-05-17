@@ -33,6 +33,7 @@ import {
   getBootAddresses,
   getHarness,
   getProvider,
+  simulate,
   type ProgressCallback,
 } from '@/lib/devnet/boot';
 import {
@@ -353,29 +354,23 @@ export async function openGuardianTrove(collateralSats: bigint, debtSats: bigint
   const { segwit, taproot } = getBootAddresses();
 
   // 1. Get frBTC signer address (opcode 103 on frBTC contract [32:0]).
+  //    Same resolution as boot.ts Phase 2 wrap — opcode 103 returns the x-only
+  //    32-byte public key; derive the P2TR address from it.
   let signerAddr = taproot;
   try {
-    const signerResult = await (provider as any).sandshrew_rpc_url
-      ? fetch('http://localhost:18888', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            jsonrpc: '2.0', id: 1,
-            method: 'alkanes_simulate',
-            params: [{ target: { block: '32', tx: '0' }, inputs: ['103'], alkanes: [],
-              transaction: '0x', block: '0x', height: '999', txindex: 0, vout: 0 }],
-          }),
-        }).then(r => r.json())
-      : null;
-    const raw = signerResult?.result?.execution?.data;
-    if (raw) {
-      const hex = raw.replace('0x', '');
-      const chunks: string[] = [];
-      for (let i = 0; i < hex.length; i += 2) chunks.push(hex.slice(i, i + 2));
-      const bytes = chunks.map(h => parseInt(h, 16));
-      const text = String.fromCharCode(...bytes).replace(/\0/g, '');
-      if (text.startsWith('bcrt') || text.startsWith('bc1') || text.startsWith('tb1')) {
-        signerAddr = text.trim();
+    const signerResult = await simulate('32:0', ['103']);
+    if (signerResult?.result?.execution?.data) {
+      const hex = (signerResult.result.execution.data as string).replace('0x', '');
+      if (hex.length === 64) {
+        const bitcoin = await import('bitcoinjs-lib');
+        const ecc = await import('@bitcoinerlab/secp256k1');
+        bitcoin.initEccLib(ecc);
+        const xOnly = Buffer.from(hex, 'hex');
+        const payment = bitcoin.payments.p2tr({
+          internalPubkey: xOnly,
+          network: bitcoin.networks.regtest,
+        });
+        if (payment.address) signerAddr = payment.address;
       }
     }
   } catch { /* fall through — use taproot as signer */ }
