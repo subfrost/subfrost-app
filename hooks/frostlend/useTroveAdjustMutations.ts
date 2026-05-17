@@ -19,6 +19,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   BORROWER_OPS_OPCODES,
   BORROWER_OPS_TX,
+  FROST_USD_GAS_COMPENSATION,
   MAX_BORROWING_FEE,
 } from '@/constants/frostlend';
 import { useFrostlendExecute } from './useFrostlendExecute';
@@ -201,10 +202,17 @@ export function useRepayFrostUsdMutation() {
 }
 
 // -- CloseTrove (opcode 3) -------------------------------------------------
-// Repay full debt + claim collateral. User sends full frostUSD debt as incoming alkane.
+// Repay net debt + claim collateral. The contract retrieves gas_comp internally
+// from the GasPool (same as Liquity v1 semantics). User only needs to send the
+// NET debt (raw_debt - gas_compensation) in frostUSD.
+// JOURNAL 2026-05-17: discovered via smoke test run 16 error "need 210950000000
+// of 4:512, have 190000000000" — wallet never accumulates gas_comp since it is
+// minted directly to GasPool on OpenTrove. Subtracting gas_comp here matches the
+// Liquity v1 BorrowerOps.closeTrove() semantics where user repays net_debt only.
 
 export type CloseTroveParams = {
-  /** Full frostUSD debt to repay (= trove.debt + ~0 of fees in normal close). */
+  /** Raw frostUSD debt from GetTroveDebt (net + gas_comp). The hook subtracts
+   *  gas_comp before building the input requirement so only net debt is sent. */
   totalDebtFrostUsdSats: bigint;
   feeRate: number;
 };
@@ -220,12 +228,17 @@ export function useCloseTroveMutation() {
       if (!cached) throw new Error('No trove found in local cache');
       if (!cached.authTokenId) throw new Error('Auth token unknown — cannot close trove');
 
+      // Net debt = raw_debt - gas_comp. The GasPool covers gas_comp internally.
+      const netDebt = params.totalDebtFrostUsdSats > FROST_USD_GAS_COMPENSATION
+        ? params.totalDebtFrostUsdSats - FROST_USD_GAS_COMPENSATION
+        : params.totalDebtFrostUsdSats;
+
       const FROST_USD_TX = 0x200;
       const protostones = buildBorrowerOpsCellpack(BORROWER_OPS_OPCODES.CloseTrove, [
         BigInt(cached.troveId),
       ]);
       const inputRequirements = combineInputRequirements([
-        `4:${FROST_USD_TX}:${params.totalDebtFrostUsdSats.toString()}`,
+        `4:${FROST_USD_TX}:${netDebt.toString()}`,
         getAuthTokenInputRequirement(cached.authTokenId),
       ]);
 

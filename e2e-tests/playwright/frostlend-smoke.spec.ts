@@ -783,13 +783,15 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
           // Wait for the "deployed" green span to appear — this is the ONLY reliable
           // signal. The "Deploy frostlend" button text changes to "Deploying…" during
           // the deploy, so checking for button-gone fires prematurely.
+          // Timeout: 360s (6 min) — the full deploy is ~28 transactions on devnet
+          // (11 deploys + 9 inits + 7 finalizeAuth + 1 PostPrice), each ~10s = ~280s min.
           const deployFinished = await page.waitForFunction(
             () => {
               const spans = Array.from(document.querySelectorAll('span'));
               return spans.some(s => s.textContent?.trim() === 'deployed' &&
                 s.classList.contains('text-green-400'));
             },
-            { timeout: 240_000 },
+            { timeout: 360_000 },
           ).then(() => true).catch(() => false);
 
           await page.screenshot({ path: '/tmp/fl-flow1-deploy-result.png' });
@@ -982,6 +984,68 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
             () => /\$[\d,]+/.test(document.body.innerText),
             { timeout: 60_000 },
           ).catch(() => { console.log('[frostlend-smoke] oracle price not visible — proceeding anyway'); });
+
+          // If the oracle shows < $90k (e.g. still at $50k default), re-set via DevPanel.
+          // This can happen when the React Query cache on the /lend page holds a stale
+          // $50k result from before Step 1b's PostPrice mined — the /lend page mounts
+          // fresh after the wrap and may get a cached response from before the oracle update.
+          const oraclePriceOnLend = await page.evaluate(() => {
+            const matches = Array.from(document.body.innerText.matchAll(/\$([\d,]+)(?:\.\d*)?/g));
+            const prices = matches.map(m => Number(m[1].replace(/,/g, ''))).filter(p => p > 1000);
+            return prices.length > 0 ? Math.max(...prices) : 0;
+          }).catch(() => 0);
+
+          if (oraclePriceOnLend < 90_000) {
+            console.log(`[frostlend-smoke] Flow 2: oracle on /lend = $${oraclePriceOnLend} — re-setting to $${ORACLE_PRICE_USD} via DevPanel`);
+            await openDevPanel(page);
+            // Look for the deployed status first, then set
+            await page.waitForFunction(
+              () => {
+                const spans = Array.from(document.querySelectorAll('span'));
+                return spans.some(s => s.textContent?.trim() === 'deployed' && s.classList.contains('text-green-400'));
+              },
+              { timeout: 15_000 },
+            ).catch(() => {});
+            const setResult = await page.evaluate((price) => {
+              const inputs = Array.from(document.querySelectorAll('input[inputmode="decimal"]'));
+              const oracleInput = inputs.find(el => el.classList.contains('font-mono')) as HTMLInputElement | undefined;
+              if (!oracleInput) return 'no-input';
+              const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!;
+              setter.call(oracleInput, String(price));
+              oracleInput.dispatchEvent(new Event('input', { bubbles: true }));
+              oracleInput.dispatchEvent(new Event('change', { bubbles: true }));
+              const parent = oracleInput.parentElement;
+              if (!parent) return 'no-parent';
+              const setBtn = Array.from(parent.querySelectorAll('button')).find(b => b.textContent?.trim() === 'Set');
+              if (!setBtn || (setBtn as HTMLButtonElement).disabled) return 'no-btn';
+              (setBtn as HTMLElement).click();
+              return 'clicked';
+            }, ORACLE_PRICE_USD);
+            console.log(`[frostlend-smoke] Flow 2: re-set oracle result = ${setResult}`);
+            if (setResult === 'clicked') {
+              await page.waitForFunction(
+                () => {
+                  const divs = Array.from(document.querySelectorAll('div'));
+                  return divs.some(d => /Price\s*→/i.test(d.textContent || ''));
+                },
+                { timeout: 30_000 },
+              ).catch(() => {});
+              await mineOneBlock(page);
+              await waitForIndexerSync(page, 30_000);
+            }
+            await closeDevPanel(page);
+            // Navigate back to /lend to force useSystemData to refetch with new price
+            await navToLend(page);
+            await dismissDisclaimer(page);
+            await page.waitForFunction(
+              () => {
+                const matches = Array.from(document.body.innerText.matchAll(/\$([\d,]+)(?:\.\d*)?/g));
+                const prices = matches.map(m => Number(m[1].replace(/,/g, ''))).filter(p => p > 1000);
+                return prices.some(p => p >= 90_000);
+              },
+              { timeout: 60_000 },
+            ).catch(() => { console.log('[frostlend-smoke] Flow 2: oracle $90k+ not visible after re-set'); });
+          }
 
           // Fill collateral and debt. React 18 controlled inputs ignore fill() when
           // the form re-renders back to its useState default. Use triple-click to
