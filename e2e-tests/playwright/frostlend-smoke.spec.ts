@@ -2459,8 +2459,11 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
           });
           needsNewTrove = true;
           // Force React Query invalidation so the /lend page shows Open Trove form.
+          // app/providers.tsx listens for 'network-changed' CustomEvent and calls
+          // queryClient.invalidateQueries() — this causes the trove-status query to
+          // re-fetch and the OpenTrovePanel to render once it sees status != Active.
           await page.evaluate(() => {
-            window.dispatchEvent(new StorageEvent('storage', { key: 'frostlend_cache_reset' }));
+            window.dispatchEvent(new CustomEvent('network-changed', { detail: 'devnet' }));
           });
           await waitForIndexerSync(page, 30_000);
           await navToLend(page);
@@ -2513,9 +2516,16 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
             });
             if (s === 'enabled') return true;
             if (s === 'missing') {
-              // Form not in open-trove mode — navigate back to /lend
-              await page.goto('http://localhost:3000/lend');
-              await page.waitForTimeout(3000);
+              // Form shows Adjust panel instead of Open Trove — dispatch network-changed
+              // to trigger queryClient.invalidateQueries() (see app/providers.tsx:79-84)
+              // which forces trove-status re-fetch. Avoid page.goto — full reloads cause
+              // a ~2min devnet state restore from IndexedDB.
+              await page.evaluate(() => {
+                window.dispatchEvent(new CustomEvent('network-changed', { detail: 'devnet' }));
+              });
+              await page.waitForTimeout(2000);
+              // Also try client-side nav to refresh the lend page state.
+              await navToLend(page);
             }
           }
           return false;
@@ -2647,7 +2657,18 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
     // subsequent owner-op throws "Auth token unknown" and falls through to a
     // stale captureTxid. Recover by querying GetTroveAuthToken(lastTroveId)
     // directly from chain and patching localStorage.
+    //
+    // IMPORTANT: Only patch if the trove is Active (status=1). If the trove was
+    // liquidated (status=3), patching the cache would cause the UI to show the
+    // Adjust panel instead of the Open Trove form, blocking the second trove open.
+    let troveIsActive = false;
     if (lastTroveId > 0n) {
+      try {
+        const statusHex = await simRead(page, { ...FL.TROVE_MANAGER, inputs: [OP.TM_GetTroveStatus, String(lastTroveId)] });
+        troveIsActive = hexToU8(statusHex) === 1;
+      } catch { troveIsActive = false; }
+    }
+    if (lastTroveId > 0n && troveIsActive) {
       try {
         // Find the wallet taproot address. Try two sources in order:
         // 1) existing frostlend:trove key (already has address embedded)
