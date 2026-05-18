@@ -91,29 +91,46 @@ async function presplitAuthTokenUtxo(
   const protostones = `[4,${BORROWER_OPS_TX},${BORROWER_OPS_OPCODES.RepayFrostUsd},${cachedTrove.troveId},${PRESPLIT_REPAY_AMOUNT}]:v0:v0`;
   const inputRequirements = `4:${FROST_USD_TX}:${PRESPLIT_REPAY_AMOUNT},${cachedTrove.authTokenId}:1`;
   console.log('[frostlend][SP presplit] running 1-sat RepayFrostUsd to separate auth token', { network, address, troveId: cachedTrove.troveId, authTokenId: cachedTrove.authTokenId });
+  // Snapshot the auth token's current outpoint BEFORE presplit so we can detect
+  // when espo indexes the NEW outpoint (not just the old one from OpenTrove).
+  // The poll checks for a DIFFERENT outpoint carrying [2:N] than what existed before.
+  const authTxStr = cachedTrove.authTokenId.split(':')[1];
+  const authTxBig = authTxStr ? BigInt(authTxStr) : null;
+  let prePresplitOutpoint: string | null = null;
+  if (authTxBig !== null && network) {
+    try {
+      const preReceipts = await fetchUserBlock2Receipts(network, address);
+      const existing = preReceipts.find(r => r.tx === authTxBig);
+      if (existing) prePresplitOutpoint = `${existing.outpoint.txid}:${existing.outpoint.vout}`;
+      console.log(`[frostlend][SP presplit] pre-presplit outpoint for ${cachedTrove.authTokenId}: ${prePresplitOutpoint ?? 'not found'}`);
+    } catch { /* fall through — poll will still work without snapshot */ }
+  }
+
   try {
     await execute({ protostones, inputRequirements, feeRate });
-    // Poll alkanes_protorunesbyaddress until the auth token appears at a fresh outpoint.
-    // This replaces the hardcoded 3s delay: instead of guessing, we wait until espo
-    // has actually indexed the presplit block. Without this gate, getProtorunesByOutpoint
-    // on the new [2:N] UTXO returns empty (indexer lag) → cachedUtxos marks it clean →
-    // WASM burns it for fees in the subsequent SP deposit (confirmed Run 31, 2026-05-17).
-    //
-    // The authTokenId is "2:<tx>"; we parse the tx field and poll block2 receipts
-    // until that tx appears. Timeout = 30s (should be well within espo's indexing window).
-    const authTxStr = cachedTrove.authTokenId.split(':')[1];
-    const authTxBig = authTxStr ? BigInt(authTxStr) : null;
+    // Poll alkanes_protorunesbyaddress until the auth token appears at a NEW outpoint.
+    // We compare against prePresplitOutpoint to detect when espo indexes the presplit output.
+    // Without this gate, getProtorunesByOutpoint on the new [2:N] UTXO returns empty
+    // (indexer lag) → cachedUtxos marks it "asserted clean" → WASM burns it for fees.
+    // (confirmed Run 31, 2026-05-17; fixed by outpoint-diff poll, Run 33+)
     if (authTxBig !== null && network) {
       const deadline = Date.now() + 30_000;
       let found = false;
       while (Date.now() < deadline) {
         try {
           const receipts = await fetchUserBlock2Receipts(network, address);
-          if (receipts.some(r => r.tx === authTxBig)) { found = true; break; }
+          const current = receipts.find(r => r.tx === authTxBig);
+          if (current) {
+            const currentOutpoint = `${current.outpoint.txid}:${current.outpoint.vout}`;
+            // Found at a NEW outpoint (presplit moved the token to a fresh UTXO)
+            if (prePresplitOutpoint === null || currentOutpoint !== prePresplitOutpoint) {
+              found = true; break;
+            }
+          }
         } catch { /* ignore transient errors */ }
         await new Promise<void>(r => setTimeout(r, 1000));
       }
-      console.log(`[frostlend][SP presplit] espo poll: auth token ${cachedTrove.authTokenId} ${found ? 'confirmed indexed' : 'timed out (proceeding)'}`);
+      console.log(`[frostlend][SP presplit] espo poll: auth token ${cachedTrove.authTokenId} ${found ? 'confirmed at new outpoint' : 'timed out (proceeding)'}`);
     } else {
       await new Promise<void>(r => setTimeout(r, 3000));
     }
