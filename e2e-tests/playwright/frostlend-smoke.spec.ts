@@ -2134,6 +2134,40 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
 
         if (openBtnEnabled) {
           const preClickTxidsOpen2 = await snapshotTxids(page);
+          // Snapshot [2:*] receipts BEFORE clicking — diff afterward to find the new auth token.
+          const walletAddr = await page.evaluate(() => {
+            // Same sources as trove-cache recovery below
+            for (let i = 0; i < localStorage.length; i++) {
+              const k = localStorage.key(i);
+              if (k && k.startsWith('frostlend:trove:devnet:')) return k.replace('frostlend:trove:devnet:', '');
+            }
+            const raw = localStorage.getItem('subfrost_browser_wallet_addresses');
+            if (raw) { try { const p = JSON.parse(raw); if (p?.taproot?.address) return p.taproot.address; } catch {} }
+            const m = document.body.innerText.match(/bcrt1p[a-z0-9]{39,59}/);
+            return m ? m[0] : null;
+          });
+          const preOpenReceipts: bigint[] = walletAddr
+            ? await page.evaluate(async (addr) => {
+                const HEX64 = /^0x/;
+                try {
+                  const res = await fetch('http://localhost:18888', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ jsonrpc: '2.0', method: 'alkanes_protorunesbyaddress',
+                      params: [{ address: addr, protocolTag: '1' }], id: 1 }),
+                  });
+                  const data = await res.json() as any;
+                  const outpoints = data?.result?.outpoints ?? [];
+                  const txNums: bigint[] = [];
+                  for (const op of outpoints) {
+                    for (const r of (op.runes ?? [])) {
+                      if (r.rune?.id?.block === 2) txNums.push(BigInt(r.rune.id.tx));
+                    }
+                  }
+                  return txNums.map(n => n.toString());
+                } catch { return []; }
+              }, walletAddr).then(arr => arr.map(BigInt)).catch(() => [] as bigint[])
+            : [];
+
           await page.evaluate(() => {
             const btn = Array.from(document.querySelectorAll('button')).find(b => b.textContent?.trim() === 'Open Trove');
             if (btn) (btn as HTMLElement).click();
@@ -2145,10 +2179,72 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
           if (t) {
             lastTxid = t;
             console.log(`[frostlend-smoke] Second trove txid: ${t}`);
-            // Update lastTroveId — second trove = TroveCount at this point
-            const tc2Hex = await simRead(page, { ...FL.TROVE_MANAGER, inputs: [OP.TM_GetTroveCount] });
-            lastTroveId = hexToU128(tc2Hex);
-            console.log(`[frostlend-smoke] Second trove ID: ${lastTroveId}`);
+
+            // Identify the new trove ID via receipt diff + reverse-lookup.
+            // TroveCount != new trove ID when prior troves were liquidated
+            // (sequence counter is monotonic; TroveCount is only active troves).
+            if (walletAddr) {
+              try {
+                const afterReceipts = await page.evaluate(async (addr) => {
+                  try {
+                    const res = await fetch('http://localhost:18888', {
+                      method: 'POST', headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ jsonrpc: '2.0', method: 'alkanes_protorunesbyaddress',
+                        params: [{ address: addr, protocolTag: '1' }], id: 1 }),
+                    });
+                    const data = await res.json() as any;
+                    const outpoints = data?.result?.outpoints ?? [];
+                    const txNums: string[] = [];
+                    for (const op of outpoints) {
+                      for (const r of (op.runes ?? [])) {
+                        if (r.rune?.id?.block === 2) txNums.push(r.rune.id.tx.toString());
+                      }
+                    }
+                    return txNums;
+                  } catch { return []; }
+                }, walletAddr);
+
+                const preSet = new Set(preOpenReceipts.map(n => n.toString()));
+                const newTx = afterReceipts.find(tx => !preSet.has(tx));
+                if (newTx) {
+                  const newAuthTokenId = `2:${newTx}`;
+                  // Reverse-lookup: find the trove ID whose GetTroveAuthToken == newTx
+                  const tmCountHex = await simRead(page, { ...FL.TROVE_MANAGER, inputs: [OP.TM_GetTroveCount] });
+                  const tmCount = hexToU128(tmCountHex);
+                  const upperBound = Number(tmCount) * 2 + 10;
+                  let foundTroveId: bigint | null = null;
+                  for (let i = 1; i <= upperBound; i++) {
+                    const authHex = await simRead(page, { ...FL.TROVE_MANAGER, inputs: [OP.TM_GetTroveAuthToken, String(i)] });
+                    const clean = (authHex || '').replace(/^0x/, '');
+                    if (clean.length >= 64) {
+                      const txBytes = clean.slice(32, 64);
+                      const txLe = BigInt('0x' + (txBytes.match(/.{2}/g) || []).reverse().join(''));
+                      if (txLe.toString() === newTx) { foundTroveId = BigInt(i); break; }
+                    }
+                  }
+                  if (foundTroveId !== null) {
+                    lastTroveId = foundTroveId;
+                    console.log(`[frostlend-smoke] Second trove ID (receipt diff): ${lastTroveId}, authTokenId: ${newAuthTokenId}`);
+                  } else {
+                    // Fallback: use TroveCount (may be wrong if guardian trove is still active)
+                    lastTroveId = tmCount;
+                    console.log(`[frostlend-smoke] Second trove ID (fallback TroveCount): ${lastTroveId}`);
+                  }
+                } else {
+                  const tc2Hex = await simRead(page, { ...FL.TROVE_MANAGER, inputs: [OP.TM_GetTroveCount] });
+                  lastTroveId = hexToU128(tc2Hex);
+                  console.log(`[frostlend-smoke] Second trove ID (no new receipt, TroveCount): ${lastTroveId}`);
+                }
+              } catch (e) {
+                const tc2Hex = await simRead(page, { ...FL.TROVE_MANAGER, inputs: [OP.TM_GetTroveCount] });
+                lastTroveId = hexToU128(tc2Hex);
+                console.log(`[frostlend-smoke] Second trove ID (error fallback): ${lastTroveId} — ${e}`);
+              }
+            } else {
+              const tc2Hex = await simRead(page, { ...FL.TROVE_MANAGER, inputs: [OP.TM_GetTroveCount] });
+              lastTroveId = hexToU128(tc2Hex);
+              console.log(`[frostlend-smoke] Second trove ID (no wallet addr): ${lastTroveId}`);
+            }
           }
         } else {
           console.log('[frostlend-smoke] Second Open Trove button not enabled — adjust flows may skip');
