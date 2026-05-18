@@ -533,6 +533,13 @@ async function navToLend(page: Page): Promise<void> {
  */
 async function openDevPanel(page: Page): Promise<void> {
   await recoverFromOom(page);
+  // If the panel is already expanded (✕ button visible), the badge is hidden —
+  // close it first so the badge re-appears, then re-open cleanly.
+  const closeBtnPrecheck = page.locator('button', { hasText: '✕' });
+  if (await closeBtnPrecheck.isVisible({ timeout: 2000 }).catch(() => false)) {
+    await closeBtnPrecheck.click();
+    await page.waitForTimeout(500);
+  }
   const badge = page.locator('button', { hasText: /Devnet H:/ });
   await badge.waitFor({ state: 'visible', timeout: 30_000 });
   await badge.click();
