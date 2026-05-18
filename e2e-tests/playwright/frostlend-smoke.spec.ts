@@ -2460,18 +2460,24 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
           needsNewTrove = true;
           // Force React Query invalidation so the /lend page shows Open Trove form.
           await page.evaluate(() => {
-            // Dispatch a storage event to trigger any listeners
             window.dispatchEvent(new StorageEvent('storage', { key: 'frostlend_cache_reset' }));
           });
+          await waitForIndexerSync(page, 30_000);
           await navToLend(page);
-          await page.waitForTimeout(3000);
+          await page.waitForTimeout(5000);
         } else {
           console.log(`[frostlend-smoke] Trove ${lastTroveId} on-chain status=${troveStatus} (Active) — using existing trove`);
         }
       }
 
       if (needsNewTrove) {
-        // Fill coll / debt — use 0.05 for better ICR
+        // Fill coll / debt — use 0.05 for better ICR.
+        // Wait for indexer to reflect the second wrap's frBTC balance before filling,
+        // otherwise the OpenTrove button stays disabled (wallet shows 0 frBTC).
+        await waitForIndexerSync(page, 30_000);
+        await page.waitForTimeout(3000);
+        await navToLend(page);
+        await page.waitForTimeout(3000);
         // Wait for oracle price before filling — same reasoning as Flow 2.
         await page.waitForFunction(
           () => /\$[\d,]+/.test(document.body.innerText),
