@@ -269,7 +269,17 @@ describe('fetchWalletState', () => {
     expect(mvCalls[0].blockTag).toBe('latest');
   });
 
-  it('tolerates per-outpoint failure (allSettled)', async () => {
+  // ---------------------------------------------------------------------------
+  // 2026-05-18 mork1e regression: per-outpoint protorune fanout partial
+  // failures were silently returning incomplete state which got cached
+  // under the current tipHash AND overwrote the last-good snapshot. Mork's
+  // wallet showed "0 TORTILLA / 0 DIESEL" for hours because ONE of his dust
+  // outpoints' fanout failed and the partial-empty state got persisted.
+  // verify-display-mainnet.ts I1 invariant catches this; the fix throws
+  // PartialFanoutError so the route falls back to last-good (complete)
+  // instead of caching the partial.
+  // ---------------------------------------------------------------------------
+  it('throws PartialFanoutError on per-outpoint failure (no silent partial state)', async () => {
     stageMocks({
       tipHeight: 100,
       tipHash: 'cafe',
@@ -282,18 +292,34 @@ describe('fetchWalletState', () => {
         ],
       ],
       outpointBalances: [
-        'error',
+        'error', // first outpoint fails the per-outpoint probe
         [{ block: 2, tx: 0, amount: '7000' }],
       ],
     });
 
-    const state = await fetchWalletState('mainnet', [TAPROOT_ADDR]);
+    await expect(fetchWalletState('mainnet', [TAPROOT_ADDR])).rejects.toThrow(
+      /PartialFanoutError|per-outpoint protorune fanout failed/,
+    );
+  });
 
-    expect(state.utxos).toHaveLength(2);
-    // The failed outpoint just has an empty balance sheet, not a hard throw
-    expect(state.utxos[0].alkanes).toEqual([]);
-    expect(state.utxos[1].alkanes).toEqual([{ block: 2, tx: 0, amount: '7000' }]);
-    expect(state.alkanes).toEqual({ '2:0': '7000' });
+  it('throws PartialFanoutError surfaces failed outpoint ids', async () => {
+    stageMocks({
+      tipHeight: 100,
+      tipHash: 'cafe',
+      metashrewHeight: 100,
+      bitcoindHeight: 100,
+      addressUtxos: [
+        [
+          { txid: 'a'.repeat(64), vout: 0, value: 546, blockHeight: 100 },
+          { txid: 'b'.repeat(64), vout: 0, value: 546, blockHeight: 100 },
+        ],
+      ],
+      outpointBalances: ['error', 'error'],
+    });
+
+    await expect(fetchWalletState('mainnet', [TAPROOT_ADDR])).rejects.toThrow(
+      /aaaaa|bbbbb/, // at least one of the failed outpoint ids appears
+    );
   });
 
   it('annotates per-address bucketing for segwit + taproot addresses', async () => {

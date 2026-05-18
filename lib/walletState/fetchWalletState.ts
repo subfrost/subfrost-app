@@ -30,6 +30,22 @@ import { getAddressUtxos, getHeight } from '@/lib/alkanes/rpc';
 import { getProtorunesByOutpointMV } from '@/lib/alkanes/protorunesByOutpointMV';
 import { getRpcUrl } from '@/utils/getConfig';
 import { getCurrentTipHash } from './tipHash';
+
+/**
+ * Thrown when one or more per-outpoint protorune fanouts fail mid-way.
+ * The route layer catches this and falls back to the last-good cached
+ * snapshot instead of caching a partial (silently-wrong) result.
+ * Always-eventually-correct: as soon as the per-outpoint reads
+ * stabilise on a subsequent request, the cache populates with a
+ * complete snapshot.
+ */
+export class PartialFanoutError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'PartialFanoutError';
+  }
+}
+
 import {
   withPendingAdjustment,
   type MempoolAdjustmentReport,
@@ -291,16 +307,34 @@ export async function fetchWalletState(
       }),
     );
     let failedFanouts = 0;
-    for (const r of settled) {
+    const failedOutpoints: string[] = [];
+    for (let i = 0; i < settled.length; i++) {
+      const r = settled[i];
       if (r.status === 'fulfilled') {
         balanceSheets.set(r.value.key, r.value.alkanes);
       } else {
         failedFanouts += 1;
+        const u = dustOutpoints[i];
+        failedOutpoints.push(`${u.txid}:${u.vout}`);
       }
     }
     if (failedFanouts > 0) {
-      console.warn(
-        `[walletState] ${failedFanouts}/${dustOutpoints.length} per-outpoint fanouts failed for network=${network}`,
+      // 2026-05-18 mork1e regression: previously this logged a warning
+      // and returned the partial state, which got cached in Redis under
+      // the current tipHash AND overwrote the last-good snapshot. The
+      // app then displayed "0 TORTILLA / 0 DIESEL" until the next block
+      // even though only ONE of mork's dust outpoints had failed the
+      // protorune fanout. The harness (scripts/verify-display-mainnet.ts)
+      // I1 invariant catches this class.
+      //
+      // New behavior: throw a PartialFanoutError so the API route's
+      // catch fires last-good fallback (returns the previous COMPLETE
+      // snapshot instead of caching the incomplete one). Eventually-
+      // correct as soon as the per-outpoint reads stabilise.
+      throw new PartialFanoutError(
+        `per-outpoint protorune fanout failed for ${failedFanouts}/${dustOutpoints.length} dust UTXOs ` +
+        `on network=${network}: ${failedOutpoints.slice(0, 5).join(', ')}` +
+        `${failedOutpoints.length > 5 ? ` (+ ${failedOutpoints.length - 5} more)` : ''}`,
       );
     }
   }
