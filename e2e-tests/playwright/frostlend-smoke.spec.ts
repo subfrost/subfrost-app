@@ -10,7 +10,7 @@
  *   Flow  1: FrostlendDevPanel deploy  → all 11 contracts deployed (5 phases)
  *   Flow  2: OpenTrove (0.03 frBTC, 1800 frostUSD) → frostUSD toast fires
  *   Flow  3: SP deposit (1200 frostUSD) → SP total increases
- *   Flow  4: Oracle drop −25% via DevPanel → ICR bar turns red
+ *   Flow  4: Oracle drop −87% ($100k → $13k) via DevPanel absolute input → ICR bar turns red
  *   Flow  5: Batch-liquidate via DevPanel → trove closed
  *   Flow  6: SP withdraw → frBTC gain returned, toast fires
  *   Flow  7: AddCollateral (+0.001 frBTC to second trove)
@@ -1728,7 +1728,12 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
       }
     }
 
-    // ── Flow 4: Oracle drop −25% ─────────────────────────────────────────────
+    // ── Flow 4: Oracle drop to $TARGET_PRICE_USD ─────────────────────────────
+    // DevPanel only has preset buttons -10/-25/-50/-75%. Instead of using a
+    // preset, set the oracle to the exact target price via the absolute input.
+    // Target: $13k → user ICR = 0.1998×13k/2712.5 = 95.8% < MCR 110% (liquidatable)
+    //         guardian ICR = 0.20×13k/1800 = 144% > MCR 110% (safe)
+    const ORACLE_TARGET_USD = Math.floor(ORACLE_PRICE_USD * (1 - ORACLE_DROP_PCT / 100));
     {
       const flow: FlowResult = {
         name: `oracle_drop_${ORACLE_DROP_PCT}pct`,
@@ -1743,7 +1748,7 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
       };
 
       try {
-        console.log(`[frostlend-smoke] Flow 4: Oracle drop -${ORACLE_DROP_PCT}%`);
+        console.log(`[frostlend-smoke] Flow 4: Oracle drop to $${ORACLE_TARGET_USD} (−${ORACLE_DROP_PCT}% from $${ORACLE_PRICE_USD})`);
         await openDevPanel(page);
 
         // Wait for the DevPanel to reflect isDeployed=true (refreshPrice async fires on mount)
@@ -1755,26 +1760,35 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
           { timeout: 90_000 },
         ).catch(() => console.log('[frostlend-smoke] Flow 4: DevPanel deployed status not seen — continuing anyway'));
 
-        // Click the -50% preset button in FrostlendDevPanel
-        const dropBtnClicked = await page.evaluate((pct) => {
-          const btns = Array.from(document.querySelectorAll('button'));
-          const dropBtn = btns.find(b => b.textContent?.trim() === `-${pct}%`);
-          if (dropBtn && !(dropBtn as HTMLButtonElement).disabled) {
-            (dropBtn as HTMLElement).click();
-            return true;
-          }
-          return false;
-        }, ORACLE_DROP_PCT);
+        // Set absolute price via the oracle input field + "Set" button.
+        // DevPanel only has preset buttons -10/-25/-50/-75%; ORACLE_DROP_PCT=87 has no preset.
+        const setResult = await page.evaluate((targetPrice) => {
+          const inputs = Array.from(document.querySelectorAll('input[inputmode="decimal"]'));
+          const oracleInput = inputs.find(el => el.classList.contains('font-mono')) as HTMLInputElement | undefined;
+          if (!oracleInput) return 'no-input';
+          const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!;
+          setter.call(oracleInput, String(targetPrice));
+          oracleInput.dispatchEvent(new Event('input', { bubbles: true }));
+          oracleInput.dispatchEvent(new Event('change', { bubbles: true }));
+          const parent = oracleInput.parentElement;
+          if (!parent) return 'no-parent';
+          const setBtn = Array.from(parent.querySelectorAll('button')).find(b => b.textContent?.trim() === 'Set');
+          if (!setBtn || (setBtn as HTMLButtonElement).disabled) return 'no-set-btn';
+          (setBtn as HTMLElement).click();
+          return 'clicked';
+        }, ORACLE_TARGET_USD);
+
+        const dropBtnClicked = setResult === 'clicked';
 
         if (!dropBtnClicked) {
           flow.status = 'skipped';
-          flow.skip_reason = 'oracle_drop_button_not_found_or_disabled';
-          console.log(`[frostlend-smoke] Flow 4 skipped — -${ORACLE_DROP_PCT}% button not found or disabled`);
+          flow.skip_reason = `oracle_set_failed: ${setResult}`;
+          console.log(`[frostlend-smoke] Flow 4 skipped — oracle set failed: ${setResult}`);
           await closeDevPanel(page);
           report.flows.push(flow);
           saveReport(report);
         } else {
-          // Wait for the result text to appear (e.g. "Dropped 25% → $37500")
+          // Wait for the result text from "Set" button (e.g. "Price → $13000")
           const resultAppeared = await page.waitForFunction(
             () => {
               const divs = Array.from(document.querySelectorAll('div'));
@@ -1790,10 +1804,10 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
 
           if (resultAppeared) {
             flow.status = 'success';
-            flow.note = `oracle dropped ${ORACLE_DROP_PCT}% — ICR bar should show red if trove is now undercollateralised`;
-            console.log('[frostlend-smoke] Flow 4: oracle price dropped');
+            flow.note = `oracle set to $${ORACLE_TARGET_USD} (−${ORACLE_DROP_PCT}%) — ICR bar should show red if trove is now undercollateralised`;
+            console.log(`[frostlend-smoke] Flow 4: oracle price set to $${ORACLE_TARGET_USD}`);
           } else {
-            flow.error = 'oracle drop did not produce result text within timeout';
+            flow.error = `oracle set to $${ORACLE_TARGET_USD} did not produce result text within timeout`;
           }
 
           await closeDevPanel(page);
@@ -2340,8 +2354,8 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
     }
 
     // Re-open trove with same params (oracle has been dropped — re-raise to $100k first
-    // so 0.05 frBTC × $100k / 1800 = ICR 277% > MCR. Without re-raise, oracle is at $25k
-    // after Flow 4's 50% drop, giving ICR 69% which keeps the Open Trove button disabled).
+    // so 0.1998 frBTC × $100k / 1800 = ICR 1110% > MCR. Without re-raise, oracle is at $13k
+    // after Flow 4's 87% drop, giving ICR ~144% which may still allow open but with less headroom).
     console.log('[frostlend-smoke] Pre-step: re-raising oracle to $100k before opening second trove...');
     {
       try {
@@ -3332,7 +3346,11 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
           if (await btcBtn12.isEnabled({ timeout: 5000 }).catch(() => false)) {
             console.log('[frostlend-smoke] Flow 12: re-funding wallet before Redeem');
             await btcBtn12.click();
-            await page.waitForTimeout(60_000);
+            // 90s wait: the devnet +1 BTC faucet mines synchronously but espo and
+            // Bitcoin RPC both need time to acknowledge the new UTXO. 60s was causing
+            // waitForIndexerSync to timeout → cachedUtxos built on unindexed UTXO →
+            // WASM call fails with "UTXO not found" (Run 32).
+            await page.waitForTimeout(90_000);
             await recoverFromOom(page);
             console.log('[frostlend-smoke] Flow 12: re-fund complete');
           }
@@ -3340,7 +3358,11 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
         const closeBtn12 = page.locator('button', { hasText: '✕' });
         if (await closeBtn12.isVisible({ timeout: 3000 }).catch(() => false)) await closeBtn12.click();
         await page.waitForTimeout(500);
-        await waitForIndexerSync(page, 30_000);
+        await waitForIndexerSync(page, 60_000);
+        // Extra settle: even after indexer sync, the Bitcoin RPC's UTXO set
+        // acknowledgment can lag by a few seconds on devnet. Without this,
+        // select_utxos picks the fresh UTXO but getrawtransaction returns null.
+        await page.waitForTimeout(8_000);
         await navToLend(page);
         await page.waitForTimeout(2000);
 
