@@ -34,6 +34,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import type { Network } from '@/utils/constants';
 
+// Upstream JSON-RPC endpoints. Must match the table in
+// app/api/rpc/[[...segments]]/route.ts:RPC_ENDPOINTS — server-side self-fetch
+// to /api/rpc fails inside the Cloud Run container (no loopback for the
+// public hostname), so we POST upstream directly. If you change the upstream
+// for a network in /api/rpc, change it here too.
+const UPSTREAM_RPC: Record<string, string> = {
+  mainnet: 'https://mainnet.subfrost.io/v4/subfrost',
+  testnet: 'https://testnet.subfrost.io/v4/5d37098b75581792a44b9d230d48aa75',
+  signet: 'https://signet.subfrost.io/v4/5d37098b75581792a44b9d230d48aa75',
+  regtest: 'https://regtest.subfrost.io/v4/5d37098b75581792a44b9d230d48aa75',
+  'regtest-local': 'http://localhost:18888',
+  'qubitcoin-regtest': 'https://meta.lake.direct',
+  'subfrost-regtest': 'https://regtest.subfrost.io/v4/5d37098b75581792a44b9d230d48aa75',
+  oylnet: 'https://regtest.subfrost.io/v4/5d37098b75581792a44b9d230d48aa75',
+};
+
 interface DispatchResult {
   method: string;
   params: unknown[];
@@ -82,13 +98,19 @@ export async function GET(
       );
     }
 
-    // Route through our own /api/rpc proxy. On the server this means an
-    // absolute URL; deriving the origin from the inbound request keeps
-    // staging / prod / preview deploys self-routing without env config.
-    const origin = new URL(request.url).origin;
-    const rpcUrl = `${origin}/api/rpc?network=${encodeURIComponent(network)}`;
+    // POST upstream directly. The /api/rpc proxy is for browser CORS — on
+    // the server we already have outbound HTTPS, and self-fetching the
+    // public hostname inside the Cloud Run container fails ("fetch failed"
+    // — verified 2026-05-18 on staging deploy 4c87c7c3).
+    const upstreamUrl = UPSTREAM_RPC[network];
+    if (!upstreamUrl) {
+      return NextResponse.json(
+        { error: `Unknown network "${network}". Valid: ${Object.keys(UPSTREAM_RPC).join(', ')}` },
+        { status: 400 },
+      );
+    }
 
-    const upstream = await fetch(rpcUrl, {
+    const upstream = await fetch(upstreamUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
