@@ -111,6 +111,6 @@ export default defineConfig({
     },
   ],
 
-  // Global test timeout — cold devnet boot can take 10-20 min on first run
-  timeout: 1_200_000,
+  // Global test timeout — frostlend cold boot takes 15-20 min; per-test overrides up to 30 min
+  timeout: 1_800_000,
 });
