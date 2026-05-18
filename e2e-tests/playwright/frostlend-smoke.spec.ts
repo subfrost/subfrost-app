@@ -2478,32 +2478,45 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
         await page.waitForTimeout(3000);
         await navToLend(page);
         await page.waitForTimeout(3000);
-        // Wait for oracle price before filling — same reasoning as Flow 2.
+        // Wait for oracle price ≥ $50k — button stays disabled if price is $13k
+        // (ICR = 0.05 × $13k / 1800 = 36% < MCR 110%). The oracle re-raise tx
+        // may not be indexed yet even after waitForIndexerSync timeout.
         await page.waitForFunction(
-          () => /\$[\d,]+/.test(document.body.innerText),
-          { timeout: 60_000 },
-        ).catch(() => { console.log('[frostlend-smoke] oracle price not visible — proceeding anyway'); });
+          () => {
+            // Match $50,000+ — any number with at least 5 digits after $
+            const text = document.body.innerText;
+            const m = text.match(/\$[\d,]+/g);
+            if (!m) return false;
+            return m.some(s => Number(s.replace(/[$,]/g, '')) >= 50_000);
+          },
+          { timeout: 90_000 },
+        ).catch(() => { console.log('[frostlend-smoke] oracle price ≥ $50k not visible — proceeding anyway'); });
 
         // pressSequentially triggers React onChange reliably on controlled inputs.
-        const collInput2 = page.locator('input[inputmode="decimal"]').nth(0);
-        const debtInput2 = page.locator('input[inputmode="decimal"]').nth(1);
-        await collInput2.click({ clickCount: 3 });
-        await collInput2.pressSequentially('0.05', { delay: 30 });
-        await page.waitForTimeout(300);
-        await debtInput2.click({ clickCount: 3 });
-        await debtInput2.pressSequentially('1800', { delay: 30 });
-        await page.waitForTimeout(500);
-
+        // Retry filling + checking the button in a loop — oracle price may arrive
+        // asynchronously causing tooLow to flip after we fill the form.
         const openBtnEnabled = await (async () => {
-          const dl = Date.now() + 30_000;
+          const dl = Date.now() + 60_000;
           while (Date.now() < dl) {
+            const collInput2 = page.locator('input[inputmode="decimal"]').nth(0);
+            const debtInput2 = page.locator('input[inputmode="decimal"]').nth(1);
+            await collInput2.click({ clickCount: 3 });
+            await collInput2.pressSequentially('0.05', { delay: 30 });
+            await page.waitForTimeout(300);
+            await debtInput2.click({ clickCount: 3 });
+            await debtInput2.pressSequentially('1800', { delay: 30 });
+            await page.waitForTimeout(800);
             const s = await page.evaluate(() => {
               const btn = Array.from(document.querySelectorAll('button')).find(b => b.textContent?.trim() === 'Open Trove');
               if (!btn) return 'missing';
               return (btn as HTMLButtonElement).disabled ? 'disabled' : 'enabled';
             });
             if (s === 'enabled') return true;
-            await page.waitForTimeout(600);
+            if (s === 'missing') {
+              // Form not in open-trove mode — navigate back to /lend
+              await page.goto('http://localhost:3000/lend');
+              await page.waitForTimeout(3000);
+            }
           }
           return false;
         })();
