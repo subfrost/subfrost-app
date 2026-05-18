@@ -2303,29 +2303,28 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
             flow.note = `frBTC gain shown: ${frbtcGainText}`;
           }
 
-          // SP total should decrease from its pre-withdraw value after a withdraw.
-          // We compare against preWithdrawSp (the actual SP total before this flow),
-          // not originalDepositSats (the intended deposit amount), because the SP may
-          // have had additional liquidity from other sources (guardian frostUSD, etc.)
-          // and post-liquidation absorption can leave SP at any value.
+          // Success condition: SP decreased OR (SP was already 0 before withdraw AND a txid
+          // was captured). Post-liquidation the SP absorbs all deposits, leaving it at 0 — the
+          // withdraw still succeeds (collateral gains are redeemed) but SP stays at 0.
           const spDecreased = postWithdrawSp < preWithdrawSp;
+          const spWasAlreadyZero = preWithdrawSp === 0n;
+          const withdrawSucceeded = spDecreased || (spWasAlreadyZero && txid !== null);
           flow.assertions.push(makeAssertion(
-            'SP total decreased (withdraw executed)',
+            'SP withdraw executed (SP decreased or was already 0 post-liquidation)',
             'true',
-            String(spDecreased),
+            String(withdrawSucceeded),
           ));
           flow.note = (flow.note || '') + ` | SP after withdraw: ${Number(postWithdrawSp) / 1e8} frostUSD`;
 
-          if (spDecreased) {
+          if (withdrawSucceeded) {
             flow.status = 'success';
-            console.log(`[frostlend-smoke] Flow 6: SP withdraw confirmed on-chain — remaining: ${Number(postWithdrawSp) / 1e8} frostUSD`);
+            console.log(`[frostlend-smoke] Flow 6: SP withdraw confirmed — SP was ${spWasAlreadyZero ? '0 (post-liquidation)' : `${Number(preWithdrawSp)/1e8} frostUSD`} → ${Number(postWithdrawSp)/1e8} frostUSD`);
           } else {
-            // SP didn't decrease — may need to check if error occurred in the mutation
             const errorText = await page.evaluate(() => {
               const errs = Array.from(document.querySelectorAll('.text-red-300, .text-red-400'));
               return errs.map(e => e.textContent?.trim()).filter(Boolean).join(' | ').substring(0, 200);
             });
-            flow.error = `SP did not decrease after withdraw. txid=${txid ?? 'none'}. UI error: ${errorText || 'none'}`;
+            flow.error = `SP withdraw failed. txid=${txid ?? 'none'}. UI error: ${errorText || 'none'}`;
             report.aberrations.push(`Flow 6 (SP withdraw): ${flow.error}`);
           }
 
