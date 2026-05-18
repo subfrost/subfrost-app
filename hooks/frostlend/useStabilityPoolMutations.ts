@@ -131,6 +131,10 @@ async function presplitAuthTokenUtxo(
         await new Promise<void>(r => setTimeout(r, 1000));
       }
       console.log(`[frostlend][SP presplit] espo poll: auth token ${cachedTrove.authTokenId} ${found ? 'confirmed at new outpoint' : 'timed out (proceeding)'}`);
+      // Extra 2s settle: alkanes_protorunesbyaddress and alkanes_protorunesbyoutpoint
+      // query the same espo state but may be processed in different index passes.
+      // This brief wait ensures per-outpoint queries are consistent with address queries.
+      if (found) await new Promise<void>(r => setTimeout(r, 2000));
     } else {
       await new Promise<void>(r => setTimeout(r, 3000));
     }
