@@ -1656,13 +1656,16 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
           report.flows.push(flow);
           saveReport(report);
         } else {
-          // Wait for result (e.g. "Batch-liquidated up to 5")
+          // Wait for result (e.g. "Batch-liquidated up to 5") or error text.
+          // result div auto-clears after 3.5s (success) or 5s (error) — poll aggressively.
+          // Also accept "Error:" prefix so we know the call completed (even if it failed).
           const resultAppeared = await page.waitForFunction(
             () => {
               const divs = Array.from(document.querySelectorAll('div'));
               return divs.some(d =>
                 /Batch-liquidated/i.test(d.textContent || '') ||
-                /Liquidated/i.test(d.textContent || '')
+                /Liquidated/i.test(d.textContent || '') ||
+                /^Error:/i.test((d.textContent || '').trim())
               );
             },
             { timeout: 60_000 },
@@ -1670,9 +1673,22 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
 
           await page.screenshot({ path: '/tmp/fl-flow5-liq-result.png' });
 
-          if (resultAppeared) {
+          // Capture the actual result text to distinguish success from error.
+          const resultText = await page.evaluate(() => {
+            const divs = Array.from(document.querySelectorAll('div'));
+            for (const d of divs) {
+              const t = d.textContent?.trim() || '';
+              if (/Batch-liquidated/i.test(t) || /Liquidated/i.test(t) || /^Error:/i.test(t)) return t.slice(0, 120);
+            }
+            return null;
+          });
+
+          if (resultAppeared && resultText && !/^Error:/i.test(resultText)) {
             flow.status = 'success';
-            console.log('[frostlend-smoke] Flow 5: batch-liquidate succeeded');
+            console.log(`[frostlend-smoke] Flow 5: batch-liquidate succeeded — ${resultText}`);
+          } else if (resultText && /^Error:/i.test(resultText)) {
+            flow.error = `batch liquidate returned error: ${resultText}`;
+            console.log(`[frostlend-smoke] Flow 5: batch-liquidate error — ${resultText}`);
           } else {
             flow.error = 'batch liquidate result not seen in panel';
           }
@@ -1903,10 +1919,12 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
             flow.note = `frBTC gain shown: ${frbtcGainText}`;
           }
 
-          // SP total = 0 means full withdrawal succeeded. SP < original deposit means
-          // partial (post-liquidation absorption). Either is a valid success signal.
-          const originalDepositSats = BigInt(SP_DEPOSIT) * 100_000_000n;
-          const spDecreased = postWithdrawSp < originalDepositSats;
+          // SP total should decrease from its pre-withdraw value after a withdraw.
+          // We compare against preWithdrawSp (the actual SP total before this flow),
+          // not originalDepositSats (the intended deposit amount), because the SP may
+          // have had additional liquidity from other sources (guardian frostUSD, etc.)
+          // and post-liquidation absorption can leave SP at any value.
+          const spDecreased = postWithdrawSp < preWithdrawSp;
           flow.assertions.push(makeAssertion(
             'SP total decreased (withdraw executed)',
             'true',
@@ -2018,7 +2036,38 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
         return btns.some(b => /close trove/i.test(b.textContent || ''));
       });
 
-      if (!hasTrove) {
+      // If UI shows "Close Trove", check on-chain to confirm the trove is truly Active.
+      // After liquidation, React Query cache may be stale and still render "Close Trove"
+      // even though the trove was liquidated (status=3, not 1). In that case, clear the
+      // trove cache so the second OpenTrove proceeds correctly.
+      let needsNewTrove = !hasTrove;
+      if (hasTrove && lastTroveId > 0n) {
+        const statusHex = await simRead(page, { ...FL.TROVE_MANAGER, inputs: [OP.TM_GetTroveStatus, String(lastTroveId)] });
+        const troveStatus = hexToU8(statusHex);
+        if (troveStatus !== 1) {
+          // Trove not Active on chain (liquidated=3, closed=2, etc.) — UI is stale cache.
+          console.log(`[frostlend-smoke] Trove ${lastTroveId} on-chain status=${troveStatus} (not Active) — clearing cache and opening new trove`);
+          // Clear the trove cache so the OpenTrove mutation doesn't conflict.
+          await page.evaluate(() => {
+            for (let i = localStorage.length - 1; i >= 0; i--) {
+              const k = localStorage.key(i);
+              if (k && k.startsWith('frostlend:trove:')) localStorage.removeItem(k);
+            }
+          });
+          needsNewTrove = true;
+          // Force React Query invalidation so the /lend page shows Open Trove form.
+          await page.evaluate(() => {
+            // Dispatch a storage event to trigger any listeners
+            window.dispatchEvent(new StorageEvent('storage', { key: 'frostlend_cache_reset' }));
+          });
+          await navToLend(page);
+          await page.waitForTimeout(3000);
+        } else {
+          console.log(`[frostlend-smoke] Trove ${lastTroveId} on-chain status=${troveStatus} (Active) — using existing trove`);
+        }
+      }
+
+      if (needsNewTrove) {
         // Fill coll / debt — use 0.05 for better ICR
         // Wait for oracle price before filling — same reasoning as Flow 2.
         await page.waitForFunction(
@@ -2070,8 +2119,6 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
         } else {
           console.log('[frostlend-smoke] Second Open Trove button not enabled — adjust flows may skip');
         }
-      } else {
-        console.log('[frostlend-smoke] Trove already open — using it for adjust flows');
       }
     }
 
@@ -2124,12 +2171,13 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
               const txBytes = clean.slice(32, 64);
               const txLe = BigInt('0x' + (txBytes.match(/.{2}/g) || []).reverse().join(''));
               const authTokenId = `2:${txLe}`;
-              // Patch only if cache is missing or authTokenId is null
+              // Always overwrite the cache with the freshly read auth token.
+              // The old auth token UTXO may have been consumed as BTC fees during SP deposit/withdraw,
+              // making it unavailable to subsequent owner-ops even though the cached ID looks correct.
+              // Re-querying from chain gives us the token ID that the contract expects; the SDK will
+              // then scan the wallet UTXOs for that ID on the next owner-op.
               const patched = await page.evaluate(({ key: k, troveId, auth, v }) => {
                 try {
-                  const raw = localStorage.getItem(k);
-                  const existing = raw ? JSON.parse(raw) : null;
-                  if (existing && existing.authTokenId) return 'already-set';
                   const entry = { troveId, authTokenId: auth, updatedAt: Date.now(), v };
                   localStorage.setItem(k, JSON.stringify(entry));
                   return 'patched';
