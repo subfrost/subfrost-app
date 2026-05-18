@@ -79,7 +79,10 @@ export function useAddCollateralMutation() {
         getAuthTokenInputRequirement(cached.authTokenId),
       ]);
 
-      const { txid } = await execute({ protostones, inputRequirements, feeRate: params.feeRate });
+      // skipTaprootFeeSources: auth token UTXO lives at taproot; passing it via
+      // inputRequirements is sufficient — alkanesExecuteFull must not also spend
+      // it as a BTC fee input from fromAddresses.
+      const { txid } = await execute({ protostones, inputRequirements, feeRate: params.feeRate, skipTaprootFeeSources: true });
       return { txid };
     },
     onSuccess: () => queryClient.refetchQueries({ queryKey: ['frostlend'] }),
@@ -115,7 +118,7 @@ export function useWithdrawCollateralMutation() {
       ]);
       const inputRequirements = getAuthTokenInputRequirement(cached.authTokenId);
 
-      const { txid } = await execute({ protostones, inputRequirements, feeRate: params.feeRate });
+      const { txid } = await execute({ protostones, inputRequirements, feeRate: params.feeRate, skipTaprootFeeSources: true });
       return { txid };
     },
     onSuccess: () => queryClient.refetchQueries({ queryKey: ['frostlend'] }),
@@ -153,7 +156,7 @@ export function useDrawFrostUsdMutation() {
       ]);
       const inputRequirements = getAuthTokenInputRequirement(cached.authTokenId);
 
-      const { txid } = await execute({ protostones, inputRequirements, feeRate: params.feeRate });
+      const { txid } = await execute({ protostones, inputRequirements, feeRate: params.feeRate, skipTaprootFeeSources: true });
       return { txid };
     },
     onSuccess: () => queryClient.refetchQueries({ queryKey: ['frostlend'] }),
@@ -194,7 +197,7 @@ export function useRepayFrostUsdMutation() {
         getAuthTokenInputRequirement(cached.authTokenId),
       ]);
 
-      const { txid } = await execute({ protostones, inputRequirements, feeRate: params.feeRate });
+      const { txid } = await execute({ protostones, inputRequirements, feeRate: params.feeRate, skipTaprootFeeSources: true });
       return { txid };
     },
     onSuccess: () => queryClient.refetchQueries({ queryKey: ['frostlend'] }),
@@ -242,7 +245,7 @@ export function useCloseTroveMutation() {
         getAuthTokenInputRequirement(cached.authTokenId),
       ]);
 
-      const { txid } = await execute({ protostones, inputRequirements, feeRate: params.feeRate });
+      const { txid } = await execute({ protostones, inputRequirements, feeRate: params.feeRate, skipTaprootFeeSources: true });
 
       // Auth token is consumed on close — wipe local cache.
       if (network && address) clearCachedTrove(network, address);

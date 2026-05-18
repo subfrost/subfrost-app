@@ -292,10 +292,14 @@ export async function setOraclePrice(price18Dec: bigint): Promise<void> {
   if (!provider || !harness) throw new Error('Devnet not booted');
   const { segwit, taproot } = getBootAddresses();
 
+  // skipTaprootFeeSources: use segwit-only for fee sources so the user's
+  // trove auth token UTXO at taproot is not consumed as a BTC fee input.
   await executeCall(
     provider, harness, segwit, taproot,
     `[4,${PRICE_FEED_TX},${PRICE_FEED_OPCODES.PostPrice},${price18Dec}]:v0:v0`,
     'B:50000:v0',
+    undefined,
+    [segwit],
   );
 }
 
@@ -310,10 +314,14 @@ export async function liquidateTrove(troveId: bigint): Promise<void> {
   if (!provider || !harness) throw new Error('Devnet not booted');
   const { segwit, taproot } = getBootAddresses();
 
+  // Segwit-only fee sources: liquidation is permissionless (no auth token needed);
+  // taproot exclusion prevents accidentally consuming any user's trove auth token UTXO.
   await executeCall(
     provider, harness, segwit, taproot,
     `[4,${TROVE_MANAGER_TX},${TROVE_MANAGER_OPCODES.Liquidate},${troveId}]:v0:v0`,
     'B:50000:v0',
+    undefined,
+    [segwit],
   );
 }
 
@@ -326,10 +334,13 @@ export async function liquidateTroves(maxCount: number): Promise<void> {
   if (!provider || !harness) throw new Error('Devnet not booted');
   const { segwit, taproot } = getBootAddresses();
 
+  // Segwit-only fee sources: same rationale as liquidateTrove above.
   await executeCall(
     provider, harness, segwit, taproot,
     `[4,${TROVE_MANAGER_TX},${TROVE_MANAGER_OPCODES.LiquidateTroves},${maxCount}]:v0:v0`,
     'B:50000:v0',
+    undefined,
+    [segwit],
   );
 }
 
@@ -377,12 +388,15 @@ export async function openGuardianTrove(collateralSats: bigint, debtSats: bigint
 
   // 2. Wrap BTC → frBTC at deployer address. Use 1.5× the collateral so there's
   //    enough for the OpenTrove inputRequirements AND fee dust.
+  // Segwit-only fee sources: user's trove auth token UTXO lives at taproot;
+  // excluding taproot from fee scan prevents it from being consumed as BTC fees.
   const wrapSats = collateralSats * 2n; // wrap 2× to have buffer
   await executeCall(
     provider, harness, segwit, taproot,
     '[32,0,77]:v1:v1',
     `B:${wrapSats}:v0`,
     [signerAddr, taproot],
+    [segwit],
   );
 
   // 3. Open the guardian trove.

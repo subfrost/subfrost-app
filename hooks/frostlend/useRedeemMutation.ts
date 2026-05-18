@@ -49,7 +49,9 @@ export function useRedeemMutation() {
       ]);
       const inputRequirements = `4:${FROST_USD_TX}:${params.amountFrostUsdSats.toString()}`;
 
-      const { txid } = await execute({ protostones, inputRequirements, feeRate: params.feeRate });
+      // skipTaprootFeeSources: redeem uses frostUSD (not trove auth token);
+      // excluding taproot from fee sources prevents burning any trove receipt UTXOs.
+      const { txid } = await execute({ protostones, inputRequirements, feeRate: params.feeRate, skipTaprootFeeSources: true });
       return { txid };
     },
     onSuccess: () => queryClient.refetchQueries({ queryKey: ['frostlend'] }),
