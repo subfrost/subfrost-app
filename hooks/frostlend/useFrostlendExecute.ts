@@ -19,6 +19,7 @@ import { useCallback } from 'react';
 import { useWallet } from '@/context/WalletContext';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { alkanesExecuteTyped } from '@/lib/alkanes/execute';
+import { getAddressUtxos } from '@/lib/alkanes/rpc';
 
 export type FrostlendExecuteParams = {
   protostones: string;
@@ -61,6 +62,29 @@ export function useFrostlendExecute() {
     const isKeystoreWallet = walletType === 'keystore';
     const isDualAddress = Boolean(segwitAddress && taprootAddress);
 
+    // Fetch non-dust UTXOs to use as payment_utxos. This prevents the SDK from
+    // selecting auth token dust UTXOs (~546 sats) as BTC fee inputs during
+    // operations that don't explicitly include the auth token in inputRequirements
+    // (e.g., SP deposit/withdraw, oracle set). Without this, auth token UTXOs get
+    // silently burned as fees, breaking subsequent owner-ops ("have 0" errors).
+    // ordinalsStrategy:'exclude' only protects inscriptions, not alkane UTXOs.
+    let paymentUtxos: string[] | undefined;
+    if (useActualAddresses && network) {
+      try {
+        const addrs = [segwitAddress, taprootAddress].filter(Boolean) as string[];
+        const allUtxos = (await Promise.all(addrs.map((a) => getAddressUtxos(network, a)))).flat();
+        // Only use UTXOs with value > 1000 sats as fee payment sources.
+        // Dust UTXOs (≤1000 sats) likely carry alkane tokens (auth receipts, frBTC, etc.).
+        const cleanUtxos = allUtxos.filter((u) => u.value > 1000);
+        if (cleanUtxos.length > 0) {
+          // Format expected by AlkanesExecuteTypedParams: "txid:vout:satoshis"
+          paymentUtxos = cleanUtxos.map((u) => `${u.txid}:${u.vout}:${u.value}`);
+        }
+      } catch {
+        // Non-fatal: fall back to SDK's own UTXO discovery
+      }
+    }
+
     let result: any;
     try {
       result = await alkanesExecuteTyped(provider, {
@@ -75,6 +99,7 @@ export function useFrostlendExecute() {
         ordinalsStrategy: 'exclude',
         protectTaproot: isDualAddress,
         network: network ?? undefined,
+        ...(paymentUtxos ? { paymentUtxos } : {}),
       });
     } catch (e: any) {
       // Surface the SDK error message so the UI can show it. Many SDK errors
