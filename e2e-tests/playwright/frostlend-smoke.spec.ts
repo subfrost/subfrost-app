@@ -1939,6 +1939,10 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
         const preLiqTroveCountHex = await simRead(page, { ...FL.TROVE_MANAGER, inputs: [OP.TM_GetTroveCount] });
         const preLiqTroveCount = hexToU128(preLiqTroveCountHex);
         console.log(`[frostlend-smoke] Flow 5: pre-liquidation TroveCount = ${preLiqTroveCount}`);
+        // Capture SP total before liquidation so post-liquidation assertion can compare.
+        const preLiqSpHex = await simRead(page, { ...FL.STABILITY_POOL, inputs: [OP.SP_GetTotalDeposits] });
+        const preLiqSp = hexToU128(preLiqSpHex);
+        console.log(`[frostlend-smoke] Flow 5: pre-liquidation SP total = ${Number(preLiqSp)/1e8} frostUSD`);
         await openDevPanel(page);
 
         // Wait for DevPanel deployed status before the Batch button (inside isDeployed section)
@@ -2082,8 +2086,8 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
           const postLiqSpHex = await simRead(page, { ...FL.STABILITY_POOL, inputs: [OP.SP_GetTotalDeposits] });
           const postLiqSp = hexToU128(postLiqSpHex);
           if (preLiqTroveCount >= 2n) {
-            // SP should have absorbed the liquidated trove's debt.
-            flow.assertions.push(makeAssertion('SP deposits decreased after liquidation', 'true', String(postLiqSp < BigInt(SP_DEPOSIT) * 100_000_000n)));
+            // SP should have absorbed the liquidated trove's debt — total decreases.
+            flow.assertions.push(makeAssertion('SP deposits decreased after liquidation', 'true', String(postLiqSp < preLiqSp)));
           } else {
             // Solo-trove no-op: SP unchanged.
             flow.assertions.push(makeAssertion('SP unchanged (solo-trove no-op)', 'true', 'true'));
