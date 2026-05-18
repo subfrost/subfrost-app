@@ -47,22 +47,51 @@ export default function AlkanesBalancesCard({
   const { data: btcPriceUsd = 0 } = useBtcPrice();
   const { t } = useTranslation();
   const router = useRouter();
-  const { balances, addressAlkanes, spendableAlkanes, btcFast, isAlkanesLoading, error, refreshAlkanes } = useEnrichedWalletData();
+  const { balances, addressAlkanes, spendableAlkanes, mempoolLockedAlkanes, btcFast, isAlkanesLoading, error, refreshAlkanes } = useEnrichedWalletData();
   const { data: poolsData } = usePools();
   const { alkaneDeltas: pendingAlkaneDeltas, pendingTxs } = usePendingTxs();
 
-  // Build a per-alkaneId map of {delta, uncertain}. A tx flagged
-  // contract_outputs_uncertain may still have edict-confirmed
-  // input-side deltas (e.g. a swap that consumes 1000 DIESEL but
-  // produces an uncertain amount of frBTC). To keep the overlay
-  // honest, we mark a row as uncertain only when one of the
-  // contributing pending txs flagged itself uncertain AND included
-  // this alkaneId in its own alkane delta list.
+  // Build a per-alkaneId map of {delta, uncertain}. Two sources:
+  //
+  // 1. SERVER (walletState.mempoolLockedAlkanes): authoritative for
+  //    OUTGOING mempool deltas — what alkanes are currently locked in
+  //    mempool txs spending our outpoints. Works for any browser session,
+  //    iOS, fresh logins, txs broadcast through other surfaces.
+  //
+  // 2. BROWSER (usePendingTxs.alkaneDeltas): per-tx prediction including
+  //    INCOMING deltas (post-swap output that the server can't predict
+  //    without decoding the protostone). Layered on top — positive
+  //    deltas merge additively; negative deltas only fill in alkanes
+  //    the server hasn't reported (server may not have hit the mempool
+  //    tx yet on a tight race).
+  //
+  // mork1e + brooks 2026-05-18 FB6: wallet card showed "mempool: 0.0000"
+  // on alkanes that WERE in mempool because the overlay was browser-only.
+  // Server-side path closes that gap. The harness I11 invariant pins it.
   const pendingByAlkane = useMemo(() => {
     const map = new Map<string, { delta: bigint; uncertain: boolean }>();
+    // 1. Server-side mempool-locked → negative deltas (authoritative).
+    for (const [id, amount] of Object.entries(mempoolLockedAlkanes)) {
+      try {
+        map.set(id, { delta: -BigInt(amount as string), uncertain: false });
+      } catch {
+        // skip malformed
+      }
+    }
+    // 2. Browser pendingTxStore predictions — additive merge.
     for (const d of pendingAlkaneDeltas) {
       const key = `${d.alkaneId.block}:${d.alkaneId.tx}`;
-      map.set(key, { delta: d.delta, uncertain: false });
+      const existing = map.get(key);
+      if (existing) {
+        // Positive (incoming) prediction adds to the existing (negative)
+        // server lock so the net delta reflects "I sent X and will get Y".
+        // Negative-on-negative we leave to the server value (don't double).
+        if (d.delta > 0n) {
+          map.set(key, { delta: existing.delta + d.delta, uncertain: existing.uncertain });
+        }
+      } else {
+        map.set(key, { delta: d.delta, uncertain: false });
+      }
     }
     for (const tx of pendingTxs) {
       if (!tx.contractOutputsUncertain) continue;
@@ -73,7 +102,7 @@ export default function AlkanesBalancesCard({
       }
     }
     return map;
-  }, [pendingAlkaneDeltas, pendingTxs]);
+  }, [mempoolLockedAlkanes, pendingAlkaneDeltas, pendingTxs]);
   const walletPageAlkanes = addressAlkanes;
   const spendableByAlkane = useMemo(() => {
     const map = new Map<string, AlkaneAsset>();

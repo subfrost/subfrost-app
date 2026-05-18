@@ -307,7 +307,11 @@ export async function getAddressStats(
 
 export interface EsploraMempoolTx {
   txid: string;
-  vin?: Array<{ txid: string; vout: number }>;
+  vin?: Array<{
+    txid: string;
+    vout: number;
+    prevout?: { value: number; scriptpubkey_address?: string };
+  }>;
   vout?: Array<{ value: number; scriptpubkey_address?: string }>;
 }
 

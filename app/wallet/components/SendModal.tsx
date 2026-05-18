@@ -265,7 +265,7 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
   const { requestConfirmation } = useTransactionConfirm();
   const { showError } = useNotification();
   const { t } = useTranslation();
-  const { balances, refresh } = useEnrichedWalletData();
+  const { balances, mempoolLockedAlkanes: serverMempoolLockedAlkanes, refresh } = useEnrichedWalletData();
   const { alkaneDeltas: pendingAlkaneDeltas } = usePendingTxs();
   // mork1e (2026-05-18 FB6): user-facing inputs (send modal, swap inputs)
   // MUST display "available" — the spendable amount after subtracting
@@ -277,11 +277,23 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
   // available only.
   const pendingByAlkaneSend = useMemo(() => {
     const map = new Map<string, { delta: bigint }>();
+    // Server-side mempool locks first (authoritative for outgoing).
+    for (const [id, amount] of Object.entries(serverMempoolLockedAlkanes)) {
+      try { map.set(id, { delta: -BigInt(amount) }); } catch { /* skip */ }
+    }
+    // Browser predictions merge — positive (incoming) deltas add, negative
+    // only fill in alkanes the server hasn't reported yet.
     for (const d of pendingAlkaneDeltas) {
-      map.set(`${d.alkaneId.block}:${d.alkaneId.tx}`, { delta: d.delta });
+      const key = `${d.alkaneId.block}:${d.alkaneId.tx}`;
+      const existing = map.get(key);
+      if (existing) {
+        if (d.delta > 0n) map.set(key, { delta: existing.delta + d.delta });
+      } else {
+        map.set(key, { delta: d.delta });
+      }
     }
     return map;
-  }, [pendingAlkaneDeltas]);
+  }, [pendingAlkaneDeltas, serverMempoolLockedAlkanes]);
   const dataSource = getAlkanesDataSource(network || 'mainnet');
   const walletUtxoCache = useWalletUtxoCache();
   const btcSendMutation = useBtcSendMutation();

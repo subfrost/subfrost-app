@@ -109,6 +109,14 @@ export interface EnrichedWalletData {
   balances: WalletBalances;
   addressAlkanes: AlkaneAsset[];
   spendableAlkanes: AlkaneAsset[];
+  /**
+   * Per-alkane sub-units locked in mempool transactions spending our
+   * outpoints. Sourced from `/api/wallet-state` so it works for any
+   * browser session (no dependency on local pendingTxStore). Consumers
+   * merge this with `usePendingTxs.alkaneDeltas` to build the wallet
+   * card's pendingByAlkane overlay.
+   */
+  mempoolLockedAlkanes: Record<string, string>;
   btcFast: BtcBalanceFast | null;
   utxos: {
     p2wpkh: EnrichedUTXO[];
@@ -134,6 +142,7 @@ const EMPTY_BALANCES: WalletBalances = {
 
 const EMPTY_UTXOS = { p2wpkh: [] as EnrichedUTXO[], p2tr: [] as EnrichedUTXO[], all: [] as EnrichedUTXO[] };
 const EMPTY_ALKANES: AlkaneAsset[] = [];
+const EMPTY_RECORD: Record<string, string> = Object.freeze({});
 
 export function useEnrichedWalletData(): EnrichedWalletData {
   const { account, isConnected, network, walletType, paymentAddress } = useWallet() as any;
@@ -352,10 +361,17 @@ export function useEnrichedWalletData(): EnrichedWalletData {
       ? (alkaneQuery.error instanceof Error ? alkaneQuery.error.message : 'Failed to fetch alkane balances')
       : null;
 
+  // mork1e + brooks 2026-05-18 FB6: server-side mempool-locked alkane
+  // amounts. Authoritative for "what's in mempool right now" regardless of
+  // browser session — closes the gap where iOS / fresh sessions / txs from
+  // other surfaces had nothing in pendingTxStore to overlay.
+  const mempoolLockedAlkanes: Record<string, string> = walletState?.mempoolLockedAlkanes ?? EMPTY_RECORD;
+
   return useMemo(() => ({
     balances,
     addressAlkanes,
     spendableAlkanes: displayAlkanes,
+    mempoolLockedAlkanes,
     btcFast,
     utxos: btcQuery.data?.utxos ?? EMPTY_UTXOS,
     isLoading: btcQuery.isLoading || alkaneQuery.isLoading,
@@ -376,6 +392,7 @@ export function useEnrichedWalletData(): EnrichedWalletData {
     btcFastQuery.isLoading,
     errorMsg,
     displayAlkanes,
+    mempoolLockedAlkanes,
     refresh,
     refreshAlkanes,
     refreshBtcFast,

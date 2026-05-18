@@ -262,7 +262,7 @@ export default function SwapShell() {
   const VOLBTC_POOL_ID = (config as any).DXBTC_NORMAL_POOL_ID as string | undefined;
 
   // Wallet balances — single source for BTC + alkanes across swap page
-  const { balances: walletBalances, btcFast, isAlkanesLoading, refresh: refreshWalletData } = useEnrichedWalletData();
+  const { balances: walletBalances, mempoolLockedAlkanes: serverMempoolLockedAlkanes, btcFast, isAlkanesLoading, refresh: refreshWalletData } = useEnrichedWalletData();
 
   // Protocol tokens that should always appear in the token selector
   const protocolTokens = useMemo(() => {
@@ -891,14 +891,25 @@ export default function SwapShell() {
   // class as the AlkanesBalancesCard iter-2 fix; second consumer needs
   // the same pending-aware adjustment.
   const { alkaneDeltas: pendingAlkaneDeltas } = usePendingTxs();
+  // Same merge contract as AlkanesBalancesCard — server-side authoritative
+  // for OUTGOING mempool locks, browser layered for INCOMING predictions.
+  // mork1e + brooks 2026-05-18 FB6.
   const pendingByAlkaneSwap = useMemo(() => {
     const map = new Map<string, PendingAlkaneEntry>();
+    for (const [id, amount] of Object.entries(serverMempoolLockedAlkanes)) {
+      try { map.set(id, { delta: -BigInt(amount) }); } catch { /* skip */ }
+    }
     for (const d of pendingAlkaneDeltas) {
       const key = `${d.alkaneId.block}:${d.alkaneId.tx}`;
-      map.set(key, { delta: d.delta });
+      const existing = map.get(key);
+      if (existing) {
+        if (d.delta > 0n) map.set(key, { delta: existing.delta + d.delta });
+      } else {
+        map.set(key, { delta: d.delta });
+      }
     }
     return map;
-  }, [pendingAlkaneDeltas]);
+  }, [pendingAlkaneDeltas, serverMempoolLockedAlkanes]);
 
   const formatBalance = (id?: string): string => {
     if (isBalancesLoading) return t('swap.loadingBalance');

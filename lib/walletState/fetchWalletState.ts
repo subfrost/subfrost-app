@@ -26,7 +26,12 @@
  * stitches up the rest from the previous block's cache entry.
  */
 
-import { getAddressStats, getAddressUtxos, getHeight } from '@/lib/alkanes/rpc';
+import {
+  getAddressMempoolTxs,
+  getAddressStats,
+  getAddressUtxos,
+  getHeight,
+} from '@/lib/alkanes/rpc';
 import { getProtorunesByOutpointMV } from '@/lib/alkanes/protorunesByOutpointMV';
 import { getRpcUrl } from '@/utils/getConfig';
 import { getCurrentTipHash } from './tipHash';
@@ -151,6 +156,19 @@ export interface WalletState {
   btcSats: WalletStateBtcSats;
   /** Aggregate per-alkane balance keyed by "block:tx". */
   alkanes: Record<string, string>;
+  /**
+   * Per-alkane amounts (keyed by "block:tx") currently locked in pending
+   * mempool transactions that spend an outpoint owned by this wallet.
+   * Independent of the browser-local pendingTxStore so the wallet card
+   * renders the mempool overlay even on fresh sessions / mobile / txs
+   * broadcast through other surfaces. Empty when no relevant mempool txs.
+   *
+   * mork1e + brooks 2026-05-18 FB6: both saw "mempool: 0.0000" after
+   * doing swaps that should have locked DIESEL/FARTANE in mempool. Root
+   * cause was that the overlay was browser-state only; fresh sessions
+   * had nothing to overlay. This field closes that gap server-side.
+   */
+  mempoolLockedAlkanes: Record<string, string>;
   /**
    * Populated only when `fetchWalletState` is called with
    * `{ includePending: true }`. Counts of UTXOs stripped (confirmed
@@ -491,6 +509,73 @@ export async function fetchWalletState(
     if (amount > 0n) alkanes[id] = amount.toString();
   }
 
+  // ── Mempool-locked alkane fanout ────────────────────────────────────────
+  // mork1e + brooks 2026-05-18 FB6: wallet card showed "mempool: 0.0000"
+  // on DIESEL/FARTANE despite a pending swap that locked those alkanes in
+  // mempool. The previous overlay path (browser pendingTxStore) only knew
+  // about txs broadcast IN THIS BROWSER SESSION — iOS, fresh sessions, or
+  // txs from other surfaces had nothing to overlay. This server-side path
+  // closes that gap.
+  //
+  // For each address: fetch mempool txs. For each mempool tx vin that
+  // spends an outpoint at our address, fetch the alkanes that were on
+  // that outpoint (pinned to 'latest' so the answer aligns with esplora's
+  // tip). Aggregate per alkane id.
+  //
+  // Skip entirely if there are no mempool txs (saves the per-outpoint RTT
+  // for the common case of an idle wallet).
+  const mempoolLockedAlkanes: Record<string, string> = {};
+  const ourAddressSet = new Set(addresses);
+  const mempoolTxLists = await Promise.allSettled(
+    addresses.map((addr) =>
+      getAddressMempoolTxs(network, addr, AbortSignal.timeout(15_000)),
+    ),
+  );
+  const mempoolSpentOutpoints: Array<{ txid: string; vout: number }> = [];
+  const seenOutpointKeys = new Set<string>();
+  for (const r of mempoolTxLists) {
+    if (r.status !== 'fulfilled') continue;
+    for (const tx of r.value) {
+      for (const vin of tx.vin ?? []) {
+        const addr = vin.prevout?.scriptpubkey_address;
+        if (!addr || !ourAddressSet.has(addr)) continue;
+        const key = `${vin.txid}:${vin.vout}`;
+        if (seenOutpointKeys.has(key)) continue;
+        seenOutpointKeys.add(key);
+        mempoolSpentOutpoints.push({ txid: vin.txid, vout: vin.vout });
+      }
+    }
+  }
+  if (mempoolSpentOutpoints.length > 0) {
+    const lockedSettled = await Promise.allSettled(
+      mempoolSpentOutpoints.map(async (o) => {
+        const resp = await getProtorunesByOutpointMV(
+          network,
+          o.txid,
+          o.vout,
+          'latest',
+          1n,
+          AbortSignal.timeout(15_000),
+        );
+        const balances = resp?.balance_sheet?.cached?.balances ?? [];
+        return balances
+          .map((b) => ({ block: Number(b.block), tx: Number(b.tx), amount: String(b.amount ?? '0') }))
+          .filter((b) => b.amount !== '0');
+      }),
+    );
+    const lockedTotals = new Map<string, bigint>();
+    for (const r of lockedSettled) {
+      if (r.status !== 'fulfilled') continue;
+      for (const b of r.value) {
+        const k = `${b.block}:${b.tx}`;
+        lockedTotals.set(k, (lockedTotals.get(k) ?? 0n) + BigInt(b.amount));
+      }
+    }
+    for (const [id, amount] of lockedTotals.entries()) {
+      if (amount > 0n) mempoolLockedAlkanes[id] = amount.toString();
+    }
+  }
+
   // Aggregate mempool_stats across addresses for net pendingIn/pendingOut.
   let mempoolFunded = 0;
   let mempoolSpent = 0;
@@ -518,6 +603,7 @@ export async function fetchWalletState(
       pendingOut,
     },
     alkanes,
+    mempoolLockedAlkanes,
     ...(pendingAdjustment ? { pendingAdjustment } : {}),
   };
 }

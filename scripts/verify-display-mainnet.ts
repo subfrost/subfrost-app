@@ -85,6 +85,14 @@
  *        alkanes on-chain (the symptom of mork1e's "2 of 7 alkanes"
  *        screenshot).
  *
+ *   I11. Mempool-locked alkane tracking (mork1e + brooks 2026-05-18 FB6)
+ *        For every mempool tx spending one of our outpoints, the alkanes
+ *        on those outpoints must surface in walletState.mempoolLockedAlkanes.
+ *        Catches: wallet card showing "mempool: 0.0000" on DIESEL/FARTANE
+ *        after a swap that locked them in mempool — the server-side
+ *        overlay is independent of browser pendingTxStore so iOS / fresh
+ *        sessions / cross-surface txs all get the correct display.
+ *
  * Usage:
  *   pnpm tsx scripts/verify-display-mainnet.ts <addr> [--env staging|prod]
  *   pnpm tsx scripts/verify-display-mainnet.ts bc1psn0925c2p5... --env staging
@@ -130,6 +138,7 @@ interface WalletStateResponse {
   utxos: WalletStateUtxo[];
   btcSats: { p2wpkh: number; p2tr: number; total: number; spendable: number; pendingIn?: number; pendingOut?: number };
   alkanes: Record<string, string>;
+  mempoolLockedAlkanes?: Record<string, string>;
 }
 
 interface EsploraUtxo {
@@ -504,6 +513,54 @@ async function main() {
       });
     }
   }
+
+  // -------------------------------------------------------------------------
+  // I11. Mempool-locked alkane tracking
+  // -------------------------------------------------------------------------
+  console.log('[I11] mempool-locked alkane coverage...');
+  // Fetch all mempool txs touching our address. For each vin whose
+  // prevout is our address, sum the alkanes at that outpoint and assert
+  // walletState.mempoolLockedAlkanes covers the same set.
+  const mempoolTxsResp = await jsonPost(`${ENVS[env]}/api/rpc`, {
+    jsonrpc: '2.0', id: 1, method: 'esplora_address::txs:mempool', params: [address],
+  });
+  const mempoolTxs: Array<{
+    txid: string;
+    vin?: Array<{ txid: string; vout: number; prevout?: { scriptpubkey_address?: string } }>;
+  }> = Array.isArray(mempoolTxsResp.result) ? mempoolTxsResp.result : [];
+
+  const expectedLocked = new Map<string, bigint>();
+  const seenOps = new Set<string>();
+  for (const tx of mempoolTxs) {
+    for (const vin of tx.vin ?? []) {
+      if (vin.prevout?.scriptpubkey_address !== address) continue;
+      const k = `${vin.txid}:${vin.vout}`;
+      if (seenOps.has(k)) continue;
+      seenOps.add(k);
+      const balances = await probeCanonicalAlkanes(env, vin.txid, vin.vout);
+      for (const b of balances) {
+        const key = `${b.block}:${b.tx}`;
+        expectedLocked.set(key, (expectedLocked.get(key) ?? 0n) + BigInt(b.amount));
+      }
+    }
+  }
+
+  const actualLocked = walletState.mempoolLockedAlkanes ?? {};
+  // Diff: every expected entry must be present with the right value;
+  // extras are tolerated (could be from txs at other addresses we don't
+  // know about). Missing or wrong = violation.
+  for (const [id, expected] of expectedLocked) {
+    const actual = actualLocked[id];
+    if (actual == null || BigInt(actual) !== expected) {
+      violations.push({
+        invariant: 'I11', surface: 'walletState.mempoolLockedAlkanes',
+        expected: expected.toString(),
+        actual: actual ?? 'undefined',
+        detail: `alkane ${id}: live mempool txs lock ${expected} sub-units via this address, but walletState reports ${actual ?? 'nothing'}. Wallet card will show "mempool: 0.0000" on this alkane row (mork1e + brooks 2026-05-18 bug class).`,
+      });
+    }
+  }
+  console.log(`  ${mempoolTxs.length} mempool tx(s), ${seenOps.size} our-outpoint(s) spent, ${expectedLocked.size} alkane id(s) expected locked, ${Object.keys(actualLocked).length} reported`);
 
   // -------------------------------------------------------------------------
   // report
