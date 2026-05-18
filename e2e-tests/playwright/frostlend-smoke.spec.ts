@@ -643,6 +643,11 @@ async function wrapFrbtc(page: Page, btcAmount: string, lastTxid: string | null)
 
   if (!confirmEnabled) return null;
 
+  // Snapshot all txids already in the DOM before clicking — prevents captureTxid
+  // from accepting a stale toast from a previous flow (e.g. the first wrap toast
+  // still visible when the second wrap runs).
+  const preClickSnapshot = await snapshotTxids(page);
+
   await page.evaluate(() => {
     const btn = Array.from(document.querySelectorAll('button'))
       .find(b => /confirm swap/i.test(b.textContent || ''));
@@ -652,7 +657,7 @@ async function wrapFrbtc(page: Page, btcAmount: string, lastTxid: string | null)
   await mineOneBlock(page);
   await waitForIndexerSync(page, 60_000);
 
-  return captureTxid(page, 60_000, lastTxid ?? undefined);
+  return captureTxid(page, 60_000, lastTxid ?? undefined, preClickSnapshot);
 }
 
 // ============================================================================
@@ -2340,6 +2345,27 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
     }
 
     // ── Pre-flows 7–11: Re-open trove (previous one was liquidated in Flow 5) ──
+    // Re-fund if BTC is exhausted before wrapping for the second trove.
+    {
+      await openDevPanel(page);
+      await page.waitForTimeout(500);
+      const btcBtnPre7 = page.locator('button', { hasText: '+1 BTC' });
+      if (await btcBtnPre7.isVisible({ timeout: 5000 }).catch(() => false)) {
+        if (await btcBtnPre7.isEnabled({ timeout: 5000 }).catch(() => false)) {
+          console.log('[frostlend-smoke] Pre-step: re-funding wallet before second wrap...');
+          await btcBtnPre7.click();
+          await page.waitForTimeout(90_000);
+          await recoverFromOom(page);
+          await waitForIndexerSync(page, 60_000);
+          await page.waitForTimeout(8_000);
+          console.log('[frostlend-smoke] Pre-step: re-fund complete');
+        }
+      }
+      const closeBtnPre7 = page.locator('button', { hasText: '✕' });
+      if (await closeBtnPre7.isVisible({ timeout: 3000 }).catch(() => false)) await closeBtnPre7.click();
+      await page.waitForTimeout(500);
+    }
+
     // Wrap more frBTC to cover the second trove.
     console.log('[frostlend-smoke] Pre-step: wrapping frBTC for second trove...');
     {
