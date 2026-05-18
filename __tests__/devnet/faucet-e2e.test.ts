@@ -242,39 +242,9 @@ describe('Devnet: Faucet E2E', () => {
     expect(BigInt(frbtc.balance)).toBeGreaterThan(0n);
   });
 
-  // ── Test sellableCurrenciesQueryOptions on devnet ──────────
-
-  it('sellableCurrenciesQueryOptions queryFn should return balances on devnet', async () => {
-    const { sellableCurrenciesQueryOptions } = await import('@/queries/account');
-
-    const deps = {
-      provider,
-      isInitialized: true,
-      network: 'devnet',
-      walletAddress: userTaproot,
-      account: {
-        taproot: { address: userTaproot },
-        nativeSegwit: { address: userSegwit },
-      },
-    };
-
-    const options = sellableCurrenciesQueryOptions(deps);
-    expect(options.enabled).toBe(true);
-
-    const result = await options.queryFn!({} as any);
-    console.log('[faucet-e2e] sellableCurrencies result:', JSON.stringify(result)?.slice(0, 300));
-
-    // Should have entries with balance > 0
-    const withBalance = result.filter((c: any) => BigInt(c.balance || '0') > 0n);
-    console.log('[faucet-e2e] sellableCurrencies with balance:', withBalance.length);
-    for (const c of withBalance) {
-      console.log('[faucet-e2e]   %s (%s): %s', c.name || c.id, c.symbol, c.balance);
-    }
-
-    expect(withBalance.length).toBeGreaterThanOrEqual(1);
-  });
-
   // ── Key difference: boot wallet vs user wallet ─────────────
+  // (sellableCurrenciesQueryOptions test removed 2026-05-18 alongside the
+  // dead `sellableCurrencies` shim.)
 
   it('boot wallet should NOT have the user tokens', async () => {
     // Tokens should be at user address, not boot address

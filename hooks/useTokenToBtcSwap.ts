@@ -89,7 +89,7 @@ export function useTokenToBtcSwap() {
       const unwrapFee = premiumData?.unwrapFeePerThousand ?? FRBTC_UNWRAP_FEE_PER_1000;
       const minimumFrbtcAmount = grossUpForUnwrapFee(params.minimumReceived || '1', unwrapFee);
       const deadlineProvider = provider as Parameters<typeof getFutureBlockHeight>[1];
-      const deadline = (await getFutureBlockHeight(deadlineBlocks || 5, deadlineProvider)).toString();
+      const deadline = (await getFutureBlockHeight(deadlineBlocks || 20, deadlineProvider)).toString();
       const signerAddress = await getSignerAddressDynamic(network);
       const payerAddress = txContext.btcChangeAddress;
       const alkaneRefundAddress = txContext.alkanesChangeAddress;

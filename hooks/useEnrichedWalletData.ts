@@ -278,66 +278,17 @@ export function useEnrichedWalletData(): EnrichedWalletData {
   const btcFast =
     btcFastQuery.data ?? btcFastFromWalletCache ?? btcFastFromWalletState ?? null;
 
-  const espoAlkanesFromWalletCache = useMemo<AlkaneAsset[] | null>(() => {
-    if (dataSource !== 'espo') return null;
-    if (!addressKey) return null;
-    if (walletUtxoCache.utxos.length === 0 && walletUtxoCache.height === 0) return null;
-
-    const cachedBalances = walletUtxoCache.balances;
-    const metadataById = new Map<string, AlkaneAsset>();
-    for (const alkane of alkaneQuery.data ?? []) {
-      metadataById.set(alkane.alkaneId, alkane);
-    }
-
-    const seen = new Set<string>();
-    const out: AlkaneAsset[] = [];
-
-    for (const alkane of alkaneQuery.data ?? []) {
-      const amount = cachedBalances.get(alkane.alkaneId) ?? 0n;
-      if (amount <= 0n) continue;
-      seen.add(alkane.alkaneId);
-      out.push({
-        ...alkane,
-        balance: amount.toString(),
-      });
-    }
-
-    const extraIds = [...cachedBalances.entries()]
-      .filter(([id, amount]) => amount > 0n && !seen.has(id))
-      .map(([id]) => id)
-      .sort((a, b) => {
-        const [aBlock, aTx] = a.split(':').map(Number);
-        const [bBlock, bTx] = b.split(':').map(Number);
-        return (aBlock - bBlock) || (aTx - bTx);
-      });
-
-    for (const id of extraIds) {
-      const amount = cachedBalances.get(id) ?? 0n;
-      const metadata = metadataById.get(id);
-      out.push({
-        alkaneId: id,
-        name: metadata?.name || id,
-        symbol: metadata?.symbol || id,
-        balance: amount.toString(),
-        decimals: metadata?.decimals ?? 8,
-        logo: metadata?.logo,
-        priceUsd: metadata?.priceUsd,
-        priceInSatoshi: metadata?.priceInSatoshi,
-      });
-    }
-
-    return out;
-  }, [
-    addressKey,
-    dataSource,
-    alkaneQuery.data,
-    walletUtxoCache.balances,
-    walletUtxoCache.height,
-    walletUtxoCache.utxos.length,
-  ]);
-
+  // Single alkane source: `alkaneQuery` is fed by `alkaneBalanceQueryOptions`,
+  // which on mainnet reads from `/api/wallet-state` (the unified backend with
+  // Redis cache + last-good fallback + PartialFanoutError). The wallet card
+  // (`addressAlkanes`) and the swap input (`balances.alkanes` aka
+  // `displayAlkanes`) both reference the same react-query result, so they
+  // physically cannot disagree the way they did in mork's 2026-05-18
+  // screenshots (wallet card 4.5122 / swap 0). The previous
+  // `espoAlkanesFromWalletCache` intersection layer was the source of that
+  // disagreement and has been removed.
   const addressAlkanes = alkaneQuery.data ?? EMPTY_ALKANES;
-  const displayAlkanes = espoAlkanesFromWalletCache ?? addressAlkanes;
+  const displayAlkanes = addressAlkanes;
 
   const refresh = useCallback(async () => {
     const tasks: Promise<unknown>[] = [refetchBtc(), refetchAlkanes(), refetchBtcFast()];

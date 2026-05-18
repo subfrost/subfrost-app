@@ -81,7 +81,7 @@ export type AddLiquidityTransactionData = {
   token1Symbol?: string;   // for confirmation display
   maxSlippage?: string;  // percent string, e.g. '0.5' — applied to amount_a_min / amount_b_min in factory opcode 11
   feeRate: number;       // sats/vB
-  deadlineBlocks?: number; // default 5
+  deadlineBlocks?: number; // default 20
   poolId?: { block: string | number; tx: string | number }; // Pool to add liquidity to
   // Override hooks for atomic flows (e.g. wrap+addLiquidity in a single tx).
   // When set, these bypass the normal protostone/inputRequirements/toAddresses
@@ -265,7 +265,7 @@ export function useAddLiquidityMutation() {
         // session would propagate into the cellpack and the SDK's
         // cellpack-number parser fell back to its edict parser, surfacing as
         // "Invalid edict format. Expected 'block:tx:amount:target' …".
-        const deadline = (await getFutureBlockHeight(data.deadlineBlocks || 5, provider as any)).toString();
+        const deadline = (await getFutureBlockHeight(data.deadlineBlocks || 20, provider as any)).toString();
 
         protostone = buildFactoryAddLiquidityProtostones({
           factoryId: ALKANE_FACTORY_ID,

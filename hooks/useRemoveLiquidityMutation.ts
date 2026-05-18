@@ -102,7 +102,7 @@ export type RemoveLiquidityTransactionData = {
   token1Decimals?: number; // token1 decimals (default 8)
   poolName?: string;       // pool name for display (e.g., "DIESEL / frBTC")
   feeRate: number;         // sats/vB
-  deadlineBlocks?: number; // blocks until deadline (default 5)
+  deadlineBlocks?: number; // blocks until deadline (default 20)
 };
 
 export function useRemoveLiquidityMutation() {
@@ -154,7 +154,7 @@ export function useRemoveLiquidityMutation() {
       // Get block height for deadline (regtest uses large offset so deadline never expires)
       const isRegtest = network === 'regtest' || network === 'subfrost-regtest' || network === 'regtest-local' || network === 'qubitcoin-regtest';
       const deadline = await getFutureBlockHeight(
-        isRegtest ? 1000 : (data.deadlineBlocks || 5),
+        isRegtest ? 1000 : (data.deadlineBlocks || 20),
         provider as any
       );
 

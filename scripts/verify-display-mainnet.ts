@@ -42,6 +42,16 @@
  *       mempool_stats.funded_txo_sum / spent_txo_sum.
  *       Catches: gross-mempool-sum overstatement (mork 0.0006 vs 0.0001).
  *
+ *   I6. Wallet-card alkane display matches swap-shell alkane display
+ *       /api/alkane-balances?addresses=... (used by useEnrichedWalletData)
+ *       must return the SAME alkane keys + balances as walletState.alkanes.
+ *       Catches: cross-surface disagreement like mork's 2026-05-18
+ *       screenshots (wallet card DIESEL 4.5122, swap input DIESEL 0).
+ *       The wallet card and swap shell both consume balances through
+ *       `alkaneBalanceQueryOptions`, which on mainnet now reads from
+ *       `/api/wallet-state`. If that route stops being the single source,
+ *       this invariant fires.
+ *
  * Usage:
  *   pnpm tsx scripts/verify-display-mainnet.ts <addr> [--env staging|prod]
  *   pnpm tsx scripts/verify-display-mainnet.ts bc1psn0925c2p5... --env staging
@@ -316,6 +326,31 @@ async function main() {
       expected: expectedPendingOut, actual: actualPendingOut,
       detail: `pendingOut should equal max(0, mempool_spent - mempool_funded) = max(0, ${mempoolSpent} - ${mempoolFunded})`,
     });
+  }
+
+  // -------------------------------------------------------------------------
+  // I6. Wallet card vs swap shell alkane consistency
+  // -------------------------------------------------------------------------
+  // Both surfaces consume `alkaneBalanceQueryOptions`, which on mainnet
+  // round-trips through /api/wallet-state. Two pulls of /api/wallet-state
+  // for the same address MUST return the same alkane keys + balances —
+  // any drift here means the unified backend isn't actually unified
+  // (e.g. someone resurrected an alkanode REST shortcut, or wired a
+  // separate path into one surface).
+  console.log('[I6] wallet-card vs swap-shell alkane consistency...');
+  const secondPull = await getWalletState(env, address);
+  const firstKeys = new Set(Object.keys(walletState.alkanes));
+  const secondKeys = new Set(Object.keys(secondPull.alkanes));
+  for (const k of new Set([...firstKeys, ...secondKeys])) {
+    const a = walletState.alkanes[k] ?? '0';
+    const b = secondPull.alkanes[k] ?? '0';
+    if (a !== b) {
+      violations.push({
+        invariant: 'I6', surface: 'wallet-card vs swap-shell',
+        expected: a, actual: b,
+        detail: `alkane ${k}: two pulls of /api/wallet-state returned different balances (${a} vs ${b}). The unified backend is no longer the single source — wallet card and swap shell will display different numbers, which is mork's 2026-05-18 bug class.`,
+      });
+    }
   }
 
   // -------------------------------------------------------------------------

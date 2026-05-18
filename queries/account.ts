@@ -4,7 +4,7 @@
  * - enrichedWallet: BTC UTXOs + runes (was useEffect, now useQuery)
  * - alkaneBalances: alkane token balances via SDK data API (separate query)
  * - btcBalance: spendable BTC satoshis
- * - sellableCurrencies: alkane tokens the wallet holds
+ * - sellableCurrencies: removed 2026-05-18 — SwapShell reads from useEnrichedWalletData now
  *
  * JOURNAL ENTRY (2026-02-03):
  * Fixed alkanes not loading on wallet dashboard. The Subfrost API returns alkane
@@ -26,7 +26,6 @@ import {
   getProtorunesByOutpoint,
 } from '@/lib/alkanes/rpc';
 import { getAlkanesDataSource } from '@/lib/alkanes/dataSource';
-import type { CurrencyPriceInfoResponse } from '@/types/alkanes';
 
 type WebProvider = import('@alkanes/ts-sdk/wasm').WebProvider;
 
@@ -285,51 +284,11 @@ export async function fetchAlkaneBalancesViaProtobuf(
   network: string,
   address: string,
 ): Promise<{ alkaneId: { block: string; tx: string }; balance: string }[]> {
-  // ──────────────────────────────────────────────────────────────────────
-  // MAINNET DISPLAY PATH — single alkanode call (~280ms total)
-  // ──────────────────────────────────────────────────────────────────────
-  // Per the user's 2026-05-13 directive: when the app-level data source is
-  // ESPO, wallet state should use ESPO's populated spendable-outpoint path
-  // instead of pairing an esplora UTXO list with per-outpoint metashrew fanout.
+  // Mainnet balances are sourced from the unified `/api/wallet-state`
+  // route (Redis-cached per tip-hash, last-good fallback, PartialFanoutError
+  // contract). The alkanode REST shortcut + per-outpoint fanout here only
+  // run for non-mainnet networks where the unified backend isn't wired.
   //
-  // Phantom-balance bug check (Rule SoT-1 ban): subfrost's
-  // `alkanes_protorunesbyaddress` is banned because it reports phantom
-  // balances on previously-spent outpoints. Alkanode's
-  // `/get-alkanes-by-address` is a DIFFERENT upstream with a different
-  // implementation — verified 2026-05-11 against test address
-  // `bc1p0eyyqrkzaadectpjkqlj7zfjg92a9m5cf2kswm6u5q9ahvvpltgqhvlglj`:
-  // alkanode returned 11 active tokens with totals matching the
-  // per-outpoint metashrew sum exactly. No phantom entries. Safe for
-  // display.
-  //
-  // What this REPLACES on mainnet for the wallet balance card:
-  //   1× esplora_address::utxo (~50-100ms)
-  //   N× alkanes_protorunesbyoutpoint (24 calls, p99=978ms each, retries)
-  //   = ~10s wall clock
-  // becomes:
-  //   1× alkanode /get-alkanes-by-address (~280ms)
-  //
-  // What this does NOT touch:
-  //   - Non-mainnet networks — they keep the metashrew path because
-  //     alkanode hosts a mainnet espo deployment only.
-  //
-  // No fallback to metashrew on alkanode failure: per flex 2026-05-11
-  // ("never more than 1 way"). If alkanode is down, display shows the
-  // previous cached data via React Query, the swap path still works.
-  if (network === 'mainnet') {
-    const fromAlkanode = await tryRestAlkanesByAddress(network, address);
-    if (fromAlkanode !== null) {
-      // null === network/transport error; an empty array is a valid
-      // "wallet has no alkanes" answer and we should return it.
-      return fromAlkanode;
-    }
-    // Alkanode unreachable. Returning [] would make the wallet look
-    // empty — not what we want. Bubble up empty so React Query keeps
-    // showing previously-cached data on retry.
-    console.warn(`[alkaneBalances] alkanode display path failed for ${address}; React Query will retry`);
-    throw new Error(`alkanode /get-alkanes-by-address unreachable for ${address}`);
-  }
-
   // ──────────────────────────────────────────────────────────────────────
   // NON-MAINNET PATH — esplora UTXOs + per-outpoint metashrew fanout
   // ──────────────────────────────────────────────────────────────────────
@@ -420,70 +379,45 @@ export async function fetchAlkaneBalancesViaProtobuf(
     }
   }
 
-  // No alkanode fallback here. Mainnet exits early at the top of this
-  // function (single-call alkanode display path); this metashrew path
-  // only runs for non-mainnet networks where alkanode doesn't host an
-  // espo deployment. Per flex 2026-05-11: never more than 1 way to do
-  // something. The `tryRestAlkanesByAddress` helper below is still
-  // exported because it IS the mainnet display upstream now — it's
-  // not a fallback layer.
-
   return Array.from(aggregate, ([id, bal]) => {
     const [block, tx] = id.split(':');
     return { alkaneId: { block, tx }, balance: bal.toString() };
   });
 }
 
-// PRIMARY display-balance fetch on mainnet (since 2026-05-11). Returns
-// the same shape as the metashrew per-outpoint aggregator above so callers
-// don't care which upstream answered.
-//
-// Returns:
-//   - `[]` if alkanode says the wallet has no alkanes (valid empty answer)
-//   - `null` if the network/transport call itself failed (caller should
-//     retry or surface an error)
-//
-// Routes through `/api/rpc/{network}/get-alkanes-by-address` so the proxy's
-// REST sub-path handler resolves the upstream (alkanode for mainnet, per
-// flex 2026-05-10 + REST_PRIMARY_BASE_URLS in the mega-proxy). Routing
-// through the proxy puts the URL config in one server-side place and lets
-// ops swap it via a single env var (`ESPO_MAINNET_PRIMARY_URL`) without
-// rebuilding the client.
-//
-// Phantom-balance bug (Rule SoT-1): subfrost's `alkanes_protorunesbyaddress`
-// is banned because it reports phantom balances on previously-spent
-// outpoints. Alkanode's address-keyed view is a different upstream with
-// a different implementation — verified 2026-05-11 against test address
-// `bc1p0eyyqrkzaadectpjkqlj7zfjg92a9m5cf2kswm6u5q9ahvvpltgqhvlglj`:
-// alkanode totals matched the per-outpoint metashrew sum exactly, no
-// phantom entries. Safe for display.
-async function tryRestAlkanesByAddress(
-  network: string,
-  address: string,
-): Promise<{ alkaneId: { block: string; tx: string }; balance: string }[] | null> {
-  try {
-    const resp = await fetch(`/api/rpc/${network}/get-alkanes-by-address`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ address }),
-      signal: AbortSignal.timeout(15_000),
-    });
-    if (!resp.ok) return null;
-    const data = await resp.json();
-    const items: any[] = Array.isArray(data?.data) ? data.data : [];
-    return items
-      .map((item) => {
-        const block = String(item?.alkaneId?.block ?? '');
-        const tx = String(item?.alkaneId?.tx ?? '');
-        const balance = String(item?.balance ?? '0');
-        if (!block || !tx) return null;
-        return { alkaneId: { block, tx }, balance };
-      })
-      .filter((x): x is { alkaneId: { block: string; tx: string }; balance: string } => x !== null);
-  } catch (err) {
-    console.warn('[alkaneBalances] REST fallback threw:', err);
-    return null;
+/**
+ * Fetch alkane balances on mainnet through the unified `/api/wallet-state`
+ * route. This is the canonical balance source — it owns Redis caching,
+ * last-good fallback, mempool stitching, and `PartialFanoutError` so we
+ * never serve silently-partial state.
+ *
+ * Why this is the single source: the wallet card AND the swap shell both
+ * derive their displayed balance from the same `alkaneBalanceQueryOptions`
+ * react-query, and that query goes through this function on mainnet. Any
+ * other upstream (alkanode REST, `dataApiGetAlkanesByAddress`, raw
+ * `protorunesbyaddress`) creates the kind of cross-surface disagreement
+ * mork hit on 2026-05-18 (wallet card showed DIESEL 4.5122; swap input
+ * showed 0).
+ */
+async function fetchAlkaneBalancesViaWalletState(
+  addresses: string[],
+): Promise<{ alkaneId: { block: string; tx: string }; balance: string }[]> {
+  const params = new URLSearchParams({
+    addresses: [...addresses].sort().join(','),
+    network: 'mainnet',
+  });
+  const resp = await fetch(`/api/wallet-state?${params.toString()}`, {
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!resp.ok) {
+    throw new Error(`/api/wallet-state ${resp.status}`);
   }
+  const data = await resp.json();
+  const map: Record<string, string> = data?.alkanes ?? {};
+  return Object.entries(map).map(([id, balance]) => {
+    const [block, tx] = id.split(':');
+    return { alkaneId: { block, tx }, balance: String(balance) };
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -1231,28 +1165,35 @@ export function alkaneBalanceQueryOptions(deps: AlkaneBalanceDeps) {
       const provider = deps.provider!;
       const alkaneMap = new Map<string, any>();
 
-      // Fetch all addresses in parallel (was sequential for...of loop).
+      // ── Balance fetch ───────────────────────────────────────────────────
+      // Mainnet: one batched call to `/api/wallet-state` for all addresses.
+      // The unified backend handles caching, last-good fallback, and refuses
+      // to serve partial state (PartialFanoutError). Both the wallet card
+      // and the swap input read this query, so they always see the same
+      // numbers — no cross-surface disagreement.
       //
-      // Uses the canonical metashrew indexer's `protorunesbyaddress` view
-      // for ALL networks. Espo's `/get-alkanes-by-address` was lagging /
-      // missing fresh outpoints on mainnet (verified 2026-05-03 via tx
-      // 2255b42e... — espo returned 0 items while protorunesbyaddress
-      // showed the correct DIESEL+frBTC balances). The address-keyed view
-      // is fast and consistent with what the contract sees at submit time;
-      // espo is appropriate for token metadata / pool lists, not balances.
-      const fetchForAddress = async (address: string): Promise<any[]> => {
-        return fetchAlkaneBalancesViaProtobuf(deps.network || 'mainnet', address);
-      };
+      // Non-mainnet (devnet / regtest / oylnet): fan out per-address through
+      // the metashrew per-outpoint helper. `/api/wallet-state` is not wired
+      // for in-browser devnet where the indexer runs in WASM.
+      //
+      // Do NOT catch per-address failures: let them propagate so React Query
+      // retries and keeps the previously-successful `data` instead of
+      // overwriting it with `[]`.
+      const allResults =
+        deps.network === 'mainnet'
+          ? [await fetchAlkaneBalancesViaWalletState(addresses)]
+          : await Promise.all(
+              addresses.map((address) =>
+                fetchAlkaneBalancesViaProtobuf(deps.network || 'mainnet', address),
+              ),
+            );
 
-      // Do NOT catch per-address failures here. The outpoint fanout in
-      // fetchAlkaneBalancesViaProtobuf already retries 3× per outpoint
-      // (cc22225); if it still throws, the indexer is genuinely struggling.
-      // Letting the failure propagate triggers React Query's retry loop and,
-      // crucially, preserves the previously-successful `data` rather than
-      // overwriting it with `[]`. Returning `[]` here was vanishing every
-      // alkane balance the moment one outpoint timed out on a refetch.
-      const allResults = await Promise.all(addresses.map(fetchForAddress));
-
+      // Aggregator: both upstreams (wallet-state on mainnet, per-outpoint
+      // fanout on devnet/regtest) return `{ alkaneId: { block, tx }, balance }`
+      // with NO metadata. Names/symbols/prices come from the enrichment
+      // block below (one batched call to /api/token-details + espo price
+      // lookup). Treating the items as balance-only here removes the old
+      // alkanode-shaped optional metadata fields and tightens the type.
       for (const items of allResults) {
         for (const item of items) {
           const block = item.alkaneId?.block;
@@ -1266,19 +1207,15 @@ export function alkaneBalanceQueryOptions(deps: AlkaneBalanceDeps) {
           if (!alkaneMap.has(alkaneId)) {
             alkaneMap.set(alkaneId, {
               alkaneId,
-              name: item.name || knownInfo?.name || `Token ${alkaneId}`,
-              symbol: item.symbol || knownInfo?.symbol || '',
+              name: knownInfo?.name || `Token ${alkaneId}`,
+              symbol: knownInfo?.symbol || '',
               balance,
               decimals: knownInfo?.decimals ?? 8,
-              logo: item.tokenImage || undefined,
-              // frBTC is bridged 1:1 with BTC, but espo derives priceUsd from
-              // the bUSD/frBTC pool — that pool isn't peg-arbitraged so its
-              // implied price drifts. Skip it for frBTC and let consumers fall
-              // back to the live BTC price.
-              priceUsd: alkaneId === '32:0'
-                ? undefined
-                : (item.priceUsd || item.busdPoolPriceInUsd || undefined),
-              priceInSatoshi: item.priceInSatoshi ? Number(item.priceInSatoshi) : undefined,
+              logo: undefined,
+              // frBTC is bridged 1:1 with BTC; skip its priceUsd here and let
+              // consumers fall back to the live BTC price.
+              priceUsd: undefined,
+              priceInSatoshi: undefined,
             });
           } else {
             const existing = alkaneMap.get(alkaneId)!;
@@ -1396,138 +1333,7 @@ export function btcBalanceQueryOptions(
   });
 }
 
-// ---------------------------------------------------------------------------
-// Sellable currencies
-// ---------------------------------------------------------------------------
-
-const KNOWN_TOKENS_SELL: Record<string, { symbol: string; name: string; decimals: number }> = {
-  '2:0': { symbol: 'DIESEL', name: 'DIESEL', decimals: 8 },
-  '32:0': { symbol: 'frBTC', name: 'frBTC', decimals: 8 },
-};
-
-interface SellableCurrenciesDeps {
-  provider: WebProvider | null;
-  isInitialized: boolean;
-  network: string;
-  walletAddress?: string;
-  account: any;
-  tokensWithPools?: { id: string; name?: string }[];
-}
-
-export function sellableCurrenciesQueryOptions(deps: SellableCurrenciesDeps) {
-  const tokensKey = deps.tokensWithPools
-    ? deps.tokensWithPools.map((t) => t.id).sort().join(',')
-    : '';
-
-  const isLocal = ['devnet', 'regtest-local', 'qubitcoin-regtest'].includes(deps.network);
-  return queryOptions<CurrencyPriceInfoResponse[]>({
-    queryKey: queryKeys.account.sellableCurrencies(deps.network, deps.walletAddress || '', tokensKey),
-    enabled: deps.isInitialized && !!deps.provider && !!deps.walletAddress,
-    staleTime: isLocal ? 2_000 : 30_000,
-    queryFn: async (): Promise<CurrencyPriceInfoResponse[]> => {
-      if (!deps.walletAddress || !deps.provider) return [];
-
-      try {
-        const allAlkanes: CurrencyPriceInfoResponse[] = [];
-        const alkaneMap = new Map<string, CurrencyPriceInfoResponse>();
-
-        const addresses = getWalletBalanceAddresses(deps.account);
-        if (deps.walletAddress && !addresses.includes(deps.walletAddress)) {
-          addresses.push(deps.walletAddress);
-        }
-
-        const sellBalancePromises = addresses.map(async (address) => {
-          try {
-            // 2026-05-04: All networks now use the canonical UTXO-derived
-            // outpoint fanout (`fetchAlkaneBalancesViaProtobuf`) for swap
-            // form percentage buttons.
-            //
-            // Previously mainnet hit `/api/alkane-balances`, a Next.js
-            // server-side proxy that uses the address-keyed
-            // `alkanes_protorunesbyaddress` view. That view sums spent +
-            // unspent outpoints (the indexer never retracts entries when
-            // the UTXO is spent at the BTC layer), producing phantom
-            // balances. Wallet UI was switched to the outpoint fanout in
-            // 9ec751fb but `sellableCurrencies` (this query) was missed —
-            // user could click "MAX" and see ~58 DIESEL spendable when
-            // they actually only had 31. Same fix path now used by both.
-            let balances: { alkaneId: string; balance: string; name?: string; symbol?: string }[] = [];
-
-            const rawItems = await fetchAlkaneBalancesViaProtobuf(deps.network, address);
-            for (const item of rawItems) {
-              const id = `${item.alkaneId.block}:${item.alkaneId.tx}`;
-              const known = KNOWN_TOKENS_SELL[id];
-              balances.push({
-                alkaneId: id,
-                balance: item.balance,
-                name: known?.name,
-                symbol: known?.symbol,
-              });
-            }
-
-            for (const entry of balances) {
-              const alkaneIdStr = entry.alkaneId;
-              const balance = String(entry.balance || '0');
-              // Use metadata from the data API response, fall back to known tokens, then raw ID
-              const knownToken = KNOWN_TOKENS_SELL[alkaneIdStr];
-              const tokenInfo = {
-                symbol: entry.symbol || knownToken?.symbol || entry.name || alkaneIdStr.split(':')[1] || '',
-                name: entry.name || knownToken?.name || entry.symbol || alkaneIdStr,
-                decimals: knownToken?.decimals ?? 8,
-              };
-
-              if (deps.tokensWithPools && !deps.tokensWithPools.some((p) => p.id === alkaneIdStr)) {
-                continue;
-              }
-
-              if (!alkaneMap.has(alkaneIdStr)) {
-                alkaneMap.set(alkaneIdStr, {
-                  id: alkaneIdStr,
-                  address: deps.walletAddress!,
-                  name: tokenInfo.name,
-                  symbol: tokenInfo.symbol,
-                  balance,
-                  priceInfo: {
-                    price: 0,
-                    idClubMarketplace: false,
-                  },
-                });
-              } else {
-                const existing = alkaneMap.get(alkaneIdStr)!;
-                try {
-                  existing.balance = (BigInt(existing.balance || '0') + BigInt(balance)).toString();
-                } catch {
-                  existing.balance = String(Number(existing.balance || 0) + Number(balance));
-                }
-              }
-            }
-          } catch (error) {
-            console.error(`[sellableCurrencies] alkane-balances API failed for ${address}:`, error);
-          }
-        });
-        await Promise.all(sellBalancePromises);
-
-        allAlkanes.push(...alkaneMap.values());
-
-        allAlkanes.sort((a, b) => {
-          try {
-            const balA = BigInt(a.balance || '0');
-            const balB = BigInt(b.balance || '0');
-            if (balA === balB) return (a.name || '').localeCompare(b.name || '');
-            return balA > balB ? -1 : 1;
-          } catch {
-            const balA = Number(a.balance || 0);
-            const balB = Number(b.balance || 0);
-            if (balA === balB) return (a.name || '').localeCompare(b.name || '');
-            return balA > balB ? -1 : 1;
-          }
-        });
-
-        return allAlkanes;
-      } catch (error) {
-        console.error('[sellableCurrencies] Error:', error);
-        return [];
-      }
-    },
-  });
-}
+// `sellableCurrenciesQueryOptions` removed 2026-05-18 — `SwapShell` consumes
+// `walletBalances.alkanes` from `useEnrichedWalletData` directly. The shim
+// existed for an older swap-form percentage button flow that no longer
+// renders. Kept here as a paper trail for the next person who greps for it.

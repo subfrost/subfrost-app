@@ -189,7 +189,7 @@ export type SwapTransactionBaseData = {
   feeRate: number; // sats/vB
   tokenPath?: string[]; // optional explicit path
   poolId?: { block: string | number; tx: string | number }; // Pool reference (not used for routing)
-  deadlineBlocks?: number; // default 5
+  deadlineBlocks?: number; // default 20
   isDieselMint?: boolean;
   // For confirmation modal display (optional)
   sellSymbol?: string;
@@ -321,7 +321,7 @@ export function useSwapMutation() {
 
       // Get deadline block height (regtest uses large offset so deadline never expires)
       const isRegtest = network === 'regtest' || network === 'subfrost-regtest' || network === 'regtest-local' || network === 'qubitcoin-regtest';
-      const deadlineBlocks = isRegtest ? 1000 : (swapData.deadlineBlocks || 5);
+      const deadlineBlocks = isRegtest ? 1000 : (swapData.deadlineBlocks || 20);
       const deadline = await getFutureBlockHeight(deadlineBlocks, provider as any);
 
       // Determine routing: Universal Router (hybrid CLOB+AMM) vs AMM factory direct

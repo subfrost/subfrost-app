@@ -19,14 +19,14 @@ const GlobalContext = createContext<GlobalStoreShape>({
   setMaxSlippage: () => {},
   slippageSelection: 'medium',
   setSlippageSelection: () => {},
-  deadlineBlocks: 5,
+  deadlineBlocks: 20,
   setDeadlineBlocks: () => {},
 });
 
 export function GlobalStore(props: { children: ReactNode }) {
   const [maxSlippage, setMaxSlippage] = useState('5');
   const [slippageSelection, setSlippageSelection] = useState<SlippageSelection>('medium');
-  const [deadlineBlocks, setDeadlineBlocks] = useState(5);
+  const [deadlineBlocks, setDeadlineBlocks] = useState(20);
 
   return (
     <GlobalContext.Provider

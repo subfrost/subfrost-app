@@ -48,11 +48,6 @@ export const queryKeys = {
      */
     walletUtxoCache: (network: string, addresses: string) =>
       ['wallet-utxo-cache', network, addresses] as const,
-    sellableCurrencies: (
-      network: string,
-      walletAddress: string,
-      tokensKey: string,
-    ) => ['sellable-currencies', walletAddress, tokensKey, network] as const,
   },
 
   // -------------------------------------------------------------------------

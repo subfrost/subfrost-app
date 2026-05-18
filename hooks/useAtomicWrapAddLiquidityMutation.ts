@@ -106,7 +106,7 @@ export function useAtomicWrapAddLiquidityMutation() {
         // unreliable (stale "NaN" propagating into the cellpack as
         // "Invalid edict format"). Same pattern as
         // useRemoveLiquidityMutation / useSwapMutation.
-        const deadline = (await getFutureBlockHeight(params.deadlineBlocks || 5, provider as any)).toString();
+        const deadline = (await getFutureBlockHeight(params.deadlineBlocks || 20, provider as any)).toString();
 
         protostones = buildFactoryAddLiquidityProtostones({
           factoryId: config.ALKANE_FACTORY_ID,
