@@ -445,20 +445,39 @@ async function fundWallet(page: Page): Promise<void> {
   await waitForIndexerSync(page, 30_000);
 }
 
-/** Capture txid from SwapSuccessNotification toast (same pattern as devnet-smoke). */
-async function captureTxid(page: Page, timeoutMs = 90_000, excludeTxid?: string): Promise<string | null> {
+/** Snapshot all espo.sh txids currently visible in the DOM. */
+async function snapshotTxids(page: Page): Promise<Set<string>> {
+  const ids = await page.evaluate(() => {
+    const HEX64 = /([a-f0-9]{64})/i;
+    return Array.from(document.querySelectorAll('a[href*="espo.sh/tx/"]'))
+      .map(a => { const m = (a as HTMLAnchorElement).href.match(HEX64); return m ? m[1] : null; })
+      .filter((x): x is string => x !== null);
+  });
+  return new Set(ids);
+}
+
+/**
+ * Capture txid from SwapSuccessNotification toast (same pattern as devnet-smoke).
+ *
+ * `excludeSet` — snapshot of all txids already in the DOM **before** the mutation
+ * was triggered. Only a txid that was not in the snapshot is accepted as the
+ * mutation's output. This prevents spurious passes when a prior flow's toast link
+ * is still in the DOM and the current mutation silently failed.
+ */
+async function captureTxid(page: Page, timeoutMs = 90_000, excludeTxid?: string, excludeSet?: Set<string>): Promise<string | null> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    const txid = await page.evaluate((exclude) => {
+    const txid = await page.evaluate(({ exclude, excludeArr }) => {
       const HEX64 = /([a-f0-9]{64})/i;
+      const excludeSet = new Set(excludeArr);
       const espLinks = Array.from(document.querySelectorAll('a[href*="espo.sh/tx/"]'));
       for (const a of espLinks) {
         const href = (a as HTMLAnchorElement).href || '';
         const m = href.match(HEX64);
-        if (m && m[1] !== exclude) return m[1];
+        if (m && m[1] !== exclude && !excludeSet.has(m[1])) return m[1];
       }
       return null;
-    }, excludeTxid ?? null);
+    }, { exclude: excludeTxid ?? null, excludeArr: excludeSet ? Array.from(excludeSet) : [] });
     if (txid) return txid;
     await page.waitForTimeout(2000);
   }
@@ -2100,6 +2119,7 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
         })();
 
         if (openBtnEnabled) {
+          const preClickTxidsOpen2 = await snapshotTxids(page);
           await page.evaluate(() => {
             const btn = Array.from(document.querySelectorAll('button')).find(b => b.textContent?.trim() === 'Open Trove');
             if (btn) (btn as HTMLElement).click();
@@ -2107,7 +2127,7 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
           await page.waitForTimeout(3000);
           await mineOneBlock(page);
           await waitForIndexerSync(page, 60_000);
-          const t = await captureTxid(page, 60_000, lastTxid ?? undefined);
+          const t = await captureTxid(page, 60_000, lastTxid ?? undefined, preClickTxidsOpen2);
           if (t) {
             lastTxid = t;
             console.log(`[frostlend-smoke] Second trove txid: ${t}`);
@@ -2269,6 +2289,7 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
             report.flows.push(flow);
             saveReport(report);
           } else {
+            const preClickTxids7 = await snapshotTxids(page);
             await page.evaluate(() => {
               const btn = Array.from(document.querySelectorAll('button')).find(b => /confirm adjustment/i.test(b.textContent || ''));
               if (btn) (btn as HTMLElement).click();
@@ -2277,7 +2298,7 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
             await mineOneBlock(page);
             await waitForIndexerSync(page, 60_000);
 
-            const txid = await captureTxid(page, 90_000, lastTxid ?? undefined);
+            const txid = await captureTxid(page, 90_000, lastTxid ?? undefined, preClickTxids7);
             await page.screenshot({ path: '/tmp/fl-flow7-result.png' });
 
             if (txid) {
@@ -2384,6 +2405,7 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
             report.flows.push(flow);
             saveReport(report);
           } else {
+            const preClickTxids8 = await snapshotTxids(page);
             await page.evaluate(() => {
               const btn = Array.from(document.querySelectorAll('button')).find(b => /confirm adjustment/i.test(b.textContent || ''));
               if (btn) (btn as HTMLElement).click();
@@ -2392,7 +2414,7 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
             await mineOneBlock(page);
             await waitForIndexerSync(page, 60_000);
 
-            const txid = await captureTxid(page, 90_000, lastTxid ?? undefined);
+            const txid = await captureTxid(page, 90_000, lastTxid ?? undefined, preClickTxids8);
             await page.screenshot({ path: '/tmp/fl-flow8-result.png' });
 
             if (txid) {
@@ -2499,6 +2521,7 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
             report.flows.push(flow);
             saveReport(report);
           } else {
+            const preClickTxids9 = await snapshotTxids(page);
             await page.evaluate(() => {
               const btn = Array.from(document.querySelectorAll('button')).find(b => /confirm adjustment/i.test(b.textContent || ''));
               if (btn) (btn as HTMLElement).click();
@@ -2507,7 +2530,7 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
             await mineOneBlock(page);
             await waitForIndexerSync(page, 60_000);
 
-            const txid = await captureTxid(page, 90_000, lastTxid ?? undefined);
+            const txid = await captureTxid(page, 90_000, lastTxid ?? undefined, preClickTxids9);
             await page.screenshot({ path: '/tmp/fl-flow9-result.png' });
 
             if (txid) {
@@ -2616,6 +2639,7 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
             report.flows.push(flow);
             saveReport(report);
           } else {
+            const preClickTxids10 = await snapshotTxids(page);
             await page.evaluate(() => {
               const btn = Array.from(document.querySelectorAll('button')).find(b => /confirm adjustment/i.test(b.textContent || ''));
               if (btn) (btn as HTMLElement).click();
@@ -2624,7 +2648,7 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
             await mineOneBlock(page);
             await waitForIndexerSync(page, 60_000);
 
-            const txid = await captureTxid(page, 90_000, lastTxid ?? undefined);
+            const txid = await captureTxid(page, 90_000, lastTxid ?? undefined, preClickTxids10);
             await page.screenshot({ path: '/tmp/fl-flow10-result.png' });
 
             if (txid) {
@@ -2709,6 +2733,9 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
             return errDivs.map(d => d.textContent?.trim() ?? '');
           });
 
+          // Snapshot txids before click so captureTxid can exclude pre-existing toasts.
+          const preClickTxids11 = await snapshotTxids(page);
+
           // Click "Close Trove (repay full debt)"
           await page.evaluate(() => {
             const btn = Array.from(document.querySelectorAll('button')).find(b => /close trove/i.test(b.textContent || ''));
@@ -2737,7 +2764,7 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
           await mineOneBlock(page);
           await waitForIndexerSync(page, 60_000);
 
-          const txid = await captureTxid(page, 90_000, lastTxid ?? undefined);
+          const txid = await captureTxid(page, 90_000, lastTxid ?? undefined, preClickTxids11);
           await page.screenshot({ path: '/tmp/fl-flow11-result.png' });
 
           if (txid) {
