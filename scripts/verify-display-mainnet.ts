@@ -52,6 +52,22 @@
  *       `/api/wallet-state`. If that route stops being the single source,
  *       this invariant fires.
  *
+ *   I7. User-facing inputs show AVAILABLE, not TOTAL (mork1e 2026-05-18 FB6)
+ *       SendModal "available" label, SwapShell formatBalance, and any other
+ *       user-facing input MUST equal `getSendableAlkane(confirmed, delta).availableRaw`.
+ *       Catches: a future regression where one surface goes back to showing
+ *       raw balance and lets the user try to spend mempool-locked amounts.
+ *       Mork's spec: "if i had 10k tortilla across 5 utxos and i was spending
+ *       a utxo that had 700 tortilla / available should be 9300 tortilla /
+ *       mempool should be 700 tortilla / total should be 10k tortilla".
+ *
+ *   I8. getSendableAlkane is the single helper for the I7 contract
+ *       Synthesises mork's scenario and asserts the helper returns the
+ *       spec values. Mirrors the vitest pins in
+ *       lib/walletState/__tests__/sendableAlkane.test.ts but runs against
+ *       the actual built code — catches build-system / module-resolution
+ *       drift that vitest's mocked environment can mask.
+ *
  * Usage:
  *   pnpm tsx scripts/verify-display-mainnet.ts <addr> [--env staging|prod]
  *   pnpm tsx scripts/verify-display-mainnet.ts bc1psn0925c2p5... --env staging
@@ -65,6 +81,7 @@ import {
   sumAvailableSats,
   type SendModalFilterUtxo,
 } from '../lib/walletState/sendModalFilter';
+import { getSendableAlkane } from '../lib/walletState/sendableAlkane';
 import {
   decodeOutpointResponse,
   encodeOutpointWithProtocol,
@@ -351,6 +368,80 @@ async function main() {
         detail: `alkane ${k}: two pulls of /api/wallet-state returned different balances (${a} vs ${b}). The unified backend is no longer the single source — wallet card and swap shell will display different numbers, which is mork's 2026-05-18 bug class.`,
       });
     }
+  }
+
+  // -------------------------------------------------------------------------
+  // I7. User-facing inputs show AVAILABLE not TOTAL — live + synthetic
+  // -------------------------------------------------------------------------
+  // For each alkane in the wallet, the value a user-facing input MUST
+  // display equals `getSendableAlkane(confirmed, pendingDelta).availableRaw`.
+  // We can't observe pendingTxStore from outside the browser, so live
+  // assertion is reduced to: when no pending entry exists, available ==
+  // total (the trivial case). The synthetic case below (I8) carries the
+  // load for the non-trivial scenario.
+  console.log('[I7] user-facing input projections (live, no pending)...');
+  for (const [id, balanceStr] of Object.entries(walletState.alkanes)) {
+    const live = getSendableAlkane(balanceStr, undefined);
+    if (live.availableRaw.toString() !== balanceStr) {
+      violations.push({
+        invariant: 'I7', surface: 'getSendableAlkane(no pending)',
+        expected: balanceStr, actual: live.availableRaw.toString(),
+        detail: `alkane ${id}: with no pending tx, available MUST equal total. Drift here means the helper is doing something it shouldn't.`,
+      });
+    }
+    if (live.mempoolRaw !== 0n) {
+      violations.push({
+        invariant: 'I7', surface: 'getSendableAlkane(no pending)',
+        expected: '0', actual: live.mempoolRaw.toString(),
+        detail: `alkane ${id}: with no pending tx, mempool MUST be 0.`,
+      });
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // I8. getSendableAlkane honours mork1e's spec
+  // -------------------------------------------------------------------------
+  console.log('[I8] getSendableAlkane mork1e 10k/700 spec...');
+  const morkSpec = getSendableAlkane('10000', { delta: -700n });
+  if (morkSpec.totalRaw !== 10000n) {
+    violations.push({
+      invariant: 'I8', surface: 'getSendableAlkane(10k, -700) → totalRaw',
+      expected: '10000', actual: morkSpec.totalRaw.toString(),
+      detail: 'mork1e spec: total stays at the confirmed amount.',
+    });
+  }
+  if (morkSpec.availableRaw !== 9300n) {
+    violations.push({
+      invariant: 'I8', surface: 'getSendableAlkane(10k, -700) → availableRaw',
+      expected: '9300', actual: morkSpec.availableRaw.toString(),
+      detail: 'mork1e spec: available = total - mempool-locked. User-facing inputs MUST use this.',
+    });
+  }
+  if (morkSpec.mempoolRaw !== 700n) {
+    violations.push({
+      invariant: 'I8', surface: 'getSendableAlkane(10k, -700) → mempoolRaw',
+      expected: '700', actual: morkSpec.mempoolRaw.toString(),
+      detail: 'mork1e spec: mempool = amount locked in pending UTXO being spent.',
+    });
+  }
+  // Full lockup (alkane lives only in pending-spent UTXOs):
+  const fullLock = getSendableAlkane('700', { delta: -700n });
+  if (fullLock.availableRaw !== 0n || fullLock.mempoolRaw !== 700n || !fullLock.canSendAny === true) {
+    // canSendAny=false expected here
+  }
+  if (fullLock.availableRaw !== 0n) {
+    violations.push({
+      invariant: 'I8', surface: 'getSendableAlkane(700, -700) → availableRaw',
+      expected: '0', actual: fullLock.availableRaw.toString(),
+      detail: 'mork1e: "if it lives in a utxo where its being spent, it is deducted from total" — full lockup → available 0.',
+    });
+  }
+  if (fullLock.canSendAny !== false) {
+    violations.push({
+      invariant: 'I8', surface: 'getSendableAlkane(700, -700) → canSendAny',
+      expected: 'false', actual: String(fullLock.canSendAny),
+      detail: 'Full mempool lockup → cannot send any. User-facing inputs gate on this.',
+    });
   }
 
   // -------------------------------------------------------------------------

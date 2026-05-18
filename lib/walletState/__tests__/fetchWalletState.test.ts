@@ -121,6 +121,17 @@ function stageMocks(opts: {
         })),
       ) as Response;
     }
+    if (method === 'esplora_address') {
+      // Empty mempool_stats — tests don't exercise pending-BTC paths via
+      // this mock layer. Returning a well-formed but zeroed payload keeps
+      // the call from throwing 'unexpected RPC method' and lets fetchWalletState
+      // populate pendingIn/pendingOut as 0.
+      return rpcResult({
+        address: 'test',
+        chain_stats: { funded_txo_count: 0, funded_txo_sum: 0, spent_txo_count: 0, spent_txo_sum: 0 },
+        mempool_stats: { funded_txo_count: 0, funded_txo_sum: 0, spent_txo_count: 0, spent_txo_sum: 0 },
+      }) as Response;
+    }
     // metashrew_view protorunesbyoutpoint calls are intercepted by the
     // module-level mock above — fetch never sees them. (The per-outpoint
     // wire format has its own coverage in protorunesByOutpointMV.test.ts.)
@@ -208,9 +219,9 @@ describe('fetchWalletState', () => {
     expect(onTheLimit!.alkanes).toHaveLength(1);
     expect(overTheLimit!.alkanes).toEqual([]);
 
-    // Fetch calls: 2 (tip) + 1 (height) + 1 (bitcoind) + 1 (utxo list) = 5.
+    // Fetch calls: 2 (tip) + 1 (height) + 1 (bitcoind) + 1 (utxo list) + 1 (esplora_address stats) = 6.
     // (Per-outpoint protorunes is now via the mocked MV helper — separate counter below.)
-    expect(mockFetch).toHaveBeenCalledTimes(5);
+    expect(mockFetch).toHaveBeenCalledTimes(6);
     // Exactly ONE per-outpoint helper call — proves the dust filter
     // excluded the over-limit UTXO from the fan-out.
     expect(mvCalls).toHaveLength(1);

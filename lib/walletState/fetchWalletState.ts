@@ -26,7 +26,7 @@
  * stitches up the rest from the previous block's cache entry.
  */
 
-import { getAddressUtxos, getHeight } from '@/lib/alkanes/rpc';
+import { getAddressStats, getAddressUtxos, getHeight } from '@/lib/alkanes/rpc';
 import { getProtorunesByOutpointMV } from '@/lib/alkanes/protorunesByOutpointMV';
 import { getRpcUrl } from '@/utils/getConfig';
 import { getCurrentTipHash } from './tipHash';
@@ -109,6 +109,19 @@ export interface WalletStateBtcSats {
    * as the soft-cap for fee budgets.
    */
   spendable: number;
+  /**
+   * Net BTC arriving from pending mempool txs (positive). Computed as
+   * `max(0, mempool_funded - mempool_spent)` aggregated across all
+   * addresses in this snapshot. mork1e 2026-05-17: showing gross
+   * mempool incoming without subtracting mempool outgoing overstated
+   * "pending BTC" 6×, panicking the user mid-swap.
+   */
+  pendingIn: number;
+  /**
+   * Net BTC leaving in pending mempool txs (positive magnitude).
+   * Computed as `max(0, mempool_spent - mempool_funded)`.
+   */
+  pendingOut: number;
 }
 
 export interface WalletState {
@@ -224,24 +237,34 @@ export async function fetchWalletState(
   ]);
   const metashrewHeight = Number(metashrewHeightRaw) || 0;
 
-  // Per-address UTXO fetch, in parallel. Failures are tolerated per
-  // address — one degraded esplora response shouldn't zero out the
-  // entire wallet snapshot.
-  const utxoSettled = await Promise.allSettled(
-    addresses.map(async (addr) => {
-      const list = await getAddressUtxos(network, addr, AbortSignal.timeout(15_000));
-      return list.map((u) => ({
-        txid: u.txid,
-        vout: u.vout,
-        value: u.value,
-        address: addr,
-        blockHeight: u.status?.block_height ?? null,
-        // Mempool entries (`status.confirmed === false` or undefined
-        // block_height) become `blockHeight: null` so the safe-spend
-        // filter excludes them.
-      }));
-    }),
-  );
+  // Per-address UTXO fetch + esplora_address stats, in parallel. Failures
+  // are tolerated per address — one degraded esplora response shouldn't
+  // zero out the entire wallet snapshot.
+  const [utxoSettled, statsSettled] = await Promise.all([
+    Promise.allSettled(
+      addresses.map(async (addr) => {
+        const list = await getAddressUtxos(network, addr, AbortSignal.timeout(15_000));
+        return list.map((u) => ({
+          txid: u.txid,
+          vout: u.vout,
+          value: u.value,
+          address: addr,
+          blockHeight: u.status?.block_height ?? null,
+          // Mempool entries (`status.confirmed === false` or undefined
+          // block_height) become `blockHeight: null` so the safe-spend
+          // filter excludes them.
+        }));
+      }),
+    ),
+    // mork1e 2026-05-17: "pending BTC" was a gross funded_sum, not the
+    // signed net. Pull mempool_stats from esplora_address per address,
+    // sum across, and derive net pendingIn/pendingOut in the final aggregation.
+    Promise.allSettled(
+      addresses.map((addr) =>
+        getAddressStats(network, addr, AbortSignal.timeout(15_000)),
+      ),
+    ),
+  ]);
 
   const rawUtxos: Array<{
     txid: string;
@@ -422,6 +445,18 @@ export async function fetchWalletState(
     if (amount > 0n) alkanes[id] = amount.toString();
   }
 
+  // Aggregate mempool_stats across addresses for net pendingIn/pendingOut.
+  let mempoolFunded = 0;
+  let mempoolSpent = 0;
+  for (const r of statsSettled) {
+    if (r.status === 'fulfilled' && r.value) {
+      mempoolFunded += Number(r.value.mempool_stats?.funded_txo_sum ?? 0);
+      mempoolSpent += Number(r.value.mempool_stats?.spent_txo_sum ?? 0);
+    }
+  }
+  const pendingIn = Math.max(0, mempoolFunded - mempoolSpent);
+  const pendingOut = Math.max(0, mempoolSpent - mempoolFunded);
+
   return {
     addresses,
     metashrewHeight,
@@ -433,6 +468,8 @@ export async function fetchWalletState(
       p2tr,
       total: p2wpkh + p2tr,
       spendable,
+      pendingIn,
+      pendingOut,
     },
     alkanes,
     ...(pendingAdjustment ? { pendingAdjustment } : {}),

@@ -121,6 +121,8 @@ import { useAlkaneSendMutation } from '@/hooks/useAlkaneSendMutation';
 import { getHeight as rpcGetHeight, getAddressUtxos as rpcGetAddressUtxos } from '@/lib/alkanes/rpc';
 import { getAlkanesDataSource } from '@/lib/alkanes/dataSource';
 import { selectAvailableUtxos } from '@/lib/walletState/sendModalFilter';
+import { getSendableAlkane } from '@/lib/walletState/sendableAlkane';
+import { usePendingTxs } from '@/hooks/usePendingTxs';
 import { useWalletUtxoCache } from '@/hooks/useWalletUtxoCache';
 
 bitcoin.initEccLib(ecc);
@@ -264,6 +266,22 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
   const { showError } = useNotification();
   const { t } = useTranslation();
   const { balances, refresh } = useEnrichedWalletData();
+  const { alkaneDeltas: pendingAlkaneDeltas } = usePendingTxs();
+  // mork1e (2026-05-18 FB6): user-facing inputs (send modal, swap inputs)
+  // MUST display "available" — the spendable amount after subtracting
+  // alkane UTXOs already locked in pending mempool transactions. Showing
+  // raw confirmed total lets the user try to spend mempool-locked amounts
+  // and gets them an "Insufficient alkanes" error at broadcast time. The
+  // wallet card displays total/available/mempool as three separate lines
+  // (the user can SEE the lock-up); user-facing INPUTS are gated on
+  // available only.
+  const pendingByAlkaneSend = useMemo(() => {
+    const map = new Map<string, { delta: bigint }>();
+    for (const d of pendingAlkaneDeltas) {
+      map.set(`${d.alkaneId.block}:${d.alkaneId.tx}`, { delta: d.delta });
+    }
+    return map;
+  }, [pendingAlkaneDeltas]);
   const dataSource = getAlkanesDataSource(network || 'mainnet');
   const walletUtxoCache = useWalletUtxoCache();
   const btcSendMutation = useBtcSendMutation();
@@ -638,10 +656,13 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
           return;
         }
 
-        // Convert to base units and check balance. NFTs always send their single base unit.
-        const balanceBaseUnits = BigInt(selectedAlkane.balance);
-
-        if (amountBaseUnits > balanceBaseUnits) {
+        // Gate on AVAILABLE, not total — mempool-locked alkanes can't be
+        // spent again until the prior pending tx mines or replaces.
+        const sendable = getSendableAlkane(
+          selectedAlkane.balance,
+          pendingByAlkaneSend.get(selectedAlkane.alkaneId),
+        );
+        if (amountBaseUnits > sendable.availableRaw) {
           setError(t('send.insufficientBalance'));
           return;
         }
@@ -890,10 +911,13 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
       const amountBaseUnits = getAlkaneSendAmountBaseUnits(selectedAlkane);
       if (amountBaseUnits === null || amountBaseUnits <= 0n) throw new Error(t('send.invalidAmount'));
 
-      const balanceBaseUnits = BigInt(selectedAlkane.balance);
-      if (amountBaseUnits > balanceBaseUnits) {
+      const sendable = getSendableAlkane(
+        selectedAlkane.balance,
+        pendingByAlkaneSend.get(selectedAlkane.alkaneId),
+      );
+      if (amountBaseUnits > sendable.availableRaw) {
         throw new Error(t('send.insufficientBalanceDetailed', {
-          have: selectedAlkane.balance,
+          have: sendable.availableRaw.toString(),
           need: amountBaseUnits.toString(),
         }));
       }
@@ -1297,11 +1321,26 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
                   />
                 </>
               )}
-              {selected && (
-                <div className={`${selectedIsNft ? 'mt-0' : 'mt-1'} text-xs text-[color:var(--sf-text)]/60`}>
-                  {t('send.available')} {formatAlkaneBalance(selected.balance, selected.decimals, selected)} {selected.name}
-                </div>
-              )}
+              {selected && (() => {
+                // "Available" label MUST reflect spendable amount, not the
+                // raw confirmed total. mork1e 2026-05-18: showing total
+                // lets users try to send mempool-locked amounts, which then
+                // fails at broadcast with cryptic "Insufficient alkanes".
+                const sendable = getSendableAlkane(
+                  selected.balance,
+                  pendingByAlkaneSend.get(selected.alkaneId),
+                );
+                return (
+                  <div className={`${selectedIsNft ? 'mt-0' : 'mt-1'} text-xs text-[color:var(--sf-text)]/60`}>
+                    {t('send.available')} {formatAlkaneBalance(sendable.availableRaw.toString(), selected.decimals, selected)} {selected.name}
+                    {sendable.mempoolRaw > 0n && (
+                      <span className="ml-2 text-yellow-400/70">
+                        ({formatAlkaneBalance(sendable.mempoolRaw.toString(), selected.decimals, selected)} {t('balances.mempool') || 'mempool'})
+                      </span>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           );
         })()}

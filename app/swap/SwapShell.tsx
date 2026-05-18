@@ -15,7 +15,8 @@ import { getConfig, getRpcUrl } from "@/utils/getConfig";
 // Now reuses walletBalances.alkanes from useEnrichedWalletData (~1s, already cached).
 import { useEnrichedWalletData } from "@/hooks/useEnrichedWalletData";
 import { usePendingTxs } from "@/hooks/usePendingTxs";
-import { getAlkaneAvailabilityBreakdown, type PendingAlkaneEntry } from "@/app/wallet/components/alkaneBalanceBreakdown";
+import { type PendingAlkaneEntry } from "@/app/wallet/components/alkaneBalanceBreakdown";
+import { getSendableAlkane } from "@/lib/walletState/sendableAlkane";
 import { useGlobalStore } from "@/stores/global";
 import { useFeeRate } from "@/hooks/useFeeRate";
 import { useBtcPrice } from "@/hooks/useBtcPrice";
@@ -918,25 +919,19 @@ export default function SwapShell() {
     // pure helper `getAlkaneAvailabilityBreakdown` so the swap input's
     // "available" matches the wallet-card semantics: outgoing-pending
     // alkanes (e.g. mid-swap) get subtracted from the displayed balance.
-    let balance = walletAlkaneBalances.get(id);
-    if (!balance) {
+    // Single contract via getSendableAlkane — same helper SendModal uses,
+    // pinned by lib/walletState/__tests__/sendableAlkane.test.ts and the
+    // headless harness (scripts/verify-display-mainnet.ts I7).
+    let rawConfirmed = walletAlkaneBalances.get(id);
+    if (!rawConfirmed) {
       const cur = idToUserCurrency.get(id);
-      balance = cur?.balance;
+      rawConfirmed = cur?.balance;
     }
-    if (balance) {
-      const confirmedRaw = (() => {
-        try { return BigInt(balance); } catch { return 0n; }
-      })();
-      const { availableRaw } = getAlkaneAvailabilityBreakdown(
-        confirmedRaw,
-        pendingByAlkaneSwap.get(id),
-      );
-      balance = availableRaw.toString();
-    }
-
-    if (!balance) {
+    if (!rawConfirmed) {
       return `${t('swap.balanceColon')} 0`;
     }
+    const sendable = getSendableAlkane(rawConfirmed, pendingByAlkaneSwap.get(id));
+    let balance = sendable.availableRaw.toString();
 
     // Alkane balances use 8 decimal places (like satoshis)
     // Example: 99000000 raw = 0.99 frBTC

@@ -27,7 +27,7 @@ function baseState(over: Partial<WalletState> = {}): WalletState {
     bitcoindHeight: 950_000,
     tipHash: 'cafe',
     utxos: [],
-    btcSats: { p2wpkh: 0, p2tr: 0, total: 0, spendable: 0 },
+    btcSats: { p2wpkh: 0, p2tr: 0, total: 0, spendable: 0, pendingIn: 0, pendingOut: 0 },
     alkanes: {},
     ...over,
   };

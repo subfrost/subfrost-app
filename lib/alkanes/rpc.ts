@@ -260,6 +260,48 @@ export async function getAddressUtxos(
 }
 
 // ============================================================================
+// esplora_address — confirmed + mempool stats summary
+// ============================================================================
+
+export interface EsploraAddressStats {
+  address: string;
+  chain_stats: {
+    funded_txo_count: number;
+    funded_txo_sum: number;
+    spent_txo_count: number;
+    spent_txo_sum: number;
+  };
+  mempool_stats: {
+    funded_txo_count: number;
+    funded_txo_sum: number;
+    spent_txo_count: number;
+    spent_txo_sum: number;
+  };
+}
+
+/**
+ * Per-address summary including mempool stats. Used by the wallet-state
+ * route to derive net-pending BTC (`mempool_funded_sum - mempool_spent_sum`)
+ * — the mork1e 2026-05-17 "0.0006 vs 0.0001 pending BTC" bug class.
+ */
+export async function getAddressStats(
+  network: string,
+  address: string,
+  signal?: AbortSignal,
+): Promise<EsploraAddressStats | null> {
+  const result = await jsonRpcCall<unknown>(
+    subfrostRpcUrl(network),
+    'esplora_address',
+    [address],
+    signal,
+  );
+  if (!result || typeof result !== 'object') return null;
+  const r = result as Partial<EsploraAddressStats>;
+  if (!r.chain_stats || !r.mempool_stats) return null;
+  return r as EsploraAddressStats;
+}
+
+// ============================================================================
 // esplora_address::txs:mempool — list mempool transactions for an address
 // ============================================================================
 
