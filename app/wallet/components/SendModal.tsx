@@ -120,6 +120,7 @@ import { useBtcSendMutation, BtcSendStaleUtxosError } from '@/hooks/useBtcSendMu
 import { useAlkaneSendMutation } from '@/hooks/useAlkaneSendMutation';
 import { getHeight as rpcGetHeight, getAddressUtxos as rpcGetAddressUtxos } from '@/lib/alkanes/rpc';
 import { getAlkanesDataSource } from '@/lib/alkanes/dataSource';
+import { selectAvailableUtxos } from '@/lib/walletState/sendModalFilter';
 import { useWalletUtxoCache } from '@/hooks/useWalletUtxoCache';
 
 bitcoin.initEccLib(ecc);
@@ -507,30 +508,20 @@ export default function SendModal({ isOpen, onClose, initialAlkane, onSuccess }:
   const frozenUtxos = getFrozenUtxos();
 
   // BTC-send UTXO candidates: confirmed, on a btcFromAddresses entry, not
-  // frozen. inscriptions/runes/alkanes filter is conditional — for
-  // dual-address browser the segwit payment address by design doesn't
-  // hold those (Xverse / OYL / Leather route ordinals to taproot). For
-  // keystore / single-address browser the address may share alkanes with
-  // BTC, so the filter stays.
-  const availableUtxos = utxos.all.filter((utxo) => {
-    // Allow unconfirmed UTXOs ONLY if they originate from a tx the
-    // user broadcast in this session. The SDK's PendingTxStore
-    // tracks those — see `ourPendingTxids` above. This overlays
-    // optimistic pending state on top of the confirmed UTXO set so
-    // back-to-back sends don't get blocked by indexer lag.
-    if (!utxo.status.confirmed && !ourPendingTxids.has(utxo.txid)) return false;
-    if (!btcFromAddresses.includes(utxo.address)) return false;
-
-    const utxoKey = `${utxo.txid}:${utxo.vout}`;
-    if (frozenUtxos.has(utxoKey)) return showFrozenUtxos;
-
-    if (!isDualAddressBrowser) {
-      if (utxo.inscriptions && utxo.inscriptions.length > 0) return false;
-      if (utxo.runes && Object.keys(utxo.runes).length > 0) return false;
-      if (utxo.alkanes && Object.keys(utxo.alkanes).length > 0) return false;
-    }
-    return true;
-  });
+  // frozen. Logic delegated to the pure `selectAvailableUtxos` helper in
+  // `lib/walletState/sendModalFilter.ts` — same function the headless
+  // display-verification harness (`scripts/verify-display-mainnet.ts`)
+  // calls against live mainnet. Refactor 2026-05-18: extracted out of
+  // an inline closure so changes here can never silently drift from
+  // what the harness asserts before push to develop.
+  const availableUtxos = selectAvailableUtxos({
+    utxos: utxos.all as any,
+    ourPendingTxids,
+    frozenUtxos,
+    showFrozenUtxos,
+    btcFromAddresses,
+    isDualAddressBrowser,
+  }) as typeof utxos.all;
 
   // UTXO distribution logged only in dev when data actually changes
 

@@ -81,10 +81,12 @@ function stubEsploraFetch(
       const body = JSON.parse(init.body ?? '{}');
       const addr = body?.params?.[0] as string | undefined;
       const method = body?.method as string | undefined;
-      const utxos = (addr && perAddressUtxos[addr]) ?? [];
+      const utxos: Array<{ value: number; [k: string]: unknown }> =
+        (addr ? perAddressUtxos[addr] : undefined) ?? [];
       let result: unknown;
       if (method === 'esplora_address') {
-        const mp = (addr && perAddressMempool[addr]) ?? { funded: 0, spent: 0 };
+        const mp: { funded: number; spent: number } =
+          (addr ? perAddressMempool[addr] : undefined) ?? { funded: 0, spent: 0 };
         result = statsFromUtxos(utxos, mp.funded, mp.spent);
       } else {
         result = utxos;
