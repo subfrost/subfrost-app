@@ -104,7 +104,7 @@ function stageMocks(opts: {
     if (method === 'metashrew_getblockhash') {
       return rpcResult(opts.tipHash) as Response;
     }
-    if (method === 'esplora_blocks::tip:height') {
+    if (method === 'esplora_blocks:tip:height') {
       return rpcResult(opts.bitcoindHeight) as Response;
     }
     if (method === 'esplora_address::utxo') {
@@ -228,11 +228,17 @@ describe('fetchWalletState', () => {
     expect(mvCalls[0].vout).toBe(0);
   });
 
-  it('pins per-outpoint reads to the snapshot tip height (reorg safety)', async () => {
-    // The whole fan-out MUST use the same blockTag as the captured tip.
-    // If individual outpoint reads were 'latest' instead, a block landing
-    // mid-fan-out could mix old and new state — the snapshot would not
-    // be self-consistent at the tipHash it advertises.
+  it("per-outpoint reads use blockTag='latest' so they align with esplora's tip", async () => {
+    // mork1e 2026-05-18 FB6: the original behavior was to pin every read to
+    // metashrewHeight "for reorg safety". But esplora_address::utxo doesn't
+    // pin — it always returns "now". When metashrew lagged bitcoind by even
+    // one block, the new (post-lag) UTXOs esplora returned didn't exist at
+    // metashrewHeight yet → per-outpoint reads returned empty → wallet card
+    // silently dropped every alkane whose carrier was created in the gap.
+    //
+    // Fix: 'latest' for per-outpoint reads. Reorg-window race (block lands
+    // mid-fanout) is microseconds; metashrew-lag window is 10-30s on
+    // mainnet. The mork bug class beats the reorg edge.
     stageMocks({
       tipHeight: 950_000,
       tipHash: 'feed',
@@ -256,7 +262,7 @@ describe('fetchWalletState', () => {
 
     expect(mvCalls).toHaveLength(3);
     for (const c of mvCalls) {
-      expect(c.blockTag).toBe('950000');
+      expect(c.blockTag).toBe('latest');
     }
   });
 

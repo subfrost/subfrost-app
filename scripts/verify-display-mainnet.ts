@@ -68,6 +68,23 @@
  *       the actual built code — catches build-system / module-resolution
  *       drift that vitest's mocked environment can mask.
  *
+ *   I9. metashrew vs bitcoind tip alignment (mork1e 2026-05-18 FB6)
+ *       walletState.metashrewHeight must be within INDEXER_LAG_TOLERANCE
+ *       (1 block) of walletState.bitcoindHeight, AND bitcoindHeight must
+ *       be non-zero. Catches: the split-brain class where esplora returns
+ *       "now" UTXOs but metashrew per-outpoint reads are pinned to a
+ *       lagging height, dropping every alkane whose carrier was created
+ *       in the gap. Also catches a broken fetchBitcoindHeight (returns 0
+ *       silently — was the 2026-05-18 wire-format bug:
+ *       `esplora_blocks::tip:height` had a double-slash and 404'd).
+ *
+ *   I10. Alkane coverage: every dust UTXO esplora reports has a
+ *        balance sheet entry in walletState.utxos[].alkanes (or none of
+ *        them do, for a wallet with no alkanes). Catches: per-outpoint
+ *        fanout silently returning empty for outpoints that DO carry
+ *        alkanes on-chain (the symptom of mork1e's "2 of 7 alkanes"
+ *        screenshot).
+ *
  * Usage:
  *   pnpm tsx scripts/verify-display-mainnet.ts <addr> [--env staging|prod]
  *   pnpm tsx scripts/verify-display-mainnet.ts bc1psn0925c2p5... --env staging
@@ -442,6 +459,50 @@ async function main() {
       expected: 'false', actual: String(fullLock.canSendAny),
       detail: 'Full mempool lockup → cannot send any. User-facing inputs gate on this.',
     });
+  }
+
+  // -------------------------------------------------------------------------
+  // I9. metashrew vs bitcoind tip alignment
+  // -------------------------------------------------------------------------
+  console.log('[I9] metashrew vs bitcoind tip alignment...');
+  if (walletState.bitcoindHeight === 0) {
+    violations.push({
+      invariant: 'I9', surface: 'walletState.bitcoindHeight',
+      expected: '> 0', actual: 0,
+      detail: 'bitcoindHeight=0 indicates fetchBitcoindHeight is broken (e.g. JSON-RPC method renamed upstream). Without bitcoindHeight the split-brain check below cannot fire — silently serves split snapshots like mork1e 2026-05-18 (2 of 7 alkanes).',
+    });
+  } else {
+    const lag = walletState.bitcoindHeight - walletState.metashrewHeight;
+    const TOLERANCE = 1;
+    if (lag > TOLERANCE) {
+      violations.push({
+        invariant: 'I9', surface: 'walletState tip alignment',
+        expected: `metashrew within ${TOLERANCE} block(s) of bitcoind`,
+        actual: `metashrew=${walletState.metashrewHeight}, bitcoind=${walletState.bitcoindHeight}, lag=${lag}`,
+        detail: 'When metashrew lags bitcoind, the per-outpoint protorune fanout (pinned to metashrewHeight) returns empty for UTXOs that esplora-now reports as unspent but metashrew-then hadn\'t seen yet. Snapshot silently drops alkanes.',
+      });
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // I10. Alkane coverage — no dust UTXO with on-chain alkanes goes empty
+  // -------------------------------------------------------------------------
+  console.log('[I10] alkane coverage check (every dust UTXO carries its balance sheet)...');
+  for (const u of walletState.utxos) {
+    if (u.value > ALKANE_DUST_MAX) continue;
+    // Re-fanout against the SNAPSHOT'S tipHash (not 'latest') so we ask the
+    // same question the snapshot did. If snapshot says empty AND canonical
+    // says non-empty at the same tip, the snapshot is broken.
+    const canonical = await probeCanonicalAlkanes(env, u.txid, u.vout);
+    const snapshotCount = Array.isArray(u.alkanes) ? u.alkanes.length : 0;
+    if (canonical.length > 0 && snapshotCount === 0) {
+      violations.push({
+        invariant: 'I10', surface: `walletState.utxos[${u.txid.slice(0,12)}...:${u.vout}].alkanes`,
+        expected: `${canonical.length} alkane entries`,
+        actual: '0',
+        detail: `dust UTXO carries ${canonical.length} on-chain alkane(s) per canonical fanout, but walletState shows empty. This UTXO's alkane balance is invisible to the wallet card.`,
+      });
+    }
   }
 
   // -------------------------------------------------------------------------

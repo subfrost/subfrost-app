@@ -46,6 +46,24 @@ export class PartialFanoutError extends Error {
   }
 }
 
+/**
+ * Thrown when the metashrew indexer lags bitcoind by more than the
+ * tolerance window. mork1e 2026-05-18: esplora returns the post-confirm
+ * UTXO set ("now") but our per-outpoint protorune fanout pins to
+ * metashrewHeight; when the two differ by 2+ blocks the snapshot
+ * silently drops every alkane whose carrier was created in the gap.
+ * The API route catches this and returns last-good rather than caching
+ * an incomplete view.
+ */
+export class IndexerLagError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'IndexerLagError';
+  }
+}
+
+const INDEXER_LAG_TOLERANCE_BLOCKS = 1;
+
 import {
   withPendingAdjustment,
   type MempoolAdjustmentReport,
@@ -190,6 +208,12 @@ function isTaprootAddress(addr: string): boolean {
 }
 
 async function fetchBitcoindHeight(network: string): Promise<number> {
+  // Wire form: `esplora_blocks:tip:height` (SINGLE colon between segments).
+  // The old `esplora_blocks::tip:height` (two colons) routes to esplora REST
+  // as `/blocks//tip/height` with a double-slash → 404, which made this
+  // helper silently return 0. mork1e 2026-05-18 FB6 surfaced the impact:
+  // wallet-state snapshots advertised bitcoindHeight=0 to clients, and the
+  // split-brain check (metashrew vs bitcoind alignment) couldn't fire.
   try {
     const res = await fetch(getRpcUrl(network), {
       method: 'POST',
@@ -197,7 +221,7 @@ async function fetchBitcoindHeight(network: string): Promise<number> {
       body: JSON.stringify({
         jsonrpc: '2.0',
         id: 1,
-        method: 'esplora_blocks::tip:height',
+        method: 'esplora_blocks:tip:height',
         params: [],
       }),
       signal: AbortSignal.timeout(8_000),
@@ -236,6 +260,17 @@ export async function fetchWalletState(
     fetchBitcoindHeight(network),
   ]);
   const metashrewHeight = Number(metashrewHeightRaw) || 0;
+
+  // Telemetry: log significant metashrew lag so we can spot it in Cloud
+  // Run logs even though we no longer refuse to serve. The previous "throw
+  // IndexerLagError" approach regressed the BTC-spendable-during-lag fix
+  // (mork1e IMG_2439); see per-outpoint blockTag handling below for the
+  // tip-alignment fix that doesn't break BTC display.
+  if (bitcoindHeight > 0 && metashrewHeight < bitcoindHeight - INDEXER_LAG_TOLERANCE_BLOCKS) {
+    console.warn(
+      `[walletState] metashrew lag detected: metashrew=${metashrewHeight}, bitcoind=${bitcoindHeight}, lag=${bitcoindHeight - metashrewHeight} blocks (network=${network})`,
+    );
+  }
 
   // Per-address UTXO fetch + esplora_address stats, in parallel. Failures
   // are tolerated per address — one degraded esplora response shouldn't
@@ -294,17 +329,28 @@ export async function fetchWalletState(
   const balanceSheets = new Map<string, WalletUtxoAlkane[]>();
 
   if (dustOutpoints.length > 0) {
-    // Pin every per-outpoint read to the SAME metashrew height as the
-    // snapshot's tipHash so the fan-out is reorg-safe and a block landing
-    // mid-fan-out can't return mixed state. `'latest'` would let metashrew
-    // return whatever its current tip is at each call — fine in steady
-    // state, racy across the boundary. Using the canonical
-    // `metashrew_view protorunesbyoutpoint` primitive via the MV helper
-    // because the legacy `alkanes_protorunesbyoutpoint` JSON-RPC wrapper
-    // is "Method not found" on the in-cluster jsonrpc upstream (verified
-    // 2026-05-11 in subfrost-mobile upstream.rs:646; same risk surface
-    // here on any deployment that routes through jsonrpc.mainnet-alkanes).
-    const blockTag = metashrewHeight > 0 ? metashrewHeight.toString() : 'latest';
+    // Per-outpoint read tip selection.
+    //
+    // mork1e 2026-05-18 FB6 root cause: this used to pin every read to
+    // metashrewHeight ("the snapshot tip") for reorg safety. But esplora
+    // doesn't pin — its UTXO list is always at the current chain tip.
+    // When metashrew lags bitcoind by even 1 block, the new (post-lag)
+    // UTXOs esplora returns don't exist at metashrewHeight yet → the
+    // per-outpoint reads return empty → the wallet card silently drops
+    // every alkane whose carrier was created in the gap.
+    //
+    // Fix: use 'latest' so per-outpoint reads match the tip esplora is
+    // looking at. We trade reorg-window race (a block landing mid-fanout
+    // could mix old+new state) for tip-alignment (the common case where
+    // metashrew is a block behind no longer drops alkanes). The reorg
+    // window is microseconds-to-seconds; the metashrew-lag window is
+    // routinely 10-30s on mainnet.
+    //
+    // Using the canonical `metashrew_view protorunesbyoutpoint` primitive
+    // via the MV helper because the legacy `alkanes_protorunesbyoutpoint`
+    // JSON-RPC wrapper is "Method not found" on the in-cluster jsonrpc
+    // upstream (verified 2026-05-11 in subfrost-mobile upstream.rs:646).
+    const blockTag = 'latest';
     const settled = await Promise.allSettled(
       dustOutpoints.map(async (u) => {
         const resp = await getProtorunesByOutpointMV(
