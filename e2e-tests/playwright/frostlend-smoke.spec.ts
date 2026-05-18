@@ -2191,17 +2191,11 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
         await navToLend(page);
         await page.waitForTimeout(2000);
 
-        // Read SP total BEFORE attempt — if 0, no deposit to withdraw from (Flow 3 failed)
+        // SP total can be 0 after liquidation absorbed deposits — that's expected and not a skip
+        // condition. We must still attempt withdraw to redeem collateral (frBTC) gains.
         const preWithdrawSpHex = await simRead(page, { ...FL.STABILITY_POOL, inputs: [OP.SP_GetTotalDeposits] });
         const preWithdrawSp = hexToU128(preWithdrawSpHex);
-        if (preWithdrawSp === 0n) {
-          flow.status = 'skipped';
-          flow.skip_reason = 'no_sp_deposit_to_withdraw';
-          flow.note = 'SP total = 0 before withdraw (Flow 3 deposit did not succeed)';
-          console.log('[frostlend-smoke] Flow 6 skipped — SP total = 0 (Flow 3 deposit failed)');
-          report.flows.push(flow);
-          saveReport(report);
-        } else {
+        console.log(`[frostlend-smoke] Flow 6: pre-withdraw SP total = ${Number(preWithdrawSp)/1e8} frostUSD`);
 
         // Click "Withdraw" tab in StabilityPoolPanel
         await page.evaluate(() => {
@@ -2337,7 +2331,6 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
           report.flows.push(flow);
           saveReport(report);
         }
-        } // end of else (preWithdrawSp > 0)
       } catch (e) {
         flow.error = e instanceof Error ? e.message : String(e);
         await page.screenshot({ path: '/tmp/fl-flow6-error.png' }).catch(() => {});
