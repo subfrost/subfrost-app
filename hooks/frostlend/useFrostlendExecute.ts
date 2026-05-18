@@ -27,10 +27,12 @@ export type FrostlendExecuteParams = {
   feeRate: number;
   /**
    * When true, taproot address is excluded from fromAddresses for fee-source
-   * selection. Use for operations that don't need the trove auth token (SP
-   * deposit/withdraw, oracle ops) — auth token UTXOs live at taproot and
-   * alkanesExecuteFull ignores payment_utxos, so excluding taproot from fee
-   * sources is the only way to prevent auth token consumption as BTC fees.
+   * selection. NOTE: This also prevents alkane input discovery at taproot
+   * (both use the same from_addresses parameter in execute.rs select_utxos).
+   * Do NOT use for any operation whose inputRequirements includes an alkane at taproot.
+   * The SDK already prevents alkane-carrying UTXOs from being used as BTC fee inputs
+   * (execute.rs:2196-2212 — UTXOs with unneeded alkanes are skipped for fee selection).
+   * This flag is preserved for deploy-time calls that genuinely have no alkane inputs.
    */
   skipTaprootFeeSources?: boolean;
 };

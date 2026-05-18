@@ -1663,6 +1663,11 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
           { timeout: 90_000 },
         ).catch(() => console.log('[frostlend-smoke] Flow 5: DevPanel deployed status (batch) not seen — continuing'));
 
+        // Snapshot all txids already in the DOM before clicking Batch so captureTxid
+        // can exclude them — prevents stale open_trove / sp_deposit toasts from being
+        // mistaken for the liquidation toast.
+        const preClickTxids5 = await snapshotTxids(page);
+
         // Click "Batch" button in FrostlendDevPanel liquidate section
         const batchClicked = await page.evaluate(() => {
           const btns = Array.from(document.querySelectorAll('button'));
@@ -1724,7 +1729,7 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
           await waitForIndexerSync(page, 60_000);
 
           // Capture txid from toast (liquidation ops emit toast)
-          const txid = await captureTxid(page, 30_000, lastTxid ?? undefined);
+          const txid = await captureTxid(page, 30_000, lastTxid ?? undefined, preClickTxids5);
           if (txid) {
             flow.txid = txid;
             lastTxid = txid;
@@ -1894,6 +1899,8 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
           report.flows.push(flow);
           saveReport(report);
         } else {
+          // Snapshot before clicking so stale toasts from earlier flows are excluded.
+          const preClickTxids6 = await snapshotTxids(page);
           await page.evaluate(() => {
             const btn = Array.from(document.querySelectorAll('button'))
               .find(b => b.textContent?.trim() === 'Withdraw from SP');
@@ -1903,7 +1910,7 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
           await mineOneBlock(page);
           await waitForIndexerSync(page, 60_000);
 
-          const txid = await captureTxid(page, 90_000, lastTxid ?? undefined);
+          const txid = await captureTxid(page, 90_000, lastTxid ?? undefined, preClickTxids6);
           await page.screenshot({ path: '/tmp/fl-flow6-result.png' });
 
           if (txid) {
@@ -2879,6 +2886,9 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
           await page.waitForTimeout(800);
           await page.screenshot({ path: '/tmp/fl-flow12-preflight.png' });
 
+          // Snapshot before clicking Redeem to exclude stale toasts from earlier flows.
+          const preClickTxids12 = await snapshotTxids(page);
+
           // Click "Redeem" button
           const redeemBtnFound = await page.evaluate(() => {
             const btn = Array.from(document.querySelectorAll('button')).find(b => b.textContent?.trim() === 'Redeem');
@@ -2899,7 +2909,7 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
             await mineOneBlock(page);
             await waitForIndexerSync(page, 60_000);
 
-            const txid = await captureTxid(page, 90_000, lastTxid ?? undefined);
+            const txid = await captureTxid(page, 90_000, lastTxid ?? undefined, preClickTxids12);
             await page.screenshot({ path: '/tmp/fl-flow12-result.png' });
 
             if (txid) {

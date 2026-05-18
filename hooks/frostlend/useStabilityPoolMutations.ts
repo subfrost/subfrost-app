@@ -92,11 +92,12 @@ export function useSpDepositMutation() {
       const beforeTxs = beforeReceipts.map(r => r.tx);
 
       // 2. Submit deposit.
-      // skipTaprootFeeSources=true: auth token UTXOs live at taproot; excluding it
-      // from fee sources prevents alkanesExecuteFull from burning the trove receipt.
+      // SDK already skips alkane-carrying UTXOs for BTC fee inputs (execute.rs:2196-2212),
+      // so frostUSD at taproot is discovered for the inputRequirements without being
+      // double-booked as a fee. Do NOT use skipTaprootFeeSources.
       const protostones = buildSpCellpack(STABILITY_POOL_OPCODES.Deposit, []);
       const inputRequirements = `4:${FROST_USD_TX}:${params.amountFrostUsdSats.toString()}`;
-      const { txid } = await execute({ protostones, inputRequirements, feeRate: params.feeRate, skipTaprootFeeSources: true });
+      const { txid } = await execute({ protostones, inputRequirements, feeRate: params.feeRate });
 
       // 3. Re-fetch and diff to find the freshly-spawned receipt.
       // Devnet mines synchronously inside alkanesExecuteFull, so the indexer is
@@ -169,9 +170,8 @@ export function useSpWithdrawMutation() {
       // Pass the depositor receipt as incoming alkane — boiler's receipt-by-passage idiom.
       const inputRequirements = `${authTokenId}:1`;
 
-      // skipTaprootFeeSources=true: auth token UTXOs live at taproot; excluding it
-      // from fee sources prevents alkanesExecuteFull from burning the trove receipt.
-      const { txid } = await execute({ protostones, inputRequirements, feeRate: params.feeRate, skipTaprootFeeSources: true });
+      // SDK skips alkane-carrying UTXOs for BTC fee inputs (execute.rs:2196-2212).
+      const { txid } = await execute({ protostones, inputRequirements, feeRate: params.feeRate });
       return { txid };
     },
     onSuccess: () => queryClient.refetchQueries({ queryKey: ['frostlend'] }),

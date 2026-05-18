@@ -49,9 +49,8 @@ export function useRedeemMutation() {
       ]);
       const inputRequirements = `4:${FROST_USD_TX}:${params.amountFrostUsdSats.toString()}`;
 
-      // skipTaprootFeeSources: redeem uses frostUSD (not trove auth token);
-      // excluding taproot from fee sources prevents burning any trove receipt UTXOs.
-      const { txid } = await execute({ protostones, inputRequirements, feeRate: params.feeRate, skipTaprootFeeSources: true });
+      // SDK already skips alkane-carrying UTXOs for BTC fee inputs (execute.rs:2196-2212).
+      const { txid } = await execute({ protostones, inputRequirements, feeRate: params.feeRate });
       return { txid };
     },
     onSuccess: () => queryClient.refetchQueries({ queryKey: ['frostlend'] }),
