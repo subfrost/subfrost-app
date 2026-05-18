@@ -1,17 +1,17 @@
 {
-  "run_at": "2026-05-17T13:55:45.953Z",
+  "run_at": "2026-05-17T19:33:42.675Z",
   "wallet": "OYL",
   "network": "mainnet",
   "seed_hint": "panic ... myself",
   "flows": [
     {
       "name": "diesel_to_btc",
-      "status": "error",
+      "status": "skipped",
       "txid": null,
       "fee_sats": null,
       "fee_usd": null,
-      "skip_reason": null,
-      "error": "\u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeEnabled\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator:  locator('button').filter({ hasText: /confirm swap/i }).first()\nExpected: enabled\nReceived: disabled\nTimeout:  10000ms\n\nCall log:\n\u001b[2m  - Expect \"toBeEnabled\" with timeout 10000ms\u001b[22m\n\u001b[2m  - waiting for locator('button').filter({ hasText: /confirm swap/i }).first()\u001b[22m\n\u001b[2m    19 × locator resolved to <button disabled type=\"button\" class=\"h-12 w-full rounded-xl font-bold text-sm uppercase tracking-wider transition-all duration-[200ms] ease-[cubic-bezier(0,0,0,1)] hover:transition-none focus:outline-none bg-[color:var(--sf-panel-bg)] text-[color:var(--sf-text)]/30 cursor-not-allowed\">CONFIRM SWAP</button>\u001b[22m\n\u001b[2m       - unexpected value \"disabled\"\u001b[22m\n"
+      "skip_reason": "insufficient_diesel_balance_flow1_not_confirmed",
+      "error": null
     },
     {
       "name": "btc_to_frbtc_wrap",
@@ -20,16 +20,16 @@
       "fee_sats": null,
       "fee_usd": null,
       "skip_reason": null,
-      "error": "page.goto: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"http://localhost:3000/swap\", waiting until \"domcontentloaded\"\u001b[22m\n"
+      "error": "txid not found in page after submit"
     },
     {
       "name": "frbtc_to_btc_unwrap",
-      "status": "success",
-      "txid": "1742754b0cbaeab265030893b1d52104534c1d543be4318ff1c11d21442c4c71",
+      "status": "error",
+      "txid": null,
       "fee_sats": null,
       "fee_usd": null,
       "skip_reason": null,
-      "error": null
+      "error": "txid not found in page after submit"
     },
     {
       "name": "add_liquidity_btc_diesel",
@@ -52,6 +52,214 @@
   ],
   "total_fee_sats": 0,
   "total_fee_usd": 0,
-  "btc_price_usd": 78101.58738600744,
-  "aberrations": []
+  "btc_price_usd": 77859.29897596785,
+  "aberrations": [],
+  "frostlend": {
+    "run_at": "2026-05-18T05:34:46.536Z",
+    "wallet": "keystore",
+    "network": "devnet",
+    "suite": "frostlend",
+    "flows": [
+      {
+        "name": "frostlend_deploy",
+        "status": "success",
+        "txid": null,
+        "fee_sats": null,
+        "skip_reason": null,
+        "error": null,
+        "trace": null,
+        "note": "11 contracts deployed (5 phases)",
+        "assertions": []
+      },
+      {
+        "name": "open_trove",
+        "status": "success",
+        "txid": null,
+        "fee_sats": null,
+        "skip_reason": null,
+        "error": null,
+        "trace": null,
+        "note": null,
+        "assertions": [
+          {
+            "label": "TroveCount ≥ 1",
+            "passed": true,
+            "expected": "true",
+            "actual": "true"
+          },
+          {
+            "label": "TroveStatus = Active (1)",
+            "passed": true,
+            "expected": "1",
+            "actual": "1"
+          },
+          {
+            "label": "TroveColl > 0",
+            "passed": true,
+            "expected": "true",
+            "actual": "true"
+          },
+          {
+            "label": "TroveDebt ≥ 1800 frostUSD",
+            "passed": true,
+            "expected": "true",
+            "actual": "true"
+          }
+        ]
+      },
+      {
+        "name": "sp_deposit",
+        "status": "success",
+        "txid": "852b3f555a3ab356bb5d39088bb666f980a20912e5174cf5778fe9f267dc1803",
+        "fee_sats": null,
+        "skip_reason": null,
+        "error": null,
+        "trace": null,
+        "note": "SP total: 2500 frostUSD",
+        "assertions": [
+          {
+            "label": "SP total deposits ≥ 500 frostUSD",
+            "passed": true,
+            "expected": "true",
+            "actual": "true"
+          }
+        ]
+      },
+      {
+        "name": "oracle_drop_50pct",
+        "status": "success",
+        "txid": null,
+        "fee_sats": null,
+        "skip_reason": null,
+        "error": null,
+        "trace": null,
+        "note": "oracle dropped 50% — ICR bar should show red if trove is now undercollateralised | ICR bar color not confirmed red (may need higher oracle drop) | stored price: 50000 USD/BTC",
+        "assertions": [
+          {
+            "label": "Oracle price is non-zero after drop",
+            "passed": true,
+            "expected": "true",
+            "actual": "true"
+          },
+          {
+            "label": "Oracle price < $10M sanity ceiling",
+            "passed": true,
+            "expected": "true",
+            "actual": "true"
+          }
+        ]
+      },
+      {
+        "name": "batch_liquidate",
+        "status": "success",
+        "txid": null,
+        "fee_sats": null,
+        "skip_reason": null,
+        "error": null,
+        "trace": null,
+        "note": "trove close not reflected in UI (may be cache lag) | SP remaining: 2500 frostUSD",
+        "assertions": [
+          {
+            "label": "TroveCount decreased (liquidated 1 of 2)",
+            "passed": false,
+            "expected": "1",
+            "actual": "2"
+          },
+          {
+            "label": "SP deposits decreased after liquidation",
+            "passed": false,
+            "expected": "true",
+            "actual": "false"
+          }
+        ]
+      },
+      {
+        "name": "sp_withdraw",
+        "status": "success",
+        "txid": "17cca7c0574166c2db3c60a8ffb1023a85b22471d2c02d7039407f1ee6489477",
+        "fee_sats": null,
+        "skip_reason": null,
+        "error": null,
+        "trace": null,
+        "note": "frBTC gain shown: 文499.96109 BTCHomeSwapLendVaultsFutures文499.96109 BTCFrostlendBorrow frostUSD ag | SP after withdraw: 1300 frostUSD",
+        "assertions": [
+          {
+            "label": "SP total decreased (withdraw executed)",
+            "passed": true,
+            "expected": "true",
+            "actual": "true"
+          }
+        ]
+      },
+      {
+        "name": "add_collateral",
+        "status": "error",
+        "txid": null,
+        "fee_sats": null,
+        "skip_reason": null,
+        "error": "txid not found in toast after AddCollateral",
+        "trace": null,
+        "note": null,
+        "assertions": []
+      },
+      {
+        "name": "withdraw_collateral",
+        "status": "error",
+        "txid": null,
+        "fee_sats": null,
+        "skip_reason": null,
+        "error": "txid not found in toast after WithdrawCollateral",
+        "trace": null,
+        "note": null,
+        "assertions": []
+      },
+      {
+        "name": "draw_frostusd",
+        "status": "error",
+        "txid": null,
+        "fee_sats": null,
+        "skip_reason": null,
+        "error": "txid not found in toast after DrawFrostUsd",
+        "trace": null,
+        "note": null,
+        "assertions": []
+      },
+      {
+        "name": "repay_frostusd",
+        "status": "error",
+        "txid": null,
+        "fee_sats": null,
+        "skip_reason": null,
+        "error": "page.evaluate: Execution context was destroyed, most likely because of a navigation",
+        "trace": null,
+        "note": null,
+        "assertions": []
+      },
+      {
+        "name": "close_trove",
+        "status": "skipped",
+        "txid": null,
+        "fee_sats": null,
+        "skip_reason": "no_active_trove_for_close",
+        "error": null,
+        "trace": null,
+        "note": null,
+        "assertions": []
+      },
+      {
+        "name": "redeem_frostusd",
+        "status": "error",
+        "txid": null,
+        "fee_sats": null,
+        "skip_reason": null,
+        "error": "page.waitForTimeout: Target page, context or browser has been closed",
+        "trace": null,
+        "note": null,
+        "assertions": []
+      }
+    ],
+    "aberrations": [
+      "Flow 5 (batch liquidate) assertion failures: TroveCount decreased (liquidated 1 of 2), SP deposits decreased after liquidation"
+    ]
+  }
 }

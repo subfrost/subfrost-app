@@ -25,13 +25,19 @@
  */
 
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
-import { STABILITY_POOL_OPCODES, STABILITY_POOL_TX } from '@/constants/frostlend';
-import { useFrostlendExecute } from './useFrostlendExecute';
+import {
+  BORROWER_OPS_OPCODES,
+  BORROWER_OPS_TX,
+  STABILITY_POOL_OPCODES,
+  STABILITY_POOL_TX,
+} from '@/constants/frostlend';
+import { useFrostlendExecute, type FrostlendExecuteParams } from './useFrostlendExecute';
 import { useWallet } from '@/context/WalletContext';
 import {
   readCachedSpDeposit,
   writeCachedSpDeposit,
 } from '@/lib/frostlend/spCache';
+import { readCachedTrove } from '@/lib/frostlend/troveCache';
 import { parseAlkaneTarget, parseU128, simulateAlkane } from '@/lib/frostlend/rpc';
 import {
   diffNewReceipt,
@@ -47,6 +53,51 @@ const FROST_USD_TX = 0x200;
 function buildSpCellpack(opcode: number, args: bigint[]): string {
   const cellpack = [4, STABILITY_POOL_TX, opcode, ...args.map(a => a.toString())].join(',');
   return `[${cellpack}]:v0:v0`;
+}
+
+/**
+ * Pre-split: execute a 1-sat RepayFrostUsd to ensure the trove auth token and
+ * frostUSD land in separate UTXOs before SP Deposit runs.
+ *
+ * Root cause: OpenTrove puts both [2:N] (auth) and [4:512] (frostUSD) into
+ * the same 546-sat UTXO. When SP Deposit's inputRequirements selects that
+ * UTXO for frostUSD, the SP contract receives [2:N] in incoming_alkanes and
+ * burns it (not a registered SP child), destroying the trove auth token.
+ * Subsequent owner-ops fail with "need 1 of 2:N, have 0".
+ *
+ * The 1-unit repay is harmless (reduces debt by 1 sat). Non-fatal if trove is
+ * closed or UTXOs already split (caught and logged). Uses exact 2-arg form
+ * (trove_id, amount) — RepayFrostUsd validates amount > 0, so we send 1 unit.
+ */
+async function presplitAuthTokenUtxo(
+  network: string,
+  address: string,
+  execute: (params: FrostlendExecuteParams) => Promise<{ txid: string }>,
+  feeRate: number,
+): Promise<void> {
+  console.log('[frostlend][SP presplit] called', { network, address: address?.slice(0, 12) });
+  const cachedTrove = readCachedTrove(network, address);
+  console.log('[frostlend][SP presplit] cache lookup result', { found: !!cachedTrove, troveId: cachedTrove?.troveId, authTokenId: cachedTrove?.authTokenId });
+  if (!cachedTrove?.authTokenId || !cachedTrove?.troveId) {
+    console.log('[frostlend][SP presplit] no trove cache — skipping', { network, address: address?.slice(0, 12), cachedTrove });
+    return;
+  }
+
+  // RepayFrostUsd opcode 7 args: (trove_id, amount) — 2 args only.
+  // repay=1 sends exactly 1 sat of frostUSD to BorrowerOps; it repays 1 unit of debt
+  // and returns both [2:N] auth token and the remaining frostUSD in separate UTXOs.
+  // Using 0 as the amount causes a contract revert (validated at call-site: amount > 0).
+  const PRESPLIT_REPAY_AMOUNT = 1n;
+  const protostones = `[4,${BORROWER_OPS_TX},${BORROWER_OPS_OPCODES.RepayFrostUsd},${cachedTrove.troveId},${PRESPLIT_REPAY_AMOUNT}]:v0:v0`;
+  const inputRequirements = `4:${FROST_USD_TX}:${PRESPLIT_REPAY_AMOUNT},${cachedTrove.authTokenId}:1`;
+  console.log('[frostlend][SP presplit] running 1-sat RepayFrostUsd to separate auth token', { network, address, troveId: cachedTrove.troveId, authTokenId: cachedTrove.authTokenId });
+  try {
+    await execute({ protostones, inputRequirements, feeRate });
+    console.log('[frostlend][SP presplit] complete — auth token should now be in its own UTXO');
+  } catch (err) {
+    // Non-fatal: trove may already be closed or UTXOs already separate.
+    console.warn('[frostlend][SP presplit] skipped (non-fatal):', err instanceof Error ? err.message : String(err));
+  }
 }
 
 /**
@@ -91,7 +142,12 @@ export function useSpDepositMutation() {
       const beforeReceipts = await fetchUserBlock2Receipts(network, primaryAddress);
       const beforeTxs = beforeReceipts.map(r => r.tx);
 
-      // 2. Submit deposit.
+      // 2. Pre-split: if the frostUSD UTXO also carries the trove auth token, run a
+      //    1-sat RepayFrostUsd to create separate UTXOs before the SP deposit.
+      //    Without this, SP deposit receives and burns the auth token alongside frostUSD.
+      await presplitAuthTokenUtxo(network, primaryAddress, execute, params.feeRate);
+
+      // 3. Submit deposit.
       // SDK already skips alkane-carrying UTXOs for BTC fee inputs (execute.rs:2196-2212),
       // so frostUSD at taproot is discovered for the inputRequirements without being
       // double-booked as a fee. Do NOT use skipTaprootFeeSources.
@@ -99,7 +155,7 @@ export function useSpDepositMutation() {
       const inputRequirements = `4:${FROST_USD_TX}:${params.amountFrostUsdSats.toString()}`;
       const { txid } = await execute({ protostones, inputRequirements, feeRate: params.feeRate });
 
-      // 3. Re-fetch and diff to find the freshly-spawned receipt.
+      // 4. Re-fetch and diff to find the freshly-spawned receipt.
       // Devnet mines synchronously inside alkanesExecuteFull, so the indexer is
       // already current. On real networks we'd need to wait/poll for confirmation.
       let depositorId: string | null = null;

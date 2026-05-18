@@ -91,14 +91,22 @@ const ORACLE_PRICE_USD = 100_000;
 // At $50k oracle drop: trove1 ICR = 0.05×$50k/$2500 = 100% < MCR → liquidatable.
 // If SP ≥ trove.debt the SP absorbs fully. 1200 < 2700 (raw debt) → redistribution path.
 const SP_DEPOSIT = '1200';
-// Oracle drop: 50% from $100k → $50k. ICR = 0.05×$50k/$2500 = 100% < MCR 110% → liquidatable.
-// 25% only drops to $75k → ICR 150% which is still above MCR.
-const ORACLE_DROP_PCT = 50;
+// Oracle drop: 87% from $100k → $13k. With actual coll=0.1998 frBTC (full UTXO deposited):
+//   User trove  ICR = 0.1998×$13k / 2712.5  = 95.8% < MCR 110% → liquidatable ✓
+//   Guardian    ICR = 0.20×$13k   / 1800     = 144%  > MCR 110% → safe ✓
+//
+// Why not 50%? On devnet, keystore wallet uses coinType=1 which matches the boot deployer.
+// Boot leaves 19.98M sats frBTC at that address (20% leftover after 80% to pool).
+// inputRequirements sends the full UTXO so the trove gets 0.1998 frBTC, not the intended 0.05.
+// A 50% drop → $50k gives ICR = 0.1998×50k/2712.5 = 368% — well above MCR, not liquidatable.
+const ORACLE_DROP_PCT = 87;
 // Guardian trove: opened between SP deposit and oracle drop. High collateral so it's not
 // liquidated when oracle drops. Needed because Liquity forbids liquidating the sole trove
 // (system would have 0 collateral and the TCR invariant breaks). Two troves needed for
 // the batch-liquidate flow to execute. Assertions: TroveCount after liquidation = 1 (guardian).
-const GUARDIAN_COLL = '0.10'; // frBTC — at $50k: ICR = 0.10×$50k/$1800 = 277% > MCR
+// Guardian uses openGuardianTrove(10_000_000n, 1800_frostUSD) which wraps 2× = 20M sats frBTC.
+// Contract receives full 20M sats (0.2 frBTC) as coll. At $13k: ICR = 0.2×$13k/1800 = 144% > MCR ✓
+const GUARDIAN_COLL = '0.10'; // frBTC — nominal (actual = 0.2 frBTC due to full-UTXO deposit)
 const GUARDIAN_DEBT = '1800'; // frostUSD
 
 const REPORT_PATH = path.join(__dirname, '../camoufox/smoke_report.json');
@@ -1205,6 +1213,216 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
               flow.assertions.push(makeAssertion('TroveDebt ≥ 1800 frostUSD', 'true', String(troveDebt >= 180_000_000_000n)));
 
               console.log(`[frostlend-smoke] Flow 2: trove confirmed on-chain — id=${troveId} coll=${troveColl} debt=${troveDebt}`);
+              // Diagnostic: find EXACTLY where auth token [2:6] UTXO lives after OpenTrove
+              try {
+                const diagAddrs = await page.evaluate(() => {
+                  let taproot: string | null = null;
+                  let segwit: string | null = null;
+                  for (let i = 0; i < localStorage.length; i++) {
+                    const k = localStorage.key(i);
+                    if (k && k.startsWith('frostlend:trove:devnet:')) taproot = k.replace('frostlend:trove:devnet:', '');
+                  }
+                  const raw = localStorage.getItem('subfrost_browser_wallet_addresses');
+                  if (raw) {
+                    try {
+                      const p = JSON.parse(raw) as any;
+                      if (p?.taproot?.address) taproot = p.taproot.address;
+                      if (p?.nativeSegwit?.address) segwit = p.nativeSegwit.address;
+                    } catch {}
+                  }
+                  return { taproot, segwit };
+                });
+
+                // 1. Get ALL UTXOs at taproot via esplora (same as what lua spendable_utxos does)
+                if (diagAddrs.taproot) {
+                  const dustUtxos = await page.evaluate(async (addr) => {
+                    const res = await fetch('http://localhost:18888', {
+                      method: 'POST', headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ jsonrpc: '2.0', method: 'esplora_addressutxo', params: [addr], id: 60 }),
+                    });
+                    const data = await res.json() as any;
+                    const utxos = data?.result ?? [];
+                    return utxos
+                      .filter((u: any) => u.value <= 2000)
+                      .map((u: any) => `${u.txid}:${u.vout}(${u.value}sats,conf=${u.status?.confirmed})`);
+                  }, diagAddrs.taproot);
+                  console.log(`[frostlend-smoke] taproot dust UTXOs: [${dustUtxos.join(' | ')}]`);
+
+                  // 2. For each dust UTXO, call protorunesbyoutpoint to see what alkanes are there
+                  const rawDustUtxos = await page.evaluate(async (addr) => {
+                    const res = await fetch('http://localhost:18888', {
+                      method: 'POST', headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ jsonrpc: '2.0', method: 'esplora_addressutxo', params: [addr], id: 61 }),
+                    });
+                    const data = await res.json() as any;
+                    return (data?.result ?? []).filter((u: any) => u.value <= 2000);
+                  }, diagAddrs.taproot) as Array<{txid: string; vout: number; value: number}>;
+
+                  for (const u of rawDustUtxos) {
+                    // A: JSON-RPC convenience wrapper (alkanes_protorunesbyoutpoint)
+                    const alkanesJson = await page.evaluate(async ([t, v]) => {
+                      const res = await fetch('http://localhost:18888', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ jsonrpc: '2.0', method: 'alkanes_protorunesbyoutpoint',
+                          params: [{ txid: t, vout: v, protocolTag: '1' }], id: 62 }),
+                      });
+                      const data = await res.json() as any;
+                      const balances = data?.result?.balances ?? data?.result?.balance_sheet?.cached?.balances ?? [];
+                      const runesList = balances.map((b: any) =>
+                        `${b.block ?? b.rune?.id?.block}:${b.tx ?? b.rune?.id?.tx}(${b.amount ?? b.balance})`);
+                      return `json-rpc tokens=[${runesList.join(',')}] rawResult=${JSON.stringify(data?.result).substring(0, 150)}`;
+                    }, [u.txid, u.vout] as [string, number]);
+                    console.log(`[frostlend-smoke] protorunesbyoutpoint ${u.txid}:${u.vout} → ${alkanesJson}`);
+
+                    // B: metashrew_view protorunesbyoutpoint (EXACT path used by WASM SDK in execute.rs:8856)
+                    const alkanesMV = await page.evaluate(async ([t, v]) => {
+                      // Inline protobuf encoder for OutpointWithProtocol
+                      function pushVarint(out: number[], n: bigint) {
+                        let val = n;
+                        while (val >= 0x80n) { out.push(Number((val & 0x7fn) | 0x80n)); val >>= 7n; }
+                        out.push(Number(val));
+                      }
+                      const hex = t.startsWith('0x') ? t.slice(2) : t;
+                      // txid LE (reverse bytes)
+                      const txidLE = new Uint8Array(32);
+                      for (let i = 0; i < 32; i++) txidLE[i] = parseInt(hex.slice((31-i)*2,(31-i)*2+2), 16);
+                      const pb: number[] = [];
+                      pb.push(0x0a, 0x20); for (let i=0;i<32;i++) pb.push(txidLE[i]); // field 1: txid
+                      pb.push(0x10); pushVarint(pb, BigInt(v));                          // field 2: vout
+                      const u128: number[] = [0x08]; pushVarint(u128, 1n); u128.push(0x10); pushVarint(u128, 0n); // protocol=1
+                      pb.push(0x1a); pushVarint(pb, BigInt(u128.length)); for (const b of u128) pb.push(b);
+                      const hexInput = '0x' + Array.from(pb, b => b.toString(16).padStart(2,'0')).join('');
+
+                      // Call metashrew_view
+                      const res = await fetch('http://localhost:18888', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ jsonrpc: '2.0', method: 'metashrew_view',
+                          params: ['protorunesbyoutpoint', hexInput, 'latest'], id: 63 }),
+                      });
+                      const data = await res.json() as any;
+                      const hexResp: string = data?.result ?? '';
+                      if (!hexResp || hexResp === '0x') return 'mv tokens=[EMPTY]';
+
+                      // Inline decoder for OutpointResponse
+                      const clean = hexResp.startsWith('0x') ? hexResp.slice(2) : hexResp;
+                      const bytes = new Uint8Array(clean.match(/.{2}/g)!.map((h: string) => parseInt(h, 16)));
+                      function readVarintBig(d: Uint8Array, p: number): [bigint, number] {
+                        let val=0n, shift=0n;
+                        while(p<d.length){const b=d[p++];val|=BigInt(b&0x7f)<<shift;if(!(b&0x80))break;shift+=7n;}
+                        return [val,p];
+                      }
+                      function readField(d: Uint8Array, pos: number): [number,number,Uint8Array|bigint,number]|null {
+                        if(pos>=d.length)return null;
+                        const [tag,p1]=readVarintBig(d,pos);
+                        const fn=Number(tag>>3n),wt=Number(tag&7n);
+                        if(wt===0){const[v,p2]=readVarintBig(d,p1);return[fn,wt,v,p2];}
+                        if(wt===2){const[len,p2]=readVarintBig(d,p1);const n=Number(len);return[fn,wt,d.subarray(p2,p2+n),p2+n];}
+                        return[fn,wt,0n,p1+1];
+                      }
+                      const tokens: string[] = [];
+                      let pos = 0;
+                      while (pos < bytes.length) {
+                        const f = readField(bytes, pos);
+                        if (!f) break;
+                        const [fn, wt, val, next] = f;
+                        pos = next;
+                        if (fn === 1 && wt === 2) {
+                          // BalanceSheet field 1 = repeated BalanceSheetItem
+                          let p2=0;
+                          const bs = val as Uint8Array;
+                          while(p2<bs.length){
+                            const fi=readField(bs,p2);if(!fi)break;
+                            const [fn2,wt2,v2,n2]=fi;p2=n2;
+                            if(fn2===1&&wt2===2){
+                              // BalanceSheetItem: field1=Rune, field2=Uint128 balance
+                              let block=-1n,tx=-1n,amount=0n,pi=0;
+                              const item=v2 as Uint8Array;
+                              while(pi<item.length){
+                                const fr=readField(item,pi);if(!fr)break;
+                                const[fn3,wt3,v3,n3]=fr;pi=n3;
+                                if(fn3===1&&wt3===2){
+                                  // Rune { RuneId rune_id = 1 } → RuneId { Uint128 height=1, Uint128 txindex=2 }
+                                  const rid=v3 as Uint8Array;let pr=0;
+                                  while(pr<rid.length){const fr2=readField(rid,pr);if(!fr2)break;const[fn4,wt4,v4,n4]=fr2;pr=n4;
+                                    if(fn4===1&&wt4===2){
+                                      const rid2=v4 as Uint8Array;let pr2=0;
+                                      while(pr2<rid2.length){const fr3=readField(rid2,pr2);if(!fr3)break;const[fn5,,v5,n5]=fr3;pr2=n5;
+                                        if(fn5===1)block=v5 as bigint;else if(fn5===2)tx=v5 as bigint;
+                                      }
+                                    }
+                                  }
+                                } else if(fn3===2&&wt3===2){
+                                  const ab=v3 as Uint8Array;let lo=0n,hi=0n,pa=0;
+                                  while(pa<ab.length){const fa=readField(ab,pa);if(!fa)break;const[fn6,,v6,n6]=fa;pa=n6;
+                                    if(fn6===1)lo=v6 as bigint;else if(fn6===2)hi=v6 as bigint;}
+                                  amount=(hi<<64n)|lo;
+                                }
+                              }
+                              if(block>=0n)tokens.push(`${block}:${tx}(${amount})`);
+                            }
+                          }
+                        }
+                      }
+                      return `mv tokens=[${tokens.join(',')}] hexResp=${hexResp.substring(0,60)}`;
+                    }, [u.txid, u.vout] as [string, number]);
+                    console.log(`[frostlend-smoke] metashrew_view protorunesbyoutpoint ${u.txid}:${u.vout} → ${alkanesMV}`);
+                  }
+                }
+
+                // 3. Query protorunesbyaddress at taproot — parse BOTH field formats
+                if (diagAddrs.taproot) {
+                  const fullResp = await page.evaluate(async (addr) => {
+                    const res = await fetch('http://localhost:18888', {
+                      method: 'POST', headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ jsonrpc: '2.0', method: 'alkanes_protorunesbyaddress',
+                        params: [{ address: addr, protocolTag: '1' }], id: 50 }),
+                    });
+                    const data = await res.json() as any;
+                    const outpoints = data?.result?.outpoints ?? [];
+                    const tokens: string[] = [];
+                    for (const op of outpoints) {
+                      // Format 1: balance_sheet.cached.balances
+                      const bs = op.balance_sheet?.cached?.balances ?? [];
+                      for (const b of bs) {
+                        tokens.push(`bs:${b.block}:${b.tx}(${b.amount}) at ${op.outpoint?.txid}:${op.outpoint?.vout}`);
+                      }
+                      // Format 2: runes (legacy)
+                      const runes = op.runes ?? [];
+                      for (const r of runes) {
+                        tokens.push(`rune:${r.rune?.id?.block}:${r.rune?.id?.tx}(${r.balance}) at ${op.outpoint?.txid}:${op.outpoint?.vout}`);
+                      }
+                    }
+                    return tokens.length > 0 ? tokens.join(' | ') : `NONE (${outpoints.length} outpoints)`;
+                  }, diagAddrs.taproot);
+                  console.log(`[frostlend-smoke] protorunesbyaddress taproot: ${fullResp}`);
+                }
+
+                const authHex26 = await simRead(page, { ...FL.TROVE_MANAGER, inputs: [OP.TM_GetTroveAuthToken, '1'] });
+                console.log(`[frostlend-smoke] GetTroveAuthToken(1) raw hex = ${authHex26?.slice(0, 80)}`);
+                const cacheEntry2 = await page.evaluate((a) => {
+                  if (!a) return 'NO TAPROOT';
+                  return localStorage.getItem(`frostlend:trove:devnet:${a}`) ?? 'NO CACHE';
+                }, diagAddrs.taproot);
+                console.log(`[frostlend-smoke] Post-OpenTrove trove cache: ${cacheEntry2}`);
+                // Inspect the raw OpenTrove tx via btc_getrawtransaction
+                if (txid) {
+                  try {
+                    const txOutputs = await page.evaluate(async (t) => {
+                      const res = await fetch('http://localhost:18888', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ jsonrpc: '2.0', method: 'btc_getrawtransaction',
+                          params: [t, 1], id: 99 }),
+                      });
+                      const data = await res.json() as any;
+                      const vouts = data?.result?.vout ?? [];
+                      return vouts.map((v: any) => `vout${v.n}: ${v.value}BTC addr=${v.scriptPubKey?.address ?? 'OP_RETURN'}`).join(' | ');
+                    }, txid);
+                    console.log(`[frostlend-smoke] OpenTrove tx outputs: ${txOutputs}`);
+                  } catch (e) { console.log(`[frostlend-smoke] tx inspect error: ${e}`); }
+                }
+              } catch (diagErr) {
+                console.log(`[frostlend-smoke] Post-OpenTrove diagnostic error: ${diagErr}`);
+              }
             } else {
               flow.status = 'error';
               flow.error = txid
@@ -1299,6 +1517,18 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
 
         await page.screenshot({ path: '/tmp/fl-flow3-preflight.png' });
 
+        // Log the trove cache state so we can see if the presplit will find it.
+        const troveCacheDiag = await page.evaluate(() => {
+          const keys = Object.keys(localStorage).filter(k => k.startsWith('frostlend:trove:'));
+          return keys.map(k => `${k}=${localStorage.getItem(k)}`).join(' | ') || 'none';
+        });
+        console.log('[frostlend-smoke] Pre-SP-deposit trove cache:', troveCacheDiag);
+
+        // Snapshot all txids in DOM before clicking so captureTxid can exclude them.
+        // Without this, the stale frBTC wrap toast (505989f2...) is captured as the
+        // SP deposit txid — a false positive that masks whether the deposit actually ran.
+        const preClickTxids3 = await snapshotTxids(page);
+
         // Click "Deposit to SP"
         const depositBtnEnabled = await (async () => {
           const dl = Date.now() + 10_000;
@@ -1331,7 +1561,7 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
           await mineOneBlock(page);
           await waitForIndexerSync(page, 60_000);
 
-          const txid = await captureTxid(page, 90_000, lastTxid ?? undefined);
+          const txid = await captureTxid(page, 90_000, lastTxid ?? undefined, preClickTxids3);
           await page.screenshot({ path: '/tmp/fl-flow3-result.png' });
 
           if (txid) {
@@ -1373,6 +1603,49 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
           }
           report.flows.push(flow);
           saveReport(report);
+
+          // Post-SP-deposit: verify auth token [2:6] still exists in wallet.
+          // If the presplit burned it (or SP deposit consumed it), Flows 7-12 will fail.
+          // Extract address from trove cache key (works for both keystore and browser wallets).
+          const postSpAuthDiag = await page.evaluate(async () => {
+            try {
+              // Derive address from trove cache (keystore wallet stores it in cache key).
+              const troveKeys = Object.keys(localStorage).filter(k => k.startsWith('frostlend:trove:'));
+              let address = '';
+              if (troveKeys.length > 0) {
+                // Key format: frostlend:trove:{network}:{address}
+                const parts = troveKeys[0].split(':');
+                address = parts.slice(3).join(':'); // address may contain colons
+              }
+              // Fallback: browser wallet
+              if (!address) {
+                const raw = localStorage.getItem('subfrost_browser_wallet_addresses');
+                if (raw) {
+                  const parsed = JSON.parse(raw) as { taproot?: { address?: string }; nativeSegwit?: { address?: string } };
+                  address = parsed?.taproot?.address || parsed?.nativeSegwit?.address || '';
+                }
+              }
+              if (!address) return 'no-address-found';
+              const r = await fetch('http://localhost:18888', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ jsonrpc: '2.0', method: 'alkanes_protorunesbyaddress', params: [{ address, protocolTag: '1' }], id: 1 }),
+              }).catch(() => null);
+              if (!r) return 'rpc-failed';
+              const j = await r.json().catch(() => ({}));
+              const outpoints = j?.result?.outpoints || [];
+              const block2entries: string[] = [];
+              for (const op of outpoints) {
+                const balances = op.balance_sheet?.cached?.balances || op.runes || [];
+                for (const entry of balances) {
+                  if (parseInt(entry.block ?? '0', 10) === 2) {
+                    block2entries.push(`2:${entry.tx}(${entry.value ?? entry.amount ?? '?'})`);
+                  }
+                }
+              }
+              return `addr=${address.slice(0,12)} block2=[${block2entries.join(', ')}]`;
+            } catch (e: any) { return 'diag-err:' + (e?.message || String(e)); }
+          });
+          console.log('[frostlend-smoke] Post-SP-deposit alkane balances:', postSpAuthDiag);
         }
       } catch (e) {
         flow.error = e instanceof Error ? e.message : String(e);
@@ -1387,9 +1660,9 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
     // collateral). We need ≥ 2 troves before the oracle drop so batch-liquidate
     // can execute against the low-ICR user trove.
     //
-    // Guardian: 0.10 frBTC, 1800 frostUSD.
-    //   At $100k oracle: ICR = 555% (healthy)
-    //   After 50% drop to $50k: ICR = 277% > MCR 110% (safe — NOT liquidatable)
+    // Guardian: nominal 0.10 frBTC but full-UTXO → ~0.2 frBTC, 1800 frostUSD.
+    //   At $100k oracle: ICR = 1111% (healthy)
+    //   After 87% drop to $13k: ICR = 144% > MCR 110% (safe — NOT liquidatable)
     //
     // Uses the "Open Guardian" button in FrostlendDevPanel, which calls
     // openGuardianTrove() from lib/frostlend/deploy.ts via the devnet deployer address.
@@ -1836,6 +2109,67 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
 
       try {
         console.log('[frostlend-smoke] Flow 6: SP withdraw');
+        await navToLend(page);
+        await page.waitForTimeout(2000);
+
+        // Diagnostic: log total BTC UTXO count and values before SP withdraw.
+        const preWithdrawBtcDiag = await page.evaluate(async () => {
+          try {
+            // Extract address from trove cache key (works for keystore + browser wallets).
+            const troveKeys = Object.keys(localStorage).filter(k => k.startsWith('frostlend:trove:'));
+            let taproot = '';
+            let segwit = '';
+            if (troveKeys.length > 0) {
+              const parts = troveKeys[0].split(':');
+              const addr = parts.slice(3).join(':');
+              if (addr.startsWith('bcrt1p') || addr.startsWith('bc1p') || addr.startsWith('tb1p')) taproot = addr;
+              else segwit = addr;
+            }
+            // Fallback: browser wallet addresses
+            if (!taproot && !segwit) {
+              const raw = localStorage.getItem('subfrost_browser_wallet_addresses');
+              if (!raw) return 'no-wallet-addresses-in-localstorage';
+              const parsed = JSON.parse(raw) as { taproot?: { address?: string }; nativeSegwit?: { address?: string } };
+              taproot = parsed?.taproot?.address || '';
+              segwit  = parsed?.nativeSegwit?.address || '';
+            }
+            if (!taproot && !segwit) return 'addresses-empty';
+            const fetchUtxos = async (addr: string) => {
+              const r = await fetch('http://localhost:18888', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ jsonrpc: '2.0', method: 'esplora_address::utxo', params: [{ address: addr }], id: 1 }),
+              }).catch(() => null);
+              if (!r) return [];
+              const j = await r.json().catch(() => ({}));
+              return (j?.result || []) as Array<{ txid: string; vout: number; value: number; status?: { confirmed: boolean } }>;
+            };
+            const utxos = (await Promise.all([taproot, segwit].filter(Boolean).map(fetchUtxos))).flat();
+            const summary = utxos.map(u => `${u.txid.slice(0,8)}:${u.vout}(${u.value}sats)`).join(' | ');
+            const totalBtc = utxos.reduce((s, u) => s + u.value, 0);
+            return `taproot=${taproot?.slice(0,12)} segwit=${segwit?.slice(0,12)} total=${totalBtc}sats count=${utxos.length} utxos: ${summary}`;
+          } catch (e: any) { return 'diag-err:' + (e?.message || String(e)); }
+        });
+        console.log('[frostlend-smoke] Flow 6 pre-withdraw BTC UTXOs:', preWithdrawBtcDiag);
+
+        // Re-fund the wallet if BTC is exhausted — presplit + SP deposit + other flows
+        // may have consumed all large UTXOs as fees, leaving only 546-sat dust UTXOs.
+        // This is a safety net; root cause investigation is tracked separately.
+        await openDevPanel(page);
+        await page.waitForTimeout(500);
+        const btcBtn6 = page.locator('button', { hasText: '+1 BTC' });
+        if (await btcBtn6.isVisible({ timeout: 5000 }).catch(() => false)) {
+          if (await btcBtn6.isEnabled({ timeout: 5000 }).catch(() => false)) {
+            console.log('[frostlend-smoke] Flow 6: re-funding wallet before SP withdraw');
+            await btcBtn6.click();
+            await page.waitForTimeout(60_000);
+            await recoverFromOom(page);
+            console.log('[frostlend-smoke] Flow 6: re-fund complete');
+          }
+        }
+        const closeBtn6 = page.locator('button', { hasText: '✕' });
+        if (await closeBtn6.isVisible({ timeout: 3000 }).catch(() => false)) await closeBtn6.click();
+        await page.waitForTimeout(500);
+        await waitForIndexerSync(page, 30_000);
         await navToLend(page);
         await page.waitForTimeout(2000);
 
@@ -2321,6 +2655,49 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
         }
       } catch (e) {
         console.log(`[frostlend-smoke] Trove cache recovery error: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
+
+    // ── Diagnostic: dump user's [2:*] receipts and localStorage before owner-ops ─
+    {
+      const taprootForDiag = await page.evaluate(() => {
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && k.startsWith('frostlend:trove:devnet:')) return k.replace('frostlend:trove:devnet:', '');
+        }
+        const raw = localStorage.getItem('subfrost_browser_wallet_addresses');
+        if (raw) { try { const p = JSON.parse(raw) as any; if (p?.taproot?.address) return p.taproot.address; } catch {} }
+        return null;
+      });
+      console.log(`[frostlend-smoke] Diagnostic: taproot=${taprootForDiag} lastTroveId=${lastTroveId}`);
+      if (taprootForDiag) {
+        try {
+          const diagReceipts = await page.evaluate(async (addr) => {
+            const res = await fetch('http://localhost:18888', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ jsonrpc: '2.0', method: 'alkanes_protorunesbyaddress',
+                params: [{ address: addr, protocolTag: '1' }], id: 99 }),
+            });
+            const data = await res.json() as any;
+            const outpoints = data?.result?.outpoints ?? [];
+            const tokens: string[] = [];
+            for (const op of outpoints) {
+              // Parse balance_sheet.cached.balances (canonical format)
+              for (const b of (op.balance_sheet?.cached?.balances ?? [])) {
+                tokens.push(`${b.block}:${b.tx}(${b.amount}) at ${op.outpoint?.txid}:${op.outpoint?.vout}`);
+              }
+              // Fallback: runes field (legacy format)
+              for (const r of (op.runes ?? [])) {
+                tokens.push(`rune:${r.rune?.id?.block}:${r.rune?.id?.tx}(${r.balance}) at ${op.outpoint?.txid}:${op.outpoint?.vout}`);
+              }
+            }
+            if (tokens.length === 0) tokens.push(`NONE (${outpoints.length} outpoints returned)`);
+            return tokens;
+          }, taprootForDiag);
+          console.log(`[frostlend-smoke] Diagnostic: taproot alkanes = [${diagReceipts.join(' | ')}]`);
+        } catch (e) { console.log(`[frostlend-smoke] Diagnostic: protorunesbyaddress error: ${e}`); }
+        const cacheEntry = await page.evaluate((addr) => localStorage.getItem(`frostlend:trove:devnet:${addr}`), taprootForDiag);
+        console.log(`[frostlend-smoke] Diagnostic: localStorage trove cache = ${cacheEntry}`);
       }
     }
 
@@ -2946,6 +3323,24 @@ test.describe.serial('Frostlend UI Smoke — keystore wallet', () => {
 
       try {
         console.log('[frostlend-smoke] Flow 12: Redeem frostUSD');
+        // Re-fund wallet — CloseTrove + adjust flows may exhaust BTC fee UTXOs,
+        // leaving only 546-sat dust that can't cover tx fees for the redemption call.
+        await openDevPanel(page);
+        await page.waitForTimeout(500);
+        const btcBtn12 = page.locator('button', { hasText: '+1 BTC' });
+        if (await btcBtn12.isVisible({ timeout: 5000 }).catch(() => false)) {
+          if (await btcBtn12.isEnabled({ timeout: 5000 }).catch(() => false)) {
+            console.log('[frostlend-smoke] Flow 12: re-funding wallet before Redeem');
+            await btcBtn12.click();
+            await page.waitForTimeout(60_000);
+            await recoverFromOom(page);
+            console.log('[frostlend-smoke] Flow 12: re-fund complete');
+          }
+        }
+        const closeBtn12 = page.locator('button', { hasText: '✕' });
+        if (await closeBtn12.isVisible({ timeout: 3000 }).catch(() => false)) await closeBtn12.click();
+        await page.waitForTimeout(500);
+        await waitForIndexerSync(page, 30_000);
         await navToLend(page);
         await page.waitForTimeout(2000);
 

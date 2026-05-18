@@ -19,7 +19,7 @@ import { useCallback } from 'react';
 import { useWallet } from '@/context/WalletContext';
 import { useAlkanesSDK } from '@/context/AlkanesSDKContext';
 import { alkanesExecuteTyped } from '@/lib/alkanes/execute';
-import { getAddressUtxos } from '@/lib/alkanes/rpc';
+import { getAddressUtxos, getProtorunesByOutpoint } from '@/lib/alkanes/rpc';
 
 export type FrostlendExecuteParams = {
   protostones: string;
@@ -30,8 +30,7 @@ export type FrostlendExecuteParams = {
    * selection. NOTE: This also prevents alkane input discovery at taproot
    * (both use the same from_addresses parameter in execute.rs select_utxos).
    * Do NOT use for any operation whose inputRequirements includes an alkane at taproot.
-   * The SDK already prevents alkane-carrying UTXOs from being used as BTC fee inputs
-   * (execute.rs:2196-2212 — UTXOs with unneeded alkanes are skipped for fee selection).
+   * Auth token protection is now via cachedUtxos prefetched_utxos (not this flag).
    * This flag is preserved for deploy-time calls that genuinely have no alkane inputs.
    */
   skipTaprootFeeSources?: boolean;
@@ -79,23 +78,63 @@ export function useFrostlendExecute() {
     const isKeystoreWallet = walletType === 'keystore';
     const isDualAddress = Boolean(segwitAddress && taprootAddress);
 
-    // Fetch non-dust UTXOs to use as payment_utxos. This prevents the SDK from
-    // selecting auth token dust UTXOs (~546 sats) as BTC fee inputs during
-    // operations that don't explicitly include the auth token in inputRequirements
-    // (e.g., SP deposit/withdraw, oracle set). Without this, auth token UTXOs get
-    // silently burned as fees, breaking subsequent owner-ops ("have 0" errors).
-    // ordinalsStrategy:'exclude' only protects inscriptions, not alkane UTXOs.
-    let paymentUtxos: string[] | undefined;
+    // Build cachedUtxos with alkane annotations so alkanesExecuteTyped can:
+    // 1. Pass clean BTC UTXOs as payment_utxos (exclude dust/alkane UTXOs from fee inputs)
+    // 2. Pass prefetched_utxos to the WASM so select_utxos knows which UTXOs carry alkanes
+    //    and skips them for BTC fee selection.
+    //
+    // WHY: paymentUtxos (passed as payment_utxos in options_json) is silently ignored by
+    // the WASM binary — grep shows 0 occurrences of "payment_utxos" in alkanes_web_sys_bg.js.
+    // prefetched_utxos IS parsed (alkanes-rs PR #259), and select_utxos reads the alkanes
+    // field to determine which UTXOs are safe to use for BTC fees. Auth token UTXOs (546 sats,
+    // alkanes: [{block:2, tx:6}]) will be skipped because alkanes.length > 0.
+    //
+    // CONFIRMED BUG (Run 31, 2026-05-17): [2:6] trove auth token was burned as fee input
+    // during SP deposit despite presplit correctly isolating it. paymentUtxos had no effect.
+    // This cachedUtxos approach is the correct fix.
+    type CachedUtxo = {
+      txid: string;
+      vout: number;
+      value: number;
+      alkanes: Array<{ block: number; tx: number; amount: bigint }>;
+      address?: string;
+    };
+    let cachedUtxos: CachedUtxo[] | undefined;
     if (useActualAddresses && network) {
       try {
         const addrs = [segwitAddress, taprootAddress].filter(Boolean) as string[];
         const allUtxos = (await Promise.all(addrs.map((a) => getAddressUtxos(network, a)))).flat();
-        // Only use UTXOs with value > 1000 sats as fee payment sources.
-        // Dust UTXOs (≤1000 sats) likely carry alkane tokens (auth receipts, frBTC, etc.).
-        const cleanUtxos = allUtxos.filter((u) => u.value > 1000);
-        if (cleanUtxos.length > 0) {
-          // Format expected by AlkanesExecuteTypedParams: "txid:vout:satoshis"
-          paymentUtxos = cleanUtxos.map((u) => `${u.txid}:${u.vout}:${u.value}`);
+        // Fan out protorunes query for dust UTXOs to get alkane annotations.
+        // Non-dust UTXOs are asserted clean (alkanes:[]) — no query needed.
+        const annotated = await Promise.all(allUtxos.map(async (u) => {
+          if (u.value > 1000) {
+            // Non-dust: assert clean, no alkane query.
+            return { txid: u.txid, vout: u.vout, value: u.value, alkanes: [] as CachedUtxo['alkanes'] };
+          }
+          // Dust: probe for alkane content so WASM can exclude from fee inputs.
+          try {
+            const resp = await getProtorunesByOutpoint(network, u.txid, u.vout);
+            const balances = resp?.balance_sheet?.cached?.balances ?? [];
+            return {
+              txid: u.txid,
+              vout: u.vout,
+              value: u.value,
+              alkanes: balances.map((b) => ({
+                block: b.block,
+                tx: b.tx,
+                amount: BigInt(b.amount),
+              })),
+            };
+          } catch {
+            // If probe fails, treat as potentially carrying alkanes (conservative: alkanes:[{dummy}])
+            // so WASM avoids it for fees. Better to miss a fee source than burn an auth token.
+            return { txid: u.txid, vout: u.vout, value: u.value, alkanes: [{ block: 0, tx: 0, amount: 0n }] };
+          }
+        }));
+        if (annotated.length > 0) {
+          cachedUtxos = annotated;
+          const dustCount = annotated.filter(u => u.value <= 1000).length;
+          console.log(`[frostlend][execute] cachedUtxos: ${annotated.length} UTXOs (${dustCount} dust annotated, will be excluded from fees)`);
         }
       } catch {
         // Non-fatal: fall back to SDK's own UTXO discovery
@@ -116,7 +155,7 @@ export function useFrostlendExecute() {
         ordinalsStrategy: 'exclude',
         protectTaproot: isDualAddress,
         network: network ?? undefined,
-        ...(paymentUtxos ? { paymentUtxos } : {}),
+        ...(cachedUtxos ? { cachedUtxos } : {}),
       });
     } catch (e: any) {
       // Surface the SDK error message so the UI can show it. Many SDK errors
