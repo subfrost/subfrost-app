@@ -92,9 +92,11 @@ export function useSpDepositMutation() {
       const beforeTxs = beforeReceipts.map(r => r.tx);
 
       // 2. Submit deposit.
+      // skipTaprootFeeSources=true: auth token UTXOs live at taproot; excluding it
+      // from fee sources prevents alkanesExecuteFull from burning the trove receipt.
       const protostones = buildSpCellpack(STABILITY_POOL_OPCODES.Deposit, []);
       const inputRequirements = `4:${FROST_USD_TX}:${params.amountFrostUsdSats.toString()}`;
-      const { txid } = await execute({ protostones, inputRequirements, feeRate: params.feeRate });
+      const { txid } = await execute({ protostones, inputRequirements, feeRate: params.feeRate, skipTaprootFeeSources: true });
 
       // 3. Re-fetch and diff to find the freshly-spawned receipt.
       // Devnet mines synchronously inside alkanesExecuteFull, so the indexer is
@@ -167,7 +169,9 @@ export function useSpWithdrawMutation() {
       // Pass the depositor receipt as incoming alkane — boiler's receipt-by-passage idiom.
       const inputRequirements = `${authTokenId}:1`;
 
-      const { txid } = await execute({ protostones, inputRequirements, feeRate: params.feeRate });
+      // skipTaprootFeeSources=true: auth token UTXOs live at taproot; excluding it
+      // from fee sources prevents alkanesExecuteFull from burning the trove receipt.
+      const { txid } = await execute({ protostones, inputRequirements, feeRate: params.feeRate, skipTaprootFeeSources: true });
       return { txid };
     },
     onSuccess: () => queryClient.refetchQueries({ queryKey: ['frostlend'] }),

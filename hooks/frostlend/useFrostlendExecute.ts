@@ -25,6 +25,14 @@ export type FrostlendExecuteParams = {
   protostones: string;
   inputRequirements: string;
   feeRate: number;
+  /**
+   * When true, taproot address is excluded from fromAddresses for fee-source
+   * selection. Use for operations that don't need the trove auth token (SP
+   * deposit/withdraw, oracle ops) — auth token UTXOs live at taproot and
+   * alkanesExecuteFull ignores payment_utxos, so excluding taproot from fee
+   * sources is the only way to prevent auth token consumption as BTC fees.
+   */
+  skipTaprootFeeSources?: boolean;
 };
 
 export function useFrostlendExecute() {
@@ -50,9 +58,16 @@ export function useFrostlendExecute() {
       network === 'regtest-local' ||
       network === 'qubitcoin-regtest';
 
-    const fromAddresses = useActualAddresses
-      ? ([segwitAddress, taprootAddress].filter(Boolean) as string[])
+    // When skipTaprootFeeSources=true, exclude taproot from fee-source addresses.
+    // Auth token UTXOs are issued to taproot (alkanesChangeAddress). alkanesExecuteFull
+    // ignores payment_utxos, so this is the only way to prevent auth token UTXOs from
+    // being silently consumed as BTC fee inputs during non-trove ops (SP, oracle).
+    const feeSourceAddresses = useActualAddresses
+      ? (params.skipTaprootFeeSources
+          ? [segwitAddress].filter(Boolean)
+          : [segwitAddress, taprootAddress].filter(Boolean)) as string[]
       : ['p2tr:0'];
+    const fromAddresses = feeSourceAddresses.length > 0 ? feeSourceAddresses : (useActualAddresses ? [primaryAddress] : ['p2tr:0']);
     const toAddresses = useActualAddresses ? [primaryAddress] : ['p2tr:0'];
     const changeAddress = useActualAddresses
       ? segwitAddress || taprootAddress
